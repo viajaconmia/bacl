@@ -1,0 +1,30 @@
+const router = require("express").Router();
+const solicitud = require("../mia/solicitud");
+const agentes = require("../mia/agentes");
+const empresas = require("../mia/empresas");
+const viajeros = require("../mia/viajeros");
+const hospedaje = require("../mia/hospedaje");
+const impuestos = require("../mia/impuestos");
+const reservas = require("../mia/reservas");
+const datosFiscales = require("../mia/datosFiscales");
+const pagos = require("../mia/pagos");
+const credito = require("../mia/credito");
+const stats = require("../mia/stats");
+const facturas = require("../mia/facturas");
+const hoteles = require("../mia/hoteles");
+
+router.use("/solicitud", solicitud);
+router.use("/agentes", agentes);
+router.use("/empresas", empresas);
+router.use("/viajeros", viajeros);
+router.use("/hospedaje", hospedaje);
+router.use("/impuestos", impuestos);
+router.use("/reservas", reservas);
+router.use("/datosFiscales", datosFiscales);
+router.use("/pagos", pagos);
+router.use("/credito", credito);
+router.use("/stats", stats);
+router.use("/hoteles", hoteles);
+router.use("/factura", facturas);
+
+module.exports = router;
