@@ -11,5 +11,6 @@ router.get("/viajero", controller.getViajeroFromSolicitud)
 router.get("/viajeroAgente", controller.getViajeroAgenteFromSolicitud)
 router.get("/withviajero", controller.readSolicitudByIdWithViajero)
 router.get("/consultas", controller.readConsultas)
+router.get("/items", controller.getItemsSolicitud)
 
 module.exports = router

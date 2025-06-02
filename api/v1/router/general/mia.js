@@ -12,6 +12,7 @@ const credito = require("../mia/credito");
 const stats = require("../mia/stats");
 const facturas = require("../mia/facturas");
 const hoteles = require("../mia/hoteles");
+const etiquetas = require("../mia/etiquetas");
 
 router.use("/solicitud", solicitud);
 router.use("/agentes", agentes);
@@ -26,5 +27,6 @@ router.use("/credito", credito);
 router.use("/stats", stats);
 router.use("/hoteles", hoteles);
 router.use("/factura", facturas);
+router.use("/etiquetas", etiquetas);
 
 module.exports = router;

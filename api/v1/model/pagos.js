@@ -336,7 +336,7 @@ SELECT
     )
     FROM facturas_pagos fp
     JOIN facturas f ON fp.id_factura = f.id_factura
-    JOIN empresas e ON f.id_empresa = e.id_empresa
+    LEFT JOIN empresas e ON f.id_empresa = e.id_empresa
     WHERE fp.id_pago = pagos.id_pago
   ) AS facturas
 

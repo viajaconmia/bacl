@@ -735,7 +735,28 @@ p.pendiente_por_cobrar,
 p.monto_a_credito,
 fp.id_factura,
 vw.primer_nombre,
-vw.apellido_paterno
+vw.apellido_paterno,
+a.nombre,
+  (
+    SELECT JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'id_item', i.id_item,
+        'fecha_uso', i.fecha_uso,
+        'total', i.total,
+        'subtotal', i.subtotal,
+        'impuestos', i.impuestos,
+        'costo_total', i.costo_total,
+        'costo_subtotal', i.costo_subtotal,
+        'costo_impuestos', i.costo_impuestos,
+        'saldo', i.saldo,
+        'is_facturado', i.is_facturado,
+        'id_factura', i.id_factura
+      )
+    )
+    FROM items i
+    WHERE i.id_hospedaje = h.id_hospedaje
+    ORDER BY i.fecha_uso
+  ) AS items
 from solicitudes as so
 LEFT JOIN servicios as s ON so.id_servicio = s.id_servicio
 LEFT JOIN bookings as b ON so.id_solicitud = b.id_solicitud
@@ -743,13 +764,13 @@ LEFT JOIN hospedajes as h ON b.id_booking = h.id_booking
 LEFT JOIN pagos as p ON so.id_servicio = p.id_servicio
 LEFT JOIN facturas_pagos as fp ON p.id_pago = fp.id_pago
 LEFT JOIN viajeros_con_empresas_con_agentes as vw ON vw.id_agente = so.id_viajero
+LEFT JOIN agentes as a ON so.id_usuario_generador = a.id_agente
 WHERE b.id_booking IS NOT NULL
 GROUP BY so.id_solicitud
 ORDER BY s.created_at DESC;`;
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);
-
     return response; // Retorna el resultado de la ejecución
   } catch (error) {
     throw error; // Lanza el error para que puedas manejarlo donde llames la función
