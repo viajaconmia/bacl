@@ -492,7 +492,7 @@ SELECT
     FROM pagos p
     JOIN facturas_pagos fp ON p.id_pago = fp.id_pago
     JOIN facturas f ON fp.id_factura = f.id_factura
-    JOIN empresas e ON f.id_empresa = e.id_empresa
+    LEFT JOIN empresas e ON f.id_empresa = e.id_empresa
     WHERE p.id_servicio = solicitudes.id_servicio
   ) AS facturas
 
@@ -512,6 +512,68 @@ ORDER BY servicios.created_at DESC;`;
   }
 };
 
+const getItemsSolicitud = async (id_solicitud) => {
+  try {
+//     let query = `
+// SELECT
+//   s.id_solicitud,
+//   s.id_servicio,
+//   s.confirmation_code,
+//   s.id_viajero,
+//   s.hotel,
+//   s.check_in,
+//   s.check_out,
+//   s.room,
+//   s.total,
+//   s.status,
+//   s.id_usuario_generador,
+//   s.nombre_viajero,
+  
+//   -- Items agrupados por noche en formato JSON
+//   (
+//     SELECT JSON_ARRAYAGG(
+//       JSON_OBJECT(
+//         'id_item', i.id_item,
+//         'fecha_uso', i.fecha_uso,
+//         'total', i.total,
+//         'subtotal', i.subtotal,
+//         'impuestos', i.impuestos,
+//         'costo_total', i.costo_total,
+//         'costo_subtotal', i.costo_subtotal,
+//         'costo_impuestos', i.costo_impuestos,
+//         'saldo', i.saldo,
+//         'is_facturado', i.is_facturado,
+//         'id_factura', i.id_factura
+//       )
+//     )
+//     FROM items i
+//     WHERE i.id_hospedaje = h.id_hospedaje
+//     ORDER BY i.fecha_uso
+//   ) AS items,
+  
+//   -- Información de booking
+//   IF(b.id_solicitud IS NOT NULL, TRUE, FALSE) AS is_booking,
+//   b.id_booking
+
+// FROM solicitudes s
+// LEFT JOIN bookings b ON s.id_solicitud = b.id_solicitud
+// LEFT JOIN hospedajes h ON b.id_booking = h.id_booking
+// WHERE s.id_solicitud = ?;`;
+    let query = `
+    select i.* from items i
+            JOIN hospedajes h ON i.id_hospedaje = h.id_hospedaje
+            JOIN bookings b ON h.id_booking = b.id_booking
+          WHERE b.id_solicitud = ?;
+      `
+    let response = await executeQuery(query, [id_solicitud]);
+    console.log("xd")
+    console.log(response)
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
 module.exports = {
   createSolicitudYTicket,
   getViajeroSolicitud,
@@ -522,4 +584,5 @@ module.exports = {
   getSolicitudById,
   getViajeroAgenteSolicitud,
   getSolicitudesConsultas,
+  getItemsSolicitud,
 };

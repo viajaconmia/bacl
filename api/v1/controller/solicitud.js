@@ -87,6 +87,17 @@ const readConsultas = async (req, res) => {
   }
 };
 
+const getItemsSolicitud = async (req, res) => {
+  try {
+    const { id_solicitud } = req.query;
+    let solicitudes = await model.getItemsSolicitud(id_solicitud);
+    res.status(200).json(solicitudes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error", details: error });
+  }
+};
+
 module.exports = {
   create,
   read,
@@ -96,4 +107,5 @@ module.exports = {
   getViajeroFromSolicitud,
   getViajeroAgenteFromSolicitud,
   readConsultas,
+  getItemsSolicitud,
 };
