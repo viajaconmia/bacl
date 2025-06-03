@@ -190,18 +190,15 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
       };
       conditions.push(reservanteMap[filters.reservante]);
     }
-
-    // if (filters.startDate && filters.endDate) {
-    // conditions.push(`${type_filters[filters.filterType]} BETWEEN ? AND ?`);
-    // values.push(filters.startDate, filters.endDate);
-    // } else
-    if (filters.startDate) {
-      conditions.push(`${type_filters[filters.filterType]} >= ?`);
-      values.push(`${filters.startDate} 00:00:00`);
-    }
-    if (filters.endDate) {
-      conditions.push(`${type_filters[filters.filterType]} <= ?`);
-      values.push(`${filters.endDate} 23:59:59`);
+    if (type_filters[filters.filterType]) {
+      if (filters.startDate) {
+        conditions.push(`${type_filters[filters.filterType]} >= ?`);
+        values.push(`${filters.startDate} 00:00:00`);
+      }
+      if (filters.endDate) {
+        conditions.push(`${type_filters[filters.filterType]} <= ?`);
+        values.push(`${filters.endDate} 23:59:59`);
+      }
     }
 
     let whereClause = `
