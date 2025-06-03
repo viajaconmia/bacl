@@ -117,7 +117,7 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
       "Check-in": "so.check_in",
       "Check-out": "so.check_out",
       Transaccion: "s.created_at",
-      Creacion: "s.created_at",
+      Actualizacion: "b.updated_at",
     };
 
     if (filters.client) {
@@ -228,6 +228,7 @@ SELECT
     so.id_usuario_generador,
     so.nombre_viajero,
 	b.id_booking,
+	b.updated_at,
   b.costo_total,
   h.id_hospedaje,
   h.comments,
