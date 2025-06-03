@@ -197,11 +197,11 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
     // } else
     if (filters.startDate) {
       conditions.push(`${type_filters[filters.filterType]} >= ?`);
-      values.push(filters.startDate);
+      values.push(`${filters.startDate} 00:00:00`);
     }
     if (filters.endDate) {
       conditions.push(`${type_filters[filters.filterType]} <= ?`);
-      values.push(filters.endDate);
+      values.push(`${filters.endDate} 23:59:59`);
     }
 
     let whereClause = `
