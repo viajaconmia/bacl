@@ -117,7 +117,7 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
       "Check-in": "so.check_in",
       "Check-out": "so.check_out",
       Transaccion: "s.created_at",
-      Creacion: "s.created_at",
+      Actualizacion: "b.updated_at",
     };
 
     if (filters.client) {
@@ -190,18 +190,15 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
       };
       conditions.push(reservanteMap[filters.reservante]);
     }
-
-    // if (filters.startDate && filters.endDate) {
-    // conditions.push(`${type_filters[filters.filterType]} BETWEEN ? AND ?`);
-    // values.push(filters.startDate, filters.endDate);
-    // } else
-    if (filters.startDate) {
-      conditions.push(`${type_filters[filters.filterType]} >= ?`);
-      values.push(`${filters.startDate} 00:00:00`);
-    }
-    if (filters.endDate) {
-      conditions.push(`${type_filters[filters.filterType]} <= ?`);
-      values.push(`${filters.endDate} 23:59:59`);
+    if (type_filters[filters.filterType]) {
+      if (filters.startDate) {
+        conditions.push(`${type_filters[filters.filterType]} >= ?`);
+        values.push(`${filters.startDate} 00:00:00`);
+      }
+      if (filters.endDate) {
+        conditions.push(`${type_filters[filters.filterType]} <= ?`);
+        values.push(`${filters.endDate} 23:59:59`);
+      }
     }
 
     let whereClause = `
@@ -231,6 +228,7 @@ SELECT
     so.id_usuario_generador,
     so.nombre_viajero,
 	b.id_booking,
+	b.updated_at,
   b.costo_total,
   h.id_hospedaje,
   h.comments,
