@@ -1,11 +1,12 @@
 const axios = require('axios');
-// const { valuesFacturama } = require("../../../config/auth")
+ 
+const { valuesFacturama } = require("../../../config/auth")
 
-let valuesFacturama = {
-  token: "cHJ1ZWJhbm9rdG9zOnBydWViYXNub2t0b3M=",
-  useragent: "pruebanoktos",
-  url: "https://apisandbox.facturama.mx/",
-};
+// let valuesFacturama = {
+//   token: "cHJ1ZWJhbm9rdG9zOnBydWViYXNub2t0b3M=",
+//   useragent: "pruebanoktos",
+//   url: "https://apisandbox.facturama.mx/",
+// };
 
 let headers = {
   headers: {
