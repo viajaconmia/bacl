@@ -827,7 +827,12 @@ const insertarReserva = async ({ reserva }) => {
       null, // fecha_limite_cancelacion - Ajusta si lo tienes
       solicitud.id_solicitud,
     ];
-
+    const valida_servicio = await executeQuery(
+      `SELECT id_servicio FROM bookings WHERE id_servicio = ?;`,
+      [solicitud.id_servicio]);
+      if(valida_servicio ) {
+        throw new Error("El servicio ya existe, no se puede insertar una reserva con el mismo id_servicio.");
+      }
     // La función executeTransaction debería tomar la primera query y sus params,
     // y luego el callback con la conexión para las siguientes operaciones.
     const response = await executeTransaction(
