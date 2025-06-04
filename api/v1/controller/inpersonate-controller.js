@@ -14,6 +14,7 @@ const impersonateUser = async (req, res) => {
       email,
       options: {
         redirectTo: 'https://mia-gray.vercel.app/impersonado' 
+        //redirectTo: 'http://localhost:5173/impersonado'
       }
     })
 
