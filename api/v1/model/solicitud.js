@@ -129,7 +129,7 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
     }
 
     if (filters.codigo_reservacion) {
-      conditions.push(`h.codigo_reservacion_hotel`);
+      conditions.push(`h.codigo_reservacion_hotel LIKE ?`);
       values.push(`%${filters.codigo_reservacion}%`);
     }
     if (filters.traveler) {
