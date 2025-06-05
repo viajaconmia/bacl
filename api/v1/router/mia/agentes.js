@@ -99,23 +99,30 @@ router.get("/all", async (req, res) => {
     }
 
     const queryget = `
-select
-  vw.created_viajero,
-  vw.id_viajero,
-  vw.correo,
-  vw.genero,
-  vw.fecha_nacimiento,
-  vw.telefono,
-  vw.nacionalidad,
-  vw.numero_pasaporte,
-  vw.numero_empleado,
-	CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) AS nombre_agente_completo,
-  a.*
+SELECT 
+	a.*,
+    v.primer_nombre,
+    v.segundo_nombre,
+    v.apellido_paterno,
+    v.apellido_materno,
+    v.correo,
+    v.telefono,
+	CONCAT_WS(' ', v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno) AS nombre_agente_completo,
+    v.created_at as created_viajero,
+    v.id_viajero,
+    v.genero,
+    v.fecha_nacimiento,
+    v.nacionalidad,
+    v.numero_pasaporte,
+    v.numero_empleado
 FROM agentes as a
-JOIN vw_details_agente as vw ON vw.id_agente = a.id_agente
-${conditions.length ? "WHERE " + conditions.join(" AND ") : ""}
-order by a.created_at desc;
-`;
+LEFT JOIN empresas_agentes as e_a ON a.id_agente = e_a.id_agente
+LEFT JOIN viajero_empresa as v_e ON v_e.id_empresa = e_a.id_empresa
+LEFT JOIN viajeros as v ON v_e.id_viajero = v.id_viajero
+WHERE e_a.id_empresa IS NOT NULL AND correo IS NOT NULL
+${conditions.length ? " AND " + conditions.join(" AND ") : ""}
+GROUP BY a.id_agente
+ORDER BY a.created_at desc, v_e.created_at asc;`;
     const response = await executeQuery(queryget, values);
     res.status(200).json(response);
   } catch (error) {
