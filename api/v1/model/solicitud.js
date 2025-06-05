@@ -353,7 +353,8 @@ WHERE id_usuario_generador in (
 	select id_empresa 
 	from empresas_agentes 
 	where id_agente = ?
-) or id_usuario_generador = ?
+) or id_usuario_generador = ? AND
+ so.status <> 'canceled'
 GROUP BY so.id_solicitud
 ORDER BY s.created_at DESC;`;
 
