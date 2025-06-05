@@ -37,6 +37,7 @@ LEFT JOIN viajeros v ON s.id_viajero = v.id_viajero
 WHERE s.id_usuario_generador = ?
   AND YEAR(s.check_in) = ?
   AND MONTH(s.check_in) = ?
+  AND s.status <> 'cancelled'
 
 ORDER BY s.check_in DESC;
 
@@ -62,6 +63,7 @@ FROM
 WHERE 
     id_usuario_generador = ?
     AND YEAR(check_in) = ?
+    AND status <> 'cancelled'
 GROUP BY 
     mes, hotel
 ORDER BY 
