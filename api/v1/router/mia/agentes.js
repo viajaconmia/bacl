@@ -113,9 +113,7 @@ select
   a.*
 FROM agentes as a
 JOIN vw_details_agente as vw ON vw.id_agente = a.id_agente
-WHERE vw.correo is not null ${
-      conditions.length ? "AND " + conditions.join(" AND ") : ""
-    }
+${conditions.length ? "WHERE " + conditions.join(" AND ") : ""}
 order by a.created_at desc;
 `;
     const response = await executeQuery(queryget, values);
