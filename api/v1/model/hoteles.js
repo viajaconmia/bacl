@@ -79,7 +79,7 @@ const getHotelesWithCuartos = async () => {
 
 const getHotelesWithTarifas = async () => {
   try {
-    const query = "SELECT * FROM vw_hoteles_tarifas_pivot";
+    const query = "SELECT * FROM vw_hoteles_tarifas_pivot where precio_sencillo > 500";
     const response = await executeQuery(query);
     return response;
   } catch (error) {
