@@ -337,7 +337,6 @@ h.codigo_reservacion_hotel,
 p.id_pago,
 p.monto_a_credito,
 fp.id_factura,
--- vw.primer_nombre,
 upper(ifnull(v.primer_nombre, ''))  as primer_nombre,
 upper(ifnull(v.apellido_paterno, ''))  as apellido_paterno,
 f.id_facturama
@@ -352,11 +351,11 @@ inner join mia.solicitudes 			as so   On so.id_viajero = ve.id_viajero
 INNER JOIN mia.servicios 			as s 	ON so.id_servicio = s.id_servicio
 inner join mia.bookings 			as b	On b.id_solicitud = so.id_solicitud 
 INNER JOIN mia.hospedajes 			as h 	ON b.id_booking = h.id_booking
--- INNER JOIN mia.viajeros_hospedajes  as vh 	On vh.id_viajero= v.id_viajero
 LEFT JOIN mia.pagos 		   		as p 	ON so.id_servicio = p.id_servicio
 LEFT JOIN mia.facturas_pagos   		as fp 	ON p.id_pago = fp.id_pago
 LEFT JOIN mia.facturas         		as f 	ON fp.id_factura = f.id_factura
 LEFT JOIN mia.pagos_credito    		as p_c 	ON s.id_servicio = p_c.id_servicio
+WHERE status <> 'canceled'
 order by a.id_agente , a.created_at`;
 
     // Ejecutar el procedimiento almacenado
