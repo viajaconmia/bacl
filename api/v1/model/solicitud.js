@@ -330,7 +330,7 @@ so.check_out,
 so.room,
 so.total,
 so.status,
-CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) AS nombre_viajero,
+so.nombre_viajero,
 so.id_usuario_generador,
 b.id_booking, 
 h.codigo_reservacion_hotel, 
@@ -366,6 +366,8 @@ order by a.id_agente , a.created_at`;
     throw error;
   }
 };
+
+
 const getSolicitudesClient = async (user_id) => {
   try {
     let query = `
