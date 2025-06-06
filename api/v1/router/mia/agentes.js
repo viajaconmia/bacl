@@ -42,10 +42,10 @@ router.get("/all", async (req, res) => {
     let conditions = [];
     let values = [];
     let type_filters = {
-      "Check-in": "a.created_at",
-      "Check-out": "a.created_at",
-      Transaccion: "a.created_at",
-      Creacion: "a.created_at",
+      "Check-in": "created_at",
+      "Check-out": "created_at",
+      Transaccion: "created_at",
+      Creacion: "created_at",
     };
 
     if (query.startDate && query.endDate) {
@@ -60,69 +60,46 @@ router.get("/all", async (req, res) => {
     }
 
     if (query.startCantidad && query.endCantidad) {
-      conditions.push(`a.monto_credito BETWEEN ? AND ?`);
+      conditions.push(`monto_credito BETWEEN ? AND ?`);
       values.push(query.startCantidad, query.endCantidad);
     } else if (query.startCantidad) {
-      conditions.push(`a.monto_credito >= ?`);
+      conditions.push(`monto_credito >= ?`);
       values.push(query.startCantidad);
     } else if (query.endCantidad) {
-      conditions.push(`a.monto_credito <= ?`);
+      conditions.push(`monto_credito <= ?`);
       values.push(query.endCantidad);
     }
 
     if (query.vendedor) {
-      conditions.push(`a.vendedor LIKE ?`);
+      conditions.push(`vendedor LIKE ?`);
       values.push(`%${query.vendedor.split(" ").join("%")}%`);
     }
     if (query.notas) {
-      conditions.push(`a.notas LIKE ?`);
+      conditions.push(`notas LIKE ?`);
       values.push(`%${query.notas.split(" ").join("%")}%`);
     }
     if (query.estado_credito) {
-      conditions.push(`a.tiene_credito_consolidado = ?`);
+      conditions.push(`tiene_credito_consolidado = ?`);
       values.push(query.estado_credito == "Activo" ? 1 : 0);
     }
     if (query.telefono) {
-      conditions.push(`vw.telefono LIKE ?`);
+      conditions.push(`telefono LIKE ?`);
       values.push(`%${query.telefono.toString().split(" ").join("%")}%`);
     }
     if (query.correo) {
-      conditions.push(`vw.correo LIKE ?`);
+      conditions.push(`correo LIKE ?`);
       values.push(`%${query.correo.toString().split(" ").join("%")}%`);
     }
     if (query.client) {
-      conditions.push(
-        `(CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) LIKE ? OR a.id_agente LIKE ?)`
-      );
+      conditions.push(`nombre_agente_completo LIKE ? OR id_agente LIKE ?`);
       values.push(`%${query.client.split(" ").join("%")}%`);
       values.push(`%${query.client.split(" ").join("%")}%`);
     }
 
     const queryget = `
-SELECT 
-	a.*,
-    v.primer_nombre,
-    v.segundo_nombre,
-    v.apellido_paterno,
-    v.apellido_materno,
-    v.correo,
-    v.telefono,
-	CONCAT_WS(' ', v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno) AS nombre_agente_completo,
-    v.created_at as created_viajero,
-    v.id_viajero,
-    v.genero,
-    v.fecha_nacimiento,
-    v.nacionalidad,
-    v.numero_pasaporte,
-    v.numero_empleado
-FROM agentes as a
-LEFT JOIN empresas_agentes as e_a ON a.id_agente = e_a.id_agente
-LEFT JOIN viajero_empresa as v_e ON v_e.id_empresa = e_a.id_empresa
-LEFT JOIN viajeros as v ON v_e.id_viajero = v.id_viajero
-WHERE e_a.id_empresa IS NOT NULL AND correo IS NOT NULL
-${conditions.length ? " AND " + conditions.join(" AND ") : ""}
-GROUP BY a.id_agente
-ORDER BY a.created_at desc, v_e.created_at asc;`;
+SELECT * FROM agente_details
+${conditions.length ? " WHERE " + conditions.join(" AND ") : ""}
+ORDER BY created_at desc`;
     const response = await executeQuery(queryget, values);
     res.status(200).json(response);
   } catch (error) {
