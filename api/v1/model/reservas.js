@@ -29,6 +29,13 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           id_hospedaje: id_hospedaje_actual,
         } = selectResults[0];
 
+        if (edicionData.viajero) {
+          connection.execute(
+            "UPDATE viajeros_hospedajes SET id_viajero = ? WHERE id_hospedaje = ?",
+            [edicionData.viajero.current.id_viajero, id_hospedaje_actual]
+          );
+        }
+
         if (
           edicionData.items &&
           !id_hospedaje_actual &&
@@ -827,7 +834,7 @@ const insertarReserva = async ({ reserva }) => {
       null, // fecha_limite_cancelacion - Ajusta si lo tienes
       solicitud.id_solicitud,
     ];
-    
+
     // La función executeTransaction debería tomar la primera query y sus params,
     // y luego el callback con la conexión para las siguientes operaciones.
     const response = await executeTransaction(
