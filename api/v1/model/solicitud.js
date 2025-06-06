@@ -337,26 +337,27 @@ h.codigo_reservacion_hotel,
 p.id_pago,
 p.monto_a_credito,
 fp.id_factura,
-vw.primer_nombre,
-vw.apellido_paterno,
+-- vw.primer_nombre,
+upper(ifnull(v.primer_nombre, ''))  as primer_nombre,
+upper(ifnull(v.apellido_paterno, ''))  as apellido_paterno,
 f.id_facturama
-from solicitudes as so
-LEFT JOIN servicios as s ON so.id_servicio = s.id_servicio
-LEFT JOIN pagos_credito as p_c ON s.id_servicio = p_c.id_servicio
-LEFT JOIN bookings as b ON so.id_solicitud = b.id_solicitud
-LEFT JOIN hospedajes as h ON b.id_booking = h.id_booking
-LEFT JOIN pagos as p ON so.id_servicio = p.id_servicio
-LEFT JOIN facturas_pagos as fp ON p.id_pago = fp.id_pago
-LEFT JOIN facturas as f ON fp.id_factura = f.id_factura
-LEFT JOIN viajeros_con_empresas_con_agentes as vw ON vw.id_viajero = so.id_viajero
-WHERE id_usuario_generador in (
-	select id_empresa 
-	from empresas_agentes 
-	where id_agente = ?
-) or id_usuario_generador = ? AND
- so.status <> 'canceled'
-GROUP BY so.id_solicitud
-ORDER BY s.created_at DESC;`;
+	
+from mia.agentes a
+inner join mia.empresas_agentes 	as ea  On a.id_agente  = ea.id_agente 
+	    									and a.id_agente = ?
+inner join mia.empresas 			as e 	On e.id_empresa = ea.id_empresa 
+inner join mia.viajero_empresa 		as ve 	On e.id_empresa = ve.id_empresa 
+inner join mia.viajeros 			as v 	On v.id_viajero = ve.id_viajero 
+inner join mia.solicitudes 			as so   On so.id_viajero = ve.id_viajero 
+INNER JOIN mia.servicios 			as s 	ON so.id_servicio = s.id_servicio
+inner join mia.bookings 			as b	On b.id_solicitud = so.id_solicitud 
+INNER JOIN mia.hospedajes 			as h 	ON b.id_booking = h.id_booking
+-- INNER JOIN mia.viajeros_hospedajes  as vh 	On vh.id_viajero= v.id_viajero
+LEFT JOIN mia.pagos 		   		as p 	ON so.id_servicio = p.id_servicio
+LEFT JOIN mia.facturas_pagos   		as fp 	ON p.id_pago = fp.id_pago
+LEFT JOIN mia.facturas         		as f 	ON fp.id_factura = f.id_factura
+LEFT JOIN mia.pagos_credito    		as p_c 	ON s.id_servicio = p_c.id_servicio
+order by a.id_agente , a.created_at`;
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query, [id, id]);
