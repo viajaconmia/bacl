@@ -316,47 +316,46 @@ ORDER BY s.created_at DESC;`;
 
 const getSolicitudesClientWithViajero = async (id) => {
   try {
-    const query = `select 
-p_c.id_credito,
-p_c.pendiente_por_cobrar,
-s.id_servicio,
-s.created_at,
-s.is_credito,
-so.id_solicitud,
-so.confirmation_code,
-so.hotel,
-so.check_in,
-so.check_out,
-so.room,
-so.total,
-so.status,
-so.nombre_viajero,
-so.id_usuario_generador,
-b.id_booking, 
-h.codigo_reservacion_hotel, 
-p.id_pago,
-p.monto_a_credito,
-fp.id_factura,
-upper(ifnull(v.primer_nombre, ''))  as primer_nombre,
-upper(ifnull(v.apellido_paterno, ''))  as apellido_paterno,
-f.id_facturama
-	
-from mia.agentes a
-inner join mia.empresas_agentes 	as ea  On a.id_agente  = ea.id_agente 
-	    									and a.id_agente = ?
-inner join mia.empresas 			as e 	On e.id_empresa = ea.id_empresa 
-inner join mia.viajero_empresa 		as ve 	On e.id_empresa = ve.id_empresa 
-inner join mia.viajeros 			as v 	On v.id_viajero = ve.id_viajero 
-inner join mia.solicitudes 			as so   On so.id_viajero = ve.id_viajero 
-INNER JOIN mia.servicios 			as s 	ON so.id_servicio = s.id_servicio
-inner join mia.bookings 			as b	On b.id_solicitud = so.id_solicitud 
-INNER JOIN mia.hospedajes 			as h 	ON b.id_booking = h.id_booking
-LEFT JOIN mia.pagos 		   		as p 	ON so.id_servicio = p.id_servicio
-LEFT JOIN mia.facturas_pagos   		as fp 	ON p.id_pago = fp.id_pago
-LEFT JOIN mia.facturas         		as f 	ON fp.id_factura = f.id_factura
-LEFT JOIN mia.pagos_credito    		as p_c 	ON s.id_servicio = p_c.id_servicio
-WHERE status <> 'canceled'
-order by a.id_agente , a.created_at`;
+    const query = 
+	    `SELECT 
+  p_c.id_credito,
+  p_c.pendiente_por_cobrar,
+  s.id_servicio,
+  s.created_at,
+  s.is_credito,
+  so.id_solicitud,
+  so.confirmation_code,
+  so.hotel,
+  so.check_in,
+  so.check_out,
+  so.room,
+  so.total,
+  so.status,
+  so.nombre_viajero,
+  so.id_usuario_generador,
+  b.id_booking, 
+  h.codigo_reservacion_hotel, 
+  p.id_pago,
+  p.monto_a_credito,
+  fp.id_factura,
+  UPPER(IFNULL(v.primer_nombre, '')) AS primer_nombre,
+  UPPER(IFNULL(v.apellido_paterno, '')) AS apellido_paterno,
+  f.id_facturama
+FROM agentes a
+INNER JOIN empresas_agentes     AS ea  ON a.id_agente  = ea.id_agente AND a.id_agente = ?
+INNER JOIN empresas             AS e   ON e.id_empresa = ea.id_empresa 
+INNER JOIN viajero_empresa      AS ve  ON e.id_empresa = ve.id_empresa 
+INNER JOIN viajeros             AS v   ON v.id_viajero = ve.id_viajero 
+INNER JOIN solicitudes          AS so  ON so.id_viajero = ve.id_viajero 
+INNER JOIN servicios            AS s   ON so.id_servicio = s.id_servicio
+INNER JOIN bookings             AS b   ON b.id_solicitud = so.id_solicitud 
+INNER JOIN hospedajes           AS h   ON b.id_booking = h.id_booking
+LEFT JOIN pagos                 AS p   ON so.id_servicio = p.id_servicio
+LEFT JOIN facturas_pagos       AS fp  ON p.id_pago = fp.id_pago
+LEFT JOIN facturas             AS f   ON fp.id_factura = f.id_factura
+LEFT JOIN pagos_credito        AS p_c ON s.id_servicio = p_c.id_servicio
+WHERE so.status <> 'canceled'
+ORDER BY a.id_agente, a.created_at;`;
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query, [id, id]);
