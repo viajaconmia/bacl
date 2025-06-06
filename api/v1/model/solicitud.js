@@ -358,7 +358,7 @@ WHERE so.status <> 'canceled'
 ORDER BY a.id_agente, a.created_at;`;
 
     // Ejecutar el procedimiento almacenado
-    const response = await executeQuery(query, [id, id]);
+    const response = await executeQuery(query,[id]);
 
     return response;
   } catch (error) {
