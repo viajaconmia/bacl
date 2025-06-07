@@ -341,21 +341,24 @@ const getSolicitudesClientWithViajero = async (id) => {
   UPPER(IFNULL(v.primer_nombre, '')) AS primer_nombre,
   UPPER(IFNULL(v.apellido_paterno, '')) AS apellido_paterno,
   f.id_facturama
+select * 
 FROM agentes a
-INNER JOIN empresas_agentes     AS ea  ON a.id_agente  = ea.id_agente AND a.id_agente = ?
-INNER JOIN empresas             AS e   ON e.id_empresa = ea.id_empresa 
-INNER JOIN viajero_empresa      AS ve  ON e.id_empresa = ve.id_empresa 
-INNER JOIN viajeros             AS v   ON v.id_viajero = ve.id_viajero 
-INNER JOIN solicitudes          AS so  ON so.id_viajero = ve.id_viajero 
-INNER JOIN servicios            AS s   ON so.id_servicio = s.id_servicio
-INNER JOIN bookings             AS b   ON b.id_solicitud = so.id_solicitud 
-INNER JOIN hospedajes           AS h   ON b.id_booking = h.id_booking
-LEFT JOIN pagos                 AS p   ON so.id_servicio = p.id_servicio
-LEFT JOIN facturas_pagos       AS fp  ON p.id_pago = fp.id_pago
-LEFT JOIN facturas             AS f   ON fp.id_factura = f.id_factura
-LEFT JOIN pagos_credito        AS p_c ON s.id_servicio = p_c.id_servicio
+inner join empresas_agentes 	as ea  
+		On a.id_agente  = ea.id_agente 	    									
+				and  a.id_agente = ?
+inner join empresas 			as e 	On e.id_empresa = ea.id_empresa 
+inner join viajero_empresa 		as ve 	On e.id_empresa = ve.id_empresa 
+inner join viajeros 			as v 	On v.id_viajero = ve.id_viajero 
+inner join solicitudes 			as so   On so.id_viajero = ve.id_viajero 
+INNER JOIN servicios 			as s 	ON so.id_servicio = s.id_servicio
+left join bookings 			as b	On b.id_solicitud = so.id_solicitud 
+left JOIN hospedajes 			as h 	ON b.id_booking = h.id_booking
+LEFT JOIN pagos 		   		as p 	ON so.id_servicio = p.id_servicio
+LEFT JOIN facturas_pagos   		as fp 	ON p.id_pago = fp.id_pago
+LEFT JOIN facturas         		as f 	ON fp.id_factura = f.id_factura
+LEFT JOIN pagos_credito    		as p_c 	ON s.id_servicio = p_c.id_servicio
 WHERE so.status <> 'canceled'
-ORDER BY a.id_agente, a.created_at;`;
+ORDER BY a.id_agente, a.created_at`;
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query,[id]);
