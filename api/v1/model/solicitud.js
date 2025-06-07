@@ -341,7 +341,6 @@ const getSolicitudesClientWithViajero = async (id) => {
   UPPER(IFNULL(v.primer_nombre, '')) AS primer_nombre,
   UPPER(IFNULL(v.apellido_paterno, '')) AS apellido_paterno,
   f.id_facturama
-select * 
 FROM agentes a
 inner join empresas_agentes 	as ea  
 		On a.id_agente  = ea.id_agente 	    									
