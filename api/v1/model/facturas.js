@@ -301,6 +301,34 @@ ORDER BY facturas.created_at DESC;`;
   }
 }
 
+const getAllFacturasConsultas = async () => {
+  try {
+    const query = `select * from facturas f
+join agentes a on a.id_agente = f.usuario_creador
+order by fecha_emision desc;`
+    let response = await executeQuery(query, []);
+
+    return response;
+  } catch (error) {
+    throw error;
+  }
+}
+
+const getDetailsFactura = async (id_factura) => {
+  try {
+    const query = `select count(*) AS noches_facturadas, i.*, h.*, b.total as total_booking, b.subtotal as subtotal_booking, b.impuestos as impuestos_booking from items i 
+join hospedajes h on h.id_hospedaje = i.id_hospedaje
+join bookings b on b.id_booking = h.id_booking
+where i.id_factura = ?
+group by h.id_hospedaje;`
+    let response = await executeQuery(query, [id_factura]);
+
+    return response;
+  } catch (error) {
+    throw error;
+  }
+}
+
 const getAllFacturas = async () => {
   try {
     const query = `SELECT 
@@ -337,4 +365,6 @@ module.exports = {
   getAllFacturas,
   createFacturaCombinada,
   getFacturasConsultas,
+  getAllFacturasConsultas,
+  getDetailsFactura,
 }

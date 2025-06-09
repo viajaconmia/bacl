@@ -1,4 +1,4 @@
-const mysql = require('mysql2/promise');
+const mysql = require("mysql2/promise");
 require("dotenv").config();
 
 const pool = mysql.createPool({
@@ -12,13 +12,18 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME,
   waitForConnections: true,
   connectionLimit: 15,
+  // timezone: "-06:00",
   multipleStatements: true,
-  typeCast: function(field, next) {
-    if (field.type === 'JSON') {
+  typeCast: function (field, next) {
+    if (field.type === "JSON") {
       return JSON.parse(field.string());
     }
     return next();
-  }
+  },
+});
+
+pool.on("connection", (conn) => {
+  conn.query("SET time_zone = '-06:00'");
 });
 
 async function executeQuery(query, params) {
@@ -40,7 +45,7 @@ async function executeTransaction(query, params, callback) {
     await connection.commit();
     return { results, resultsCallback };
   } catch (error) {
-    console.log("UPS HICIMOS ROLLBACK POR SI LAS DUDAS")
+    console.log("UPS HICIMOS ROLLBACK POR SI LAS DUDAS");
     await connection.rollback();
     throw error;
   } finally {
@@ -52,7 +57,7 @@ async function executeSP(procedure, params = [], raw = false) {
   const connection = await pool.getConnection();
 
   try {
-    const placeholders = params.map(() => '?').join(', ');
+    const placeholders = params.map(() => "?").join(", ");
     const query = `CALL ${procedure}(${placeholders})`;
 
     const [rows] = await connection.query(query, params);
@@ -71,9 +76,6 @@ async function executeSP(procedure, params = [], raw = false) {
   }
 }
 
-
-
-
 async function runTransaction(callback) {
   const connection = await pool.getConnection();
   try {
@@ -82,7 +84,7 @@ async function runTransaction(callback) {
     await connection.commit();
     return resultsCallback;
   } catch (error) {
-    console.log("UPS HICIMOS ROLLBACK POR SI LAS DUDAS")
+    console.log("UPS HICIMOS ROLLBACK POR SI LAS DUDAS");
     await connection.rollback();
     throw error;
   } finally {
@@ -90,5 +92,10 @@ async function runTransaction(callback) {
   }
 }
 
-module.exports = { pool, executeQuery, executeTransaction,executeSP, runTransaction };
-
+module.exports = {
+  pool,
+  executeQuery,
+  executeTransaction,
+  executeSP,
+  runTransaction,
+};

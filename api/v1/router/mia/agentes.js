@@ -42,10 +42,10 @@ router.get("/all", async (req, res) => {
     let conditions = [];
     let values = [];
     let type_filters = {
-      "Check-in": "a.created_at",
-      "Check-out": "a.created_at",
-      Transaccion: "a.created_at",
-      Creacion: "a.created_at",
+      "Check-in": "created_at",
+      "Check-out": "created_at",
+      Transaccion: "created_at",
+      Creacion: "created_at",
     };
 
     if (query.startDate && query.endDate) {
@@ -71,53 +71,35 @@ router.get("/all", async (req, res) => {
     }
 
     if (query.vendedor) {
-      conditions.push(`a.vendedor LIKE ?`);
+      conditions.push(`vendedor LIKE ?`);
       values.push(`%${query.vendedor.split(" ").join("%")}%`);
     }
     if (query.notas) {
-      conditions.push(`a.notas LIKE ?`);
+      conditions.push(`notas LIKE ?`);
       values.push(`%${query.notas.split(" ").join("%")}%`);
     }
     if (query.estado_credito) {
-      conditions.push(`a.tiene_credito_consolidado = ?`);
+      conditions.push(`tiene_credito_consolidado = ?`);
       values.push(query.estado_credito == "Activo" ? 1 : 0);
     }
     if (query.telefono) {
-      conditions.push(`vw.telefono LIKE ?`);
+      conditions.push(`telefono LIKE ?`);
       values.push(`%${query.telefono.toString().split(" ").join("%")}%`);
     }
     if (query.correo) {
-      conditions.push(`vw.correo LIKE ?`);
+      conditions.push(`correo LIKE ?`);
       values.push(`%${query.correo.toString().split(" ").join("%")}%`);
     }
     if (query.client) {
-      conditions.push(
-        `(CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) LIKE ? OR a.id_agente LIKE ?)`
-      );
+      conditions.push(`nombre_agente_completo LIKE ? OR id_agente LIKE ?`);
       values.push(`%${query.client.split(" ").join("%")}%`);
-      values.push(`%${query.client.split(" ").join("%")}%`);
+      values.push(`%${query.client.split("").join("%")}%`);
     }
 
     const queryget = `
-select
-  vw.created_viajero,
-  vw.id_viajero,
-  vw.correo,
-  vw.genero,
-  vw.fecha_nacimiento,
-  vw.telefono,
-  vw.nacionalidad,
-  vw.numero_pasaporte,
-  vw.numero_empleado,
-	CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) AS nombre_agente_completo,
-  a.*
-FROM agentes as a
-JOIN vw_details_agente as vw ON vw.id_agente = a.id_agente
-WHERE vw.correo is not null ${
-      conditions.length ? "AND " + conditions.join(" AND ") : ""
-    }
-order by a.created_at desc;
-`;
+SELECT * FROM agente_details
+${conditions.length ? " WHERE " + conditions.join(" AND ") : ""}
+ORDER BY created_at desc`;
     const response = await executeQuery(queryget, values);
     res.status(200).json(response);
   } catch (error) {

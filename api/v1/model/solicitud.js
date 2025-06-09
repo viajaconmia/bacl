@@ -117,7 +117,7 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
       "Check-in": "so.check_in",
       "Check-out": "so.check_out",
       Transaccion: "s.created_at",
-      Creacion: "s.created_at",
+      Actualizacion: "b.updated_at",
     };
 
     if (filters.client) {
@@ -129,7 +129,7 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
     }
 
     if (filters.codigo_reservacion) {
-      conditions.push(`h.codigo_reservacion_hotel`);
+      conditions.push(`h.codigo_reservacion_hotel LIKE ?`);
       values.push(`%${filters.codigo_reservacion}%`);
     }
     if (filters.traveler) {
@@ -146,7 +146,7 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
     }
     if (filters.id_client) {
       conditions.push(`vw.id_agente LIKE ?`);
-      values.push(`%${filters.id_client}%`);
+      values.push(`%${filters.id_client.split("").join("%")}%`);
     }
 
     if (filters.status) {
@@ -157,6 +157,13 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
       };
       conditions.push(`so.status = ?`);
       values.push(estadoMap[filters.status]);
+    }
+    if (filters.id_booking) {
+      const isbooking = {
+        Active: "not null",
+        Inactive: "null",
+      };
+      conditions.push(`b.id_booking is ${isbooking[filters.id_booking]}`);
     }
     if (filters.reservationStage) {
       conditions.push(`
@@ -183,16 +190,15 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
       };
       conditions.push(reservanteMap[filters.reservante]);
     }
-
-    if (filters.startDate && filters.endDate) {
-      conditions.push(`${type_filters[filters.filterType]} BETWEEN ? AND ?`);
-      values.push(filters.startDate, filters.endDate);
-    } else if (filters.startDate) {
-      conditions.push(`${type_filters[filters.filterType]} >= ?`);
-      values.push(filters.startDate);
-    } else if (filters.endDate) {
-      conditions.push(`${type_filters[filters.filterType]} <= ?`);
-      values.push(filters.endDate);
+    if (type_filters[filters.filterType]) {
+      if (filters.startDate) {
+        conditions.push(`${type_filters[filters.filterType]} >= ?`);
+        values.push(`${filters.startDate} 00:00:00`);
+      }
+      if (filters.endDate) {
+        conditions.push(`${type_filters[filters.filterType]} <= ?`);
+        values.push(`${filters.endDate} 23:59:59`);
+      }
     }
 
     let whereClause = `
@@ -222,6 +228,7 @@ SELECT
     so.id_usuario_generador,
     so.nombre_viajero,
 	b.id_booking,
+	b.updated_at,
   b.costo_total,
   h.id_hospedaje,
   h.comments,
@@ -278,7 +285,7 @@ so.total,
 h.comments,
 h.id_hotel,
 so.id_usuario_generador,
-so.nombre_viajero,
+CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) AS nombre_viajero,
 b.id_booking, 
 h.codigo_reservacion_hotel, 
 p.id_pago, 
@@ -309,56 +316,59 @@ ORDER BY s.created_at DESC;`;
 
 const getSolicitudesClientWithViajero = async (id) => {
   try {
-    const query = `select 
-p_c.id_credito,
-p_c.pendiente_por_cobrar,
-s.id_servicio,
-s.created_at,
-s.is_credito,
-so.id_solicitud,
-so.confirmation_code,
-so.hotel,
-so.check_in,
-so.check_out,
-so.room,
-so.total,
-so.status,
-so.nombre_viajero,
-so.id_usuario_generador,
-b.id_booking, 
-h.codigo_reservacion_hotel, 
-p.id_pago,
-p.monto_a_credito,
-fp.id_factura,
-upper(ifnull(v.primer_nombre, ''))  as primer_nombre,
-upper(ifnull(v.apellido_paterno, ''))  as apellido_paterno,
-f.id_facturama
-	
-from mia.agentes a
-inner join mia.empresas_agentes 	as ea  On a.id_agente  = ea.id_agente 
-	    									and a.id_agente = ?
-inner join mia.empresas 			as e 	On e.id_empresa = ea.id_empresa 
-inner join mia.viajero_empresa 		as ve 	On e.id_empresa = ve.id_empresa 
-inner join mia.viajeros 			as v 	On v.id_viajero = ve.id_viajero 
-inner join mia.solicitudes 			as so   On so.id_viajero = ve.id_viajero 
-INNER JOIN mia.servicios 			as s 	ON so.id_servicio = s.id_servicio
-inner join mia.bookings 			as b	On b.id_solicitud = so.id_solicitud 
-INNER JOIN mia.hospedajes 			as h 	ON b.id_booking = h.id_booking
-LEFT JOIN mia.pagos 		   		as p 	ON so.id_servicio = p.id_servicio
-LEFT JOIN mia.facturas_pagos   		as fp 	ON p.id_pago = fp.id_pago
-LEFT JOIN mia.facturas         		as f 	ON fp.id_factura = f.id_factura
-LEFT JOIN mia.pagos_credito    		as p_c 	ON s.id_servicio = p_c.id_servicio
-WHERE status <> 'canceled'
-order by a.id_agente , a.created_at`;
+    const query = 
+	    `SELECT 
+  p_c.id_credito,
+  p_c.pendiente_por_cobrar,
+  s.id_servicio,
+  s.created_at,
+  s.is_credito,
+  so.id_solicitud,
+  so.confirmation_code,
+  so.hotel,
+  so.check_in,
+  so.check_out,
+  so.room,
+  so.total,
+  so.status,
+  so.nombre_viajero,
+  so.id_usuario_generador,
+  b.id_booking, 
+  h.codigo_reservacion_hotel, 
+  p.id_pago,
+  p.monto_a_credito,
+  fp.id_factura,
+  UPPER(IFNULL(v.primer_nombre, '')) AS primer_nombre,
+  UPPER(IFNULL(v.apellido_paterno, '')) AS apellido_paterno,
+  f.id_facturama
+FROM agentes a
+inner join empresas_agentes 	as ea  
+		On a.id_agente  = ea.id_agente 	    									
+				and  a.id_agente = ?
+inner join empresas 			as e 	On e.id_empresa = ea.id_empresa 
+inner join viajero_empresa 		as ve 	On e.id_empresa = ve.id_empresa 
+inner join viajeros 			as v 	On v.id_viajero = ve.id_viajero 
+inner join solicitudes 			as so   On so.id_viajero = ve.id_viajero 
+INNER JOIN servicios 			as s 	ON so.id_servicio = s.id_servicio
+left join bookings 			as b	On b.id_solicitud = so.id_solicitud 
+left JOIN hospedajes 			as h 	ON b.id_booking = h.id_booking
+LEFT JOIN pagos 		   		as p 	ON so.id_servicio = p.id_servicio
+LEFT JOIN facturas_pagos   		as fp 	ON p.id_pago = fp.id_pago
+LEFT JOIN facturas         		as f 	ON fp.id_factura = f.id_factura
+LEFT JOIN pagos_credito    		as p_c 	ON s.id_servicio = p_c.id_servicio
+WHERE so.status <> 'canceled'
+ORDER BY a.id_agente, a.created_at`;
 
     // Ejecutar el procedimiento almacenado
-    const response = await executeQuery(query, [id, id]);
+    const response = await executeQuery(query,[id]);
 
     return response;
   } catch (error) {
     throw error;
   }
 };
+
+
 const getSolicitudesClient = async (user_id) => {
   try {
     let query = `
@@ -515,60 +525,60 @@ ORDER BY servicios.created_at DESC;`;
 
 const getItemsSolicitud = async (id_solicitud) => {
   try {
-//     let query = `
-// SELECT
-//   s.id_solicitud,
-//   s.id_servicio,
-//   s.confirmation_code,
-//   s.id_viajero,
-//   s.hotel,
-//   s.check_in,
-//   s.check_out,
-//   s.room,
-//   s.total,
-//   s.status,
-//   s.id_usuario_generador,
-//   s.nombre_viajero,
-  
-//   -- Items agrupados por noche en formato JSON
-//   (
-//     SELECT JSON_ARRAYAGG(
-//       JSON_OBJECT(
-//         'id_item', i.id_item,
-//         'fecha_uso', i.fecha_uso,
-//         'total', i.total,
-//         'subtotal', i.subtotal,
-//         'impuestos', i.impuestos,
-//         'costo_total', i.costo_total,
-//         'costo_subtotal', i.costo_subtotal,
-//         'costo_impuestos', i.costo_impuestos,
-//         'saldo', i.saldo,
-//         'is_facturado', i.is_facturado,
-//         'id_factura', i.id_factura
-//       )
-//     )
-//     FROM items i
-//     WHERE i.id_hospedaje = h.id_hospedaje
-//     ORDER BY i.fecha_uso
-//   ) AS items,
-  
-//   -- Información de booking
-//   IF(b.id_solicitud IS NOT NULL, TRUE, FALSE) AS is_booking,
-//   b.id_booking
+    //     let query = `
+    // SELECT
+    //   s.id_solicitud,
+    //   s.id_servicio,
+    //   s.confirmation_code,
+    //   s.id_viajero,
+    //   s.hotel,
+    //   s.check_in,
+    //   s.check_out,
+    //   s.room,
+    //   s.total,
+    //   s.status,
+    //   s.id_usuario_generador,
+    //   s.nombre_viajero,
 
-// FROM solicitudes s
-// LEFT JOIN bookings b ON s.id_solicitud = b.id_solicitud
-// LEFT JOIN hospedajes h ON b.id_booking = h.id_booking
-// WHERE s.id_solicitud = ?;`;
+    //   -- Items agrupados por noche en formato JSON
+    //   (
+    //     SELECT JSON_ARRAYAGG(
+    //       JSON_OBJECT(
+    //         'id_item', i.id_item,
+    //         'fecha_uso', i.fecha_uso,
+    //         'total', i.total,
+    //         'subtotal', i.subtotal,
+    //         'impuestos', i.impuestos,
+    //         'costo_total', i.costo_total,
+    //         'costo_subtotal', i.costo_subtotal,
+    //         'costo_impuestos', i.costo_impuestos,
+    //         'saldo', i.saldo,
+    //         'is_facturado', i.is_facturado,
+    //         'id_factura', i.id_factura
+    //       )
+    //     )
+    //     FROM items i
+    //     WHERE i.id_hospedaje = h.id_hospedaje
+    //     ORDER BY i.fecha_uso
+    //   ) AS items,
+
+    //   -- Información de booking
+    //   IF(b.id_solicitud IS NOT NULL, TRUE, FALSE) AS is_booking,
+    //   b.id_booking
+
+    // FROM solicitudes s
+    // LEFT JOIN bookings b ON s.id_solicitud = b.id_solicitud
+    // LEFT JOIN hospedajes h ON b.id_booking = h.id_booking
+    // WHERE s.id_solicitud = ?;`;
     let query = `
     select i.* from items i
             JOIN hospedajes h ON i.id_hospedaje = h.id_hospedaje
             JOIN bookings b ON h.id_booking = b.id_booking
           WHERE b.id_solicitud = ?;
-      `
+      `;
     let response = await executeQuery(query, [id_solicitud]);
-    console.log("xd")
-    console.log(response)
+    console.log("xd");
+    console.log(response);
     return response;
   } catch (error) {
     throw error;

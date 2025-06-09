@@ -31,6 +31,27 @@ const readConsultas = async (req, res) => {
   }
 }
 
+const readAllConsultas = async (req, res) => {
+  try {
+    let solicitudes = await model.getAllFacturasConsultas()
+    res.status(200).json(solicitudes)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Internal Server Error', details: error })
+  }
+}
+
+const readDetailsFactura = async (req, res) => {
+  try {
+    const { id_factura } = req.query;
+    let facturas = await model.getDetailsFactura(id_factura);
+    res.status(200).json(facturas)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Internal Server Error', details: error })
+  }
+}
+
 const readAllFacturas = async (req, res) => {
   try {
     const facturas = await model.getAllFacturas()
@@ -46,4 +67,6 @@ module.exports = {
   readAllFacturas,
   createCombinada,
   readConsultas,
+  readAllConsultas,
+  readDetailsFactura,
 }

@@ -29,6 +29,13 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           id_hospedaje: id_hospedaje_actual,
         } = selectResults[0];
 
+        if (edicionData.viajero) {
+          connection.execute(
+            "UPDATE viajeros_hospedajes SET id_viajero = ? WHERE id_hospedaje = ?",
+            [edicionData.viajero.current.id_viajero, id_hospedaje_actual]
+          );
+        }
+
         if (
           edicionData.items &&
           !id_hospedaje_actual &&
@@ -41,7 +48,28 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
             `No se encontró un hospedaje para la reserva ${id_booking_a_editar} para procesar items.`
           );
         }
+        // --- 0. Verificar si es la primera vez que se procesa la solicitud
+        // if (id_hospedaje_actual && edicionData.viajero?.current?.id_viajero) {
+        //   const query_check_relacion = `
+        //     SELECT 1 FROM viajeros_hospedajes 
+        //     WHERE id_hospedaje = ? LIMIT 1;
+        //   `;
+        //   const [existeRelacion] = await connection.execute(query_check_relacion, [id_hospedaje_actual]);
 
+        //   if (!existeRelacion || existeRelacion.length === 0) {
+        //     //Se inserta en la tabla si no existen registros
+        //     const query_insert_relacion = `
+        //       INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal)
+        //       VALUES (?, ?, ?);
+        //     `;
+        //     await connection.execute(query_insert_relacion, [
+        //       edicionData.viajero.current.id_viajero,
+        //       id_hospedaje_actual,
+        //       1
+        //     ]);
+        //     console.log(`Nueva relación viajero-hospedaje creada para viajero ${edicionData.viajero.current.id_viajero} y hospedaje ${id_hospedaje_actual}`);
+        //   }
+        // }
         // --- 1. Actualizar tabla 'bookings' ---
         const updates_bookings_clauses = [];
         const params_update_bookings_values = [];
@@ -185,8 +213,8 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
                   is_facturado, fecha_uso, id_hospedaje, costo_total, costo_subtotal, 
                   costo_impuestos, costo_iva, saldo
                 ) VALUES ${itemsConIdAnadido
-                  .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                  .join(",")};`;
+                .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .join(",")};`;
             const params_items_insert = itemsConIdAnadido.flatMap(
               (itemConId) => [
                 itemConId.id_item,
@@ -228,8 +256,8 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
               const query_impuestos_items = `
                   INSERT INTO impuestos_items (id_item, base, total, porcentaje, monto, nombre_impuesto, tipo_impuesto)
                   VALUES ${taxesDataParaDb
-                    .map(() => "(?, ?, ?, ?, ?, ?, ?)")
-                    .join(", ")};`;
+                  .map(() => "(?, ?, ?, ?, ?, ?, ?)")
+                  .join(", ")};`;
               const params_impuestos_items = taxesDataParaDb.flatMap((t) => [
                 t.id_item,
                 t.base,
@@ -256,8 +284,8 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
                 const query_items_pagos_insert = `
                     INSERT INTO items_pagos (id_item, id_pago, monto)
                     VALUES ${itemsConIdAnadido
-                      .map(() => "(?, ?, ?)")
-                      .join(",")};`;
+                    .map(() => "(?, ?, ?)")
+                    .join(",")};`;
                 const params_items_pagos_insert = itemsConIdAnadido.flatMap(
                   (itemConId) => [
                     itemConId.id_item,
@@ -511,9 +539,9 @@ const insertarReservaOperaciones = async (reserva) => {
           const itemsConIdAnadido =
             items && items.length > 0
               ? items.map((item) => ({
-                  ...item, // Esto incluye item.costo, item.venta, item.impuestos originales
-                  id_item: `ite-${uuidv4()}`,
-                }))
+                ...item, // Esto incluye item.costo, item.venta, item.impuestos originales
+                id_item: `ite-${uuidv4()}`,
+              }))
               : [];
 
           // 2. Insertar Items en la tabla 'items' (común si hay items)
@@ -592,6 +620,16 @@ const insertarReservaOperaciones = async (reserva) => {
               );
             }
           }
+          // 4. meter a viajero hospedajes
+          const query_insert_relacion = `
+              INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal)
+              VALUES (?, ?, ?);
+            `;
+          await connection.execute(query_insert_relacion, [
+            viajero.id_viajero,
+            id_hospedaje,
+            1
+          ]);
 
           /* FALTA AGREGAR EL CREDITO CON PAGO Y LOS ITEMS A SUS CREDITOS */
           const queryCredito = `
@@ -797,9 +835,10 @@ WHERE b.id_booking = ?;`;
 };
 
 const insertarReserva = async ({ reserva }) => {
+  //console.log(reserva);
   try {
     const id_booking = `boo-${uuidv4()}`;
-    const { solicitud, venta, proveedor, hotel, items } = reserva; // 'items' aquí es ReservaForm['items']
+    const { solicitud, venta, proveedor, hotel, items, viajero } = reserva; // 'items' aquí es ReservaForm['items']
 
     // Query y parámetros para la inserción inicial en 'bookings'
     // Asegúrate de que estas columnas coincidan con tu tabla 'bookings'
@@ -827,7 +866,7 @@ const insertarReserva = async ({ reserva }) => {
       null, // fecha_limite_cancelacion - Ajusta si lo tienes
       solicitud.id_solicitud,
     ];
-    
+
     // La función executeTransaction debería tomar la primera query y sus params,
     // y luego el callback con la conexión para las siguientes operaciones.
     const response = await executeTransaction(
@@ -869,9 +908,9 @@ const insertarReserva = async ({ reserva }) => {
           const itemsConIdAnadido =
             items && items.length > 0
               ? items.map((item) => ({
-                  ...item, // Esto incluye item.costo, item.venta, item.impuestos originales
-                  id_item: `ite-${uuidv4()}`,
-                }))
+                ...item, // Esto incluye item.costo, item.venta, item.impuestos originales
+                id_item: `ite-${uuidv4()}`,
+              }))
               : [];
 
           // 2. Insertar Items en la tabla 'items' (común si hay items)
@@ -1004,6 +1043,17 @@ const insertarReserva = async ({ reserva }) => {
             `UPDATE solicitudes SET status = "complete" WHERE id_solicitud = ?;`,
             [solicitud.id_solicitud] // Asegúrate que solicitud.id_solicitud está disponible
           );
+
+          // 6. meter a viajero hospedajes
+          const query_insert_relacion = `
+              INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal)
+              VALUES (?, ?, ?);
+            `;
+          await connection.execute(query_insert_relacion, [
+            viajero.id_viajero,
+            id_hospedaje,
+            1
+          ]);
 
           return {
             message: "Reserva procesada exitosamente",

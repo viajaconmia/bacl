@@ -27,12 +27,18 @@ const getStats = async (month, year, id_user) => {
   v.primer_nombre,
   v.apellido_paterno,
   v.correo,
-  v.telefono
+  v.telefono,
+
+  -- Datos Pagos
+  p.id_pago,
+  pc.id_credito
 
 FROM solicitudes s
 LEFT JOIN bookings b ON s.id_solicitud = b.id_solicitud
 LEFT JOIN hospedajes h ON b.id_booking = h.id_booking
 LEFT JOIN viajeros v ON s.id_viajero = v.id_viajero
+LEFT JOIN pagos p ON s.id_servicio = p.id_servicio
+LEFT JOIN pagos_credito pc ON s.id_servicio = pc.id_servicio
 
 WHERE s.id_usuario_generador = ?
   AND YEAR(s.check_in) = ?
