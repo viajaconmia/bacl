@@ -7,11 +7,11 @@ const createAgenteCredito = async (datosCredito) => {
         const query = `
         UPDATE agentes
         SET tiene_credito_consolidado = 1,
-            monto_credito = 50000
+            saldo = 50000
         WHERE id_agente = 'ce57342e-03e9-440f-b12f-16497f23b8bb';`;
 
         const params = [
-            datosCredito.monto_credito
+            datosCredito.saldo
         ];
 
         const response = await executeQuery(query, params);
@@ -23,7 +23,7 @@ const createAgenteCredito = async (datosCredito) => {
 
 const readAgenteCredito = async () => {
     try {
-        const query = "SELECT tiene_credito_consolidado, monto_credito FROM agentes WHERE id_agente = ?";
+        const query = "SELECT tiene_credito_consolidado, saldo FROM agentes WHERE id_agente = ?";
         const params = [id_agente];
         const response = await executeQuery(query, params);
         console.log(response);

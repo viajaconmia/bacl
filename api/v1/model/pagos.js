@@ -102,7 +102,7 @@ const getCreditoEmpresa = async (body) => {
     const { id_empresa } = body;
     const params = [id_empresa];
     const query = `
-    SELECT empresas.id_empresa, empresas.tiene_credito, empresas.monto_credito as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona, agentes.id_agente, agentes.tiene_credito_consolidado,  agentes.monto_credito as monto_credito_agente
+    SELECT empresas.id_empresa, empresas.tiene_credito, empresas.saldo as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona, agentes.id_agente, agentes.tiene_credito_consolidado,  agentes.saldo as monto_credito_agente
     FROM empresas
     JOIN empresas_agentes ON empresas.id_empresa = empresas_agentes.id_empresa
     JOIN agentes ON agentes.id_agente = empresas_agentes.id_agente
@@ -119,7 +119,7 @@ const getCreditoAgente = async (body) => {
     console.log(body)
     const { id_agente } = body;
     const query = `
-      SELECT agentes.id_agente, agentes.nombre, agentes.tiene_credito_consolidado, agentes.monto_credito as monto_credito_agente, empresas.id_empresa, empresas.tiene_credito, empresas.monto_credito as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona
+      SELECT agentes.id_agente, agentes.nombre, agentes.tiene_credito_consolidado, agentes.saldo as monto_credito_agente, empresas.id_empresa, empresas.tiene_credito, empresas.saldo as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona
       FROM agentes
       JOIN empresas_agentes ON agentes.id_agente = empresas_agentes.id_agente
       JOIN empresas ON empresas.id_empresa = empresas_agentes.id_empresa
@@ -135,7 +135,7 @@ const getCreditoAgente = async (body) => {
 const getCreditoTodos = async () => {
   try {
     const query = `
-      SELECT agentes.id_agente, agentes.nombre, agentes.tiene_credito_consolidado, agentes.monto_credito AS monto_credito_agente, empresas.id_empresa, empresas.tiene_credito, empresas.monto_credito as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona
+      SELECT agentes.id_agente, agentes.nombre, agentes.tiene_credito_consolidado, agentes.saldo AS monto_credito_agente, empresas.id_empresa, empresas.tiene_credito, empresas.saldo as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona
       FROM agentes
       JOIN empresas_agentes ON agentes.id_agente = empresas_agentes.id_agente
       JOIN empresas ON empresas.id_empresa = empresas_agentes.id_empresa;`;
@@ -149,7 +149,7 @@ const getCreditoTodos = async () => {
 const editCreditoEmpresa = async (body) => {
   try {
     const { id, credit } = body;
-    const query = `UPDATE empresas SET monto_credito = ?, tiene_credito = ? WHERE id_empresa = ?`;
+    const query = `UPDATE empresas SET saldo = ?, tiene_credito = ? WHERE id_empresa = ?`;
     const params = [credit, (credit > 0), id]
     const response = await executeQuery(query, params);
     return response;
@@ -160,7 +160,7 @@ const editCreditoEmpresa = async (body) => {
 const editCreditoAgente = async (body) => {
   try {
     const { id, credit } = body;
-    const query = `UPDATE agentes SET monto_credito = ?, tiene_credito_consolidado = ? WHERE id_agente = ?`;
+    const query = `UPDATE agentes SET saldo = ?, tiene_credito_consolidado = ? WHERE id_agente = ?`;
     const params = [credit, (credit > 0), id]
     const response = await executeQuery(query, params);
     return response;
@@ -231,7 +231,7 @@ const pagoConCredito = async (body) => {
       console.log("Pago a crédito registrado en pagos_credito");
 
       // Actualizar el crédito disponible del agente
-      const query2 = "UPDATE agentes SET monto_credito = ? WHERE id_agente = ?;";
+      const query2 = "UPDATE agentes SET saldo = ? WHERE id_agente = ?;";
       const params2 = [credito_restante, responsable_pago_agente];
 
       try {
