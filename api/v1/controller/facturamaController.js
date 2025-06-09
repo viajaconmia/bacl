@@ -86,6 +86,19 @@ const descargarFacturas = async (req, res) => {
   }
 };
 
+const descargarFacturasXML = async (req, res) => {
+  try {
+    const { cfdi_id } = req.body
+    const dataDownload = await model.descargaCfdiXML(cfdi_id)  // Asegúrate de que esta función también devuelva una promesa
+    console.log(dataDownload);
+
+    res.status(200).json(dataDownload)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Internal Server Error', details: error.response.data })
+  }
+}
+
 const mandarCorreo = async (req, res) => {
   try {
     const { id_cfdi, email } = req.body;
@@ -155,4 +168,5 @@ module.exports = {
   obtenerClientePorRfc,
   obtenerFacturasCliente,
   cancelarCfdi,
-};
+  descargarFacturasXML
+}

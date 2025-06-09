@@ -10,6 +10,8 @@ const descargaCfdi = (idCfdi, type = "pdf") =>
 const mandarCorreo = (idCfdi, email, type = "issued") =>
   facturama.Cfdi.Send(`cfdiId=${idCfdi}&email=${email}&cfdiType=${type}`);
 
+const descargaCfdiXML = (idCfdi) => facturama.Cfdi.Download("xml", "issued", idCfdi)
+
 const crearCfdi = (cfdi_data) => facturama.Cfdi.Create3(cfdi_data);
 
 const crearCliente = (data) => facturama.Clients.Create(data);
@@ -25,4 +27,6 @@ module.exports = {
   crearCfdi,
   crearCliente,
   cancelarCfdi,
-};
+
+  descargaCfdiXML
+}

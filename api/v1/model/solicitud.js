@@ -316,56 +316,59 @@ ORDER BY s.created_at DESC;`;
 
 const getSolicitudesClientWithViajero = async (id) => {
   try {
-    const query = `select 
-p_c.id_credito,
-p_c.pendiente_por_cobrar,
-s.id_servicio,
-s.created_at,
-s.is_credito,
-so.id_solicitud,
-so.confirmation_code,
-so.hotel,
-so.check_in,
-so.check_out,
-so.room,
-so.total,
-so.status,
-CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) AS nombre_viajero,
-so.id_usuario_generador,
-b.id_booking, 
-h.codigo_reservacion_hotel, 
-p.id_pago,
-p.monto_a_credito,
-fp.id_factura,
-vw.primer_nombre,
-vw.apellido_paterno,
-f.id_facturama
-from solicitudes as so
-LEFT JOIN servicios as s ON so.id_servicio = s.id_servicio
-LEFT JOIN pagos_credito as p_c ON s.id_servicio = p_c.id_servicio
-LEFT JOIN bookings as b ON so.id_solicitud = b.id_solicitud
-LEFT JOIN hospedajes as h ON b.id_booking = h.id_booking
-LEFT JOIN pagos as p ON so.id_servicio = p.id_servicio
-LEFT JOIN facturas_pagos as fp ON p.id_pago = fp.id_pago
-LEFT JOIN facturas as f ON fp.id_factura = f.id_factura
-LEFT JOIN viajeros_con_empresas_con_agentes as vw ON vw.id_viajero = so.id_viajero
-WHERE id_usuario_generador in (
-	select id_empresa 
-	from empresas_agentes 
-	where id_agente = ?
-) or id_usuario_generador = ? AND
- so.status <> 'canceled'
-GROUP BY so.id_solicitud
-ORDER BY s.created_at DESC;`;
+    const query = 
+	    `SELECT 
+  p_c.id_credito,
+  p_c.pendiente_por_cobrar,
+  s.id_servicio,
+  s.created_at,
+  s.is_credito,
+  so.id_solicitud,
+  so.confirmation_code,
+  so.hotel,
+  so.check_in,
+  so.check_out,
+  so.room,
+  so.total,
+  so.status,
+  so.nombre_viajero,
+  so.id_usuario_generador,
+  b.id_booking, 
+  h.codigo_reservacion_hotel, 
+  p.id_pago,
+  p.monto_a_credito,
+  fp.id_factura,
+  UPPER(IFNULL(v.primer_nombre, '')) AS primer_nombre,
+  UPPER(IFNULL(v.apellido_paterno, '')) AS apellido_paterno,
+  f.id_facturama
+FROM agentes a
+inner join empresas_agentes 	as ea  
+		On a.id_agente  = ea.id_agente 	    									
+				and  a.id_agente = ?
+inner join empresas 			as e 	On e.id_empresa = ea.id_empresa 
+inner join viajero_empresa 		as ve 	On e.id_empresa = ve.id_empresa 
+inner join viajeros 			as v 	On v.id_viajero = ve.id_viajero 
+inner join solicitudes 			as so   On so.id_viajero = ve.id_viajero 
+INNER JOIN servicios 			as s 	ON so.id_servicio = s.id_servicio
+left join bookings 			as b	On b.id_solicitud = so.id_solicitud 
+left JOIN hospedajes 			as h 	ON b.id_booking = h.id_booking
+LEFT JOIN pagos 		   		as p 	ON so.id_servicio = p.id_servicio
+LEFT JOIN facturas_pagos   		as fp 	ON p.id_pago = fp.id_pago
+LEFT JOIN facturas         		as f 	ON fp.id_factura = f.id_factura
+LEFT JOIN pagos_credito    		as p_c 	ON s.id_servicio = p_c.id_servicio
+WHERE so.status <> 'canceled'
+ORDER BY a.id_agente, a.created_at`;
 
     // Ejecutar el procedimiento almacenado
-    const response = await executeQuery(query, [id, id]);
+    const response = await executeQuery(query,[id]);
 
     return response;
   } catch (error) {
     throw error;
   }
 };
+
+
 const getSolicitudesClient = async (user_id) => {
   try {
     let query = `
