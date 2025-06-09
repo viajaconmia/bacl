@@ -60,13 +60,13 @@ router.get("/all", async (req, res) => {
     }
 
     if (query.startCantidad && query.endCantidad) {
-      conditions.push(`a.monto_credito BETWEEN ? AND ?`);
+      conditions.push(`a.saldo BETWEEN ? AND ?`);
       values.push(query.startCantidad, query.endCantidad);
     } else if (query.startCantidad) {
-      conditions.push(`a.monto_credito >= ?`);
+      conditions.push(`a.saldo >= ?`);
       values.push(query.startCantidad);
     } else if (query.endCantidad) {
-      conditions.push(`a.monto_credito <= ?`);
+      conditions.push(`a.saldo <= ?`);
       values.push(query.endCantidad);
     }
 
@@ -128,7 +128,7 @@ order by a.created_at desc;
 //Extrae los datos del agente por id
 router.get("/id", async (req, res) => {
   try {
-    const query = `select vw_details_agente.*, agentes.tiene_credito_consolidado, agentes.monto_credito from agentes JOIN vw_details_agente ON vw_details_agente.id_agente = agentes.id_agente WHERE vw_details_agente.id_agente = ?;`;
+    const query = `select vw_details_agente.*, agentes.tiene_credito_consolidado, agentes.saldo from agentes JOIN vw_details_agente ON vw_details_agente.id_agente = agentes.id_agente WHERE vw_details_agente.id_agente = ?;`;
     const response = await executeQuery(query, [req.query.id]);
     res.status(200).json(response);
   } catch (error) {
@@ -167,7 +167,7 @@ router.put("/", async (req, res) => {
     // Columnas permitidas para cada tabla (basado en tu JSON de ejemplo y la lista de columnas)
     // ¡Asegúrate de que estas listas sean correctas y completas según tus necesidades!
     const allowedColumns = {
-      empresas: ["tiene_credito", "monto_credito"],
+      empresas: ["tiene_credito", "saldo"],
       viajeros: [
         "numero_pasaporte",
         "nacionalidad",
@@ -177,7 +177,7 @@ router.put("/", async (req, res) => {
       ],
       agentes: [
         "tiene_credito_consolidado",
-        "monto_credito",
+        "saldo",
         "vendedor",
         "notas",
       ],
