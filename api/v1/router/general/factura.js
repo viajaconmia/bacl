@@ -21,6 +21,7 @@ router.post(
   "/cfdi",
   async (req, res, next) => {
     console.log(req.body);
+    next();
   },
   controller.crearCfdi
 );
