@@ -146,7 +146,7 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
     }
     if (filters.id_client) {
       conditions.push(`vw.id_agente LIKE ?`);
-      values.push(`%${filters.id_client}%`);
+      values.push(`%${filters.id_client.split("").join("%")}%`);
     }
 
     if (filters.status) {

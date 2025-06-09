@@ -93,7 +93,7 @@ router.get("/all", async (req, res) => {
     if (query.client) {
       conditions.push(`nombre_agente_completo LIKE ? OR id_agente LIKE ?`);
       values.push(`%${query.client.split(" ").join("%")}%`);
-      values.push(`%${query.client.split(" ").join("%")}%`);
+      values.push(`%${query.client.split("").join("%")}%`);
     }
 
     const queryget = `
