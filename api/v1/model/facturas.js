@@ -316,8 +316,9 @@ order by fecha_emision desc;`
 
 const getDetailsFactura = async (id_factura) => {
   try {
-    const query = `select count(*) AS noches_facturadas, i.*, h.* from items i 
+    const query = `select count(*) AS noches_facturadas, i.*, h.*, b.total as total_booking, b.subtotal as subtotal_booking, b.impuestos as impuestos_booking from items i 
 join hospedajes h on h.id_hospedaje = i.id_hospedaje
+join bookings b on b.id_booking = h.id_booking
 where i.id_factura = ?
 group by h.id_hospedaje;`
     let response = await executeQuery(query, [id_factura]);
