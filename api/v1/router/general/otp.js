@@ -37,6 +37,16 @@ router.post("/send-otp-pass", async (req, res) => {
   }
 });
 
+router.get("/all", async (req, res) => {
+  try {
+    const response = await executeQuery("select * from otp_storage", []);
+
+    res.json({ success: true, message: "Se obtuvo con exito", data: response });
+  } catch (error) {
+    res.status(500).json({ error: error });
+  }
+});
+
 router.get("/verify-otp", async (req, res) => {
   try {
     const { email, code } = req.query;
