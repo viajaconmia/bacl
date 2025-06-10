@@ -18,18 +18,18 @@ const createPagos = async (datosPago) => {
 
     const params = [
       id_pago,
-      datosPago.id_servicio,  // Requerido de la relación con servicios
-      datosPago.monto_a_credito || 0.0,  // Campo NOT NULL
+      datosPago.id_servicio, // Requerido de la relación con servicios
+      datosPago.monto_a_credito || 0.0, // Campo NOT NULL
       datosPago.responsable_pago_empresa || null,
       datosPago.responsable_pago_agente || null,
-      datosPago.fecha_creacion || new Date().toISOString().split('T')[0], // Formato YYYY-MM-DD
+      datosPago.fecha_creacion || new Date().toISOString().split("T")[0], // Formato YYYY-MM-DD
       datosPago.pago_por_credito || null,
       datosPago.pendiente_por_cobrar || false,
       datosPago.total || null,
       datosPago.subtotal || null,
       datosPago.impuestos || null,
-      new Date().toISOString().slice(0, 19).replace('T', ' '), // created_at
-      new Date().toISOString().slice(0, 19).replace('T', ' '), // updated_at
+      new Date().toISOString().slice(0, 19).replace("T", " "), // created_at
+      new Date().toISOString().slice(0, 19).replace("T", " "), // updated_at
       datosPago.padre || null,
       datosPago.concepto || null,
       datosPago.referencia || null,
@@ -39,15 +39,15 @@ const createPagos = async (datosPago) => {
       datosPago.banco || null,
       datosPago.autorizacion_stripe || null,
       datosPago.last_digits || null,
-      datosPago.fecha_transaccion || new Date().toISOString().split('T')[0],
+      datosPago.fecha_transaccion || new Date().toISOString().split("T")[0],
       datosPago.currency || null,
       datosPago.metodo_de_pago || null,
       datosPago.tipo_de_tarjeta || null,
-      datosPago.tipo_de_pago || 'contado'
+      datosPago.tipo_de_pago || "contado",
     ];
 
     const response = await executeQuery(query, params);
-    return ({ success: true });
+    return { success: true };
   } catch (error) {
     throw error;
   }
@@ -65,7 +65,8 @@ const readPagos = async () => {
 
 const getPagos = async (id_agente) => {
   try {
-    const query = "SELECT * FROM vista_pagos WHERE responsable_pago_agente = ?;";
+    const query =
+      "SELECT * FROM vista_pagos WHERE responsable_pago_agente = ?;";
     const response = await executeQuery(query, [id_agente]);
     console.log(response);
     return response;
@@ -76,7 +77,8 @@ const getPagos = async (id_agente) => {
 
 const getPendientes = async (id_agente) => {
   try {
-    const query = "SELECT * FROM vista_creditos_completos WHERE responsable_pago_agente = ?;";
+    const query =
+      "SELECT * FROM vista_creditos_completos WHERE responsable_pago_agente = ?;";
     const response = await executeQuery(query, [id_agente]);
     console.log(response);
     return response;
@@ -98,15 +100,15 @@ const getAllPendientes = async () => {
 
 const getCreditoEmpresa = async (body) => {
   try {
-    console.log(body)
+    console.log(body);
     const { id_empresa } = body;
     const params = [id_empresa];
     const query = `
-    SELECT empresas.id_empresa, empresas.tiene_credito, empresas.saldo as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona, agentes.id_agente, agentes.tiene_credito_consolidado,  agentes.saldo as monto_credito_agente
+    SELECT empresas.id_empresa, empresas.tiene_credito, empresas.monto_credito as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona, agentes.id_agente, agentes.tiene_credito_consolidado,  agentes.saldo as monto_credito_agente
     FROM empresas
     JOIN empresas_agentes ON empresas.id_empresa = empresas_agentes.id_empresa
     JOIN agentes ON agentes.id_agente = empresas_agentes.id_agente
-    WHERE empresas.id_empresa = 1;`
+    WHERE empresas.id_empresa = 1;`;
     const response = await executeQuery(query, params);
     return response;
   } catch (error) {
@@ -116,10 +118,10 @@ const getCreditoEmpresa = async (body) => {
 
 const getCreditoAgente = async (body) => {
   try {
-    console.log(body)
+    console.log(body);
     const { id_agente } = body;
     const query = `
-      SELECT agentes.id_agente, agentes.nombre, agentes.tiene_credito_consolidado, agentes.saldo as monto_credito_agente, empresas.id_empresa, empresas.tiene_credito, empresas.saldo as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona
+      SELECT agentes.id_agente, agentes.nombre, agentes.tiene_credito_consolidado, agentes.saldo as monto_credito_agente, empresas.id_empresa, empresas.tiene_credito, empresas.monto_credito as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona
       FROM agentes
       JOIN empresas_agentes ON agentes.id_agente = empresas_agentes.id_agente
       JOIN empresas ON empresas.id_empresa = empresas_agentes.id_empresa
@@ -135,7 +137,7 @@ const getCreditoAgente = async (body) => {
 const getCreditoTodos = async () => {
   try {
     const query = `
-      SELECT agentes.id_agente, agentes.nombre, agentes.tiene_credito_consolidado, agentes.saldo AS monto_credito_agente, empresas.id_empresa, empresas.tiene_credito, empresas.saldo as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona
+      SELECT agentes.id_agente, agentes.nombre, agentes.tiene_credito_consolidado, agentes.saldo AS monto_credito_agente, empresas.id_empresa, empresas.tiene_credito, empresas.monto_credito as monto_credito_empresa, empresas.nombre_comercial, empresas.razon_social, empresas.tipo_persona
       FROM agentes
       JOIN empresas_agentes ON agentes.id_agente = empresas_agentes.id_agente
       JOIN empresas ON empresas.id_empresa = empresas_agentes.id_empresa;`;
@@ -149,25 +151,25 @@ const getCreditoTodos = async () => {
 const editCreditoEmpresa = async (body) => {
   try {
     const { id, credit } = body;
-    const query = `UPDATE empresas SET saldo = ?, tiene_credito = ? WHERE id_empresa = ?`;
-    const params = [credit, (credit > 0), id]
+    const query = `UPDATE empresas SET monto_credito = ?, tiene_credito = ? WHERE id_empresa = ?`;
+    const params = [credit, credit > 0, id];
     const response = await executeQuery(query, params);
     return response;
   } catch (error) {
     throw error;
   }
-}
+};
 const editCreditoAgente = async (body) => {
   try {
     const { id, credit } = body;
     const query = `UPDATE agentes SET saldo = ?, tiene_credito_consolidado = ? WHERE id_agente = ?`;
-    const params = [credit, (credit > 0), id]
+    const params = [credit, credit > 0, id];
     const response = await executeQuery(query, params);
     return response;
   } catch (error) {
     throw error;
   }
-}
+};
 
 const getAllPagos = async () => {
   try {
@@ -196,7 +198,7 @@ const pagoConCredito = async (body) => {
       concepto,
       credito_restante,
       currency = "mxn",
-      tipo_de_pago = "credito"
+      tipo_de_pago = "credito",
     } = body;
 
     const id_credito = `cre-${uuidv4()}`;
@@ -224,32 +226,36 @@ const pagoConCredito = async (body) => {
       impuestos,
       concepto,
       currency,
-      tipo_de_pago
+      tipo_de_pago,
     ];
 
-    const response = await executeTransaction(query, params, async (result, connection) => {
-      console.log("Pago a crédito registrado en pagos_credito");
+    const response = await executeTransaction(
+      query,
+      params,
+      async (result, connection) => {
+        console.log("Pago a crédito registrado en pagos_credito");
 
-      // Actualizar el crédito disponible del agente
-      const query2 = "UPDATE agentes SET saldo = ? WHERE id_agente = ?;";
-      const params2 = [credito_restante, responsable_pago_agente];
+        // Actualizar el crédito disponible del agente
+        const query2 = "UPDATE agentes SET saldo = ? WHERE id_agente = ?;";
+        const params2 = [credito_restante, responsable_pago_agente];
 
-      try {
-        await connection.execute(query2, params2);
-        console.log("Crédito del agente actualizado");
+        try {
+          await connection.execute(query2, params2);
+          console.log("Crédito del agente actualizado");
 
-        return { success: true, id_credito };
-      } catch (error) {
-        throw error;
+          return { success: true, id_credito };
+        } catch (error) {
+          throw error;
+        }
       }
-    });
+    );
 
     return { success: true, id_credito };
   } catch (error) {
     console.error("Error en pagoConCredito:", error);
     throw error;
   }
-}
+};
 
 const getPagosConsultas = async (user_id) => {
   try {
@@ -354,7 +360,7 @@ ORDER BY pagos.created_at DESC;`;
   } catch (error) {
     throw error;
   }
-}
+};
 
 module.exports = {
   createPagos,

@@ -157,12 +157,7 @@ router.put("/", async (req, res) => {
         "fecha_nacimiento",
         "numero_empleado",
       ],
-      agentes: [
-        "tiene_credito_consolidado",
-        "saldo",
-        "vendedor",
-        "notas",
-      ],
+      agentes: ["tiene_credito_consolidado", "saldo", "vendedor", "notas"],
     };
 
     for (const sectionKey in dataToUpdate) {
