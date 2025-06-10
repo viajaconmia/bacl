@@ -149,7 +149,7 @@ router.put("/", async (req, res) => {
     // Columnas permitidas para cada tabla (basado en tu JSON de ejemplo y la lista de columnas)
     // ¡Asegúrate de que estas listas sean correctas y completas según tus necesidades!
     const allowedColumns = {
-      empresas: ["tiene_credito", "saldo"],
+      empresas: ["tiene_credito", "monto_credito"],
       viajeros: [
         "numero_pasaporte",
         "nacionalidad",
@@ -157,12 +157,7 @@ router.put("/", async (req, res) => {
         "fecha_nacimiento",
         "numero_empleado",
       ],
-      agentes: [
-        "tiene_credito_consolidado",
-        "saldo",
-        "vendedor",
-        "notas",
-      ],
+      agentes: ["tiene_credito_consolidado", "saldo", "vendedor", "notas"],
     };
 
     for (const sectionKey in dataToUpdate) {
