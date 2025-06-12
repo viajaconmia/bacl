@@ -357,6 +357,7 @@ LEFT JOIN facturas_pagos   		as fp 	ON p.id_pago = fp.id_pago
 LEFT JOIN facturas         		as f 	ON fp.id_factura = f.id_factura
 LEFT JOIN pagos_credito    		as p_c 	ON s.id_servicio = p_c.id_servicio
 WHERE so.status <> 'canceled'
+group by so.id_solicitud
 ORDER BY a.id_agente, a.created_at`;
 
     // Ejecutar el procedimiento almacenado
