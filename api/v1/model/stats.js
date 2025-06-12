@@ -49,43 +49,45 @@ ORDER BY s.check_in DESC;
 
 
 
-`
-    let params = [id_user, year, month]
-    let response = await executeQuery(query, params)
+`;
+    let params = [id_user, year, month];
+    let response = await executeQuery(query, params);
     return response;
   } catch (error) {
     throw error;
   }
-}
+};
 const getStatsPerMonth = async (year, id_user) => {
   try {
     let query = `SELECT 
-    DATE_FORMAT(check_in, '%Y-%m') AS mes,
-    hotel,
+    DATE_FORMAT(b.check_in, '%Y-%m') AS mes,
     COUNT(*) AS visitas,
-    ROUND(SUM(total),2) AS total_gastado
-FROM 
-    solicitudes
+    ROUND(SUM(b.total),2) AS total_gastado,
+    h.nombre_hotel as hotel
+FROM solicitudes as so
+INNER JOIN bookings as b ON b.id_solicitud = so.id_solicitud
+INNER JOIN hospedajes as h ON h.id_booking = b.id_booking
+INNER JOIN viajeros_hospedajes as vh ON vh.id_hospedaje = h.id_hospedaje
+INNER JOIN agentes_viajeros as av ON av.id_viajero = vh.id_viajero
 WHERE 
-    id_usuario_generador = ?
-    AND YEAR(check_in) = ?
-    AND status <> 'canceled'
+   av.id_agente = ?
+  AND YEAR(b.check_in) = ?
+  AND b.estado = "Confirmada"
 GROUP BY 
     mes, hotel
 ORDER BY 
-    mes DESC, total_gastado DESC;
+    mes DESC, b.total DESC;
 ;
-`
-    let params = [id_user, year]
-    let response = await executeQuery(query, params)
+`;
+    let params = [id_user, year];
+    let response = await executeQuery(query, params);
     return response;
   } catch (error) {
     throw error;
   }
-}
-
+};
 
 module.exports = {
   getStats,
-  getStatsPerMonth
-}
+  getStatsPerMonth,
+};
