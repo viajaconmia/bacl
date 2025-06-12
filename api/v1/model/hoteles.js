@@ -87,7 +87,19 @@ const getHotelesWithTarifas = async () => {
   }
 };
 
+const getHotelesWithTarifasClient = async () => {
+  try {
+    const query =
+      "select * from vw_hoteles_tarifas_completa where Activo = 1;";
+    const response = await executeQuery(query);
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
 module.exports = {
   getHotelesWithCuartos,
   getHotelesWithTarifas,
+  getHotelesWithTarifasClient,
 };
