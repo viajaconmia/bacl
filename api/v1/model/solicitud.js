@@ -395,7 +395,7 @@ INNER JOIN servicios as se ON se.id_servicio = so.id_servicio
 LEFT JOIN hospedajes as h ON h.id_booking = b.id_booking
 LEFT JOIN hoteles as ho ON h.id_hotel = ho.id_hotel
 LEFT JOIN viajeros_hospedajes as vh ON vh.id_hospedaje = h.id_hospedaje
-LEFT JOIN viajeros as v ON vh.id_viajero = v.id_viajero
+LEFT JOIN viajeros as v ON v.id_viajero = vh.id_viajero OR so.id_viajero = v.id_viajero
 LEFT JOIN pagos as p ON p.id_servicio = se.id_servicio
 LEFT JOIN pagos_credito as pc ON pc.id_servicio = se.id_servicio
 LEFT JOIN facturas_pagos as fp ON fp.id_pago = p.id_pago
