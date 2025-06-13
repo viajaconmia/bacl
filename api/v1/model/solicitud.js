@@ -367,6 +367,57 @@ ORDER BY a.id_agente, a.created_at`;
     throw error;
   }
 };
+const readForClient = async (id) => {
+  try {
+    const query = `
+SELECT
+	  so.id_solicitud,
+    h.codigo_reservacion_hotel,
+    ho.nombre,
+    so.hotel,
+    so.check_in,
+    so.check_out,
+    so.room,
+    so.total,
+    so.status,
+    CONCAT_WS(' ', v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno) AS nombre_viajero_completo,
+    so.nombre_viajero,
+    se.created_at,
+    ho.URLImagenHotel,
+    !isnull(b.id_booking) as is_booking,
+    p.id_pago,
+    f.id_facturama,
+    pc.id_credito,
+    pc.pendiente_por_cobrar
+FROM solicitudes as so
+LEFT JOIN bookings as b ON b.id_solicitud = so.id_solicitud
+INNER JOIN servicios as se ON se.id_servicio = so.id_servicio
+LEFT JOIN hospedajes as h ON h.id_booking = b.id_booking
+LEFT JOIN hoteles as ho ON h.id_hotel = ho.id_hotel
+LEFT JOIN viajeros_hospedajes as vh ON vh.id_hospedaje = h.id_hospedaje
+LEFT JOIN viajeros as v ON vh.id_viajero = v.id_viajero
+LEFT JOIN pagos as p ON p.id_servicio = se.id_servicio
+LEFT JOIN pagos_credito as pc ON pc.id_servicio = se.id_servicio
+LEFT JOIN facturas_pagos as fp ON fp.id_pago = p.id_pago
+LEFT JOIN facturas as f ON f.id_factura = fp.id_factura
+LEFT JOIN agentes_viajeros as av ON av.id_viajero = so.id_viajero
+WHERE (p.id_pago IS NOT NULL OR pc.id_credito IS NOT NULL) AND so.status <> "canceled" AND av.id_agente = ?
+order by se.created_at desc;`;
+
+    // Ejecutar el procedimiento almacenado
+    const response = await executeQuery(query, [id]);
+
+    return response.map((item) => ({
+      ...item,
+      viajero: item.nombre_viajero_completo
+        ? item.nombre_viajero_completo
+        : item.nombre_viajero,
+      hotel: item.nombre ? item.nombre : item.hotel,
+    }));
+  } catch (error) {
+    throw error;
+  }
+};
 
 const getSolicitudesClient = async (user_id) => {
   try {
@@ -595,4 +646,5 @@ module.exports = {
   getViajeroAgenteSolicitud,
   getSolicitudesConsultas,
   getItemsSolicitud,
+  readForClient,
 };
