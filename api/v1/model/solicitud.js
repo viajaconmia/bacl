@@ -316,9 +316,10 @@ ORDER BY s.created_at DESC;`;
 
 const getSolicitudesClientWithViajero = async (id) => {
   try {
-    const query = 
-	    `SELECT 
+    const query = `SELECT 
   p_c.id_credito,
+  p.id_pago,
+  b.id_booking, 
   p_c.pendiente_por_cobrar,
   s.id_servicio,
   s.created_at,
@@ -333,9 +334,7 @@ const getSolicitudesClientWithViajero = async (id) => {
   so.status,
   so.nombre_viajero,
   so.id_usuario_generador,
-  b.id_booking, 
   h.codigo_reservacion_hotel, 
-  p.id_pago,
   p.monto_a_credito,
   fp.id_factura,
   UPPER(IFNULL(v.primer_nombre, '')) AS primer_nombre,
@@ -360,14 +359,13 @@ WHERE so.status <> 'canceled'
 ORDER BY a.id_agente, a.created_at`;
 
     // Ejecutar el procedimiento almacenado
-    const response = await executeQuery(query,[id]);
+    const response = await executeQuery(query, [id]);
 
     return response;
   } catch (error) {
     throw error;
   }
 };
-
 
 const getSolicitudesClient = async (user_id) => {
   try {
