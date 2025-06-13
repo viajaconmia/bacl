@@ -51,7 +51,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
         // --- 0. Verificar si es la primera vez que se procesa la solicitud
         // if (id_hospedaje_actual && edicionData.viajero?.current?.id_viajero) {
         //   const query_check_relacion = `
-        //     SELECT 1 FROM viajeros_hospedajes 
+        //     SELECT 1 FROM viajeros_hospedajes
         //     WHERE id_hospedaje = ? LIMIT 1;
         //   `;
         //   const [existeRelacion] = await connection.execute(query_check_relacion, [id_hospedaje_actual]);
@@ -83,22 +83,22 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           params_update_bookings_values.push(edicionData.check_out.current);
         }
         if (edicionData.venta?.current) {
-          if (edicionData.venta.current.total !== undefined) {
-            updates_bookings_clauses.push("total = ?");
-            params_update_bookings_values.push(edicionData.venta.current.total);
-          }
-          if (edicionData.venta.current.subtotal !== undefined) {
-            updates_bookings_clauses.push("subtotal = ?");
-            params_update_bookings_values.push(
-              edicionData.venta.current.subtotal
-            );
-          }
-          if (edicionData.venta.current.impuestos !== undefined) {
-            updates_bookings_clauses.push("impuestos = ?");
-            params_update_bookings_values.push(
-              edicionData.venta.current.impuestos
-            );
-          }
+          // if (edicionData.venta.current.total !== undefined) {
+          //   updates_bookings_clauses.push("total = ?");
+          //   params_update_bookings_values.push(edicionData.venta.current.total);
+          // }
+          // if (edicionData.venta.current.subtotal !== undefined) {
+          //   updates_bookings_clauses.push("subtotal = ?");
+          //   params_update_bookings_values.push(
+          //     edicionData.venta.current.subtotal
+          //   );
+          // }
+          // if (edicionData.venta.current.impuestos !== undefined) {
+          //   updates_bookings_clauses.push("impuestos = ?");
+          //   params_update_bookings_values.push(
+          //     edicionData.venta.current.impuestos
+          //   );
+          // }
         }
         if (edicionData.estado_reserva?.current !== undefined) {
           updates_bookings_clauses.push("estado = ?");
@@ -213,16 +213,22 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
                   is_facturado, fecha_uso, id_hospedaje, costo_total, costo_subtotal, 
                   costo_impuestos, costo_iva, saldo
                 ) VALUES ${itemsConIdAnadido
-                .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                .join(",")};`;
+                  .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                  .join(",")};`;
             const params_items_insert = itemsConIdAnadido.flatMap(
               (itemConId) => [
                 itemConId.id_item,
                 null,
                 null,
-                itemConId.venta.total.toFixed(2),
-                itemConId.venta.subtotal.toFixed(2),
-                itemConId.venta.impuestos.toFixed(2),
+                (
+                  edicionData.venta.before.total / edicionData.noches.before
+                ).toFixed(2),
+                (
+                  edicionData.venta.before.subtotal / edicionData.noches.before
+                ).toFixed(2),
+                (
+                  edicionData.venta.before.impuestos / edicionData.noches.before
+                ).toFixed(2),
                 null,
                 new Date().toISOString().split("T")[0],
                 id_hospedaje_actual,
@@ -256,8 +262,8 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
               const query_impuestos_items = `
                   INSERT INTO impuestos_items (id_item, base, total, porcentaje, monto, nombre_impuesto, tipo_impuesto)
                   VALUES ${taxesDataParaDb
-                  .map(() => "(?, ?, ?, ?, ?, ?, ?)")
-                  .join(", ")};`;
+                    .map(() => "(?, ?, ?, ?, ?, ?, ?)")
+                    .join(", ")};`;
               const params_impuestos_items = taxesDataParaDb.flatMap((t) => [
                 t.id_item,
                 t.base,
@@ -284,13 +290,15 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
                 const query_items_pagos_insert = `
                     INSERT INTO items_pagos (id_item, id_pago, monto)
                     VALUES ${itemsConIdAnadido
-                    .map(() => "(?, ?, ?)")
-                    .join(",")};`;
+                      .map(() => "(?, ?, ?)")
+                      .join(",")};`;
                 const params_items_pagos_insert = itemsConIdAnadido.flatMap(
                   (itemConId) => [
                     itemConId.id_item,
                     id_pago,
-                    itemConId.venta.total.toFixed(2),
+                    (
+                      edicionData.venta.before.total / edicionData.noches.before
+                    ).toFixed(2),
                   ]
                 );
                 await connection.execute(
@@ -374,12 +382,12 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
             updates_solicitud_clauses.push("room = ?"); // Columna 'room' en tabla 'solicitudes'
             params_update_solicitud_values.push(edicionData.habitacion.current);
           }
-          if (edicionData.venta?.current?.total !== undefined) {
-            updates_solicitud_clauses.push("total = ?"); // Columna 'total' en tabla 'solicitudes'
-            params_update_solicitud_values.push(
-              edicionData.venta.current.total
-            );
-          }
+          // if (edicionData.venta?.current?.total !== undefined) {
+          //   updates_solicitud_clauses.push("total = ?"); // Columna 'total' en tabla 'solicitudes'
+          //   params_update_solicitud_values.push(
+          //     edicionData.venta.current.total
+          //   );
+          // }
           if (edicionData.codigo_reservacion_hotel?.current !== undefined) {
             updates_solicitud_clauses.push("confirmation_code = ?"); // Columna 'confirmation_code' en 'solicitudes'
             params_update_solicitud_values.push(
@@ -539,9 +547,9 @@ const insertarReservaOperaciones = async (reserva) => {
           const itemsConIdAnadido =
             items && items.length > 0
               ? items.map((item) => ({
-                ...item, // Esto incluye item.costo, item.venta, item.impuestos originales
-                id_item: `ite-${uuidv4()}`,
-              }))
+                  ...item, // Esto incluye item.costo, item.venta, item.impuestos originales
+                  id_item: `ite-${uuidv4()}`,
+                }))
               : [];
 
           // 2. Insertar Items en la tabla 'items' (común si hay items)
@@ -628,7 +636,7 @@ const insertarReservaOperaciones = async (reserva) => {
           await connection.execute(query_insert_relacion, [
             viajero.id_viajero,
             id_hospedaje,
-            1
+            1,
           ]);
 
           /* FALTA AGREGAR EL CREDITO CON PAGO Y LOS ITEMS A SUS CREDITOS */
@@ -908,9 +916,9 @@ const insertarReserva = async ({ reserva }) => {
           const itemsConIdAnadido =
             items && items.length > 0
               ? items.map((item) => ({
-                ...item, // Esto incluye item.costo, item.venta, item.impuestos originales
-                id_item: `ite-${uuidv4()}`,
-              }))
+                  ...item, // Esto incluye item.costo, item.venta, item.impuestos originales
+                  id_item: `ite-${uuidv4()}`,
+                }))
               : [];
 
           // 2. Insertar Items en la tabla 'items' (común si hay items)
@@ -1052,7 +1060,7 @@ const insertarReserva = async ({ reserva }) => {
           await connection.execute(query_insert_relacion, [
             viajero.id_viajero,
             id_hospedaje,
-            1
+            1,
           ]);
 
           return {
