@@ -1128,10 +1128,14 @@ const insertarReserva = async ({ reserva }) => {
             // Si necesitas hacerlo, aquí sería el lugar.
           }
 
-          // 5. Actualizar Solicitud (común para ambos casos)
+          // 5. Actualizar Solicitud y servicios (común para ambos casos)
           await connection.execute(
             `UPDATE solicitudes SET status = "complete" WHERE id_solicitud = ?;`,
             [solicitud.id_solicitud] // Asegúrate que solicitud.id_solicitud está disponible
+          );
+          await connection.execute(
+            `UPDATE servicios SET id_agente = ? WHERE id_servicio = ?;`,
+            [solicitud.id_agente, solicitud.id_servicio] // Asegúrate que solicitud.id_solicitud está disponible
           );
 
           // 6. meter a viajero hospedajes
