@@ -49,7 +49,7 @@ const createSolicitudes = async (body) => {
       null,
       null,
       null,
-      id_agente,
+      solicitudes[0].id_agente,
     ];
 
     const response = await executeTransaction(
