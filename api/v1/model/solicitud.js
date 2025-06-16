@@ -1,33 +1,33 @@
 const { executeTransaction, executeQuery } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 
-const createSolicitudYTicket = async (solicitud) => {
-  try {
-    let query = `INSERT INTO solicitudes (confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-    let params = [
-      solicitud.confirmation_code,
-      solicitud.id_viajero,
-      solicitud.hotel_name,
-      solicitud.check_in,
-      solicitud.check_out,
-      solicitud.room_type,
-      solicitud.total_price,
-      solicitud.status,
-    ];
+// const createSolicitudYTicket = async (solicitud) => {
+//   try {
+//     let query = `INSERT INTO solicitudes (confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+//     let params = [
+//       solicitud.confirmation_code,
+//       solicitud.id_viajero,
+//       solicitud.hotel_name,
+//       solicitud.check_in,
+//       solicitud.check_out,
+//       solicitud.room_type,
+//       solicitud.total_price,
+//       solicitud.status,
+//     ];
 
-    let response = await executeTransaction(
-      query,
-      params,
-      async (results, connection) => {
-        console.log("Creamos el ticket");
-      }
-    );
+//     let response = await executeTransaction(
+//       query,
+//       params,
+//       async (results, connection) => {
+//         console.log("Creamos el ticket");
+//       }
+//     );
 
-    return response;
-  } catch (error) {
-    throw error;
-  }
-};
+//     return response;
+//   } catch (error) {
+//     throw error;
+//   }
+// };
 
 const createSolicitudes = async (body) => {
   try {
@@ -56,8 +56,8 @@ const createSolicitudes = async (body) => {
       params_servicio,
       async (results, connection) => {
         try {
-          const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_servicio, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero) VALUES ${solicitudes
-            .map(() => "(?,?,?,?,?,?,?,?,?,?,?,?)")
+          const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_servicio, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero, id_agente) VALUES ${solicitudes
+            .map(() => "(?,?,?,?,?,?,?,?,?,?,?,?,?)")
             .join(",")};`;
 
           const params_solicitudes_map = solicitudes.map((solicitud) => {
@@ -88,6 +88,7 @@ const createSolicitudes = async (body) => {
               total,
               status,
               nombre_viajero,
+              id_agente,
             ];
           });
           const params_solicitudes_flat = params_solicitudes_map.flat();
