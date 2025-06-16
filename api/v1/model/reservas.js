@@ -447,7 +447,7 @@ const insertarReservaOperaciones = async (reserva) => {
   try {
     const { venta, proveedor, hotel, items, viajero } = reserva; // 'items' aquí es ReservaForm['items']
     const id_servicio = `ser-${uuidv4()}`;
-    const query_servicio = `INSERT INTO servicios (id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago) VALUES (?,?,?,?,?,?,?);`;
+    const query_servicio = `INSERT INTO servicios (id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago, id_agente) VALUES (?,?,?,?,?,?,?,?);`;
     const params_servicio = [
       id_servicio,
       venta.total,
@@ -456,6 +456,7 @@ const insertarReservaOperaciones = async (reserva) => {
       true,
       null,
       null,
+      reserva.solicitud.id_agente,
     ];
 
     // La función executeTransaction debería tomar la primera query y sus params,
