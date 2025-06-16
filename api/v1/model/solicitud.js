@@ -637,7 +637,7 @@ const getItemsSolicitud = async (id_solicitud) => {
 };
 
 module.exports = {
-  createSolicitudYTicket,
+  // createSolicitudYTicket,
   getViajeroSolicitud,
   getSolicitudes,
   createSolicitudes,
