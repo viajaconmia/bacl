@@ -34,7 +34,7 @@ const createSolicitudes = async (body) => {
     const { solicitudes } = body;
     console.log(solicitudes);
     const id_servicio = `ser-${uuidv4()}`;
-    const query_servicio = `INSERT INTO servicios (id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago) VALUES (?,?,?,?,?,?,?);`;
+    const query_servicio = `INSERT INTO servicios (id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago, id_agente) VALUES (?,?,?,?,?,?,?,?);`;
     const total = solicitudes.reduce(
       (prev, current) => prev + current.total,
       0
@@ -49,6 +49,7 @@ const createSolicitudes = async (body) => {
       null,
       null,
       null,
+      id_agente,
     ];
 
     const response = await executeTransaction(
@@ -56,8 +57,8 @@ const createSolicitudes = async (body) => {
       params_servicio,
       async (results, connection) => {
         try {
-          const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_servicio, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero, id_agente) VALUES ${solicitudes
-            .map(() => "(?,?,?,?,?,?,?,?,?,?,?,?,?)")
+          const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_servicio, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero) VALUES ${solicitudes
+            .map(() => "(?,?,?,?,?,?,?,?,?,?,?,?)")
             .join(",")};`;
 
           const params_solicitudes_map = solicitudes.map((solicitud) => {
@@ -88,7 +89,6 @@ const createSolicitudes = async (body) => {
               total,
               status,
               nombre_viajero,
-              id_agente,
             ];
           });
           const params_solicitudes_flat = params_solicitudes_map.flat();
