@@ -86,6 +86,18 @@ const readAll = async (req, res) => {
   }
 };
 
+const readAllFacturacion = async (req, res) => {
+  try {
+    let response = await model.getReservaAllFacturacion();
+    res.status(201).json(response);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.message });
+  }
+};
+
 module.exports = {
   create,
   read,
@@ -94,4 +106,5 @@ module.exports = {
   createFromOperaciones,
   readOnlyById,
   updateReserva,
+  readAllFacturacion,
 };
