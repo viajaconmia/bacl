@@ -342,13 +342,14 @@ router.post("/payment-links-hook", async (req, res) => {
   switch (event.type) {
     case 'checkout.session.completed':
       const session = event.data.object;
-
+      const query = "UPDATE saldos SET estado_link = ?, fecha_procesamiento = ? WHERE id_saldo = ?;"
+      const params = [
+        "completed",
+        new Date().toISOString(),
+        session.metadata.saldo_id
+      ]
       // Actualiza tu base de datos
-      await updateSaldo(session.metadata.saldo_id, {
-        estado: 'completed',
-        charge_id: session.payment_intent,
-        fecha_procesamiento: new Date().toISOString()
-      });
+      await executeQuery(query, params);
       break;
 
     case 'checkout.session.expired':
