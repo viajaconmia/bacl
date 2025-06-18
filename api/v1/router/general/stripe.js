@@ -288,4 +288,89 @@ router.post("/payment-log-storage", async (req, res) => {
   }
 });
 
+router.post("/create-payment-link", async (req, res) => {
+  try {
+    const { amount, currency, metadata, description } = req.body;
+
+    // Primero crea un precio
+    const price = await stripe.prices.create({
+      unit_amount: amount,
+      currency: currency,
+      product_data: {
+        name: `Saldo a favor: ${description}`,
+      },
+    });
+
+    // Luego crea el payment link con el price ID
+    const paymentLink = await stripe.paymentLinks.create({
+      line_items: [
+        {
+          price: price.id,  // Usa el ID del precio creado
+          quantity: 1,
+        },
+      ],
+      metadata: metadata,
+    });
+
+    res.status(200).json({
+      url: paymentLink.url,
+      id: paymentLink.id
+    });
+  } catch (error) {
+    console.error('Error creating payment link:', error);
+    res.status(500).json({
+      message: 'Error creating payment link',
+      error: error.message
+    });
+  }
+});
+
+router.post("/payment-links-hook", async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      "whsec_nau4uGg351SWXP1PJAqhPUdRMqznaWZ9"
+    );
+  } catch (err) {
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  switch (event.type) {
+    case 'checkout.session.completed':
+      const session = event.data.object;
+      const query = "UPDATE saldos SET estado_link = ?, fecha_procesamiento = ? WHERE id_saldo = ?;"
+      const params = [
+        "completed",
+        new Date().toISOString(),
+        session.metadata.saldo_id
+      ]
+      // Actualiza tu base de datos
+      await executeQuery(query, params);
+      break;
+
+    case 'checkout.session.expired':
+      const expiredSession = event.data.object;
+      await updateSaldo(expiredSession.metadata.saldo_id, {
+        estado: 'expired'
+      });
+      break;
+
+    case 'payment_intent.payment_failed':
+      const failedPayment = event.data.object;
+      // Puedes notificar al admin o cliente
+      break;
+
+    default:
+      console.log(`Evento no manejado: ${event.type}`);
+  }
+
+  res.json({ received: true });
+});
+
+
+
 module.exports = router;
