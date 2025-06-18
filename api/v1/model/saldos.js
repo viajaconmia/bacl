@@ -39,7 +39,7 @@ const createSaldo = async (saldo) => {
 
 const readSaldos = async () => {
   try {
-    const query = "select * from saldos s left join agentes a on s.id_agente = a.id_agente;";
+    const query = "select * from saldos s left join agentes a on s.id_agente = a.id_agente where estado_link != 'pending' or estado_link is null;";
     const response = executeQuery(query);
     return response;
   } catch (error) {
