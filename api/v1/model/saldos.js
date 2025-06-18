@@ -7,7 +7,7 @@ const createSaldo = async (saldo) => {
 
     // Insertar el saldo en la tabla "saldos"
     const query =
-      "INSERT INTO saldos (id_saldo, id_agente, id_proveedor, monto, restante, moneda, forma_pago, fecha_procesamiento, referencia, id_hospedaje, charge_id, transaction_id, motivo, comentarios, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+      "INSERT INTO saldos (id_saldo, id_agente, id_proveedor, monto, restante, moneda, forma_pago, fecha_procesamiento, referencia, id_hospedaje, charge_id, transaction_id, motivo, comentarios,estado_link, estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
     const params = [
       id_saldo,
       saldo.id_agente,
@@ -23,12 +23,14 @@ const createSaldo = async (saldo) => {
       saldo.transaction_id,
       saldo.motivo,
       saldo.comentarios,
+      saldo?.estado_link || null,
       "pending",
     ];
     await executeQuery(query, params);
 
     return {
-      success: true
+      success: true,
+      id_saldo: id_saldo
     };
   } catch (error) {
     throw error;
