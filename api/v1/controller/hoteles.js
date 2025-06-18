@@ -1,6 +1,7 @@
 const { executeSP, executeQuery } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 const model = require("../model/hoteles");
+const { generatePresignedUploadUrl } = require("../utils/subir-imagen");
 
 const AgregarHotel = async (req, res) => {
   console.log("Llegó al endpoint de agregar hotel");
@@ -874,6 +875,24 @@ const filtroAvanzado = async (req, res) => {
   }
 };
 
+const cargaImagen = async (req, res) => {
+ try {
+    const { filename, filetype } = req.query;
+
+    if (!filename || !filetype) {
+      return res.status(400).json({ success: false, message: "Faltan parámetros" });
+    }
+
+    const key = `hoteles/${Date.now()}_${filename}`;
+    const result = await generatePresignedUploadUrl(key, filetype);
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("Error al generar presigned URL:", error);
+    res.status(500).json({ success: false, message: "Error al generar URL" });
+  }
+};
+
 module.exports = {
   readGroupByHotel,
   AgregarHotel,
@@ -892,4 +911,5 @@ module.exports = {
   eliminarLogicaTarifa,
   filtroAvanzado,
   readHotelesWithTarifaClient,
+  cargaImagen
 };

@@ -26,6 +26,7 @@ const corsOptions = {
     "cache-control",
     "pragma",
     "Expires",
+    "x-amz-tagging"
   ],
 };
 

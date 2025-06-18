@@ -28,4 +28,5 @@ router.get(
 router.patch("/Actualiza-tarifa", controller.actualizarTarifa);
 router.patch("/Eliminar-tarifa-preferencial", controller.eliminarLogicaTarifa);
 router.post("/Filtro-avanzado", controller.filtroAvanzado);
+router.get("/carga-imagen", controller.cargaImagen);
 module.exports = router;
