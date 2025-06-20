@@ -1,34 +1,41 @@
-const { executeQuery, executeTransaction, runTransaction } = require("../../../config/db");
-const { crearCfdi } = require("./facturamaModel")
+const {
+  executeQuery,
+  executeTransaction,
+  runTransaction,
+} = require("../../../config/db");
+const { crearCfdi } = require("./facturamaModel");
 const { v4: uuidv4 } = require("uuid");
 
 const createFactura = async ({ cfdi, info_user }) => {
   try {
-    const { id_solicitud, id_user } = info_user
+    const { id_solicitud, id_user } = info_user;
 
-    const reduce = cfdi.Items.reduce((acc, item) => {
-      // Sumar el total
-      acc.total += parseFloat(item.Total);
+    const reduce = cfdi.Items.reduce(
+      (acc, item) => {
+        // Sumar el total
+        acc.total += parseFloat(item.Total);
 
-      // Sumar el subtotal (sin impuestos)
-      acc.subtotal += parseFloat(item.Subtotal);
+        // Sumar el subtotal (sin impuestos)
+        acc.subtotal += parseFloat(item.Subtotal);
 
-      // Sumar los impuestos de cada item
-      item.Taxes.forEach(tax => {
-        acc.impuestos += parseFloat(tax.Total);
-      });
+        // Sumar los impuestos de cada item
+        item.Taxes.forEach((tax) => {
+          acc.impuestos += parseFloat(tax.Total);
+        });
 
-      return acc;
-    }, { total: 0, subtotal: 0, impuestos: 0 });
+        return acc;
+      },
+      { total: 0, subtotal: 0, impuestos: 0 }
+    );
 
     const response = await runTransaction(async (connection) => {
       try {
         console.log(cfdi);
-        const response_factura = await crearCfdi(cfdi)
+        const response_factura = await crearCfdi(cfdi);
 
         const id_factura = `fac-${uuidv4()}`;
 
-        const { total, subtotal, impuestos } = reduce
+        const { total, subtotal, impuestos } = reduce;
 
         const query = `
     INSERT INTO facturas ( id_factura, fecha_emision, estado, usuario_creador, total, subtotal, impuestos, id_facturama )
@@ -42,7 +49,7 @@ const createFactura = async ({ cfdi, info_user }) => {
           total,
           subtotal,
           impuestos,
-          response_factura.Id
+          response_factura.Id,
         ];
         const result_creates = await connection.execute(query, params);
 
@@ -74,7 +81,7 @@ const createFactura = async ({ cfdi, info_user }) => {
 
     return {
       success: true,
-      ...response
+      ...response,
     };
   } catch (error) {
     throw error;
@@ -85,17 +92,22 @@ const createFacturaCombinada = async ({ cfdi, info_user }) => {
   let connection;
   try {
     const { id_solicitud, id_user, id_items } = info_user;
-    const solicitudesArray = Array.isArray(id_solicitud) ? id_solicitud : [id_solicitud];
+    const solicitudesArray = Array.isArray(id_solicitud)
+      ? id_solicitud
+      : [id_solicitud];
     const itemsArray = Array.isArray(id_items) ? id_items : [id_items];
     // Calcular totales
-    const reduce = cfdi.Items.reduce((acc, item) => {
-      acc.total += parseFloat(item.Total);
-      acc.subtotal += parseFloat(item.Subtotal);
-      item.Taxes.forEach(tax => {
-        acc.impuestos += parseFloat(tax.Total);
-      });
-      return acc;
-    }, { total: 0, subtotal: 0, impuestos: 0 });
+    const reduce = cfdi.Items.reduce(
+      (acc, item) => {
+        acc.total += parseFloat(item.Total);
+        acc.subtotal += parseFloat(item.Subtotal);
+        item.Taxes.forEach((tax) => {
+          acc.impuestos += parseFloat(tax.Total);
+        });
+        return acc;
+      },
+      { total: 0, subtotal: 0, impuestos: 0 }
+    );
 
     const response = await runTransaction(async (conn) => {
       connection = conn;
@@ -128,12 +140,14 @@ const createFacturaCombinada = async ({ cfdi, info_user }) => {
         total,
         subtotal,
         impuestos,
-        response_factura.Id
+        response_factura.Id,
       ]);
 
       // 4. Actualizar SOLO los items seleccionados
       await connection.execute(
-        `UPDATE items SET id_factura = ? WHERE id_item IN (${itemsArray.map(() => '?').join(',')})`,
+        `UPDATE items SET id_factura = ? WHERE id_item IN (${itemsArray
+          .map(() => "?")
+          .join(",")})`,
         [id_factura, ...itemsArray]
       );
 
@@ -154,7 +168,7 @@ const createFacturaCombinada = async ({ cfdi, info_user }) => {
       JOIN servicios se ON s.id_servicio = se.id_servicio
       JOIN pagos p ON se.id_servicio = p.id_servicio
     WHERE 
-      s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
+      s.id_solicitud IN (${solicitudesArray.map(() => "?").join(",")})
       AND p.id_pago IS NOT NULL
   `,
         [id_factura, total, ...solicitudesArray]
@@ -162,31 +176,31 @@ const createFacturaCombinada = async ({ cfdi, info_user }) => {
 
       return {
         id_factura,
-        ...response_factura
+        ...response_factura,
       };
     });
 
     return {
       success: true,
-      data: response
+      data: response,
     };
   } catch (error) {
-    console.error('Error en createFacturaCombinada:', error);
+    console.error("Error en createFacturaCombinada:", error);
 
     // Rollback manual si es necesario
     if (connection) {
       try {
         await connection.rollback();
       } catch (rollbackError) {
-        console.error('Error en rollback:', rollbackError);
+        console.error("Error en rollback:", rollbackError);
       }
     }
 
     throw {
-      error: 'Error al crear factura combinada',
+      error: "Error al crear factura combinada",
       message: error.message,
       sqlMessage: error.sqlMessage,
-      code: error.code || 'UNKNOWN_ERROR'
+      code: error.code || "UNKNOWN_ERROR",
     };
   }
 };
@@ -299,20 +313,20 @@ ORDER BY facturas.created_at DESC;`;
   } catch (error) {
     throw error;
   }
-}
+};
 
 const getAllFacturasConsultas = async () => {
   try {
     const query = `select * from facturas f
 join agentes a on a.id_agente = f.usuario_creador
-order by fecha_emision desc;`
+order by fecha_emision desc;`;
     let response = await executeQuery(query, []);
 
     return response;
   } catch (error) {
     throw error;
   }
-}
+};
 
 const getDetailsFactura = async (id_factura) => {
   try {
@@ -320,14 +334,14 @@ const getDetailsFactura = async (id_factura) => {
 join hospedajes h on h.id_hospedaje = i.id_hospedaje
 join bookings b on b.id_booking = h.id_booking
 where i.id_factura = ?
-group by h.id_hospedaje;`
+group by h.id_hospedaje;`;
     let response = await executeQuery(query, [id_factura]);
 
     return response;
   } catch (error) {
     throw error;
   }
-}
+};
 
 const getAllFacturas = async () => {
   try {
@@ -356,15 +370,39 @@ GROUP BY
     console.log(response);
     return response;
   } catch (error) {
-    throw error
+    throw error;
   }
-}
+};
+const deleteFacturas = async (id) => {
+  try {
+    await executeTransaction(
+      `delete from items WHERE id_factura = ?`,
+      id,
+      async (results, connection) => {
+        try {
+          await connection.execute(
+            `delete from facturas WHERE id_factura = ?;`,
+            id
+          );
+        } catch (error) {
+          console.log(error);
+          throw error;
+        }
+      }
+    );
+
+    return { message: "success" };
+  } catch (error) {
+    throw error;
+  }
+};
 
 module.exports = {
   createFactura,
   getAllFacturas,
+  deleteFacturas,
   createFacturaCombinada,
   getFacturasConsultas,
   getAllFacturasConsultas,
   getDetailsFactura,
-}
+};
