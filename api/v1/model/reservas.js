@@ -483,6 +483,14 @@ const insertarReservaOperaciones = async (reserva) => {
             reserva.estado_reserva,
           ];
           await connection.execute(query_solicitudes, params_solicitud);
+          //aqui metere el update para el saldo del agente
+          const query_update_saldo_agente = `
+          UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?;`;
+          const params_update_saldo_agente = [
+            venta.total,
+            reserva.solicitud.id_agente];
+            //console.log(`Actualizando saldo del agente ${reserva.solicitud.id_agente} con el monto ${venta.total}`);
+          await connection.execute(query_update_saldo_agente, params_update_saldo_agente);
 
           const id_booking = `boo-${uuidv4()}`;
 
