@@ -1,4 +1,3 @@
-// utils/s3Utils.js
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
@@ -11,13 +10,10 @@ const s3Client = new S3Client({
 });
 
 const generatePresignedUploadUrl = async (key, contentType) => {
-
-
   const command = new PutObjectCommand({
     Bucket: process.env.S3_BUCKET,
     Key: key,
     ContentType: contentType,
-    // NO TAGGING → simplifica la firma
   });
 
   const url = await getSignedUrl(s3Client, command, { expiresIn: 60 });
