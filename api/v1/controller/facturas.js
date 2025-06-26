@@ -17,20 +17,33 @@ const create = async (req, res) => {
 };
 
 const createCombinada = async (req, res) => {
+  req.context.logStep('createCombinada', 'Inicio del proceso de creación de factura combinada');
   try {
-    const response = await model.createFacturaCombinada(req.body);
-    res
-      .status(201)
-      .json({ message: "Factura creado correctamente", data: response });
+
+    const resp = await model.createFacturaCombinada(req,req.body);
+req.context.logStep('resultado del model.createFacturaCombinada', resp);
+    return res
+      .status(resp.status)
+      .json(resp.data);
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      error: "Error en el servidor",
-      details: error,
-      ohterDetails: error.response.data,
-    });
+    console.error('Error en createCombinada:', error);
+
+    if (error.response) {
+      // 400, 500, o cualquier status que venga de Facturama
+      return res
+        .status(error.response.status)
+        .json(error.response.data);
+    }
+
+    return res
+      .status(500)
+      .json({
+        error: 'Error en el servidor',
+        message: error.message
+      });
   }
 };
+
 
 const readConsultas = async (req, res) => {
   try {

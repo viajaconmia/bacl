@@ -53,20 +53,45 @@ const facturama = () => {
   };
 
   // Función para hacer una solicitud POST con datos
-  const postSyncWithData = async (path, data) => {
-    try {
-      const response = await axios.post(`${settings.url}${path}`, data, {
+  const postSyncWithData = async (req,path, data) => {
+    req.context.logStep('▶️ postSyncWithData args:', { path, data });
+
+  try {
+    // 1) Ejecutamos la llamada y nos quedamos con todo el response
+    const response = await axios.post(
+      `${settings.url}${path}`,
+      data,
+      {
         headers: {
           ...headers.headers,
           'Content-Type': 'application/json',
         },
-      });
-      return response.data;
-    } catch (error) {
-      // console.error(`Error posting data to ${path}:`, error);
-      throw error;
+        // Si prefieres, también podrías configurar aquí auth:
+        // auth: { username: settings.user, password: settings.pass }
+      }
+    );
+
+    // 2) Opcional: sanity log de headers enviados
+    req.context.logStep('➡️ Facturama request headers:', response.config.headers);
+
+    // 3) Retornamos el objeto completo (status + data + headers, etc.)
+    return response;
+  } catch (error) {
+    if (error.response) {
+      // 4a) Si es un fallo HTTP, mostramos TODO el payload de error
+      console.error('❌ Facturama error status:', error.response.status);
+      console.error(
+        '❌ Facturama error payload:',
+        JSON.stringify(error.response.data, null, 2)
+      );
+    } else {
+      // 4b) Cualquier otro error (network, typo, etc.)
+      console.error('❌ Axios unexpected error:', error.message);
     }
-  };
+    // 5) Siempre relanzamos para que el controlador lo capture
+    throw error;
+  }
+};
   const postSyncWithParams = async (path, params, data = {}) => {
     try {
       const response = await axios.post(`${settings.url}${path}?${params}`, data, {
@@ -134,7 +159,7 @@ const facturama = () => {
     },
     Cfdi: {
       Get: (id) => retrieve('cfdi', id),
-      Create3: (data) => postSyncWithData('3/cfdis', data),
+      Create3: (data) => postSyncWithData(req,'3/cfdis', data),
       Send: (param) => postSyncWithParams('cfdi', param),
       Cancel: (params) => deleteSyncWithParam('cfdi', params),
       Download: (format, type, id) => retrieve(`cfdi/${format}/${type}`, id),
