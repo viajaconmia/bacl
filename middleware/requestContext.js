@@ -17,9 +17,13 @@ const requestContext = (req, res, next) => {
     logStep: (...stepName) => {
       const timestamp = new Date().toISOString();
       req.context.trace.push(
-        `[${requestId}] ${timestamp} -> ${stepName.map(item=>JSON.stringify(item)).join(" ")}`
+        `[${requestId}] ${timestamp} -> ${stepName
+          .map((item) =>
+            typeof item === "object" ? JSON.stringify(item) : item
+          )
+          .join(" ")}`
       );
-    }
+    },
   };
 
   // Al finalizar la respuesta, si fue un error, mostramos la traza y el resumen
@@ -29,11 +33,13 @@ const requestContext = (req, res, next) => {
         `🔴 TRACE DE ERROR - ${req.method} ${req.originalUrl} (${res.statusCode})`
       );
       // Trazas detalladas
-      req.context.trace.forEach(line => console.error(line));
+      req.context.trace.forEach((line) => console.error(line));
       // Resumen al estilo Morgan 'dev'
       const duration = (Date.now() - startTime).toFixed(3);
       const length = res.getHeader("Content-Length") || "-";
-      console.error(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration} ms - ${length}`);
+      console.error(
+        `${req.method} ${req.originalUrl} ${res.statusCode} ${duration} ms - ${length}`
+      );
     }
   });
 
