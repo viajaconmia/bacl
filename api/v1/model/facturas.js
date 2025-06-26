@@ -105,17 +105,19 @@ const createFacturaCombinada = async (req,{ cfdi, info_user }) => {
 
     // Ejecutamos todo dentro de una transacción
     const result = await runTransaction(async (conn) => {
-      connection = conn;
-
-      // 1. Crear factura en Facturama
-      //*****AQUI ESTABA MAL INVOCADA LA FUNCION⬇️⬇️********* */
-      const response_factura = await crearCfdi(req,cfdi);
-
-      // 2. Generar ID local de factura
-      const id_factura = `fac-${uuidv4()}`;
-
-      // 3. Insertar factura principal
-      const insertFacturaQuery = `
+      try {
+        
+        connection = conn;
+        
+        // 1. Crear factura en Facturama
+        //*****AQUI ESTABA MAL INVOCADA LA FUNCION⬇️⬇️********* */
+        const response_factura = await crearCfdi(req,cfdi);
+        
+        // 2. Generar ID local de factura
+        const id_factura = `fac-${uuidv4()}`;
+        
+        // 3. Insertar factura principal
+        const insertFacturaQuery = `
         INSERT INTO facturas (
           id_factura,
           fecha_emision,
@@ -125,8 +127,8 @@ const createFacturaCombinada = async (req,{ cfdi, info_user }) => {
           subtotal,
           impuestos,
           id_facturama
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-      `;
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+          `;
       await connection.execute(insertFacturaQuery, [
         id_factura,
         new Date(),
@@ -137,42 +139,45 @@ const createFacturaCombinada = async (req,{ cfdi, info_user }) => {
         impuestos,
         response_factura.data.Id
       ]);
-
+      
       // 4. Actualizar solo los items seleccionados
       const updateItemsSql = `
         UPDATE items
         SET id_factura = ?
         WHERE id_item IN (${itemsArray.map(() => '?').join(',')})
-      `;
+        `;
       await connection.execute(updateItemsSql, [id_factura, ...itemsArray]);
-
+      
       // 5. Insertar registros en facturas_pagos
       await connection.execute(
         `
-    INSERT INTO facturas_pagos (
-      id_factura, 
-      monto_pago, 
-      id_pago
-    )
-    SELECT 
-      ? AS id_factura,
-      ? AS monto_pago,
-      p.id_pago
-    FROM 
-      solicitudes s
-      JOIN servicios se ON s.id_servicio = se.id_servicio
-      JOIN pagos p ON se.id_servicio = p.id_servicio
-    WHERE 
-      s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
-      AND p.id_pago IS NOT NULL
-  `,
-        [id_factura, total, ...solicitudesArray]
-      );
-
-      return {
-        id_factura,
-        ...response_factura
-      };
+        INSERT INTO facturas_pagos (
+          id_factura, 
+          monto_pago, 
+          id_pago
+          )
+          SELECT 
+          ? AS id_factura,
+          ? AS monto_pago,
+          p.id_pago
+          FROM 
+          solicitudes s
+          JOIN servicios se ON s.id_servicio = se.id_servicio
+          JOIN pagos p ON se.id_servicio = p.id_servicio
+          WHERE 
+          s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
+          AND p.id_pago IS NOT NULL
+          `,
+          [id_factura, total, ...solicitudesArray]
+        );
+        
+        return {
+          id_factura,
+          ...response_factura
+        };
+      } catch (error) {
+        throw error;
+      }
     });
 
     return {
@@ -180,17 +185,20 @@ const createFacturaCombinada = async (req,{ cfdi, info_user }) => {
       data: response
     };
   } catch (error) {
-    console.error("Error en createFacturaCombinada:", error.response.data);
-
-    // Si hubo conexión abierta, hacemos rollback manual
-    if (connection) {
-      try {
-        await connection.rollback();
-      } catch (rollbackError) {
-        console.error("Error en rollback:", rollbackError);
-      }
+    console.error("Error en createFacturaCombinada:", error.response);
+    if(error.response && error.response.data) {
+      console.error("Error en createFacturaCombinada:", error.response.data);
     }
-
+    // Si hubo conexión abierta, hacemos rollback manual
+    // if (connection) {
+    //   try {
+    //     await connection.rollback();
+    //   } catch (rollbackError) {
+    //     console.error("Error en rollback:", rollbackError);
+    //   }
+    // }
+    
+    console.error("Error en createFacturaCombinada:", error.response.data);
     throw {
       error: 'Error al crear factura combinada',
       message: error.message,
