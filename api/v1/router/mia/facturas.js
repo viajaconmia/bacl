@@ -16,6 +16,6 @@ router.get("/getFacturas", controller.readAllFacturas);
 router.get("/consultas", controller.readConsultas);
 router.get("/consultasAll", controller.readAllConsultas);
 router.get("/getDetailsFactura", controller.readDetailsFactura);
-router.delete("/:id", controller.deleteFacturas);
+router.delete("/delete/:id", controller.deleteFacturas);
 
 module.exports = router;
