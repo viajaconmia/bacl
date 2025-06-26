@@ -80,100 +80,94 @@ const createFactura = async ({ cfdi, info_user }) => {
     throw error;
   }
 };
-
 const createFacturaCombinada = async ({ cfdi, info_user }) => {
   let connection;
   try {
     const { id_solicitud, id_user, id_items } = info_user;
     const solicitudesArray = Array.isArray(id_solicitud) ? id_solicitud : [id_solicitud];
-    const itemsArray = Array.isArray(id_items) ? id_items : [id_items];
-    // Calcular totales
-    const reduce = cfdi.Items.reduce((acc, item) => {
-      acc.total += parseFloat(item.Total);
+    const itemsArray      = Array.isArray(id_items)   ? id_items   : [id_items];
+
+    // 0. Calcular totales
+    const { total, subtotal, impuestos } = cfdi.Items.reduce((acc, item) => {
+      acc.total    += parseFloat(item.Total);
       acc.subtotal += parseFloat(item.Subtotal);
-      item.Taxes.forEach(tax => {
-        acc.impuestos += parseFloat(tax.Total);
-      });
+      item.Taxes.forEach(tax => acc.impuestos += parseFloat(tax.Total));
       return acc;
     }, { total: 0, subtotal: 0, impuestos: 0 });
 
-    const response = await runTransaction(async (conn) => {
+    // Ejecutamos todo dentro de una transacción
+    const result = await runTransaction(async (conn) => {
       connection = conn;
 
       // 1. Crear factura en Facturama
+      //*****AQUI ESTABA MAL INVOCADA LA FUNCION⬇️⬇️********* */
       const response_factura = await crearCfdi(cfdi);
 
-      // 2. Generar ID de factura
+      // 2. Generar ID local de factura
       const id_factura = `fac-${uuidv4()}`;
-      const { total, subtotal, impuestos } = reduce;
 
       // 3. Insertar factura principal
       const insertFacturaQuery = `
         INSERT INTO facturas (
-          id_factura, 
-          fecha_emision, 
-          estado, 
-          usuario_creador, 
-          total, 
-          subtotal, 
-          impuestos, 
+          id_factura,
+          fecha_emision,
+          estado,
+          usuario_creador,
+          total,
+          subtotal,
+          impuestos,
           id_facturama
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`;
-
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+      `;
       await connection.execute(insertFacturaQuery, [
         id_factura,
         new Date(),
-        "Confirmada",
+        'Confirmada',
         id_user,
         total,
         subtotal,
         impuestos,
-        response_factura.Id
+        response_factura.data.Id
       ]);
 
-      // 4. Actualizar SOLO los items seleccionados
-      await connection.execute(
-        `UPDATE items SET id_factura = ? WHERE id_item IN (${itemsArray.map(() => '?').join(',')})`,
-        [id_factura, ...itemsArray]
-      );
+      // 4. Actualizar solo los items seleccionados
+      const updateItemsSql = `
+        UPDATE items
+        SET id_factura = ?
+        WHERE id_item IN (${itemsArray.map(() => '?').join(',')})
+      `;
+      await connection.execute(updateItemsSql, [id_factura, ...itemsArray]);
 
       // 5. Insertar registros en facturas_pagos
-      await connection.execute(
-        `
-    INSERT INTO facturas_pagos (
-      id_factura, 
-      monto_pago, 
-      id_pago
-    )
-    SELECT 
-      ? AS id_factura,
-      ? AS monto_pago,
-      p.id_pago
-    FROM 
-      solicitudes s
-      JOIN servicios se ON s.id_servicio = se.id_servicio
-      JOIN pagos p ON se.id_servicio = p.id_servicio
-    WHERE 
-      s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
-      AND p.id_pago IS NOT NULL
-  `,
-        [id_factura, total, ...solicitudesArray]
-      );
+      const insertPagosSql = `
+        INSERT INTO facturas_pagos (
+          id_factura,
+          monto_pago,
+          id_pago
+        )
+        SELECT
+          ? AS id_factura,
+          ? AS monto_pago,
+          p.id_pago
+        FROM
+          solicitudes s
+          JOIN servicios se ON s.id_servicio = se.id_servicio
+          JOIN pagos p     ON se.id_servicio = p.id_servicio
+        WHERE
+          s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
+          AND p.id_pago IS NOT NULL
+      `;
+      await connection.execute(insertPagosSql, [id_factura, total, ...solicitudesArray]);
 
-      return {
-        id_factura,
-        ...response_factura
-      };
+      // 6. Devolver el ID local y la respuesta de Facturama
+      return response_factura;
     });
 
-    return {
-      success: true,
-      data: response
-    };
+    return result;
   } catch (error) {
     console.error('Error en createFacturaCombinada:', error);
 
-    // Rollback manual si es necesario
+    // Si hubo conexión abierta, hacemos rollback manual
     if (connection) {
       try {
         await connection.rollback();
@@ -183,13 +177,14 @@ const createFacturaCombinada = async ({ cfdi, info_user }) => {
     }
 
     throw {
-      error: 'Error al crear factura combinada',
-      message: error.message,
+      error:      'Error al crear factura combinada',
+      message:    error.message,
       sqlMessage: error.sqlMessage,
-      code: error.code || 'UNKNOWN_ERROR'
+      code:       error.code || 'UNKNOWN_ERROR'
     };
   }
 };
+
 
 const getFacturasConsultas = async (user_id) => {
   try {
