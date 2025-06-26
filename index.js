@@ -9,7 +9,7 @@ const cors = require("cors");
 const morgan = require("morgan");
 
 // Logger y trazabilidad
-const logger = require("../bacl/api/v1/utils/logger");
+const logger = require("./api/v1/utils/logger");
 const requestContext = require("./middleware/requestContext");
 
 // Control de CORS
