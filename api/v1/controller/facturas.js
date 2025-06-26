@@ -25,7 +25,7 @@ const createCombinada = async (req, res) => {
     const resp = await model.createFacturaCombinada(req, req.body);
     req.context.logStep("resultado del model.createFacturaCombinada");
     console.log(resp);
-    return res.status(resp.status).json(resp.data);
+    return res.status(201).json(resp.data.data);
   } catch (error) {
     console.log(error);
     res.status(500).json({

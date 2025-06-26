@@ -92,7 +92,6 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
     "LLgando al model de crear factura combinada con los datos:",
     JSON.stringify({ cfdi, info_user })
   );
-  let connection;
   try {
     const { id_solicitud, id_user, id_items } = info_user;
     const solicitudesArray = Array.isArray(id_solicitud)
@@ -114,10 +113,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
     // Ejecutamos todo dentro de una transacción
     const result = await runTransaction(async (conn) => {
       try {
-        connection = conn;
-
         // 1. Crear factura en Facturama
-        //*****AQUI ESTABA MAL INVOCADA LA FUNCION⬇️⬇️********* */
         const response_factura = await crearCfdi(req, cfdi);
 
         // 2. Generar ID local de factura
@@ -136,7 +132,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           id_facturama
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
           `;
-        await connection.execute(insertFacturaQuery, [
+        const results = await conn.execute(insertFacturaQuery, [
           id_factura,
           new Date(),
           "Confirmada",
@@ -153,10 +149,13 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         SET id_factura = ?
         WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
         `;
-        await connection.execute(updateItemsSql, [id_factura, ...itemsArray]);
+        const resultados_items = await conn.execute(updateItemsSql, [
+          id_factura,
+          ...itemsArray,
+        ]);
 
         // 5. Insertar registros en facturas_pagos
-        await connection.execute(
+        const resultados_pagos = await conn.execute(
           `
         INSERT INTO facturas_pagos (
           id_factura, 
@@ -177,6 +176,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           `,
           [id_factura, total, ...solicitudesArray]
         );
+        console.log("resultado pagos", resultados_pagos);
 
         return {
           id_factura,
