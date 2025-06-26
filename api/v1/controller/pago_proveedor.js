@@ -88,24 +88,50 @@ const getSolicitudes = async (req, res) => {
       return previus;
     }, {});
 
-    const formatedResponse = response.map((solicitud) => ({
-      ...solicitud,
-      solicitud_proveedor: {
-        id_solicitud_proveedor: solicitud.id_solicitud_proveedor,
-        fecha_solicitud: string,
-        monto_solicitado: string,
-        saldo: string,
-        forma_pago_solicitada: "credit" | "transfer" | "card" | "link" | string,
-        id_tarjeta_solicitada: string | null,
-        usuario_solicitante: string | null,
-        usuario_generador: string | null,
-        comentarios: solicitud.comentarios,
-        estado_solicitud: solicitud.estado_solicitud,
-        estado_facturacion: solicitud.estado_facturacion,
-      },
-      pagos: pagos[String(solicitud.id_solicitud_proveedor)],
-      facturas: facturas[String(solicitud.id_solicitud_proveedor)],
-    }));
+    const formatedResponse = response.map(
+      ({
+        id_solicitud_proveedor,
+        fecha_solicitud,
+        monto_solicitado,
+        saldo,
+        forma_pago_solicitada,
+        id_tarjeta_solicitada,
+        usuario_solicitante,
+        usuario_generador,
+        comentarios,
+        estado_solicitud,
+        estado_facturacion,
+        ultimos_4,
+        banco_emisor,
+        tipo_tarjeta,
+        rfc,
+        razon_social,
+        ...rest
+      }) => ({
+        ...rest,
+        solicitud_proveedor: {
+          id_solicitud_proveedor,
+          fecha_solicitud,
+          monto_solicitado,
+          saldo,
+          forma_pago_solicitada,
+          id_tarjeta_solicitada,
+          usuario_solicitante,
+          usuario_generador,
+          comentarios,
+          estado_solicitud,
+          estado_facturacion,
+        },
+        tarjeta: {
+          ultimos_4,
+          banco_emisor,
+          tipo_tarjeta,
+        },
+        proveedor: { rfc, razon_social },
+        pagos: pagos[String(id_solicitud_proveedor)],
+        facturas: facturas[String(id_solicitud_proveedor)],
+      })
+    );
 
     res.status(200).json({
       message: "Registros obtenidos con exito",
