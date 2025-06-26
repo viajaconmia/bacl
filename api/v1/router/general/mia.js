@@ -16,7 +16,7 @@ const etiquetas = require("../mia/etiquetas");
 const impersonate = require("../mia/impersonate");
 const pagar = require("../mia/pagar");
 const saldos = require("../mia/saldos");
-
+const pago_proveedor = require("../mia/pago_proveedor");
 
 router.use("/solicitud", solicitud);
 router.use("/agentes", agentes);
@@ -35,5 +35,6 @@ router.use("/etiquetas", etiquetas);
 router.use("/impersonate", impersonate);
 router.use("/pagar", pagar);
 router.use("/saldos", saldos);
+router.use("/pago_proveedor", pago_proveedor);
 
 module.exports = router;
