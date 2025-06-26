@@ -18,9 +18,7 @@ const requestContext = (req, res, next) => {
       const timestamp = new Date().toISOString();
       req.context.trace.push(
         `[${requestId}] ${timestamp} -> ${stepName
-          .map((item) =>
-            typeof item === "object" ? JSON.stringify(item) : item
-          )
+          .map((item) => JSON.stringify(item))
           .join(" ")}`
       );
     },
