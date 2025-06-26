@@ -6,7 +6,7 @@ const {
 const { crearCfdi } = require("./facturamaModel");
 const { v4: uuidv4 } = require("uuid");
 
-const createFactura = async ({ cfdi, info_user }) => {
+const createFactura = async ({ cfdi, info_user }, req) => {
   try {
     const { id_solicitud, id_user } = info_user;
 
@@ -31,7 +31,7 @@ const createFactura = async ({ cfdi, info_user }) => {
     const response = await runTransaction(async (connection) => {
       try {
         console.log(cfdi);
-        const response_factura = await crearCfdi(cfdi);
+        const response_factura = await crearCfdi(req, cfdi);
 
         const id_factura = `fac-${uuidv4()}`;
 

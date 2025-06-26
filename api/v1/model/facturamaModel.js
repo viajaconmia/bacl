@@ -18,7 +18,7 @@ const crearCfdi = (req, cfdi_data) => {
     "crearCfdi se ha invocado con los sigiuentes datos",
     cfdi_data
   );
-  return facturama.Cfdi.Create3(cfdi_data);
+  return facturama.Cfdi.Create3(cfdi_data, req);
 };
 
 const crearCliente = (data) => facturama.Clients.Create(data);
