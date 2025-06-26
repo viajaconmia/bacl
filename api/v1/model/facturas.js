@@ -185,7 +185,7 @@ const createFacturaCombinada = async ({ cfdi, info_user }) => {
       data: response,
     };
   } catch (error) {
-    console.error("Error en createFacturaCombinada:", error);
+    console.error("Error en createFacturaCombinada:", error.response.data);
 
     // Rollback manual si es necesario
     if (connection) {
