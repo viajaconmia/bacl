@@ -54,7 +54,7 @@ const facturama = () => {
 
   // Función para hacer una solicitud POST con datos
   const postSyncWithData = async (path, data) => {
-    console.log('▶️ postSyncWithData args:', { path, data });
+    req.context.logStep('▶️ postSyncWithData args:', { path, data });
 
   try {
     // 1) Ejecutamos la llamada y nos quedamos con todo el response
@@ -72,7 +72,7 @@ const facturama = () => {
     );
 
     // 2) Opcional: sanity log de headers enviados
-    console.log('➡️ Facturama request headers:', response.config.headers);
+    req.context.logStep('➡️ Facturama request headers:', response.config.headers);
 
     // 3) Retornamos el objeto completo (status + data + headers, etc.)
     return response;

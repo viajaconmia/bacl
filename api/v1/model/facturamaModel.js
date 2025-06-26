@@ -12,7 +12,10 @@ const mandarCorreo = (idCfdi, email, type = "issued") =>
 
 const descargaCfdiXML = (idCfdi) => facturama.Cfdi.Download("xml", "issued", idCfdi)
 
-const crearCfdi = (cfdi_data) => facturama.Cfdi.Create3(cfdi_data);
+const crearCfdi = (cfdi_data) => {
+  req.context.logStep('crearCfdi se ha invocado con los sigiuientes datos',cfdi_data);
+  facturama.Cfdi.Create3(cfdi_data)}
+  ;
 
 const crearCliente = (data) => facturama.Clients.Create(data);
 

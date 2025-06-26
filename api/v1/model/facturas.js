@@ -88,6 +88,7 @@ const createFactura = async ({ cfdi, info_user }) => {
   }
 };
 const createFacturaCombinada = async ({ cfdi, info_user }) => {
+  req.context.logStep('LLgando al model de crear factura combinada con los datos:', JSON.stringify( {cfdi, info_user})); 
   let connection;
   try {
     const { id_solicitud, id_user, id_items } = info_user;
@@ -146,31 +147,38 @@ const createFacturaCombinada = async ({ cfdi, info_user }) => {
       await connection.execute(updateItemsSql, [id_factura, ...itemsArray]);
 
       // 5. Insertar registros en facturas_pagos
-      const insertPagosSql = `
-        INSERT INTO facturas_pagos (
-          id_factura,
-          monto_pago,
-          id_pago
-        )
-        SELECT
-          ? AS id_factura,
-          ? AS monto_pago,
-          p.id_pago
-        FROM
-          solicitudes s
-          JOIN servicios se ON s.id_servicio = se.id_servicio
-          JOIN pagos p     ON se.id_servicio = p.id_servicio
-        WHERE
-          s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
-          AND p.id_pago IS NOT NULL
-      `;
-      await connection.execute(insertPagosSql, [id_factura, total, ...solicitudesArray]);
+      await connection.execute(
+        `
+    INSERT INTO facturas_pagos (
+      id_factura, 
+      monto_pago, 
+      id_pago
+    )
+    SELECT 
+      ? AS id_factura,
+      ? AS monto_pago,
+      p.id_pago
+    FROM 
+      solicitudes s
+      JOIN servicios se ON s.id_servicio = se.id_servicio
+      JOIN pagos p ON se.id_servicio = p.id_servicio
+    WHERE 
+      s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
+      AND p.id_pago IS NOT NULL
+  `,
+        [id_factura, total, ...solicitudesArray]
+      );
 
-      // 6. Devolver el ID local y la respuesta de Facturama
-      return response_factura;
+      return {
+        id_factura,
+        ...response_factura
+      };
     });
 
-    return result;
+    return {
+      success: true,
+      data: response
+    };
   } catch (error) {
     console.error("Error en createFacturaCombinada:", error.response.data);
 
@@ -184,10 +192,10 @@ const createFacturaCombinada = async ({ cfdi, info_user }) => {
     }
 
     throw {
-      error:      'Error al crear factura combinada',
-      message:    error.message,
+      error: 'Error al crear factura combinada',
+      message: error.message,
       sqlMessage: error.sqlMessage,
-      code:       error.code || 'UNKNOWN_ERROR'
+      code: error.code || 'UNKNOWN_ERROR'
     };
   }
 };
@@ -365,12 +373,12 @@ const deleteFacturas = async (id) => {
   try {
     await executeTransaction(
       `delete from items WHERE id_factura = ?`,
-      id,
+      [id],
       async (results, connection) => {
         try {
           await connection.execute(
             `delete from facturas WHERE id_factura = ?;`,
-            id
+            [id]
           );
         } catch (error) {
           console.log(error);
