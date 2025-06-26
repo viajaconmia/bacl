@@ -2,7 +2,7 @@ const model = require("../model/facturas");
 
 const create = async (req, res) => {
   try {
-    const response = await model.createFactura(req.body);
+    const response = await model.createFactura(req.body, req);
     res
       .status(201)
       .json({ message: "Factura creado correctamente", data: response });
