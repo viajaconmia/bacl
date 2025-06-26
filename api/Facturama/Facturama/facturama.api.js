@@ -53,7 +53,7 @@ const facturama = () => {
   };
 
   // Función para hacer una solicitud POST con datos
-  const postSyncWithData = async (path, data) => {
+  const postSyncWithData = async (req,path, data) => {
     req.context.logStep('▶️ postSyncWithData args:', { path, data });
 
   try {
@@ -159,7 +159,7 @@ const facturama = () => {
     },
     Cfdi: {
       Get: (id) => retrieve('cfdi', id),
-      Create3: (data) => postSyncWithData('3/cfdis', data),
+      Create3: (data) => postSyncWithData(req,'3/cfdis', data),
       Send: (param) => postSyncWithParams('cfdi', param),
       Cancel: (params) => deleteSyncWithParam('cfdi', params),
       Download: (format, type, id) => retrieve(`cfdi/${format}/${type}`, id),
