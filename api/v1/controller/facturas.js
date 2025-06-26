@@ -20,7 +20,7 @@ const createCombinada = async (req, res) => {
   req.context.logStep('createCombinada', 'Inicio del proceso de creación de factura combinada');
   try {
 
-    const resp = await model.createFacturaCombinada(req.body);
+    const resp = await model.createFacturaCombinada(req,req.body);
 req.context.logStep('resultado del model.createFacturaCombinada', resp);
     return res
       .status(resp.status)

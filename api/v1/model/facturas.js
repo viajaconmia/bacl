@@ -87,7 +87,7 @@ const createFactura = async ({ cfdi, info_user }) => {
     throw error;
   }
 };
-const createFacturaCombinada = async ({ cfdi, info_user }) => {
+const createFacturaCombinada = async (req,{ cfdi, info_user }) => {
   req.context.logStep('LLgando al model de crear factura combinada con los datos:', JSON.stringify( {cfdi, info_user})); 
   let connection;
   try {
@@ -109,7 +109,7 @@ const createFacturaCombinada = async ({ cfdi, info_user }) => {
 
       // 1. Crear factura en Facturama
       //*****AQUI ESTABA MAL INVOCADA LA FUNCION⬇️⬇️********* */
-      const response_factura = await crearCfdi(cfdi);
+      const response_factura = await crearCfdi(req,cfdi);
 
       // 2. Generar ID local de factura
       const id_factura = `fac-${uuidv4()}`;
