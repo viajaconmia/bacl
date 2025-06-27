@@ -9,9 +9,8 @@ const create = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({
-      error: "Error en el servidor",
+      error: "Error create from v1/mia/factura - GET",
       details: error,
-      ohterDetails: error.response.data,
     });
   }
 };
