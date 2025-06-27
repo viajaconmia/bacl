@@ -56,7 +56,7 @@ const facturama = () => {
 
   // Función para hacer una solicitud POST con datos
   const postSyncWithData = async (req, path, data) => {
-    req.context.logStep("▶️ postSyncWithData args:", { path, data });
+    req.context.logStep("▶️ postSyncWithData args:");
 
     try {
       // 1) Ejecutamos la llamada y nos quedamos con todo el response

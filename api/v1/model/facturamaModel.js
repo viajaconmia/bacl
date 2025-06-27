@@ -14,10 +14,7 @@ const descargaCfdiXML = (idCfdi) =>
   facturama.Cfdi.Download("xml", "issued", idCfdi);
 
 const crearCfdi = (req, cfdi_data) => {
-  req.context.logStep(
-    "crearCfdi se ha invocado con los sigiuentes datos",
-    cfdi_data
-  );
+  req.context.logStep("crearCfdi se ha invocado con los sigiuentes datos");
   return facturama.Cfdi.Create3(cfdi_data, req);
 };
 
