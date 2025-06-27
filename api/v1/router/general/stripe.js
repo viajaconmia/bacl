@@ -1,5 +1,6 @@
 const { API_STRIPE } = require("../../../../config/auth");
 const { API_STRIPE_TEST } = require("../../../../config/auth");
+const express = require("express");
 const stripe = require("stripe")(API_STRIPE);
 const stripeTest = require("stripe")(API_STRIPE_TEST);
 const router = require("express").Router();
@@ -305,7 +306,7 @@ router.post("/create-payment-link", async (req, res) => {
     const paymentLink = await stripe.paymentLinks.create({
       line_items: [
         {
-          price: price.id,  // Usa el ID del precio creado
+          price: price.id, // Usa el ID del precio creado
           quantity: 1,
         },
       ],
@@ -314,63 +315,66 @@ router.post("/create-payment-link", async (req, res) => {
 
     res.status(200).json({
       url: paymentLink.url,
-      id: paymentLink.id
+      id: paymentLink.id,
     });
   } catch (error) {
-    console.error('Error creating payment link:', error);
+    console.error("Error creating payment link:", error);
     res.status(500).json({
-      message: 'Error creating payment link',
-      error: error.message
+      message: "Error creating payment link",
+      error: error.message,
     });
   }
 });
 
-router.post("/payment-links-hook", async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
+router.post(
+  "/payment-links-hook",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    let event;
 
-  try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      "whsec_nau4uGg351SWXP1PJAqhPUdRMqznaWZ9"
-    );
-  } catch (err) {
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        "whsec_nau4uGg351SWXP1PJAqhPUdRMqznaWZ9"
+      );
+    } catch (err) {
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    switch (event.type) {
+      case "checkout.session.completed":
+        const session = event.data.object;
+        const query =
+          "UPDATE saldos SET estado_link = ?, fecha_procesamiento = ? WHERE id_saldo = ?;";
+        const params = [
+          "completed",
+          new Date().toISOString(),
+          session.metadata.saldo_id,
+        ];
+        // Actualiza tu base de datos
+        await executeQuery(query, params);
+        break;
+
+      case "checkout.session.expired":
+        const expiredSession = event.data.object;
+        await updateSaldo(expiredSession.metadata.saldo_id, {
+          estado: "expired",
+        });
+        break;
+
+      case "payment_intent.payment_failed":
+        const failedPayment = event.data.object;
+        // Puedes notificar al admin o cliente
+        break;
+
+      default:
+        console.log(`Evento no manejado: ${event.type}`);
+    }
+
+    res.json({ received: true });
   }
-
-  switch (event.type) {
-    case 'checkout.session.completed':
-      const session = event.data.object;
-      const query = "UPDATE saldos SET estado_link = ?, fecha_procesamiento = ? WHERE id_saldo = ?;"
-      const params = [
-        "completed",
-        new Date().toISOString(),
-        session.metadata.saldo_id
-      ]
-      // Actualiza tu base de datos
-      await executeQuery(query, params);
-      break;
-
-    case 'checkout.session.expired':
-      const expiredSession = event.data.object;
-      await updateSaldo(expiredSession.metadata.saldo_id, {
-        estado: 'expired'
-      });
-      break;
-
-    case 'payment_intent.payment_failed':
-      const failedPayment = event.data.object;
-      // Puedes notificar al admin o cliente
-      break;
-
-    default:
-      console.log(`Evento no manejado: ${event.type}`);
-  }
-
-  res.json({ received: true });
-});
-
-
+);
 
 module.exports = router;
