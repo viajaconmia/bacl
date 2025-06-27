@@ -445,6 +445,21 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
 
 const insertarReservaOperaciones = async (reserva) => {
   try {
+    const agentes = await executeQuery(
+      `SELECT * FROM agentes WHERE id_agente = ?`,
+      [reserva.solicitud.id_agente]
+    );
+    if (!agentes || agentes.length === 0) {
+      throw new Error("Agente no encontrado");
+    } else {
+      const agente = agentes[0];
+      if (agente.saldo < reserva.venta.total) {
+        throw new Error(
+          `El saldo del agente ${agente.nombre} es insuficiente para procesar esta reserva.`
+        );
+      }
+    }
+
     const { venta, proveedor, hotel, items, viajero } = reserva; // 'items' aquí es ReservaForm['items']
     const id_servicio = `ser-${uuidv4()}`;
     const query_servicio = `INSERT INTO servicios (id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago, id_agente) VALUES (?,?,?,?,?,?,?,?);`;
@@ -488,9 +503,13 @@ const insertarReservaOperaciones = async (reserva) => {
           UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?;`;
           const params_update_saldo_agente = [
             venta.total,
-            reserva.solicitud.id_agente];
-            //console.log(`Actualizando saldo del agente ${reserva.solicitud.id_agente} con el monto ${venta.total}`);
-          await connection.execute(query_update_saldo_agente, params_update_saldo_agente);
+            reserva.solicitud.id_agente,
+          ];
+          //console.log(`Actualizando saldo del agente ${reserva.solicitud.id_agente} con el monto ${venta.total}`);
+          await connection.execute(
+            query_update_saldo_agente,
+            params_update_saldo_agente
+          );
 
           const id_booking = `boo-${uuidv4()}`;
 
