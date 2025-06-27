@@ -32,7 +32,12 @@ const createFactura = async ({ cfdi, info_user }, req) => {
       try {
         console.log(cfdi);
         const response_factura = await crearCfdi(req, cfdi);
-
+      } catch (error) {
+        throw {
+          data: error.response.data,
+        };
+      }
+      try {
         const id_factura = `fac-${uuidv4()}`;
 
         const { total, subtotal, impuestos } = reduce;
@@ -77,7 +82,9 @@ const createFactura = async ({ cfdi, info_user }, req) => {
 
         return response_factura;
       } catch (error) {
-        throw error;
+        throw {
+          data: error,
+        };
       }
     });
 
