@@ -41,6 +41,8 @@ const createFactura = async ({ cfdi, info_user }, req) => {
     INSERT INTO facturas ( id_factura, fecha_emision, estado, usuario_creador, total, subtotal, impuestos, id_facturama )
     VALUES (?,?,?,?,?,?,?,?);`;
 
+        console.log("response_factura", response_factura);
+
         const params = [
           id_factura,
           new Date(),
@@ -49,7 +51,7 @@ const createFactura = async ({ cfdi, info_user }, req) => {
           total,
           subtotal,
           impuestos,
-          response_factura.Id,
+          response_factura.data.Id,
         ];
         const result_creates = await connection.execute(query, params);
 
