@@ -1,8 +1,32 @@
 const model = require("../model/reservas");
+const {executeQuery} = require("../../../config/db");
 
 const create = async (req, res) => {
+
+  const { reserva } = req.body;
+  const { estado_reserva, solicitud } = reserva;
+  if (estado_reserva === "Cancelada")
+    //SI AL PROCESAR LA SOLICITUD SE SETEA COMO CANCELADA, SE CANCELA LA SOLICITUD Y NO SE CREA LA RESERVA
+    {
+    try {
+      await executeQuery(
+        `UPDATE solicitudes 
+           SET status = 'Canceled' 
+         WHERE id_solicitud = ?`,
+        [solicitud.id_solicitud]
+      );
+      return res
+        .status(200)
+        .json({ message: "Solicitud cancelada correctamente" });
+    } catch (error) {
+      console.error(error);
+      return res
+        .status(500)
+        .json({ error: "Error interno al cancelar solicitud", details: error.message });
+    }
+  }
   try {
-    let response = await model.insertarReserva(req.body);
+       let response = await model.insertarReserva(req.body);
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });
@@ -13,6 +37,7 @@ const create = async (req, res) => {
       .json({ error: "Internal Server Error", details: error.message });
   }
 };
+
 
 const updateReserva = async (req, res) => {
   try {
