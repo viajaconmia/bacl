@@ -123,8 +123,9 @@ const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
 
     if (filters.client) {
       conditions.push(
-        `	(CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) LIKE ? OR vwae.rfc LIKE ?) `
+        `	(CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) LIKE ? OR vwae.rfc LIKE ? OR vwae.razon_social LIKE ?) `
       );
+      values.push(`%${filters.client.split(" ").join("%")}%`);
       values.push(`%${filters.client.split(" ").join("%")}%`);
       values.push(`%${filters.client.split(" ").join("%")}%`);
     }

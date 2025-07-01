@@ -46,9 +46,6 @@ WHERE s.id_usuario_generador = ?
   AND s.status <> 'canceled'
 
 ORDER BY s.check_in DESC;
-
-
-
 `;
     let params = [id_user, year, month];
     let response = await executeQuery(query, params);

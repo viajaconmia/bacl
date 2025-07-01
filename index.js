@@ -23,7 +23,7 @@ const corsOptions = {
     "https://admin-mia.vercel.app",
     "https://mia-gray.vercel.app",
     "https://www.viajaconmia.com",
-    "https://admin.viajaconmia.com"
+    "https://admin.viajaconmia.com",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: [
@@ -33,8 +33,8 @@ const corsOptions = {
     "cache-control",
     "pragma",
     "Expires",
-    "x-amz-tagging"
-  ]
+    "x-amz-tagging",
+  ],
 };
 
 // 1. Trazabilidad de la petición (genera req.context)
@@ -72,7 +72,10 @@ app.use(
 
 // Ruta pública raíz
 app.get("/", (req, res) =>
-  res.json({ mensaje: "Bienvenido a la API. Por favor, autentícate para acceder a más datos." })
+  res.json({
+    mensaje:
+      "Bienvenido a la API. Por favor, autentícate para acceder a más datos.",
+  })
 );
 
 // 7. Manejador de errores global (solo formatea respuesta; no llama a logger.error)
@@ -80,11 +83,15 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({
     error: true,
     mensaje: err.message || "Ocurrió un error interno en el servidor",
-    data: err.response?.data || null
+    data: err || null,
   });
 });
 
 // 8. Inicio del servidor
 app.listen(PORT, () => {
-  logger.info({ message: `Servidor escuchando en http://localhost:${PORT}`, port: PORT });
+  logger.info({
+    message: `Servidor escuchando en http://localhost:${PORT}`,
+    port: PORT,
+  });
+  console.log(`Servidor escuchando en http://localhost:${PORT}`);
 });
