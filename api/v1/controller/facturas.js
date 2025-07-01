@@ -15,6 +15,27 @@ const create = async (req, res) => {
   }
 };
 
+const isFacturada = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const response = await model.isFacturada(id);
+    res.status(200).json({
+      ok: true,
+      message: "Consulta exitosa",
+      data: { facturada: response },
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({
+        ok: false,
+        error: error.message || "Error en el servidor",
+        details: error,
+      });
+  }
+};
+
 const createCombinada = async (req, res) => {
   req.context.logStep(
     "createCombinada",
@@ -94,4 +115,5 @@ module.exports = {
   readConsultas,
   readAllConsultas,
   readDetailsFactura,
+  isFacturada,
 };

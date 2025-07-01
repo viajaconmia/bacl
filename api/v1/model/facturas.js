@@ -6,6 +6,16 @@ const {
 const { crearCfdi } = require("./facturamaModel");
 const { v4: uuidv4 } = require("uuid");
 
+const isFacturada = async (id) => {
+  try {
+    const query = `SELECT COUNT(*) AS facturadas FROM items where id_factura is not null and id_hospedaje = ?;`;
+    const response = await executeQuery(query, [id]);
+    return response[0].facturadas > 0;
+  } catch (error) {
+    throw error;
+  }
+};
+
 const createFactura = async ({ cfdi, info_user }, req) => {
   try {
     const { id_solicitud, id_user } = info_user;
@@ -405,4 +415,5 @@ module.exports = {
   getFacturasConsultas,
   getAllFacturasConsultas,
   getDetailsFactura,
+  isFacturada,
 };
