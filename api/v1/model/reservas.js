@@ -185,29 +185,30 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
         }
 
         // --- 3. Manejar Items (Borrar y Recrear) ---
-        if (edicionData.items && id_hospedaje_actual) {
-          const query_delete_items_pagos = `DELETE FROM items_pagos WHERE id_item IN (SELECT id_item FROM items WHERE id_hospedaje = ?);`;
-          await connection.execute(query_delete_items_pagos, [
-            id_hospedaje_actual,
-          ]);
+        if (edicionData.solicitud?.id_credito) {
+          if (edicionData.items && id_hospedaje_actual) {
+            const query_delete_items_pagos = `DELETE FROM items_pagos WHERE id_item IN (SELECT id_item FROM items WHERE id_hospedaje = ?);`;
+            await connection.execute(query_delete_items_pagos, [
+              id_hospedaje_actual,
+            ]);
 
-          const query_delete_impuestos_items = `DELETE FROM impuestos_items WHERE id_item IN (SELECT id_item FROM items WHERE id_hospedaje = ?);`;
-          await connection.execute(query_delete_impuestos_items, [
-            id_hospedaje_actual,
-          ]);
+            const query_delete_impuestos_items = `DELETE FROM impuestos_items WHERE id_item IN (SELECT id_item FROM items WHERE id_hospedaje = ?);`;
+            await connection.execute(query_delete_impuestos_items, [
+              id_hospedaje_actual,
+            ]);
 
-          const query_delete_items =
-            "DELETE FROM items WHERE id_hospedaje = ?;";
-          await connection.execute(query_delete_items, [id_hospedaje_actual]);
+            const query_delete_items =
+              "DELETE FROM items WHERE id_hospedaje = ?;";
+            await connection.execute(query_delete_items, [id_hospedaje_actual]);
 
-          const nuevosItemsParaInsertar = edicionData.items.current;
-          if (nuevosItemsParaInsertar && nuevosItemsParaInsertar.length > 0) {
-            const itemsConIdAnadido = nuevosItemsParaInsertar.map((item) => ({
-              ...item,
-              id_item: `ite-${uuidv4()}`,
-            }));
+            const nuevosItemsParaInsertar = edicionData.items.current;
+            if (nuevosItemsParaInsertar && nuevosItemsParaInsertar.length > 0) {
+              const itemsConIdAnadido = nuevosItemsParaInsertar.map((item) => ({
+                ...item,
+                id_item: `ite-${uuidv4()}`,
+              }));
 
-            const query_items_insert = `
+              const query_items_insert = `
                 INSERT INTO items (
                   id_item, id_catalogo_item, id_factura, total, subtotal, impuestos, 
                   is_facturado, fecha_uso, id_hospedaje, costo_total, costo_subtotal, 
@@ -215,119 +216,124 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
                 ) VALUES ${itemsConIdAnadido
                   .map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                   .join(",")};`;
-            const params_items_insert = itemsConIdAnadido.flatMap(
-              (itemConId) => [
-                itemConId.id_item,
-                null,
-                null,
-                (
-                  edicionData.venta.before.total / edicionData.noches.before
-                ).toFixed(2),
-                (
-                  edicionData.venta.before.subtotal / edicionData.noches.before
-                ).toFixed(2),
-                (
-                  edicionData.venta.before.impuestos / edicionData.noches.before
-                ).toFixed(2),
-                null,
-                new Date().toISOString().split("T")[0],
-                id_hospedaje_actual,
-                itemConId.costo.total.toFixed(2),
-                itemConId.costo.subtotal.toFixed(2),
-                itemConId.costo.impuestos.toFixed(2),
-                (itemConId.costo.total * 0.16).toFixed(2),
-                0,
-              ]
-            );
-            await connection.execute(query_items_insert, params_items_insert);
+              const params_items_insert = itemsConIdAnadido.flatMap(
+                (itemConId) => [
+                  itemConId.id_item,
+                  null,
+                  null,
+                  (
+                    edicionData.venta.before.total / edicionData.noches.before
+                  ).toFixed(2),
+                  (
+                    edicionData.venta.before.subtotal /
+                    edicionData.noches.before
+                  ).toFixed(2),
+                  (
+                    edicionData.venta.before.impuestos /
+                    edicionData.noches.before
+                  ).toFixed(2),
+                  null,
+                  new Date().toISOString().split("T")[0],
+                  id_hospedaje_actual,
+                  itemConId.costo.total.toFixed(2),
+                  itemConId.costo.subtotal.toFixed(2),
+                  itemConId.costo.impuestos.toFixed(2),
+                  (itemConId.costo.total * 0.16).toFixed(2),
+                  0,
+                ]
+              );
+              await connection.execute(query_items_insert, params_items_insert);
 
-            const taxesDataParaDb = [];
-            itemsConIdAnadido.forEach((itemConId) => {
-              if (itemConId.impuestos && itemConId.impuestos.length > 0) {
-                itemConId.impuestos.forEach((tax) => {
-                  taxesDataParaDb.push({
-                    id_item: itemConId.id_item,
-                    base: tax.base,
-                    total: tax.total,
-                    porcentaje: tax.rate ?? 0,
-                    monto: tax.monto ?? 0,
-                    name: tax.name,
-                    tipo_impuestos: tax.tipo_impuesto,
+              const taxesDataParaDb = [];
+              itemsConIdAnadido.forEach((itemConId) => {
+                if (itemConId.impuestos && itemConId.impuestos.length > 0) {
+                  itemConId.impuestos.forEach((tax) => {
+                    taxesDataParaDb.push({
+                      id_item: itemConId.id_item,
+                      base: tax.base,
+                      total: tax.total,
+                      porcentaje: tax.rate ?? 0,
+                      monto: tax.monto ?? 0,
+                      name: tax.name,
+                      tipo_impuestos: tax.tipo_impuesto,
+                    });
                   });
-                });
-              }
-            });
+                }
+              });
 
-            if (taxesDataParaDb.length > 0) {
-              const query_impuestos_items = `
+              if (taxesDataParaDb.length > 0) {
+                const query_impuestos_items = `
                   INSERT INTO impuestos_items (id_item, base, total, porcentaje, monto, nombre_impuesto, tipo_impuesto)
                   VALUES ${taxesDataParaDb
                     .map(() => "(?, ?, ?, ?, ?, ?, ?)")
                     .join(", ")};`;
-              const params_impuestos_items = taxesDataParaDb.flatMap((t) => [
-                t.id_item,
-                t.base,
-                t.total,
-                t.porcentaje,
-                t.monto,
-                t.name,
-                t.tipo_impuestos,
-              ]);
-              await connection.execute(
-                query_impuestos_items,
-                params_impuestos_items
+                const params_impuestos_items = taxesDataParaDb.flatMap((t) => [
+                  t.id_item,
+                  t.base,
+                  t.total,
+                  t.porcentaje,
+                  t.monto,
+                  t.name,
+                  t.tipo_impuestos,
+                ]);
+                await connection.execute(
+                  query_impuestos_items,
+                  params_impuestos_items
+                );
+              }
+
+              const query_pago_contado = `SELECT id_pago FROM pagos WHERE id_servicio = ? LIMIT 1;`;
+              const [rowsContado] = await connection.execute(
+                query_pago_contado,
+                [id_servicio_actual]
               );
-            }
 
-            const query_pago_contado = `SELECT id_pago FROM pagos WHERE id_servicio = ? LIMIT 1;`;
-            const [rowsContado] = await connection.execute(query_pago_contado, [
-              id_servicio_actual,
-            ]);
-
-            if (rowsContado.length > 0) {
-              const id_pago = rowsContado[0].id_pago;
-              if (itemsConIdAnadido.length > 0) {
-                const query_items_pagos_insert = `
+              if (rowsContado.length > 0) {
+                const id_pago = rowsContado[0].id_pago;
+                if (itemsConIdAnadido.length > 0) {
+                  const query_items_pagos_insert = `
                     INSERT INTO items_pagos (id_item, id_pago, monto)
                     VALUES ${itemsConIdAnadido
                       .map(() => "(?, ?, ?)")
                       .join(",")};`;
-                const params_items_pagos_insert = itemsConIdAnadido.flatMap(
-                  (itemConId) => [
-                    itemConId.id_item,
-                    id_pago,
-                    (
-                      edicionData.venta.before.total / edicionData.noches.before
-                    ).toFixed(2),
-                  ]
+                  const params_items_pagos_insert = itemsConIdAnadido.flatMap(
+                    (itemConId) => [
+                      itemConId.id_item,
+                      id_pago,
+                      (
+                        edicionData.venta.before.total /
+                        edicionData.noches.before
+                      ).toFixed(2),
+                    ]
+                  );
+                  await connection.execute(
+                    query_items_pagos_insert,
+                    params_items_pagos_insert
+                  );
+                }
+              } else {
+                const query_pago_credito = `SELECT id_credito FROM pagos_credito WHERE id_servicio = ? LIMIT 1;`;
+                const [rowsCredito] = await connection.execute(
+                  query_pago_credito,
+                  [id_servicio_actual]
                 );
-                await connection.execute(
-                  query_items_pagos_insert,
-                  params_items_pagos_insert
-                );
-              }
-            } else {
-              const query_pago_credito = `SELECT id_credito FROM pagos_credito WHERE id_servicio = ? LIMIT 1;`;
-              const [rowsCredito] = await connection.execute(
-                query_pago_credito,
-                [id_servicio_actual]
-              );
-              if (rowsCredito.length === 0) {
-                console.warn(
-                  "Advertencia: No se encontró un pago (contado o crédito) para el servicio al re-crear items_pagos:",
-                  id_servicio_actual
-                );
+                if (rowsCredito.length === 0) {
+                  console.warn(
+                    "Advertencia: No se encontró un pago (contado o crédito) para el servicio al re-crear items_pagos:",
+                    id_servicio_actual
+                  );
+                }
               }
             }
+          } else if (
+            edicionData.items &&
+            edicionData.items.current?.length === 0 &&
+            id_hospedaje_actual
+          ) {
+            console.log(
+              `Todos los items asociados al hospedaje ${id_hospedaje_actual} han sido eliminados según la solicitud.`
+            );
           }
-        } else if (
-          edicionData.items &&
-          edicionData.items.current?.length === 0 &&
-          id_hospedaje_actual
-        ) {
-          console.log(
-            `Todos los items asociados al hospedaje ${id_hospedaje_actual} han sido eliminados según la solicitud.`
-          );
         }
 
         // --- 5. Actualizar Tabla 'solicitudes' ---

@@ -13,6 +13,7 @@ router.post(
   controller.createCombinada
 );
 router.get("/getFacturas", controller.readAllFacturas);
+router.get("/isFacturada/:id", controller.isFacturada);
 router.get("/consultas", controller.readConsultas);
 router.get("/consultasAll", controller.readAllConsultas);
 router.get("/getDetailsFactura", controller.readDetailsFactura);
