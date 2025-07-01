@@ -952,7 +952,7 @@ WHERE b.id_booking = ?;`;
 };
 
 const insertarReserva = async ({ reserva }) => {
-  //console.log(reserva);
+  console.log(reserva);
   try {
     const id_booking = `boo-${uuidv4()}`;
     const { solicitud, venta, proveedor, hotel, items, viajero } = reserva; // 'items' aquí es ReservaForm['items']
@@ -1156,9 +1156,21 @@ const insertarReserva = async ({ reserva }) => {
           }
 
           // 5. Actualizar Solicitud y servicios (común para ambos casos)
+          //VALIDANDO BIEN EL ESTADO CORRECTO DE LA SOLICITUD
+          let estado=null;
+          if (reserva.estado_reserva=== "En proceso") {
+            estado = "pending"
+          } else if (reserva.estado_reserva === "Confirmada"){
+            estado = "complete"
+          }
+          if (!estado) {
+  throw new Error("Estado de reserva no válido para inserción");
+}
+            
+          console.log("Actualizando estado de solicitud:", solicitud.id_solicitud, "a", estado);
           await connection.execute(
-            `UPDATE solicitudes SET status = "complete" WHERE id_solicitud = ?;`,
-            [solicitud.id_solicitud] // Asegúrate que solicitud.id_solicitud está disponible
+            `UPDATE solicitudes SET status = ? WHERE id_solicitud = ?;`,
+            [estado , solicitud.id_solicitud] // Asegúrate que solicitud.id_solicitud está disponible
           );
           await connection.execute(
             `UPDATE servicios SET id_agente = ? WHERE id_servicio = ?;`,
