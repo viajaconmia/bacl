@@ -447,10 +447,13 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
       }
     );
     return response;
-  } catch (error) {
-    console.error("Error al editar reserva:", error);
-    throw error + `${edicionData}`;
-  }
+} catch (error) {
+  console.error("Error al editar reserva:", error, edicionData);
+
+  const message = error && error.message ? error.message : String(error);
+
+  throw new Error(`Error al editar reserva: ${message}. Datos: ${JSON.stringify(edicionData)}`);
+}
 };
 
 const insertarReservaOperaciones = async (reserva) => {
