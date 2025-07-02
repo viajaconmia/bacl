@@ -83,22 +83,23 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           params_update_bookings_values.push(edicionData.check_out.current);
         }
         if (edicionData.venta?.current) {
-          // if (edicionData.venta.current.total !== undefined) {
-          //   updates_bookings_clauses.push("total = ?");
-          //   params_update_bookings_values.push(edicionData.venta.current.total);
-          // }
-          // if (edicionData.venta.current.subtotal !== undefined) {
-          //   updates_bookings_clauses.push("subtotal = ?");
-          //   params_update_bookings_values.push(
-          //     edicionData.venta.current.subtotal
-          //   );
-          // }
-          // if (edicionData.venta.current.impuestos !== undefined) {
-          //   updates_bookings_clauses.push("impuestos = ?");
-          //   params_update_bookings_values.push(
-          //     edicionData.venta.current.impuestos
-          //   );
-          // }
+          if(edicionData.solicitud.id_credito){
+          if (edicionData.venta.current.total !== undefined) {
+            updates_bookings_clauses.push("total = ?");
+            params_update_bookings_values.push(edicionData.venta.current.total);
+          }
+          if (edicionData.venta.current.subtotal !== undefined) {
+            updates_bookings_clauses.push("subtotal = ?");
+            params_update_bookings_values.push(
+              edicionData.venta.current.subtotal
+            );
+          }
+          if (edicionData.venta.current.impuestos !== undefined) {
+            updates_bookings_clauses.push("impuestos = ?");
+            params_update_bookings_values.push(
+              edicionData.venta.current.impuestos
+            );
+          }}
         }
         if (edicionData.estado_reserva?.current !== undefined) {
           updates_bookings_clauses.push("estado = ?");
@@ -388,12 +389,15 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
             updates_solicitud_clauses.push("room = ?"); // Columna 'room' en tabla 'solicitudes'
             params_update_solicitud_values.push(edicionData.habitacion.current);
           }
-          // if (edicionData.venta?.current?.total !== undefined) {
-          //   updates_solicitud_clauses.push("total = ?"); // Columna 'total' en tabla 'solicitudes'
-          //   params_update_solicitud_values.push(
-          //     edicionData.venta.current.total
-          //   );
-          // }
+          if(edicionData.solicitud?.id_credito){
+
+            if (edicionData.venta?.current?.total !== undefined) {
+                updates_solicitud_clauses.push("total = ?"); //Columna 'total' en tabla 'solicitudes'
+                params_update_solicitud_values.push(
+                    edicionData.venta.current.total
+                  );
+                }
+              }
           if (edicionData.codigo_reservacion_hotel?.current !== undefined) {
             updates_solicitud_clauses.push("confirmation_code = ?"); // Columna 'confirmation_code' en 'solicitudes'
             params_update_solicitud_values.push(
