@@ -83,7 +83,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           params_update_bookings_values.push(edicionData.check_out.current);
         }
         if (edicionData.venta?.current) {
-          if(edicionData.solicitud.id_credito){
+          if(edicionData.metadata?.id_credito){
           if (edicionData.venta.current.total !== undefined) {
             updates_bookings_clauses.push("total = ?");
             params_update_bookings_values.push(edicionData.venta.current.total);
@@ -186,7 +186,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
         }
 
         // --- 3. Manejar Items (Borrar y Recrear) ---
-        if (edicionData.solicitud?.id_credito) {
+        if (edicionData.metadata?.id_credito) {
           if (edicionData.items && id_hospedaje_actual) {
             const query_delete_items_pagos = `DELETE FROM items_pagos WHERE id_item IN (SELECT id_item FROM items WHERE id_hospedaje = ?);`;
             await connection.execute(query_delete_items_pagos, [
@@ -389,7 +389,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
             updates_solicitud_clauses.push("room = ?"); // Columna 'room' en tabla 'solicitudes'
             params_update_solicitud_values.push(edicionData.habitacion.current);
           }
-          if(edicionData.solicitud?.id_credito){
+          if(edicionData.metadata?.id_credito){
 
             if (edicionData.venta?.current?.total !== undefined) {
                 updates_solicitud_clauses.push("total = ?"); //Columna 'total' en tabla 'solicitudes'
