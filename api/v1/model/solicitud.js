@@ -57,8 +57,8 @@ const createSolicitudes = async (body) => {
       params_servicio,
       async (results, connection) => {
         try {
-          const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_servicio, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero) VALUES ${solicitudes
-            .map(() => "(?,?,?,?,?,?,?,?,?,?,?,?)")
+          const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_servicio, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales) VALUES ${solicitudes
+            .map(() => "(?,?,?,?,?,?,?,?,?,?,?,?,?)")
             .join(",")};`;
 
           const params_solicitudes_map = solicitudes.map((solicitud) => {
@@ -75,6 +75,7 @@ const createSolicitudes = async (body) => {
               status,
               id_viajero,
               nombre_viajero,
+              viajeros_adicionales
             } = solicitud;
             return [
               id_solicitud,
@@ -89,6 +90,7 @@ const createSolicitudes = async (body) => {
               total,
               status,
               nombre_viajero,
+              JSON.stringify(viajeros_adicionales) || [], 
             ];
           });
           const params_solicitudes_flat = params_solicitudes_map.flat();
@@ -229,6 +231,7 @@ SELECT
     so.status,
     so.id_usuario_generador,
     so.nombre_viajero,
+    so.viajeros_adicionales,
 	b.id_booking,
 	b.updated_at,
   b.costo_total,
@@ -273,30 +276,31 @@ ORDER BY s.created_at DESC;`;
 const getSolicitudById = async (id) => {
   try {
     let query = `
-select 
-s.id_servicio,
-s.created_at,
-s.is_credito,
-so.id_solicitud,
-so.confirmation_code,
-so.hotel,
-so.check_in,
-so.check_out,
-so.room,
-so.total,
-h.comments,
-h.id_hotel,
-so.id_usuario_generador,
-CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) AS nombre_viajero,
-b.id_booking, 
-h.codigo_reservacion_hotel, 
-p.id_pago, 
-p.pendiente_por_cobrar,
-p.monto_a_credito,
-hot.direccion,
-fp.id_factura,
-	CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) AS nombre_viajero_completo
-from solicitudes as so
+SELECT 
+  s.id_servicio,
+  s.created_at,
+  s.is_credito,
+  so.id_solicitud,
+  so.confirmation_code,
+  so.hotel,
+  so.check_in,
+  so.check_out,
+  so.room,
+  so.total,
+  so.viajeros_adicionales,
+  CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) AS nombre_viajero,
+  GROUP_CONCAT(CONCAT_WS(' ', v.primer_nombre) SEPARATOR ', ') AS nombres_viajeros_adicionales,
+  h.comments,
+  h.id_hotel,
+  so.id_usuario_generador,
+  b.id_booking, 
+  h.codigo_reservacion_hotel, 
+  p.id_pago, 
+  p.pendiente_por_cobrar,
+  p.monto_a_credito,
+  hot.direccion,
+  fp.id_factura
+FROM solicitudes as so
 LEFT JOIN servicios as s ON so.id_servicio = s.id_servicio
 LEFT JOIN bookings as b ON so.id_solicitud = b.id_solicitud
 LEFT JOIN hospedajes as h ON b.id_booking = h.id_booking
@@ -304,6 +308,11 @@ LEFT JOIN pagos as p ON so.id_servicio = p.id_servicio
 LEFT JOIN facturas_pagos as fp ON p.id_pago = fp.id_pago
 LEFT JOIN viajeros_con_empresas_con_agentes as vw ON vw.id_viajero = so.id_viajero
 LEFT JOIN hoteles as hot ON hot.id_hotel = h.id_hotel
+LEFT JOIN JSON_TABLE(
+    so.viajeros_adicionales,
+    '$[*]' COLUMNS (id_viajero VARCHAR(50) PATH '$')
+) AS va ON 1
+LEFT JOIN viajeros AS v ON v.id_viajero = va.id_viajero
 WHERE so.id_solicitud = ?
 GROUP BY so.id_solicitud
 ORDER BY s.created_at DESC;`;
