@@ -9,7 +9,6 @@ const valuesFacturama = {
   url: process.env.URL_FACTURAMA || "https://apisandbox.facturama.mx/",
 };
 
-console.log("Valores de Facturama:", valuesFacturama);
 const API_STRIPE_TEST = process.env.API_STRIPE_TEST;
 const API_SENDGRID = process.env.API_SENDGRID;
 
