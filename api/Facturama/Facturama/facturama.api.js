@@ -15,8 +15,6 @@ let headers = {
   },
 };
 
-console.log(headers);
-
 const facturama = () => {
   const settings = {
     url: valuesFacturama.url,
