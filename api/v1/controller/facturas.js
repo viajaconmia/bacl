@@ -3,14 +3,15 @@ const model = require("../model/facturas");
 const create = async (req, res) => {
   try {
     const response = await model.createFactura(req.body, req);
-    res
-      .status(201)
-      .json({ message: "Factura creado correctamente", data: response });
+    res.status(201).json({
+      message: "Factura creado correctamente",
+      data: response,
+    });
   } catch (error) {
     console.log(error);
     res.status(500).json({
       error: "Error create from v1/mia/factura - GET",
-      details: error,
+      details: error.response?.data || error.message || error,
     });
   }
 };
@@ -26,13 +27,11 @@ const isFacturada = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({
-        ok: false,
-        error: error.message || "Error en el servidor",
-        details: error,
-      });
+    res.status(500).json({
+      ok: false,
+      error: error.message || error,
+      details: error || null,
+    });
   }
 };
 

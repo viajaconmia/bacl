@@ -39,13 +39,13 @@ const createFactura = async ({ cfdi, info_user }, req) => {
     );
 
     const response = await runTransaction(async (connection) => {
+      let response_factura;
       try {
         console.log(cfdi);
-        const response_factura = await crearCfdi(req, cfdi);
+        response_factura = await crearCfdi(req, cfdi);
       } catch (error) {
-        throw {
-          data: error.response.data,
-        };
+        console.error("Error al crear CFDI:", error.response.data);
+        throw error;
       }
       try {
         const id_factura = `fac-${uuidv4()}`;
@@ -90,18 +90,15 @@ const createFactura = async ({ cfdi, info_user }, req) => {
         const params3 = [id_factura, total, id_solicitud];
         const result2 = await connection.execute(query3, params3);
 
-        return response_factura;
+        return response_factura.data;
       } catch (error) {
         throw {
           data: error,
         };
       }
     });
-
-    return {
-      success: true,
-      ...response,
-    };
+    console.log(" ⬅️⬅️⬅️⬅️⬅️ response", response);
+    return response;
   } catch (error) {
     throw error;
   }
