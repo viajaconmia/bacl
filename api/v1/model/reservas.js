@@ -965,7 +965,10 @@ WHERE b.id_booking = ?;`;
 };
 
 const insertarReserva = async ({ reserva }) => {
-  console.log(reserva);
+  // console.log("LLegando a insertarReserva con reserva: ");
+  // console.log(reserva);
+  // const {solicitud} = reserva;
+  // console.log("Verificando solicitud: ",solicitud);
   try {
     const id_booking = `boo-${uuidv4()}`;
     const { solicitud, venta, proveedor, hotel, items, viajero } = reserva; // 'items' aquí es ReservaForm['items']
@@ -1189,17 +1192,29 @@ const insertarReserva = async ({ reserva }) => {
             `UPDATE servicios SET id_agente = ? WHERE id_servicio = ?;`,
             [solicitud.id_agente, solicitud.id_servicio] // Asegúrate que solicitud.id_solicitud está disponible
           );
+          const id_viajeros = [viajero.id_viajero];
+          if (solicitud.viajeros_adicionales && Array.isArray(solicitud.viajeros_adicionales)) {
+            solicitud.viajeros_adicionales.forEach((viajero_adicional) => {
+              if (viajero_adicional?.id_viajero) {
+                id_viajeros.push(viajero_adicional.id_viajero);
+              } else if (typeof viajero_adicional === "string") {
+                id_viajeros.push(viajero_adicional);
+              }
+            });
+          }
 
           // 6. meter a viajero hospedajes
           const query_insert_relacion = `
               INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal)
               VALUES (?, ?, ?);
             `;
-          await connection.execute(query_insert_relacion, [
-            viajero.id_viajero,
-            id_hospedaje,
-            1,
-          ]);
+          for (let i = 0; i < id_viajeros.length; i++) {
+            await connection.execute(query_insert_relacion, [
+              id_viajeros[i],
+              id_hospedaje,
+              i === 0 ? 1 : 0, // El primero es principal
+            ]);
+          }
 
           return {
             message: "Reserva procesada exitosamente",

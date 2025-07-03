@@ -2,6 +2,8 @@ const model = require("../model/reservas");
 const {executeQuery} = require("../../../config/db");
 
 const create = async (req, res) => {
+  //revisemos el body
+  console.log(req.body);
 
   const { reserva } = req.body;
   const { estado_reserva, solicitud } = reserva;
