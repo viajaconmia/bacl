@@ -1,3 +1,4 @@
+const { executeSP } = require("../../../config/db");
 let model = require("../model/solicitud");
 
 const create = async (req, res) => {
@@ -35,11 +36,17 @@ const readClient = async (req, res) => {
   }
 };
 const readSolicitudById = async (req, res) => {
+  req.context.logStep('Llegando al endpoint de readSolicitudById');
+  const { id } = req.query;
   try {
-    const { id } = req.query;
-    let solicitudes = await model.getSolicitudById(id);
-    res.status(200).json(solicitudes);
+    const result = await executeSP("sp_get_solicitud_by_id",[id]);
+    if(!result || result.length === 0) {
+      req.context.logStep('Result vacio');
+      return res.status(404).json({ message: "No se encontró un detalle para esta solicitud" });
+    }
+    res.status(200).json({message: "Detalle de solicitud obtenido correctamente", data: result});
   } catch (error) {
+    req.context.logStep('error en la ejecucion del SP',error);
     console.error(error);
     res.status(500).json({ error: "Internal Server Error", details: error });
   }
