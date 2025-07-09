@@ -35,7 +35,7 @@ router.use("/factura", facturas);
 router.use("/etiquetas", etiquetas);
 router.use("/impersonate", impersonate);
 router.use("/pagar", pagar);
-router.use("/saldos", saldos);
+router.use("/saldo", saldos);
 router.use("/utils", utils);
 router.use("/pago_proveedor", pago_proveedor);
 
