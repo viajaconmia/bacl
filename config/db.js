@@ -53,21 +53,23 @@ async function executeTransaction(query, params, callback) {
   }
 }
 
-async function executeSP(procedure, params = [], raw = false) {
+async function executeSP(procedure, params = []) {
   const connection = await pool.getConnection();
 
   try {
     const placeholders = params.map(() => "?").join(", ");
     const query = `CALL ${procedure}(${placeholders})`;
 
-    const [rows] = await connection.query(query, params);
+    const result = await connection.query(query, params);
+    const [rows] = result;
+    console.log("👌👌",result, rows);
+    // if (raw) {
 
-    if (raw) {
-      return rows; // Devuelve todos los resultsets
-    }
+    //   return rows; // Devuelve todos los resultsets
+    // }
 
     // Devuelve solo el primer resultset por compatibilidad con casos anteriores
-    return Array.isArray(rows) && rows.length > 0 ? rows[0] : [];
+    return Array.isArray(rows[0]) ? rows[0] : rows;
   } catch (error) {
     console.error(`Error ejecutando SP "${procedure}":`, error.message);
     throw error;
