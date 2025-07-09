@@ -4,6 +4,16 @@ const controller = require("../../controller/saldos");
 
 router.post("/", controller.create);
 router.get("/", controller.read);
-router.post("/new", controller.createNewSaldo);
+router.post(
+  "/new",
+  middleware.validateParams([
+    "id_cliente",
+    "monto_pagado",
+    "forma_pago",
+    "fecha_pago",
+  ]),
+  controller.createNewSaldo
+);
+router.get("/:id", controller.readSaldoByAgente);
 
 module.exports = router;

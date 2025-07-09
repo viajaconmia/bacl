@@ -1,4 +1,4 @@
-const { executeTransactionSP } = require("../../../config/db");
+const { executeTransactionSP, executeQuery } = require("../../../config/db");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
 const model = require("../model/saldos");
 
@@ -18,6 +18,23 @@ const read = async (req, res) => {
   try {
     const saldos = await model.readSaldos();
     res.status(200).json(saldos);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: "Error en el servidor", details: error });
+  }
+};
+
+const readSaldoByAgente = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const saldo = await executeQuery(
+      `SELECT * FROM saldos_a_favor as sf inner join agentes as a on a.id_agente = sf.id_agente where sf.id_agente = ?;`,
+      [id]
+    );
+    console.log(saldo);
+    res
+      .status(200)
+      .json({ message: "Saldos obtenidos correctamente", data: saldo });
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Error en el servidor", details: error });
@@ -78,4 +95,5 @@ module.exports = {
   create,
   read,
   createNewSaldo,
+  readSaldoByAgente,
 };
