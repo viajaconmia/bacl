@@ -6,7 +6,7 @@ const getCardStats = async (req, res) => {
   try {
   
     const response = await executeSP("sp_stats_pago",[id_user,year,month])
-    // console.log ("😒😒",response);
+    console.log ("😒😒",response);
     if (!response || response.length === 0) {
       return res.status(404).json({ message: "No se encontraron datos para esta busqueda" })
     }
