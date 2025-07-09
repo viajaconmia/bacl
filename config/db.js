@@ -92,6 +92,29 @@ async function runTransaction(callback) {
   }
 }
 
+async function executeSP(procedure, params = [], raw = false) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+    const placeholders = params.map(() => "?").join(", ");
+    const query = `CALL ${procedure}(${placeholders})`;
+    const [rows] = await connection.query(query, params);
+    await connection.commit();
+    // Devuelve solo el primer resultset por compatibilidad con casos anteriores
+    return Array.isArray(rows) && rows.length > 0 ? rows[0] : [];
+  } catch (error) {
+    await connection.rollback();
+    console.error(
+      `Error ejecutando SP, ya manejamos el rollback "${procedure}":`,
+      error.message
+    );
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 module.exports = {
   pool,
   executeQuery,
