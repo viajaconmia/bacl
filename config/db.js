@@ -62,13 +62,6 @@ async function executeSP(procedure, params = []) {
 
     const result = await connection.query(query, params);
     const [rows] = result;
-    console.log("👌👌",result, rows);
-    // if (raw) {
-
-    //   return rows; // Devuelve todos los resultsets
-    // }
-
-    // Devuelve solo el primer resultset por compatibilidad con casos anteriores
     return Array.isArray(rows[0]) ? rows[0] : rows;
   } catch (error) {
     console.error(`Error ejecutando SP "${procedure}":`, error.message);
@@ -94,10 +87,35 @@ async function runTransaction(callback) {
   }
 }
 
+async function executeTransactionSP(procedure, params = []) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const placeholders = params.map(() => "?").join(", ");
+    const query = `CALL ${procedure}(${placeholders})`;
+    const result = await connection.query(query, params);
+    const [rows] = result;
+
+    await connection.commit();
+    return Array.isArray(rows[0]) ? rows[0] : rows;
+  } catch (error) {
+    await connection.rollback();
+    console.error(
+      `Error ejecutando SP, ya manejamos el rollback "${procedure}":`,
+      error.message
+    );
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 module.exports = {
   pool,
   executeQuery,
   executeTransaction,
   executeSP,
   runTransaction,
+  executeTransactionSP,
 };
