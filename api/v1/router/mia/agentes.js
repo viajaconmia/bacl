@@ -253,4 +253,6 @@ router.put("/", async (req, res) => {
   }
 });
 
+router.get("/agentes-with-viajeros-details", controller.get_agente_with_viajeros_details);
+
 module.exports = router;
