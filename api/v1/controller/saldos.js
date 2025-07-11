@@ -84,16 +84,72 @@ const createNewSaldo = async (req, res) => {
     );
     res
       .status(201)
-      .json({ message: "Nuevo saldo creado correctamente", data: data });
+      .json({ message: "Nuevo saldo creado correctamente", data: response });
   } catch (error) {
     console.error("Error al crear nuevo saldo:", error);
     res.status(500).json({ error: "Error en el servidor", details: error });
   }
 };
 
+const update_saldo_by_id = async (req,res) => {
+  console.log("Llegando al endpoint de update_saldo_by_id");
+  const {
+id_saldos,
+id_agente,
+saldo,
+monto,
+metodo_pago,
+fecha_pago,
+concepto,
+referencia,
+currency,
+tipo_tarjeta,
+comentario,
+link_stripe,
+is_facturable,
+is_descuento,
+comprobante,
+activo
+  } = req.body;
+  console.log("Datos recibidos para actualizar saldo a favor:", req.body);
+  try {
+    const result =  await executeTransactionSP(
+      STORED_PROCEDURE.PATCH.ACTUALIZA_SALDO_A_FAVOR,[
+        id_saldos,
+        id_agente,
+        saldo,
+        monto,
+        metodo_pago,
+        fecha_pago,
+        concepto,
+        referencia,
+        currency,
+        tipo_tarjeta,
+        comentario,
+        link_stripe,
+        is_facturable,
+        is_descuento,
+        comprobante,
+        activo
+      ]);
+    console.log("Resultado de la actualización:", result);
+    if (!result || result.length === 0) {
+      return res.status(404).json({ message: "No se encontró el saldo a favor para actualizar" });
+    }else{
+      res.status(200).json({
+        message: "Saldo a favor actualizado correctamente",
+        data: result,
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: "Error en el servidor", details: error });
+  }
+}
+
 module.exports = {
   create,
   read,
   createNewSaldo,
   readSaldoByAgente,
+  update_saldo_by_id
 };
