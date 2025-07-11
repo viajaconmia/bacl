@@ -92,11 +92,27 @@ const readAgentes = async (req, res) => {
   }
 }
 
-
+const get_agente_with_viajeros_details = async (req, res) => {
+  const {id} = req.query;
+  try {
+    const result = await executeSP("sp_get_agente_with_viajeros_details", [id]);
+    if(!result || result.length === 0) {
+      return res.status(404).json({ message: "No se encontró el agente o los detalles de los viajeros" });
+    }else{
+      return res.status(200).json({
+        message: "Agente y detalles de viajeros recuperados correctamente",
+        data: result
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Error en el servidor", details: error });
+  }
+}
 module.exports = {
   create,
   read,
   readAgentesCompanies,
   readEmpresasDatosFiscales,getAgenteId,
   readAgentes,
+  get_agente_with_viajeros_details
 }
