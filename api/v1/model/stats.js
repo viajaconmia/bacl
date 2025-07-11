@@ -54,7 +54,7 @@ ORDER BY s.check_in DESC;
     throw error;
   }
 };
-const getStatsPerMonth = async (year, id_user) => {
+const getStatsPerMonth = async (year, id_user, mes) => {
   try {
     let query = `SELECT 
     DATE_FORMAT(b.check_in, '%Y-%m') AS mes,
@@ -69,6 +69,7 @@ INNER JOIN agentes_viajeros as av ON av.id_viajero = vh.id_viajero
 WHERE 
    av.id_agente = ?
   AND YEAR(b.check_in) = ?
+    AND MONTH(b.check_in) = ?
   AND b.estado = "Confirmada"
 GROUP BY 
     mes, hotel
@@ -76,7 +77,7 @@ ORDER BY
     mes DESC, b.total DESC;
 ;
 `;
-    let params = [id_user, year];
+    let params = [id_user, year, mes];
     let response = await executeQuery(query, params);
     return response;
   } catch (error) {
