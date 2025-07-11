@@ -31,7 +31,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
 
         if (edicionData.viajero) {
           connection.execute(
-            "UPDATE viajeros_hospedajes SET id_viajero = ? WHERE id_hospedaje = ?",
+            "UPDATE viajeros_hospedajes SET id_viajero = ? WHERE id_hospedaje = ? and is_principal = 1;",
             [edicionData.viajero.current.id_viajero, id_hospedaje_actual]
           );
         }
@@ -346,8 +346,10 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           const params_update_solicitud_values = [];
 
           // Datos del viajero
+          /*
           if (edicionData.viajero?.current) {
             const viajeroActual = edicionData.viajero.current;
+            
             if (viajeroActual.id_viajero !== undefined) {
               updates_solicitud_clauses.push("id_viajero = ?");
               params_update_solicitud_values.push(viajeroActual.id_viajero);
@@ -364,48 +366,51 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
               nombreCompletoArray.push(viajeroActual.apellido_paterno);
             if (viajeroActual.apellido_materno)
               nombreCompletoArray.push(viajeroActual.apellido_materno); // Asegúrate que este campo exista
-
-            if (nombreCompletoArray.length > 0) {
-              updates_solicitud_clauses.push("nombre_viajero = ?");
-              params_update_solicitud_values.push(
-                nombreCompletoArray.join(" ").trim()
-              );
-            }
-          }
-
-          // Datos del hotel y reserva
-          if (edicionData.hotel?.current?.content?.nombre_hotel !== undefined) {
-            updates_solicitud_clauses.push("hotel = ?"); // Columna 'hotel' en tabla 'solicitudes'
-            params_update_solicitud_values.push(
-              edicionData.hotel.current.content.nombre_hotel
-            );
-          }
-          if (edicionData.check_in?.current !== undefined) {
-            updates_solicitud_clauses.push("check_in = ?");
-            params_update_solicitud_values.push(edicionData.check_in.current);
-          }
-          if (edicionData.check_out?.current !== undefined) {
-            updates_solicitud_clauses.push("check_out = ?");
-            params_update_solicitud_values.push(edicionData.check_out.current);
-          }
-          if (edicionData.habitacion?.current !== undefined) {
-            updates_solicitud_clauses.push("room = ?"); // Columna 'room' en tabla 'solicitudes'
-            params_update_solicitud_values.push(edicionData.habitacion.current);
-          }
-          if (edicionData.metadata?.id_credito) {
-            if (edicionData.venta?.current?.total !== undefined) {
-              updates_solicitud_clauses.push("total = ?"); //Columna 'total' en tabla 'solicitudes'
-              params_update_solicitud_values.push(
-                edicionData.venta.current.total
-              );
-            }
-          }
-          if (edicionData.codigo_reservacion_hotel?.current !== undefined) {
-            updates_solicitud_clauses.push("confirmation_code = ?"); // Columna 'confirmation_code' en 'solicitudes'
-            params_update_solicitud_values.push(
-              edicionData.codigo_reservacion_hotel.current
-            );
-          }
+            
+                        if (nombreCompletoArray.length > 0) {
+                          updates_solicitud_clauses.push("nombre_viajero = ?");
+                          params_update_solicitud_values.push(
+                            nombreCompletoArray.join(" ").trim()
+                          );
+                        }
+                      }
+            
+                      // Datos del hotel y reserva
+                      
+                      if (edicionData.hotel?.current?.content?.nombre_hotel !== undefined) {
+                        updates_solicitud_clauses.push("hotel = ?"); // Columna 'hotel' en tabla 'solicitudes'
+                        params_update_solicitud_values.push(
+                          edicionData.hotel.current.content.nombre_hotel
+                        );
+                      }
+                      
+                      if (edicionData.check_in?.current !== undefined) {
+                        updates_solicitud_clauses.push("check_in = ?");
+                        params_update_solicitud_values.push(edicionData.check_in.current);
+                      }
+                      if (edicionData.check_out?.current !== undefined) {
+                        updates_solicitud_clauses.push("check_out = ?");
+                        params_update_solicitud_values.push(edicionData.check_out.current);
+                      }
+                      if (edicionData.habitacion?.current !== undefined) {
+                        updates_solicitud_clauses.push("room = ?"); // Columna 'room' en tabla 'solicitudes'
+                        params_update_solicitud_values.push(edicionData.habitacion.current);
+                      }
+                      if (edicionData.metadata?.id_credito) {
+                        if (edicionData.venta?.current?.total !== undefined) {
+                          updates_solicitud_clauses.push("total = ?"); //Columna 'total' en tabla 'solicitudes'
+                          params_update_solicitud_values.push(
+                            edicionData.venta.current.total
+                          );
+                        }
+                      }
+                      if (edicionData.codigo_reservacion_hotel?.current !== undefined) {
+                        updates_solicitud_clauses.push("confirmation_code = ?"); // Columna 'confirmation_code' en 'solicitudes'
+                        params_update_solicitud_values.push(
+                          edicionData.codigo_reservacion_hotel.current
+                        );
+                      }
+                      */
 
           // Estado de la solicitud
           let nuevoEstadoSolicitud = null;
