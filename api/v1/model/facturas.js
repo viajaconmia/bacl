@@ -112,7 +112,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
     JSON.stringify({ cfdi, info_user })
   );
   try {
-    const { id_solicitud, id_user, id_items } = info_user;
+    const { id_solicitud, id_user, id_items, datos_empresa } = info_user;
     const solicitudesArray = Array.isArray(id_solicitud)
       ? id_solicitud
       : [id_solicitud];
@@ -148,9 +148,13 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           total,
           subtotal,
           impuestos,
-          id_facturama
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+          id_facturama,
+          rfc,
+          id_empresa,
+          uuid_factura
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?);
           `;
+        console.log(datos_empresa);
         const results = await conn.execute(insertFacturaQuery, [
           id_factura,
           new Date(),
@@ -160,6 +164,9 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           subtotal,
           impuestos,
           response_factura.data.Id,
+          datos_empresa.rfc,
+          datos_empresa.id_empresa,
+          response_factura.data.Complement.TaxStamp.Uuid,
         ]);
 
         // 4. Actualizar solo los items seleccionados
