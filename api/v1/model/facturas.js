@@ -16,7 +16,7 @@ const isFacturada = async (id) => {
   }
 };
 
-const createFactura = async ({ cfdi, info_user }, req) => {
+const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
   try {
     const { id_solicitud, id_user } = info_user;
 
@@ -53,8 +53,8 @@ const createFactura = async ({ cfdi, info_user }, req) => {
         const { total, subtotal, impuestos } = reduce;
 
         const query = `
-    INSERT INTO facturas ( id_factura, fecha_emision, estado, usuario_creador, total, subtotal, impuestos, id_facturama )
-    VALUES (?,?,?,?,?,?,?,?);`;
+    INSERT INTO facturas ( id_factura, fecha_emision, estado, usuario_creador, total, subtotal, impuestos, id_facturama, rfc, id_empresa,uuid_factura )
+    VALUES (?,?,?,?,?,?,?,?,?,?,?);`;
 
         console.log("response_factura", response_factura);
 
@@ -67,6 +67,9 @@ const createFactura = async ({ cfdi, info_user }, req) => {
           subtotal,
           impuestos,
           response_factura.data.Id,
+          datos_empresa.rfc,
+          datos_empresa.id_empresa,
+          response_factura.data.Complement.TaxStamp.Uuid,
         ];
         const result_creates = await connection.execute(query, params);
 

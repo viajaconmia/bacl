@@ -37,4 +37,6 @@ router.post("/send-email", controller.mandarCorreo);
 //Cancelar un cfdi
 router.delete("/cfdi", controller.cancelarCfdi);
 
+router.get("/cfdi", controller.getCdfi);
+
 module.exports = router;
