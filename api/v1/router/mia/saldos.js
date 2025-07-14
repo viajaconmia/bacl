@@ -18,4 +18,4 @@ router.get("/:id", controller.readSaldoByAgente);
 router.patch("/actualizar-saldo-a-favor",controller.update_saldo_by_id);
 router.get("/stripe-info", controller.getStripeInfo);
 
-module.exports = router;
+module.exports = router; 
