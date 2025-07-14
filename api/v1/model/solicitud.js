@@ -648,6 +648,10 @@ const getItemsSolicitud = async (id_solicitud) => {
   }
 };
 
+// const filtro_solicitudes_y_reservas = async (req,res) => {
+//   const 
+  
+// }
 module.exports = {
   // createSolicitudYTicket,
   getViajeroSolicitud,
