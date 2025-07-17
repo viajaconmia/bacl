@@ -17,4 +17,4 @@ router.post(
 router.get("/:id", controller.readSaldoByAgente);
 router.patch("/actualizar-saldo-a-favor",controller.update_saldo_by_id);
 
-module.exports = router;
+module.exports = router; 
