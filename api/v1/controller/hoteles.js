@@ -4,8 +4,7 @@ const model = require("../model/hoteles");
 const { generatePresignedUploadUrl } = require("../utils/subir-imagen");
 
 const AgregarHotel = async (req, res) => {
-  console.log("Llegó al endpoint de agregar hotel");
-  console.log("Body recibido:", JSON.stringify(req.body, null, 2)); // Log completo del body
+ req.context.logStep("Llegó al endpoint de agregar hotel");
 
   try {
     // Extraer datos del cuerpo de la solicitud con valores por defecto
@@ -81,6 +80,7 @@ const AgregarHotel = async (req, res) => {
       score_operaciones,
       score_sistemas,
     } = req.body;
+    req.context.logStep("Body recibido:", JSON.stringify(req.body, null, 2)); 
     const { preferenciales } = tarifas;
     // Función para asegurar valores numéricos
     const safeNumber = (value) => {
@@ -134,7 +134,7 @@ const AgregarHotel = async (req, res) => {
           },
         };
 
-        console.log(
+        req.context.logStep(
           "Tarifa preferencial procesada:",
           JSON.stringify(tarifaPreferencial, null, 2)
         );
@@ -144,7 +144,7 @@ const AgregarHotel = async (req, res) => {
 
     const tarifasPreferenciales = processTarifasPreferenciales();
     const tarifas_preferenciales_json = JSON.stringify(tarifasPreferenciales);
-    console.log("Tarifas preferenciales finales:", tarifas_preferenciales_json);
+    req.context.logStep("Tarifas preferenciales finales:", tarifas_preferenciales_json);
 
     // Formatear fecha de vigencia del convenio si existe
     const formatVigenciaConvenio = (dateString) => {
@@ -177,7 +177,7 @@ const AgregarHotel = async (req, res) => {
     }
 
     // Llamada al stored procedure (descomentar cuando esté listo)
-
+    req.context.logStep("Ejecutando stored procedure sp_inserta_hotel3");
     const result = await executeSP(
       "sp_inserta_hotel3",
       [
@@ -248,7 +248,7 @@ const AgregarHotel = async (req, res) => {
       ],
       false
     );
-
+    req.context.logStep("Resultado del stored procedure:", result);
     res.status(200).json({
       success: true,
       data: {
@@ -257,6 +257,7 @@ const AgregarHotel = async (req, res) => {
       },
     });
   } catch (error) {
+    req.context.logStep("Error al agregar hotel:", error.message);
     console.error("Error en AgregarHotel:", error);
     res.status(500).json({
       success: false,
@@ -471,7 +472,7 @@ const consultaPrecioSencilla = async (req, res) => {
 
     res
       .status(200)
-      .json({ message: "Precio encontrado", precio: precio_sencilla });
+      .json({ message: "Precio encontrado", precio: precio_sencilla, result });
   } catch (error) {
     console.error("Error ejecutando SP:", error);
     res.status(500).json({ message: "Error interno del servidor" });
@@ -801,6 +802,7 @@ const eliminarLogicaTarifa = async (req, res) => {
 };
 
 const filtroAvanzado = async (req, res) => {
+  req.context.logStep('Llegó al endpoint de filtro avanzado');
   const {
     desayuno,
     activo,
@@ -825,12 +827,14 @@ const filtroAvanzado = async (req, res) => {
     tiene_transportacion,
     pais,
   } = req.body;
+  req.context.logStep('Datos recibidos:', JSON.stringify(req.body, null, 2));
 
   // Utilidad para convertir a mayúsculas si es string
   const toUpperOrNull = (val) =>
     typeof val === "string" ? val.toUpperCase() : val ?? null;
 
   try {
+    req.context.logStep('Ejecutando stored procedure filtro_completo');
     const result = await executeSP(
       "filtro_completo",
       [
@@ -859,8 +863,9 @@ const filtroAvanzado = async (req, res) => {
       ],
       true
     );
-
+    req.context.logStep('Resultado del stored procedure:', result);
     if (!result) {
+      req.context.logStep('No se encontraron hoteles con esa búsqueda');
       res
         .status(404)
         .json({ message: "No se encontraron hoteles con esa búsqueda" });
@@ -870,6 +875,7 @@ const filtroAvanzado = async (req, res) => {
         .json({ message: "Hoteles recuperados con éxito", data: result });
     }
   } catch (error) {
+    req.context.logStep('Error al ejecutar filtro_completo:', error.message);
     console.error("Error al ejecutar filtro_completo:", error);
     res.status(500).json({ message: "Error interno del servidor" });
   }
