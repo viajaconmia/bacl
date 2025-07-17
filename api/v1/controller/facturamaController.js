@@ -200,7 +200,7 @@ const cancelarCfdi = async (req, res) => {
 };
 const getCdfi = async (req, res) => {
   try {
-    const { id } = req.body;
+    const { id } = req.query;
 
     if (!id) throw new Error("Falta el id del CFDI");
 

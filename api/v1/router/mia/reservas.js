@@ -6,8 +6,9 @@ const requiredParamsToCreate = [];
 
 router.put(
   "/",
-  middleware.validateParams(requiredParamsToCreate),
-  controller.updateReserva
+  //middleware.validateParams(requiredParamsToCreate),
+  // controller.updateReserva //se vovio el original era updateReserva
+  controller.updateReserva2
 );
 router.post(
   "/operaciones",

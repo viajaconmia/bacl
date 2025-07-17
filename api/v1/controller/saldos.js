@@ -28,9 +28,32 @@ const readSaldoByAgente = async (req, res) => {
   const { id } = req.params;
   try {
     const saldo = await executeQuery(
-      `SELECT * FROM saldos_a_favor as sf inner join agentes as a on a.id_agente = sf.id_agente where sf.id_agente = ?;`,
+      `SELECT
+  sf.id_agente,
+  a.nombre,
+  sf.id_saldos,
+  sf.fecha_creacion,
+  sf.saldo,
+  sf.monto,
+  sf.metodo_pago,
+  sf.fecha_pago,
+  sf.concepto,
+  sf.referencia,
+  sf.currency,
+  sf.tipo_tarjeta,
+  sf.comentario,
+  sf.link_stripe,
+  sf.is_facturable,
+  sf.is_descuento,
+  sf.comprobante,
+  sf.activo
+FROM saldos_a_favor AS sf
+INNER JOIN agente_details AS a
+  ON a.id_agente = sf.id_agente
+WHERE sf.id_agente = ?;`,
       [id]
     );
+    console.log("Si es esta query 👌👌👌")
     console.log(saldo);
     res
       .status(200)
