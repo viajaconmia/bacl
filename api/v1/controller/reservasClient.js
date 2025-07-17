@@ -45,7 +45,7 @@ const filtro_solicitudes_y_reservas = async (req, res) => {
 } = req.body;
  const status_dic ={
     "Confirmada" : "Confirmada",
-     "Pendiente" : "Pendiente",
+     "Pendiente" : "En Proceso",
       "Cancelada": "Cancelada", 
        "Todos":  null
  }
