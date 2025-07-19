@@ -211,6 +211,28 @@ const readAllFacturacion = async (req, res) => {
   }
 };
 
+
+const getReservasWithIAtemsByidAgente = async (req, res) => {
+  console.log("ESTE ENDPOINT SOLO TRAE RESERVAS CON ITEMS SIN FACTURAR");
+  const {id_agente} = req.query;
+  console.log("id_agente", id_agente);
+ try {
+  const reservas = await executeSP("mia2.sp_reservas_con_items_by_id_agente",[id_agente]);
+      if (!reservas) {
+        return res.status(404).json({ message: "No se encontraron reservas" });
+      }else{
+        return res.status(200).json({message: "Reservas encontradas", data: reservas});
+      }
+ } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.message });
+  }
+
+ }
+
+
 module.exports = {
   create,
   read,
@@ -220,5 +242,6 @@ module.exports = {
   readOnlyById,
   //updateReserva,
   readAllFacturacion,
-  updateReserva2
+  updateReserva2,
+  getReservasWithIAtemsByidAgente
 };
