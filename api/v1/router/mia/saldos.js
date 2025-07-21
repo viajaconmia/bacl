@@ -6,12 +6,12 @@ router.post("/", controller.create);
 router.get("/", controller.read);
 router.post(
   "/new",
-  middleware.validateParams([
-    "id_cliente",
-    "monto_pagado",
-    "forma_pago",
-    "fecha_pago",
-  ]),
+  // middleware.validateParams([
+  //   "id_cliente",
+  //   "monto_pagado",
+  //   "forma_pago",
+  //   "fecha_pago",
+  // ]),
   controller.createNewSaldo
 );
 router.get("/:id", controller.readSaldoByAgente);
