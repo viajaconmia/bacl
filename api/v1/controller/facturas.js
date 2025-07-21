@@ -1,5 +1,6 @@
 const { executeSP } = require("../../../config/db");
 const model = require("../model/facturas");
+const { v4: uuidv4 } = require("uuid");
 
 const create = async (req, res) => {
   try {
@@ -123,9 +124,10 @@ const crearFacturaDesdeCarga = async (req,res) => {
         uuid_factura,
         rfc_emisor,
         url_pdf,
-        xml_pdf,
-        items
+        url_xml,
+        items_json
   } = req.body;
+  console.log("Datos recibidos para crear factura desde carga:", req.body);
   const id_factura = "fac-"+uuidv4();
   try {
     const response = await executeSP("sp_inserta_factura_desde_carga",[
@@ -143,8 +145,8 @@ const crearFacturaDesdeCarga = async (req,res) => {
         uuid_factura,
         rfc_emisor,
         url_pdf,
-        xml_pdf,
-        items
+        url_xml,
+        items_json
     ])
     if (!response) {
       req.context.logStep('crearFacturaDesdeCarga:', 'Error al crear factura desde carga');
@@ -154,6 +156,7 @@ const crearFacturaDesdeCarga = async (req,res) => {
         message: "Factura creada correctamente desde carga",
         data: { id_factura, ...response }
       });
+      console.log("Factura creada correctamente desde carga:", response);
     }
   } catch (error) {
     req.context.logStep('Error en crearFacturaDesdeCarga:', error);
@@ -176,3 +179,4 @@ module.exports = {
   isFacturada,
   crearFacturaDesdeCarga
 };
+
