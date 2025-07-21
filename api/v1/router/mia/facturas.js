@@ -12,6 +12,7 @@ router.post(
   middleware.validateParams(["info_user", "cfdi"]),
   controller.createCombinada
 );
+router.post("/CrearFacturaDesdeCarga", controller.crearFacturaDesdeCarga);
 router.get("/getFacturas", controller.readAllFacturas);
 router.get("/isFacturada/:id", controller.isFacturada);
 router.get("/consultas", controller.readConsultas);
