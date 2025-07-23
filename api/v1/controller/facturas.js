@@ -1,4 +1,6 @@
+const { executeSP } = require("../../../config/db");
 const model = require("../model/facturas");
+const { v4: uuidv4 } = require("uuid");
 
 const create = async (req, res) => {
   try {
@@ -106,6 +108,66 @@ const deleteFacturas = async (req, res) => {
   }
 };
 
+const crearFacturaDesdeCarga = async (req,res) => {
+  req.context.logStep('crearFacturaDesdeCarga', 'Iniciando creación de factura desde carga');
+  const {
+        fecha_emision,
+        estado,
+        usuario_creador,
+        id_agente,
+        total,
+        subtotal,
+        impuestos,
+        saldo,
+        rfc,
+        id_empresa,
+        uuid_factura,
+        rfc_emisor,
+        url_pdf,
+        url_xml,
+        items_json
+  } = req.body;
+  console.log("Datos recibidos para crear factura desde carga:", req.body);
+  const id_factura = "fac-"+uuidv4();
+  try {
+    const response = await executeSP("sp_inserta_factura_desde_carga",[
+      id_factura,
+              fecha_emision,
+        estado,
+        usuario_creador,
+        id_agente,
+        total,
+        subtotal,
+        impuestos,
+        saldo,
+        rfc,
+        id_empresa,
+        uuid_factura,
+        rfc_emisor,
+        url_pdf,
+        url_xml,
+        items_json
+    ])
+    if (!response) {
+      req.context.logStep('crearFacturaDesdeCarga:', 'Error al crear factura desde carga');
+      throw new Error("No se pudo crear la factura desde carga");
+    } else {
+      res.status(201).json({
+        message: "Factura creada correctamente desde carga",
+        data: { id_factura, ...response }
+      });
+      console.log("Factura creada correctamente desde carga:", response);
+    }
+  } catch (error) {
+    req.context.logStep('Error en crearFacturaDesdeCarga:', error);
+    res.status(500).json({
+      error: "Error al crear factura desde carga",
+      details: error.message || error,
+      otherDetails: error.response?.data || null,
+    });
+  }
+}
+
 module.exports = {
   create,
   deleteFacturas,
@@ -115,4 +177,6 @@ module.exports = {
   readAllConsultas,
   readDetailsFactura,
   isFacturada,
+  crearFacturaDesdeCarga
 };
+
