@@ -3,6 +3,8 @@ const express = require("express");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const { errorHandler } = require("./middleware/errorHandler");
+
 const { checkApiKey } = require("./middleware/auth");
 const v1Router = require("./api/v1/router/general");
 const cors = require("cors");
@@ -80,13 +82,7 @@ app.get("/", (req, res) =>
 );
 
 // 7. Manejador de errores global (solo formatea respuesta; no llama a logger.error)
-app.use((err, req, res, next) => {
-  res.status(err.status || 500).json({
-    error: true,
-    mensaje: err.message || "Ocurrió un error interno en el servidor",
-    data: err || null,
-  });
-});
+app.use(errorHandler);
 
 // 8. Inicio del servidor
 app.listen(PORT, () => {

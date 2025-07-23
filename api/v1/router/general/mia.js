@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const solicitud = require("../mia/solicitud");
+const auth = require("../mia/auth");
 const agentes = require("../mia/agentes");
 const empresas = require("../mia/empresas");
 const viajeros = require("../mia/viajeros");
@@ -20,6 +21,7 @@ const pago_proveedor = require("../mia/pago_proveedor");
 const utils = require("../mia/utils");
 const reservasClient = require("../mia/reservasClient");
 
+router.use("/auth", auth);
 router.use("/solicitud", solicitud);
 router.use("/agentes", agentes);
 router.use("/empresas", empresas);

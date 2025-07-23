@@ -1,4 +1,6 @@
+const { error } = require("winston");
 const { executeSP } = require("../../../config/db");
+const { CustomError } = require("../../../middleware/errorHandler");
 
 const get_reservasClient_by_id_agente = async (req, res) => {
   try {
@@ -7,14 +9,16 @@ const get_reservasClient_by_id_agente = async (req, res) => {
     );
     const { user_id } = req.query;
     if (!user_id) {
-      return res.status(400).json({ error: "Falta el parametro user_id" });
+      throw new CustomError(
+        "Falta el parametro user_id",
+        400,
+        "ERROR_MISSING_PARAMETER",
+        null
+      );
     }
     const result = await executeSP("sp_get_reservasClient_by_id_cliente", [
       user_id,
     ]);
-    if (!result || result.length === 0) {
-      return res.status(404).json({ message: "No se encontraron reservas" });
-    }
     res.status(200).json({
       message: "Reservas obtenidas correctamente",
       data: result,
@@ -22,7 +26,11 @@ const get_reservasClient_by_id_agente = async (req, res) => {
   } catch (error) {
     req.context.logStep("Error en la ejecucion del SP", error);
     console.error(error);
-    res.status(500).json({ error: "Internal Server Error", details: error });
+    res.status(error.statusCode || 500).json({
+      error: error.code || "INTERNAL_SERVER_ERROR",
+      message: error.message || "Error interno del servidor",
+      data: null,
+    });
   }
 };
 
