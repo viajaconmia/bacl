@@ -100,7 +100,12 @@ const createNewSaldo = async (req, res) => {
       data.is_facturable ?? false,
       data.descuento_aplicable ?? false,
       null,
+      data.ult_digits || null,
+      data.numero_autorizacion || null,
+      data.banco_tarjeta || null
+
     ];
+    console.log("Valores para el stored procedure:", values);
     const response = await executeTransactionSP(
       STORED_PROCEDURE.POST.SALDO_A_FAVOR_INSERTAR,
       values
@@ -132,7 +137,10 @@ link_stripe,
 is_facturable,
 is_descuento,
 comprobante,
-activo
+activo,
+ult_digits,  
+numero_autorizacion,
+banco_tarjeta
   } = req.body;
   console.log("Datos recibidos para actualizar saldo a favor:", req.body);
   try {
@@ -153,7 +161,10 @@ activo
         is_facturable,
         is_descuento,
         comprobante,
-        activo
+        activo,
+        ult_digits, 
+        numero_autorizacion,
+        banco_tarjeta
       ]);
     console.log("Resultado de la actualización:", result);
     if (!result || result.length === 0) {
