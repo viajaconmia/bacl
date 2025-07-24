@@ -4,8 +4,9 @@ const model = require("../model/stats");
 const getCardStats = async (req, res) => {
   const { month, year, id_user } = req.query;
   try {
-    const response = await executeSP("sp_stats_pago", [id_user, year, month]);
-    // console.log ("😒😒",response);
+  
+    const response = await executeSP("sp_stats_pago",[id_user,year,month])
+    console.log ("😒😒",response);
     if (!response || response.length === 0) {
       return res
         .status(404)

@@ -180,10 +180,29 @@ banco_tarjeta
   }
 }
 
+const stripe = require('stripe')(process.env.API_STRIPE2); // Reemplaza con tu clave secreta de Stripe
+const getStripeInfo = async (req, res) => {
+  const { chargeId } = req.params;
+  try {
+    const charge = await stripe.charges.retrieve(chargeId);
+    console.log("Detalles del cargo:", charge);
+    if (!charge) {
+      return res.status(404).json({ message: "Cargo no encontrado" });
+    }
+    res.status(200).json({
+      message: "Detalles del pago obtenidos correctamente",
+      data: charge
+    });
+  } catch (error) {
+    console.error("Error al obtener detalles del pago:", error);
+    res.status(500).json({ error: "Error en el servidor", details: error.message });
+  }
+};
 module.exports = {
   create,
   read,
   createNewSaldo,
   readSaldoByAgente,
-  update_saldo_by_id
+  update_saldo_by_id,
+  getStripeInfo
 };
