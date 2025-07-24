@@ -180,18 +180,33 @@ banco_tarjeta
   }
 }
 
-const stripe = require('stripe')(process.env.API_STRIPE2); // Reemplaza con tu clave secreta de Stripe
+const stripe = require('stripe')( process.env.API_STRIPE2); 
+
 const getStripeInfo = async (req, res) => {
-  const { chargeId } = req.params;
+
+  const { chargeId } = req.query;
   try {
     const charge = await stripe.charges.retrieve(chargeId);
-    console.log("Detalles del cargo:", charge);
+
+    const stripeInfo = {
+      id: charge.id,
+      monto: charge.amount / 100,
+      currency: charge.currency.toUpperCase(),
+      estado: charge.status,
+      fecha_pago: new Date(charge.created * 1000),
+      ultimos_4_digitos: charge.payment_method_details.card.last4,
+      tipo_tarjeta: charge.payment_method_details.card.brand,
+      funding: charge.payment_method_details.card.funding,
+      pais: charge.payment_method_details.card.country,
+      authorization_code: charge.payment_method_details.card.authorization_code,
+    };
+
     if (!charge) {
       return res.status(404).json({ message: "Cargo no encontrado" });
     }
     res.status(200).json({
       message: "Detalles del pago obtenidos correctamente",
-      data: charge
+      data: stripeInfo
     });
   } catch (error) {
     console.error("Error al obtener detalles del pago:", error);
