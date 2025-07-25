@@ -1,5 +1,6 @@
 const { executeSP } = require("../../../config/db");
 const model = require("../model/facturas");
+const { v4: uuidv4 } = require("uuid");
 
 const create = async (req, res) => {
   try {
@@ -152,7 +153,9 @@ const crearFacturaDesdeCarga = async (req,res) => {
     } else {
       res.status(201).json({
         message: "Factura creada correctamente desde carga",
-        data: { id_factura, ...response }
+        data: { id_factura, ...response }, 
+        id_facturacreada:id_factura,
+        items:items
       });
     }
   } catch (error) {
@@ -166,17 +169,14 @@ const crearFacturaDesdeCarga = async (req,res) => {
 }
 const asignarFacturaItems = async (req, res) => {
   const { id_factura, items } = req.body;
-
+  console.log("body", req.body)
+  
   try {
-    const response = await executeSP("sp_asigna_factura_items", [id_factura, items]);
-    if(response.affectedRows === 0) {
-      return res.status(404).json({ message: "No se encontraron items para asignar a la factura" });
-    }else {
-      return res.status(200).json({
+    const response = await executeSP("sp_asigna_facturas_items", [id_factura, items]);
+    return res.status(200).json({
         message: "Items asignados correctamente a la factura",
         data: response
       });
-    }
   } catch (error) {
     return res.status(500).json({
       error: "Error al asignar items a la factura",

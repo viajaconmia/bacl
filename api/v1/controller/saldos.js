@@ -180,7 +180,9 @@ banco_tarjeta
   }
 }
 
-const stripe = require('stripe')( process.env.API_STRIPE2); 
+const stripe = require('stripe')(process.env.API_STRIPE); 
+console.log("Stripe API Key:", process.env.API_STRIPE);
+// console.log(process.env.API_STRIPE)
 
 const getStripeInfo = async (req, res) => {
 
