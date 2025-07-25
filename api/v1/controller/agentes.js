@@ -1,6 +1,8 @@
 
 const { executeSP, executeTransactionSP } = require("../../../config/db");
 const model = require("../model/agentes")
+const { API_STRIPE_TEST } = require("../../../config/auth");
+const stripeTest = require("stripe")(API_STRIPE_TEST);
 
 const create = async (req, res) => {
   try {
@@ -142,7 +144,7 @@ const newCreateAgente = async (req,res)=> {
      let pid_cliente_stripe;
      try {
       req.context.logStep('Creando usuario de Stripe');
-      pid_cliente_stripe = await createStripeUser(pcorreo,pid_agente);
+      pid_cliente_stripe = await stripeTest.customers.create({pcorreo});
       
      } catch (error) {
       req.context.logStep('Error al crear usuario de Stripe');
