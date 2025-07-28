@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/facturas");
-
+router.post("/filtrarFacturas", controller.filtrarFacturas);
 router.post(
   "/",
   middleware.validateParams(["info_user", "cfdi"]),
