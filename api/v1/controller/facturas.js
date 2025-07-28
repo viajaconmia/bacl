@@ -124,15 +124,14 @@ const crearFacturaDesdeCarga = async (req,res) => {
         uuid_factura,
         rfc_emisor,
         url_pdf,
-        url_xml,
-        items_json
+        xml_pdf,
+        items
   } = req.body;
-  console.log("Datos recibidos para crear factura desde carga:", req.body);
   const id_factura = "fac-"+uuidv4();
   try {
     const response = await executeSP("sp_inserta_factura_desde_carga",[
       id_factura,
-              fecha_emision,
+      fecha_emision,
         estado,
         usuario_creador,
         id_agente,
@@ -145,8 +144,8 @@ const crearFacturaDesdeCarga = async (req,res) => {
         uuid_factura,
         rfc_emisor,
         url_pdf,
-        url_xml,
-        items_json
+        xml_pdf,
+        items
     ])
     if (!response) {
       req.context.logStep('crearFacturaDesdeCarga:', 'Error al crear factura desde carga');
@@ -154,9 +153,10 @@ const crearFacturaDesdeCarga = async (req,res) => {
     } else {
       res.status(201).json({
         message: "Factura creada correctamente desde carga",
-        data: { id_factura, ...response }
+        data: { id_factura, ...response }, 
+        id_facturacreada:id_factura,
+        items:items
       });
-      console.log("Factura creada correctamente desde carga:", response);
     }
   } catch (error) {
     req.context.logStep('Error en crearFacturaDesdeCarga:', error);
@@ -167,7 +167,24 @@ const crearFacturaDesdeCarga = async (req,res) => {
     });
   }
 }
-
+const asignarFacturaItems = async (req, res) => {
+  const { id_factura, items } = req.body;
+  console.log("body", req.body)
+  
+  try {
+    const response = await executeSP("sp_asigna_facturas_items", [id_factura, items]);
+    return res.status(200).json({
+        message: "Items asignados correctamente a la factura",
+        data: response
+      });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Error al asignar items a la factura",
+      details: error.message || error,
+      otherDetails: error.response?.data || null,
+    });
+  }
+}
 module.exports = {
   create,
   deleteFacturas,
@@ -177,6 +194,6 @@ module.exports = {
   readAllConsultas,
   readDetailsFactura,
   isFacturada,
-  crearFacturaDesdeCarga
+  crearFacturaDesdeCarga,
+  asignarFacturaItems
 };
-
