@@ -13,7 +13,7 @@ router.post(
   controller.createCombinada
 );
 router.post("/CrearFacturaDesdeCarga", controller.crearFacturaDesdeCarga);
-router.patch("AsignarFacturaItems", controller.asignarFacturaItems);
+router.patch("/AsignarFacturaItems", controller.asignarFacturaItems);
 router.get("/getFacturas", controller.readAllFacturas);
 router.get("/isFacturada/:id", controller.isFacturada);
 router.get("/consultas", controller.readConsultas);
