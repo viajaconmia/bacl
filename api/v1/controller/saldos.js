@@ -42,6 +42,7 @@ const readSaldoByAgente = async (req, res) => {
   sf.referencia,
   sf.currency,
   sf.tipo_tarjeta,
+  sf.ult_digits,
   sf.comentario,
   sf.link_stripe,
   sf.is_facturable,
