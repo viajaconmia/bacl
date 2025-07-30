@@ -4,9 +4,9 @@ const { createClient } = require("@supabase/supabase-js");
 const API_KEY = process.env.APIKEY;
 const API_STRIPE = process.env.API_STRIPE;
 const valuesFacturama = {
-  token: process.env.TOKEN_FACTURAMA,
+  token: process.env.TOKEN_FACTURAMA || btoa("pruebanoktos:pruebasnoktos"),
   useragent: process.env.USERAGENT_FACTURAMA,
-  url: process.env.URL_FACTURAMA,
+  url: process.env.URL_FACTURAMA || "https://apisandbox.facturama.mx/",
 };
 
 const API_STRIPE_TEST = process.env.API_STRIPE_TEST;

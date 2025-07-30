@@ -110,7 +110,15 @@ ORDER BY created_at desc`;
 //Extrae los datos del agente por id
 router.get("/id", async (req, res) => {
   try {
-    const query = `select vw_details_agente.*, agentes.tiene_credito_consolidado, agentes.saldo from agentes JOIN vw_details_agente ON vw_details_agente.id_agente = agentes.id_agente WHERE vw_details_agente.id_agente = ?;`;
+    const query = `select vw_details_agente.*, 
+agentes.tiene_credito_consolidado, 
+agentes.saldo ,
+ad.wallet
+from agentes 
+JOIN vw_details_agente ON vw_details_agente.id_agente = agentes.id_agente 
+join agente_details ad on ad.id_agente = agentes.id_agente
+WHERE vw_details_agente.id_agente = '6f8be357-6020-4bf5-ad6e-e7dfaa135d03';`;
+    
     const response = await executeQuery(query, [req.query.id]);
     res.status(200).json(response);
   } catch (error) {
@@ -252,5 +260,8 @@ router.put("/", async (req, res) => {
     });
   }
 });
+
+router.get("/agentes-with-viajeros-details", controller.get_agente_with_viajeros_details);
+router.post("/new-create-agente", controller.newCreateAgente);
 
 module.exports = router;

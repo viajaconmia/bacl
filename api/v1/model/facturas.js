@@ -16,7 +16,7 @@ const isFacturada = async (id) => {
   }
 };
 
-const createFactura = async ({ cfdi, info_user }, req) => {
+const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
   try {
     const { id_solicitud, id_user } = info_user;
 
@@ -39,13 +39,13 @@ const createFactura = async ({ cfdi, info_user }, req) => {
     );
 
     const response = await runTransaction(async (connection) => {
+      let response_factura;
       try {
         console.log(cfdi);
-        const response_factura = await crearCfdi(req, cfdi);
+        response_factura = await crearCfdi(req, cfdi);
       } catch (error) {
-        throw {
-          data: error.response.data,
-        };
+        console.error("Error al crear CFDI:", error.response.data);
+        throw error;
       }
       try {
         const id_factura = `fac-${uuidv4()}`;
@@ -53,8 +53,8 @@ const createFactura = async ({ cfdi, info_user }, req) => {
         const { total, subtotal, impuestos } = reduce;
 
         const query = `
-    INSERT INTO facturas ( id_factura, fecha_emision, estado, usuario_creador, total, subtotal, impuestos, id_facturama )
-    VALUES (?,?,?,?,?,?,?,?);`;
+    INSERT INTO facturas ( id_factura, fecha_emision, estado, usuario_creador, total, subtotal, impuestos, id_facturama, rfc, id_empresa,uuid_factura )
+    VALUES (?,?,?,?,?,?,?,?,?,?,?);`;
 
         console.log("response_factura", response_factura);
 
@@ -67,6 +67,9 @@ const createFactura = async ({ cfdi, info_user }, req) => {
           subtotal,
           impuestos,
           response_factura.data.Id,
+          datos_empresa.rfc,
+          datos_empresa.id_empresa,
+          response_factura.data.Complement.TaxStamp.Uuid,
         ];
         const result_creates = await connection.execute(query, params);
 
@@ -90,18 +93,15 @@ const createFactura = async ({ cfdi, info_user }, req) => {
         const params3 = [id_factura, total, id_solicitud];
         const result2 = await connection.execute(query3, params3);
 
-        return response_factura;
+        return response_factura.data;
       } catch (error) {
         throw {
           data: error,
         };
       }
     });
-
-    return {
-      success: true,
-      ...response,
-    };
+    console.log(" ⬅️⬅️⬅️⬅️⬅️ response", response);
+    return response;
   } catch (error) {
     throw error;
   }
@@ -112,7 +112,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
     JSON.stringify({ cfdi, info_user })
   );
   try {
-    const { id_solicitud, id_user, id_items } = info_user;
+    const { id_solicitud, id_user, id_items, datos_empresa } = info_user;
     const solicitudesArray = Array.isArray(id_solicitud)
       ? id_solicitud
       : [id_solicitud];
@@ -148,9 +148,13 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           total,
           subtotal,
           impuestos,
-          id_facturama
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+          id_facturama,
+          rfc,
+          id_empresa,
+          uuid_factura
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?);
           `;
+        console.log(datos_empresa);
         const results = await conn.execute(insertFacturaQuery, [
           id_factura,
           new Date(),
@@ -160,6 +164,9 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           subtotal,
           impuestos,
           response_factura.data.Id,
+          datos_empresa.rfc,
+          datos_empresa.id_empresa,
+          response_factura.data.Complement.TaxStamp.Uuid,
         ]);
 
         // 4. Actualizar solo los items seleccionados

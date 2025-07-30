@@ -75,7 +75,7 @@ const createSolicitudes = async (body) => {
               status,
               id_viajero,
               nombre_viajero,
-              viajeros_adicionales
+              viajeros_adicionales,
             } = solicitud;
             return [
               id_solicitud,
@@ -90,7 +90,7 @@ const createSolicitudes = async (body) => {
               total,
               status,
               nombre_viajero,
-              JSON.stringify(viajeros_adicionales) || [], 
+              JSON.stringify(viajeros_adicionales) || [],
             ];
           });
           const params_solicitudes_flat = params_solicitudes_map.flat();
@@ -299,6 +299,8 @@ SELECT
   p.pendiente_por_cobrar,
   p.monto_a_credito,
   hot.direccion,
+  hot.desayuno_sencilla,
+  hot.desayuno_doble,
   fp.id_factura
 FROM solicitudes as so
 LEFT JOIN servicios as s ON so.id_servicio = s.id_servicio
@@ -307,7 +309,7 @@ LEFT JOIN hospedajes as h ON b.id_booking = h.id_booking
 LEFT JOIN pagos as p ON so.id_servicio = p.id_servicio
 LEFT JOIN facturas_pagos as fp ON p.id_pago = fp.id_pago
 LEFT JOIN viajeros_con_empresas_con_agentes as vw ON vw.id_viajero = so.id_viajero
-LEFT JOIN hoteles as hot ON hot.id_hotel = h.id_hotel
+LEFT JOIN vw_hoteles_tarifas_completa as hot ON hot.id_hotel = h.id_hotel
 LEFT JOIN JSON_TABLE(
     so.viajeros_adicionales,
     '$[*]' COLUMNS (id_viajero VARCHAR(50) PATH '$')
@@ -405,7 +407,7 @@ LEFT JOIN bookings as b ON b.id_solicitud = so.id_solicitud
 INNER JOIN servicios as se ON se.id_servicio = so.id_servicio
 LEFT JOIN hospedajes as h ON h.id_booking = b.id_booking
 LEFT JOIN hoteles as ho ON h.id_hotel = ho.id_hotel
-LEFT JOIN viajeros_hospedajes as vh ON vh.id_hospedaje = h.id_hospedaje
+LEFT JOIN viajeros_hospedajes as vh ON vh.id_hospedaje = h.id_hospedaje AND vh.is_principal = 1
 LEFT JOIN viajeros as v ON v.id_viajero = vh.id_viajero OR so.id_viajero = v.id_viajero
 LEFT JOIN pagos as p ON p.id_servicio = se.id_servicio
 LEFT JOIN pagos_credito as pc ON pc.id_servicio = se.id_servicio
@@ -646,6 +648,10 @@ const getItemsSolicitud = async (id_solicitud) => {
   }
 };
 
+// const filtro_solicitudes_y_reservas = async (req,res) => {
+//   const 
+  
+// }
 module.exports = {
   // createSolicitudYTicket,
   getViajeroSolicitud,

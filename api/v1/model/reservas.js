@@ -31,7 +31,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
 
         if (edicionData.viajero) {
           connection.execute(
-            "UPDATE viajeros_hospedajes SET id_viajero = ? WHERE id_hospedaje = ?",
+            "UPDATE viajeros_hospedajes SET id_viajero = ? WHERE id_hospedaje = ? and is_principal = 1;",
             [edicionData.viajero.current.id_viajero, id_hospedaje_actual]
           );
         }
@@ -83,23 +83,26 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           params_update_bookings_values.push(edicionData.check_out.current);
         }
         if (edicionData.venta?.current) {
-          if(edicionData.metadata?.id_credito){
-          if (edicionData.venta.current.total !== undefined) {
-            updates_bookings_clauses.push("total = ?");
-            params_update_bookings_values.push(edicionData.venta.current.total);
+          if (edicionData.metadata?.id_credito) {
+            if (edicionData.venta.current.total !== undefined) {
+              updates_bookings_clauses.push("total = ?");
+              params_update_bookings_values.push(
+                edicionData.venta.current.total
+              );
+            }
+            if (edicionData.venta.current.subtotal !== undefined) {
+              updates_bookings_clauses.push("subtotal = ?");
+              params_update_bookings_values.push(
+                edicionData.venta.current.subtotal
+              );
+            }
+            if (edicionData.venta.current.impuestos !== undefined) {
+              updates_bookings_clauses.push("impuestos = ?");
+              params_update_bookings_values.push(
+                edicionData.venta.current.impuestos
+              );
+            }
           }
-          if (edicionData.venta.current.subtotal !== undefined) {
-            updates_bookings_clauses.push("subtotal = ?");
-            params_update_bookings_values.push(
-              edicionData.venta.current.subtotal
-            );
-          }
-          if (edicionData.venta.current.impuestos !== undefined) {
-            updates_bookings_clauses.push("impuestos = ?");
-            params_update_bookings_values.push(
-              edicionData.venta.current.impuestos
-            );
-          }}
         }
         if (edicionData.estado_reserva?.current !== undefined) {
           updates_bookings_clauses.push("estado = ?");
@@ -343,8 +346,10 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           const params_update_solicitud_values = [];
 
           // Datos del viajero
+          /*
           if (edicionData.viajero?.current) {
             const viajeroActual = edicionData.viajero.current;
+            
             if (viajeroActual.id_viajero !== undefined) {
               updates_solicitud_clauses.push("id_viajero = ?");
               params_update_solicitud_values.push(viajeroActual.id_viajero);
@@ -361,49 +366,51 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
               nombreCompletoArray.push(viajeroActual.apellido_paterno);
             if (viajeroActual.apellido_materno)
               nombreCompletoArray.push(viajeroActual.apellido_materno); // Asegúrate que este campo exista
-
-            if (nombreCompletoArray.length > 0) {
-              updates_solicitud_clauses.push("nombre_viajero = ?");
-              params_update_solicitud_values.push(
-                nombreCompletoArray.join(" ").trim()
-              );
-            }
-          }
-
-          // Datos del hotel y reserva
-          if (edicionData.hotel?.current?.content?.nombre_hotel !== undefined) {
-            updates_solicitud_clauses.push("hotel = ?"); // Columna 'hotel' en tabla 'solicitudes'
-            params_update_solicitud_values.push(
-              edicionData.hotel.current.content.nombre_hotel
-            );
-          }
-          if (edicionData.check_in?.current !== undefined) {
-            updates_solicitud_clauses.push("check_in = ?");
-            params_update_solicitud_values.push(edicionData.check_in.current);
-          }
-          if (edicionData.check_out?.current !== undefined) {
-            updates_solicitud_clauses.push("check_out = ?");
-            params_update_solicitud_values.push(edicionData.check_out.current);
-          }
-          if (edicionData.habitacion?.current !== undefined) {
-            updates_solicitud_clauses.push("room = ?"); // Columna 'room' en tabla 'solicitudes'
-            params_update_solicitud_values.push(edicionData.habitacion.current);
-          }
-          if(edicionData.metadata?.id_credito){
-
-            if (edicionData.venta?.current?.total !== undefined) {
-                updates_solicitud_clauses.push("total = ?"); //Columna 'total' en tabla 'solicitudes'
-                params_update_solicitud_values.push(
-                    edicionData.venta.current.total
-                  );
-                }
-              }
-          if (edicionData.codigo_reservacion_hotel?.current !== undefined) {
-            updates_solicitud_clauses.push("confirmation_code = ?"); // Columna 'confirmation_code' en 'solicitudes'
-            params_update_solicitud_values.push(
-              edicionData.codigo_reservacion_hotel.current
-            );
-          }
+            
+                        if (nombreCompletoArray.length > 0) {
+                          updates_solicitud_clauses.push("nombre_viajero = ?");
+                          params_update_solicitud_values.push(
+                            nombreCompletoArray.join(" ").trim()
+                          );
+                        }
+                      }
+            
+                      // Datos del hotel y reserva
+                      
+                      if (edicionData.hotel?.current?.content?.nombre_hotel !== undefined) {
+                        updates_solicitud_clauses.push("hotel = ?"); // Columna 'hotel' en tabla 'solicitudes'
+                        params_update_solicitud_values.push(
+                          edicionData.hotel.current.content.nombre_hotel
+                        );
+                      }
+                      
+                      if (edicionData.check_in?.current !== undefined) {
+                        updates_solicitud_clauses.push("check_in = ?");
+                        params_update_solicitud_values.push(edicionData.check_in.current);
+                      }
+                      if (edicionData.check_out?.current !== undefined) {
+                        updates_solicitud_clauses.push("check_out = ?");
+                        params_update_solicitud_values.push(edicionData.check_out.current);
+                      }
+                      if (edicionData.habitacion?.current !== undefined) {
+                        updates_solicitud_clauses.push("room = ?"); // Columna 'room' en tabla 'solicitudes'
+                        params_update_solicitud_values.push(edicionData.habitacion.current);
+                      }
+                      if (edicionData.metadata?.id_credito) {
+                        if (edicionData.venta?.current?.total !== undefined) {
+                          updates_solicitud_clauses.push("total = ?"); //Columna 'total' en tabla 'solicitudes'
+                          params_update_solicitud_values.push(
+                            edicionData.venta.current.total
+                          );
+                        }
+                      }
+                      if (edicionData.codigo_reservacion_hotel?.current !== undefined) {
+                        updates_solicitud_clauses.push("confirmation_code = ?"); // Columna 'confirmation_code' en 'solicitudes'
+                        params_update_solicitud_values.push(
+                          edicionData.codigo_reservacion_hotel.current
+                        );
+                      }
+                      */
 
           // Estado de la solicitud
           let nuevoEstadoSolicitud = null;
@@ -447,13 +454,17 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
       }
     );
     return response;
-} catch (error) {
-  console.error("Error al editar reserva:", error, edicionData);
+  } catch (error) {
+    console.error("Error al editar reserva:", error, edicionData);
 
-  const message = error && error.message ? error.message : String(error);
+    const message = error && error.message ? error.message : String(error);
 
-  throw new Error(`Error al editar reserva: ${message}. Datos: ${JSON.stringify(edicionData)}`);
-}
+    throw new Error(
+      `Error al editar reserva: ${message}. Datos: ${JSON.stringify(
+        edicionData
+      )}`
+    );
+  }
 };
 
 const insertarReservaOperaciones = async (reserva) => {
@@ -973,6 +984,17 @@ const insertarReserva = async ({ reserva }) => {
     const id_booking = `boo-${uuidv4()}`;
     const { solicitud, venta, proveedor, hotel, items, viajero } = reserva; // 'items' aquí es ReservaForm['items']
 
+    const existingSolicitud = await executeQuery(
+      "select * from solicitudes as so inner join bookings as bo on bo.id_solicitud = so.id_solicitud where so.id_solicitud = ?;",
+      [solicitud.id_solicitud]
+    );
+    console.log(existingSolicitud);
+    if (existingSolicitud && existingSolicitud.length > 0) {
+      throw new Error(
+        `Ya existe una solicitud con el ID ${solicitud.id_solicitud}. Por favor, verifica el ID de la solicitud.`
+      );
+    }
+
     // Query y parámetros para la inserción inicial en 'bookings'
     // Asegúrate de que estas columnas coincidan con tu tabla 'bookings'
     const query_bookings = `
@@ -1173,27 +1195,35 @@ const insertarReserva = async ({ reserva }) => {
 
           // 5. Actualizar Solicitud y servicios (común para ambos casos)
           //VALIDANDO BIEN EL ESTADO CORRECTO DE LA SOLICITUD
-          let estado=null;
-          if (reserva.estado_reserva=== "En proceso") {
-            estado = "pending"
-          } else if (reserva.estado_reserva === "Confirmada"){
-            estado = "complete"
+          let estado = null;
+          if (reserva.estado_reserva === "En proceso") {
+            estado = "pending";
+          } else if (reserva.estado_reserva === "Confirmada") {
+            estado = "complete";
           }
           if (!estado) {
-  throw new Error("Estado de reserva no válido para inserción");
-}
-            
-          console.log("Actualizando estado de solicitud:", solicitud.id_solicitud, "a", estado);
+            throw new Error("Estado de reserva no válido para inserción");
+          }
+
+          console.log(
+            "Actualizando estado de solicitud:",
+            solicitud.id_solicitud,
+            "a",
+            estado
+          );
           await connection.execute(
             `UPDATE solicitudes SET status = ? WHERE id_solicitud = ?;`,
-            [estado , solicitud.id_solicitud] // Asegúrate que solicitud.id_solicitud está disponible
+            [estado, solicitud.id_solicitud] // Asegúrate que solicitud.id_solicitud está disponible
           );
           await connection.execute(
             `UPDATE servicios SET id_agente = ? WHERE id_servicio = ?;`,
             [solicitud.id_agente, solicitud.id_servicio] // Asegúrate que solicitud.id_solicitud está disponible
           );
           const id_viajeros = [viajero.id_viajero];
-          if (solicitud.viajeros_adicionales && Array.isArray(solicitud.viajeros_adicionales)) {
+          if (
+            solicitud.viajeros_adicionales &&
+            Array.isArray(solicitud.viajeros_adicionales)
+          ) {
             solicitud.viajeros_adicionales.forEach((viajero_adicional) => {
               if (viajero_adicional?.id_viajero) {
                 id_viajeros.push(viajero_adicional.id_viajero);

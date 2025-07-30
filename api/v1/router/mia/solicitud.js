@@ -17,5 +17,6 @@ router.get("/withviajero", controller.readSolicitudByIdWithViajero);
 router.get("/consultas", controller.readConsultas);
 router.get("/items", controller.getItemsSolicitud);
 router.get("/forclient", controller.readForClient);
+router.post("/filtro_solicitudes_y_reservas", controller.filtro_solicitudes_y_reservas);
 
 module.exports = router;

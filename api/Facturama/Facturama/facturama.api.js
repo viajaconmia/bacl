@@ -18,6 +18,8 @@ let headers = {
 const facturama = () => {
   const settings = {
     url: valuesFacturama.url,
+    // user: "pruebanoktos",
+    // pass: "pruebasnoktos",
   };
 
   // Función para hacer una solicitud GET
@@ -59,14 +61,17 @@ const facturama = () => {
     req.context.logStep("▶️ postSyncWithData args:");
 
     try {
+      console.log(`${settings.url}${path}`);
       // 1) Ejecutamos la llamada y nos quedamos con todo el response
+      //
+
       const response = await axios.post(`${settings.url}${path}`, data, {
         headers: {
           ...headers.headers,
           "Content-Type": "application/json",
         },
-        // Si prefieres, también podrías configurar aquí auth:
-        // auth: { username: settings.user, password: settings.pass }
+        // // Si prefieres, también podrías configurar aquí auth:
+        // auth: { username: settings.user, password: settings.pass },
       });
 
       // 2) Opcional: sanity log de headers enviados
@@ -81,10 +86,10 @@ const facturama = () => {
       if (error.response) {
         // 4a) Si es un fallo HTTP, mostramos TODO el payload de error
         console.error("❌ Facturama error status:", error.response.status);
-        console.error(
-          "❌ Facturama error payload:",
-          JSON.stringify(error.response.data, null, 2)
-        );
+        // console.error(
+        //   "❌ Facturama error payload:",
+        //   JSON.stringify(error.response.data, null, 2)
+        // );
       } else {
         // 4b) Cualquier otro error (network, typo, etc.)
         console.error("❌ Axios unexpected error:", error.message);

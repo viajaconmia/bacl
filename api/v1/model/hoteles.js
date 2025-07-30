@@ -20,7 +20,8 @@ const getHotelesWithCuartos = async () => {
     t.id_tarifa,
     t.costo,
     t.precio,
-    t.id_agente
+    t.id_agente,
+    t.incluye_desayuno
   FROM tarifas t
     JOIN tipos_cuartos tc ON t.id_tipos_cuartos = tc.id_tipo_cuarto
     JOIN hoteles h ON t.id_hotel = h.id_hotel order by nombre_hotel, id_tipo_cuarto; `;
@@ -39,6 +40,7 @@ const getHotelesWithCuartos = async () => {
         precio: item.precio,
         costo: item.costo,
         id_agente: item.id_agente,
+        incluye_desayuno: item.incluye_desayuno,
       };
 
       if (!hotel) {
@@ -89,8 +91,7 @@ const getHotelesWithTarifas = async () => {
 
 const getHotelesWithTarifasClient = async () => {
   try {
-    const query =
-      "select * from vw_hoteles_tarifas_completa where Activo = 1;";
+    const query = "select * from vw_hoteles_tarifas_completa where Activo = 1;";
     const response = await executeQuery(query);
     return response;
   } catch (error) {
