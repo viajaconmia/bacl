@@ -1,3 +1,4 @@
+const { response } = require("express");
 const { executeTransactionSP, executeQuery } = require("../../../config/db");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
 const model = require("../model/saldos");
@@ -41,6 +42,7 @@ const readSaldoByAgente = async (req, res) => {
   sf.referencia,
   sf.currency,
   sf.tipo_tarjeta,
+  sf.ult_digits,
   sf.comentario,
   sf.link_stripe,
   sf.is_facturable,
@@ -54,7 +56,7 @@ WHERE sf.id_agente = ?;`,
       [id]
     );
     console.log("Si es esta query 👌👌👌")
-    console.log(saldo);
+    // console.log(saldo);
     res
       .status(200)
       .json({ message: "Saldos obtenidos correctamente", data: saldo });
@@ -66,7 +68,8 @@ WHERE sf.id_agente = ?;`,
 
 const createNewSaldo = async (req, res) => {
   const data = req.body;
-
+  // console.log("2llegando al endponit",data)
+  // res.status(200).json({message:"mensaje prueba",data}) 
   try {
     console.log("Datos recibidos para crear saldo a favor:", data);
     if (
@@ -78,12 +81,17 @@ const createNewSaldo = async (req, res) => {
       return res.status(400).json({ error: "Campos requeridos faltantes." });
     }
 
-    let tipoTarjeta = null;
-
-    if (data.forma_pago === "tarjeta de credito") tipoTarjeta = "credito";
-    else if (data.forma_pago === "tarjeta de debito") tipoTarjeta = "debito";
-    else tipoTarjeta = null;
-
+    switch (data.tipo_tarjeta) {
+      case "credit":
+        data.tipo_tarjeta = "credito"
+        break;
+      case "debit":
+        data.tipo_tarjeta = "debito"
+        break;
+      default:
+        data.tipo_tarjeta = null
+        break;
+    }
     // Preparar valores para el stored procedure
     const values = [
       data.id_cliente,
@@ -94,7 +102,7 @@ const createNewSaldo = async (req, res) => {
       data.comentario || null,
       data.referencia || null,
       "MXN",
-      tipoTarjeta,
+      data.tipo_tarjeta|| null,
       data.comentario || null,
       data.link_stripe || null,
       data.is_facturable ?? false,
