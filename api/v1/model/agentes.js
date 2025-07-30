@@ -90,8 +90,9 @@ select
     
     
 from primer_viajero_por_agente
-where primer_viajero_por_agente.id_agente ='6f8be357-6020-4bf5-ad6e-e7dfaa135d03'
-Order by primer_viajero_por_agente.rn desc;`;
+where primer_viajero_por_agente.id_agente = ?
+Order by primer_viajero_por_agente.rn desc;
+`;
     const params = [id_agente];
     const response = await executeQuery(query, params);
     console.log(response);
