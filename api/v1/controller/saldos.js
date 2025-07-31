@@ -80,16 +80,24 @@ const createNewSaldo = async (req, res) => {
     ) {
       return res.status(400).json({ error: "Campos requeridos faltantes." });
     }
+    
+    console.log("tipo tarjeta")
 
     switch (data.tipo_tarjeta) {
       case "credit":
-        data.tipo_tarjeta = "credito"
+        data.tipo_tarjeta = "credito";
         break;
       case "debit":
-        data.tipo_tarjeta = "debito"
+        data.tipo_tarjeta = "debito";
+        break;
+      case "credito":
+        data.tipo_tarjeta = "credito";
+        break;
+      case "debito":
+        data.tipo_tarjeta = "debito";
         break;
       default:
-        data.tipo_tarjeta = null
+        data.tipo_tarjeta = "";
         break;
     }
     // Preparar valores para el stored procedure
