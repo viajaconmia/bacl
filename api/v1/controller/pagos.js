@@ -130,46 +130,23 @@ const pagoPorCredito = async (req, res) => {
 };
 
 const pagoPorSaldoAFavor = async (req, res) => {
-  // Simulación del body que debo recibir
-  const SaldoAFavor = {
-    activo: 1,
-    comentario: null,
-    comprobante: null,
-    concepto: null,
-    currency: "MXN",
-    fecha_creacion: "2025-07-29T17:10:59.000Z",
-    fecha_pago: "2025-07-22T06:00:00.000Z",
-    id_agente: "78360a2a-4935-47bd-b2ca-3d1e4d808ccf",
-    id_saldos: 98,
-    is_descuento: 1,
-    is_facturable: 0,
-    link_stripe: null,
-    metodo_pago: "transferencia",
-    monto: "2000.00",
-    nombre: "Wendy Rojo Sanchez",
-    referencia: "asdfg",
-    saldo: "2000.00",
-    tipo_tarjeta: "credito",
-    last_digits: null
-  };
-
-  const items_seleccionados = {
-    items: [
-      { total: 1009.20, id_item: "ite-2fbf652e-d9ad-4ad5-8868-2e9e85fe7d30", fraccion: 0 },
-      { total: 1009.20, id_item: "ite-9d391180-4e68-4c65-a986-18df8a234e24", fraccion:990.80},
-    ]
-  };
-
-  const id_servicios = [
-    "ser-3e87f0f3-46c8-4d0c-a046-fa0b216fd078", // aqui solo era un servicio
-    "ser-60575e69-3989-4319-9dbf-3d3f9804b271"
-  ];
-
   try {
-    // Generar un id_pago por cada item
-    const ids_pago = items_seleccionados.items.map(() => `pag-${uuidv4()}`);
+    const {
+      SaldoAFavor,
+      items_seleccionados // [{ total, id_item, fraccion, id_servicio }]
+    } = req.body;
 
-    // Ejecutar SP
+    if (!SaldoAFavor || !items_seleccionados || !Array.isArray(items_seleccionados)) {
+      return res.status(400).json({
+        success: false,
+        message: "Faltan datos requeridos en el body"
+      });
+    }
+
+    // Generar un id_pago para cada item/servicio
+    const ids_pago = items_seleccionados.map(() => `pag-${uuidv4()}`);
+
+    // Ejecutar el SP
     await executeSP(
       "sp_asignar_saldosAF_a_pagos",
       [
@@ -182,9 +159,8 @@ const pagoPorSaldoAFavor = async (req, res) => {
         SaldoAFavor.currency,
         SaldoAFavor.tipo_tarjeta,
         SaldoAFavor.link_stripe,
-        SaldoAFavor.last_digits, // last_digits por ahora
-        JSON.stringify(items_seleccionados.items),
-        JSON.stringify(id_servicios),
+        SaldoAFavor.ult_digits ?? SaldoAFavor.last_digits ?? null, // soporte para ambos nombres
+        JSON.stringify(items_seleccionados), // ahora ya trae id_servicio dentro de cada item
         JSON.stringify(ids_pago)
       ]
     );
@@ -194,6 +170,7 @@ const pagoPorSaldoAFavor = async (req, res) => {
       message: "Pagos aplicados correctamente",
       ids_pagos: ids_pago
     });
+
   } catch (error) {
     console.error("Error al aplicar pagos:", error);
     res.status(500).json({
