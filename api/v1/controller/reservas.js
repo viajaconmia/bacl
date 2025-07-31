@@ -231,6 +231,19 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
   }
 
  }
+ const getReservasWithItemsSinPagarByAgente = async (req, res) => {
+  console.log("ESTE ENDPOINT SOLO TRAE RESERVAS CON ITEMS SIN PAGAR");
+  const {id_agente} = req.query;
+  try {
+    const result = await executeSP('sp_get_items_sin_pagar_by_id_agente',[id_agente]);
+    if(!result){
+      return res.status(404).json({ message: "No se encontraron reservas con items sin pagar" });
+    }
+    return res.status(200).json({ message: "Reservas con items sin pagar encontradas", data: result });
+  } catch (error) {
+    res.status(500).json({ error: "Error en el servidor", details: error });
+  }
+};
 
 
 module.exports = {
@@ -243,5 +256,6 @@ module.exports = {
   //updateReserva,
   readAllFacturacion,
   updateReserva2,
-  getReservasWithIAtemsByidAgente
+  getReservasWithIAtemsByidAgente,
+  getReservasWithItemsSinPagarByAgente
 };

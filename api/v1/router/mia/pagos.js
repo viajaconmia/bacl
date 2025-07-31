@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/pagos");
-
+router.post("/aplicarpagoPorSaldoAFavor",controller.pagoPorSaldoAFavor);
 router.post("/", controller.create);
 router.get("/", controller.read);
 router.get(
@@ -44,5 +44,7 @@ router.post(
   ]),
   controller.pagoPorCredito
 );
+
+
 
 module.exports = router;

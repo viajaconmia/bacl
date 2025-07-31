@@ -185,6 +185,27 @@ const asignarFacturaItems = async (req, res) => {
     });
   }
 }
+
+const filtrarFacturas = async (req, res) => {
+  const {estatusFactura} = req.body;
+  try {
+    const result = await executeSP("sp_filtrar_facturas",[estatusFactura]);
+    if(!result){
+      return res.status(404).json({
+        message: "No se encontraron facturas con el parametro deseado"
+      });}
+    return res.status(200).json({
+      message: "Facturas filtradas correctamente",
+      data: result
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Error al filtrar facturas",
+      details: error.message || error,
+      otherDetails: error.response?.data || null,
+    });
+  }
+}
 module.exports = {
   create,
   deleteFacturas,
@@ -195,5 +216,6 @@ module.exports = {
   readDetailsFactura,
   isFacturada,
   crearFacturaDesdeCarga,
-  asignarFacturaItems
+  asignarFacturaItems,
+  filtrarFacturas
 };
