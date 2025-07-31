@@ -131,55 +131,65 @@ const pagoPorCredito = async (req, res) => {
 
 const pagoPorSaldoAFavor = async (req, res) => {
   try {
-    const {
-      SaldoAFavor,
-      items_seleccionados // [{ total, id_item, fraccion, id_servicio }]
-    } = req.body;
-
-    if (!SaldoAFavor || !items_seleccionados || !Array.isArray(items_seleccionados)) {
-      return res.status(400).json({
-        success: false,
-        message: "Faltan datos requeridos en el body"
-      });
+    const { SaldoAFavor, items_seleccionados } = req.body;
+    if (!SaldoAFavor || !Array.isArray(items_seleccionados)) {
+      return res.status(400).json({ success: false, message: "Faltan datos" });
     }
 
-    // Generar un id_pago para cada item/servicio
-    const ids_pago = items_seleccionados.map(() => `pag-${uuidv4()}`);
+    // 1️⃣ Un pago por servicio
+    const pagosPorServicio = {};
+    items_seleccionados.forEach(item => {
+      if (!pagosPorServicio[item.id_servicio]) {
+        pagosPorServicio[item.id_servicio] = `pag-${uuidv4()}`;
+      }
+    });
 
-    // Ejecutar el SP
+    // 2️⃣ Inyectar id_pago en cada item
+    const itemsConPago = items_seleccionados.map(item => ({
+      ...item,
+      id_pago: pagosPorServicio[item.id_servicio]
+    }));
+
+    // 3️⃣ Montos para la respuesta
+    const montoAplicado = itemsConPago
+      .reduce((sum, it) => sum + (it.saldo - it.saldonuevo), 0);
+    const nuevoSaldo = SaldoAFavor.saldo;
+
+    // 4️⃣ Llamada al SP (12 parámetros)
     await executeSP(
       "sp_asignar_saldosAF_a_pagos",
       [
-        SaldoAFavor.id_saldos,
-        SaldoAFavor.id_agente,
-        SaldoAFavor.metodo_pago,
-        SaldoAFavor.fecha_pago,
-        SaldoAFavor.concepto,
-        SaldoAFavor.referencia,
-        SaldoAFavor.currency,
-        SaldoAFavor.tipo_tarjeta,
-        SaldoAFavor.link_stripe,
-        SaldoAFavor.ult_digits ?? SaldoAFavor.last_digits ?? null, // soporte para ambos nombres
-        JSON.stringify(items_seleccionados), // ahora ya trae id_servicio dentro de cada item
-        JSON.stringify(ids_pago)
+        SaldoAFavor.id_saldos,               // 1
+        SaldoAFavor.id_agente,               // 2
+        SaldoAFavor.metodo_pago,             // 3
+        SaldoAFavor.fecha_pago,              // 4
+        SaldoAFavor.concepto,                // 5
+        SaldoAFavor.referencia,              // 6
+        SaldoAFavor.currency,                // 7
+        SaldoAFavor.tipo_tarjeta,            // 8
+        SaldoAFavor.link_stripe,             // 9
+        SaldoAFavor.ult_digits ?? null,      // 10
+        JSON.stringify(itemsConPago),        // 11 p_items_json
+        nuevoSaldo                           // 12 p_nuevo_saldo
       ]
     );
 
-    res.status(200).json({
+    res.json({
       success: true,
-      message: "Pagos aplicados correctamente",
-      ids_pagos: ids_pago
+      ids_pagos: Object.values(pagosPorServicio),
+      monto_aplicado: montoAplicado,
+      nuevo_saldo: nuevoSaldo
     });
-
-  } catch (error) {
-    console.error("Error al aplicar pagos:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al aplicar pagos",
-      error: error.message
-    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Error al aplicar pagos", error: err.message });
   }
 };
+
+
+
+
+
 module.exports = {
   create,
   read,
