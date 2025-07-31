@@ -68,8 +68,6 @@ WHERE sf.id_agente = ?;`,
 
 const createNewSaldo = async (req, res) => {
   const data = req.body;
-  // console.log("2llegando al endponit",data)
-  // res.status(200).json({message:"mensaje prueba",data}) 
   try {
     console.log("Datos recibidos para crear saldo a favor:", data);
     if (
@@ -80,7 +78,7 @@ const createNewSaldo = async (req, res) => {
     ) {
       return res.status(400).json({ error: "Campos requeridos faltantes." });
     }
-    
+
     console.log("tipo tarjeta")
 
     switch (data.tipo_tarjeta) {
