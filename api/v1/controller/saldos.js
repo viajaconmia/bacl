@@ -48,7 +48,9 @@ const readSaldoByAgente = async (req, res) => {
   sf.is_facturable,
   sf.is_descuento,
   sf.comprobante,
-  sf.activo
+  sf.activo,
+  sf.numero_autorizacion,
+  sf.banco_tarjeta
 FROM saldos_a_favor AS sf
 INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
