@@ -6,6 +6,7 @@ const {
   executeSP,
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+const { executeSP, runTransaction } = require("../../../config/db");
 const create = async (req, res) => {
   try {
     const response = await model.createPagos(req.body);
@@ -440,13 +441,11 @@ const pagoPorSaldoAFavor = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error al aplicar pagos",
-        error: err.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error al aplicar pagos",
+      error: err.message,
+    });
   }
 };
 
@@ -466,4 +465,5 @@ module.exports = {
   readConsultas,
   handlerPagoContadoRegresarSaldo,
   pagoPorSaldoAFavor,
+  crearItemdeAjuste,
 };
