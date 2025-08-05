@@ -117,7 +117,7 @@ ad.wallet
 from agentes 
 JOIN vw_details_agente ON vw_details_agente.id_agente = agentes.id_agente 
 join agente_details ad on ad.id_agente = agentes.id_agente
-WHERE vw_details_agente.id_agente = '6f8be357-6020-4bf5-ad6e-e7dfaa135d03';`;
+WHERE vw_details_agente.id_agente = ?;`;
     
     const response = await executeQuery(query, [req.query.id]);
     res.status(200).json(response);
