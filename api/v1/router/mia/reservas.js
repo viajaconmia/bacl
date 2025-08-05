@@ -27,5 +27,10 @@ router.get("/allFacturacion", controller.readAllFacturacion);
 router.get("/id", controller.readOnlyById);
 router.put("/items", controller.actualizarPrecioVenta);
 router.get("/items", controller.getItemsFromBooking);
+router.get("/reservasConItems", controller.getReservasWithIAtemsByidAgente);
+router.get(
+  "/reservasConItemsSinPagar",
+  controller.getReservasWithItemsSinPagarByAgente
+);
 
 module.exports = router;

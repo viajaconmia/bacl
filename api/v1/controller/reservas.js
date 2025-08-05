@@ -266,6 +266,52 @@ const actualizarPrecioVenta = async (req, res) => {
   }
 };
 
+const getReservasWithIAtemsByidAgente = async (req, res) => {
+  console.log("ESTE ENDPOINT SOLO TRAE RESERVAS CON ITEMS SIN FACTURAR");
+  const { id_agente } = req.query;
+  console.log("id_agente", id_agente);
+  try {
+    const reservas = await executeSP(
+      "mia2.sp_reservas_con_items_by_id_agente",
+      [id_agente]
+    );
+    if (!reservas) {
+      return res.status(404).json({ message: "No se encontraron reservas" });
+    } else {
+      return res
+        .status(200)
+        .json({ message: "Reservas encontradas", data: reservas });
+    }
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.message });
+  }
+};
+const getReservasWithItemsSinPagarByAgente = async (req, res) => {
+  console.log("ESTE ENDPOINT SOLO TRAE RESERVAS CON ITEMS SIN PAGAR");
+  const { id_agente } = req.query;
+  try {
+    const result = await executeSP("sp_get_items_sin_pagar_by_id_agente", [
+      id_agente,
+    ]);
+    if (!result) {
+      return res
+        .status(404)
+        .json({ message: "No se encontraron reservas con items sin pagar" });
+    }
+    return res
+      .status(200)
+      .json({
+        message: "Reservas con items sin pagar encontradas",
+        data: result,
+      });
+  } catch (error) {
+    res.status(500).json({ error: "Error en el servidor", details: error });
+  }
+};
+
 module.exports = {
   create,
   read,
@@ -278,4 +324,6 @@ module.exports = {
   updateReserva2,
   getItemsFromBooking,
   actualizarPrecioVenta,
+  getReservasWithIAtemsByidAgente,
+  getReservasWithItemsSinPagarByAgente,
 };

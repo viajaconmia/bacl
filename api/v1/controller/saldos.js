@@ -1,3 +1,4 @@
+const { response } = require("express");
 const { executeTransactionSP, executeQuery } = require("../../../config/db");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
 const { CustomError } = require("../../../middleware/errorHandler");
@@ -146,6 +147,7 @@ const readSaldoByAgente = async (req, res) => {
   sf.referencia,
   sf.currency,
   sf.tipo_tarjeta,
+  sf.ult_digits,
   sf.comentario,
   sf.link_stripe,
   sf.is_facturable,
@@ -160,6 +162,8 @@ WHERE sf.id_agente = ?;`,
     );
     console.log("Si es esta query 👌👌👌");
     console.log(saldo);
+    console.log("Si es esta query 👌👌👌")
+    // console.log(saldo);
     res
       .status(200)
       .json({ message: "Saldos obtenidos correctamente", data: saldo });
@@ -176,7 +180,6 @@ WHERE sf.id_agente = ?;`,
 
 const createNewSaldo = async (req, res) => {
   const data = req.body;
-
   try {
     console.log("Datos recibidos para crear saldo a favor:", data);
     if (
@@ -188,12 +191,25 @@ const createNewSaldo = async (req, res) => {
       return res.status(400).json({ error: "Campos requeridos faltantes." });
     }
 
-    let tipoTarjeta = null;
+    console.log("tipo tarjeta");
 
-    if (data.forma_pago === "tarjeta de credito") tipoTarjeta = "credito";
-    else if (data.forma_pago === "tarjeta de debito") tipoTarjeta = "debito";
-    else tipoTarjeta = null;
-
+    switch (data.tipo_tarjeta) {
+      case "credit":
+        data.tipo_tarjeta = "credito";
+        break;
+      case "debit":
+        data.tipo_tarjeta = "debito";
+        break;
+      case "credito":
+        data.tipo_tarjeta = "credito";
+        break;
+      case "debito":
+        data.tipo_tarjeta = "debito";
+        break;
+      default:
+        data.tipo_tarjeta = "";
+        break;
+    }
     // Preparar valores para el stored procedure
     const values = [
       data.id_cliente,
@@ -204,13 +220,17 @@ const createNewSaldo = async (req, res) => {
       data.comentario || null,
       data.referencia || null,
       "MXN",
-      tipoTarjeta,
+      data.tipo_tarjeta || null,
       data.comentario || null,
       data.link_stripe || null,
       data.is_facturable ?? false,
       data.descuento_aplicable ?? false,
       null,
+      data.ult_digits || null,
+      data.numero_autorizacion || null,
+      data.banco_tarjeta || null,
     ];
+    console.log("Valores para el stored procedure:", values);
     const response = await executeTransactionSP(
       STORED_PROCEDURE.POST.SALDO_A_FAVOR_INSERTAR,
       values
@@ -243,6 +263,9 @@ const update_saldo_by_id = async (req, res) => {
     is_descuento,
     comprobante,
     activo,
+ult_digits,  
+numero_autorizacion,
+banco_tarjeta,
   } = req.body;
   console.log("Datos recibidos para actualizar saldo a favor:", req.body);
   try {
@@ -267,6 +290,11 @@ const update_saldo_by_id = async (req, res) => {
         activo,
       ]
     );
+        activo,
+        ult_digits, 
+        numero_autorizacion,
+        banco_tarjeta
+      ]);
     console.log("Resultado de la actualización:", result);
     if (!result || result.length === 0) {
       return res
@@ -281,40 +309,12 @@ const update_saldo_by_id = async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: "Error en el servidor", details: error });
   }
-};
-
-const stripe = require("stripe")(
-  "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"
-);
-
-const getStripeInfo = async (req, res) => {
-  console.log("Recibiendo solicitud para obtener detalles del pago de Stripe");
-  const { chargeId } = req.query;
-  try {
-    const charge = await stripe.charges.retrieve(chargeId);
-    console.log("Detalles del cargo:", charge);
-    if (!charge) {
-      return res.status(404).json({ message: "Cargo no encontrado" });
-    }
-    res.status(200).json({
-      message: "Detalles del pago obtenidos correctamente",
-      data: charge,
-    });
-  } catch (error) {
-    console.error("Error al obtener detalles del pago:", error);
-    res
-      .status(500)
-      .json({ error: "Error en el servidor", details: error.message });
-  }
-};
+}
 
 module.exports = {
   create,
   read,
   createNewSaldo,
   readSaldoByAgente,
-  update_saldo_by_id,
-  getStripeInfo,
-  saldosAgrupadosPorMetodoPorIdClient,
-  saldosByType,
+  update_saldo_by_id
 };

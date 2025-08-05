@@ -25,6 +25,7 @@ const getAgente = async (id_agente) => {
     const query = `
 with primer_viajero_por_agente as (
     select 
+        ad.wallet,
         a.id_agente AS id_agente,
         a.monto_credito AS monto_credito,
         a.saldo AS saldo,
@@ -56,6 +57,7 @@ with primer_viajero_por_agente as (
     left join viajero_empresa v_e on v_e.id_empresa = e_a.id_empresa
     join viajeros v on v_e.id_viajero = v.id_viajero
     left join viajeros_con_empresas_con_agentes vea on vea.id_viajero = v.id_viajero
+    join agente_details ad on ad.id_agente = a.id_agente
 )
 select 
     primer_viajero_por_agente.id_agente,
@@ -83,7 +85,10 @@ select
     primer_viajero_por_agente.numero_empleado,
     primer_viajero_por_agente.nombre_agente_completo,
     primer_viajero_por_agente.empresas,
-    primer_viajero_por_agente.rn
+    primer_viajero_por_agente.rn,
+    primer_viajero_por_agente.wallet
+    
+    
 from primer_viajero_por_agente
 where primer_viajero_por_agente.id_agente = ?
 Order by primer_viajero_por_agente.rn desc;
