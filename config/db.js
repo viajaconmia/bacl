@@ -1,4 +1,5 @@
 const mysql = require("mysql2/promise");
+const { CustomError } = require("../middleware/errorHandler");
 require("dotenv").config();
 
 const pool = mysql.createPool({
@@ -26,13 +27,17 @@ pool.on("connection", (conn) => {
   conn.query("SET time_zone = '-06:00'");
 });
 
-async function executeQuery(query, params) {
+async function executeQuery(query, params = []) {
   try {
     const [results] = await pool.execute(query, params);
     return results;
   } catch (error) {
-    console.log(error);
-    throw error;
+    throw new CustomError(
+      "Ha ocurrido un error al hacer la petición",
+      500,
+      "DATABASE_ERROR",
+      error
+    );
   }
 }
 
@@ -64,8 +69,12 @@ async function executeSP(procedure, params = []) {
     const [rows] = result;
     return Array.isArray(rows[0]) ? rows[0] : rows;
   } catch (error) {
-    console.error(`Error ejecutando SP "${procedure}":`, error.message);
-    throw error;
+    throw new CustomError(
+      "Error en el sp",
+      500,
+      "ERROR_STORED_PROCEDURE",
+      error
+    );
   } finally {
     connection.release();
   }
@@ -79,9 +88,17 @@ async function runTransaction(callback) {
     await connection.commit();
     return resultsCallback;
   } catch (error) {
-    console.log("UPS HICIMOS ROLLBACK POR SI LAS DUDAS");
+    console.log(error);
     await connection.rollback();
-    throw error;
+    if (error instanceof CustomError) {
+      throw error;
+    }
+    throw new CustomError(
+      "Error corriendo la transaction",
+      500,
+      "ERROR_RUN TRANSACTION",
+      error
+    );
   } finally {
     connection.release();
   }
