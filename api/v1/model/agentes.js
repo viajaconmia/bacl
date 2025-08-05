@@ -54,7 +54,7 @@ with primer_viajero_por_agente as (
     from agentes a 
     left join empresas_agentes e_a on a.id_agente = e_a.id_agente
     left join viajero_empresa v_e on v_e.id_empresa = e_a.id_empresa
-    join viajeros v on v_e.id_viajero = v.id_viajero
+    join viajeros v on v_e.id_viajero = v.id_viajero and v.activo = 1
     left join viajeros_con_empresas_con_agentes vea on vea.id_viajero = v.id_viajero
 )
 select 
