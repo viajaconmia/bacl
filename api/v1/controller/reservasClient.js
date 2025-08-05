@@ -104,7 +104,7 @@ const filtro_solicitudes_y_reservas = async (req, res) => {
     });
     if (!result || result.length === 0) {
       req.context.logStep("Result vacio");
-      return res.status(404).json({
+      return res.status(200).json({
         message: "No se encontraron resultados para los filtros proporcionados",
         data: [],
       });

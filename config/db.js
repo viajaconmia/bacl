@@ -88,9 +88,17 @@ async function runTransaction(callback) {
     await connection.commit();
     return resultsCallback;
   } catch (error) {
-    console.log("UPS HICIMOS ROLLBACK POR SI LAS DUDAS");
+    console.log(error);
     await connection.rollback();
-    throw error;
+    if (error instanceof CustomError) {
+      throw error;
+    }
+    throw new CustomError(
+      "Error corriendo la transaction",
+      500,
+      "ERROR_RUN TRANSACTION",
+      error
+    );
   } finally {
     connection.release();
   }

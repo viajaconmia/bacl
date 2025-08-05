@@ -3,6 +3,60 @@ const { CustomError } = require("../../../middleware/errorHandler");
 const { v4: uuidv4 } = require("uuid");
 const { API_STRIPE_TEST } = require("../../../config/auth");
 const stripeTest = require("stripe")(API_STRIPE_TEST);
+const { createClient } = require("@supabase/supabase-js");
+const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
+
+const verificarRegistroUsuario = async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    const response = await executeSP(
+      STORED_PROCEDURE.GET.OBTENER_AGENTE_POR_CORREO,
+      ["", email]
+    );
+    const usuario = response[0];
+    if (!usuario) {
+      return res
+        .status(200)
+        .json({ message: "usuario no encontrado", data: { registrar: false } });
+    }
+    const supabase_url = process.env.SUPABASE_URL;
+    const supabase_service_role = process.env.SERVICE_ROLE_KEY_SPB;
+    const supabaseAdmin = createClient(supabase_url, supabase_service_role);
+
+    const { data, error } = await supabaseAdmin
+      .from("user_info")
+      .select("id_viajero")
+      .eq("id_viajero", usuario.id_viajero)
+      .maybeSingle();
+
+    if (error) {
+      throw new CustomError(
+        error.message || "Error en el mensaje",
+        error.status || 500,
+        "ERROR_SUPABASE",
+        error
+      );
+    }
+    if (!data) {
+      return res.status(200).json({
+        message: "usuario existe pero no en supabase",
+        data: { registrar: true, usuario },
+      });
+    }
+    return res
+      .status(200)
+      .json({ message: "usuario encontrado", data: { registrar: false } });
+  } catch (error) {
+    console.log(error);
+    return res.status(error.status || 500).json({
+      message:
+        error.message || "Error desconocido en verificar registro del usuario",
+      error,
+      data: null,
+    });
+  }
+};
 
 const newCreateAgente = async (req, res) => {
   const { body } = req;
@@ -56,7 +110,7 @@ const newCreateAgente = async (req, res) => {
     ]);
     return res.status(201).json({
       message: "Agente creado correctamente",
-      data: newAgente,
+      data: { id_viajero },
     });
   } catch (error) {
     return res.status(error.status || 500).json({
@@ -67,4 +121,4 @@ const newCreateAgente = async (req, res) => {
   }
 };
 
-module.exports = { newCreateAgente };
+module.exports = { newCreateAgente, verificarRegistroUsuario };

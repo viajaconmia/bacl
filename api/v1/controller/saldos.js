@@ -1,5 +1,6 @@
 const { executeTransactionSP, executeQuery } = require("../../../config/db");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
+const { CustomError } = require("../../../middleware/errorHandler");
 const model = require("../model/saldos");
 
 const create = async (req, res) => {
@@ -24,6 +25,110 @@ const read = async (req, res) => {
   }
 };
 
+/**
+ *
+ * Este endpoint se utiliza en:
+ * 1.- La parte del admin cuando se maneja el precio de venta de una reservación
+ *
+ */
+const saldosAgrupadosPorMetodoPorIdClient = async (req, res) => {
+  const { id_agente } = req.query;
+  console.log(id_agente);
+  try {
+    if (!id_agente) {
+      throw new CustomError("Falta el id_agente", 400, "CLIENT_ERROR", null);
+    }
+    const agente = await executeQuery(
+      `SELECT * from agente_details where id_agente = ?`,
+      [id_agente]
+    );
+    if (!agente[0]) {
+      throw new CustomError("No existe ese agente", 404, "CLIENT_ERROR", null);
+    }
+    const saldo = await executeQuery(
+      `select metodo_pago, SUM(saldo) as saldo 
+      from saldos_a_favor
+      where
+        id_agente = ?
+        and metodo_pago not in("tarjeta_de_credito","tarjeta_de_debito","")
+        and activo = 1
+      group by metodo_pago;`,
+      [id_agente]
+    );
+    if (saldo.length == 0) {
+      throw new CustomError(
+        "No se encontraron registros en el saldo del usuario",
+        404,
+        "NO_DATA_FOUND",
+        null
+      );
+    }
+    res
+      .status(200)
+      .json({ message: "Saldos obtenidos correctamente", data: saldo });
+  } catch (error) {
+    console.log(error);
+    res.status(error.statusCode || 500).json({
+      error,
+      message:
+        error.message ||
+        "Error desconocido en servidor, read saldo by agente type",
+      data: null,
+    });
+  }
+};
+/**
+ *
+ * Este endpoint se utiliza en:
+ * 1.- La parte del admin cuando se maneja el precio de venta de una reservación
+ *
+ */
+const saldosByType = async (req, res) => {
+  const { type, id_agente, id_hospedaje } = req.query;
+  try {
+    if (!type || !id_agente || !id_hospedaje) {
+      throw new CustomError(
+        "Falta el tipo de saldo o el id_agente o el id_hospedajje",
+        400,
+        "CLIENT_ERROR",
+        req.query
+      );
+    }
+    const saldos = await executeQuery(
+      `SELECT * FROM saldos_a_favor WHERE metodo_pago = ? AND id_agente = ? AND saldo > 0;`,
+      [type, id_agente]
+    );
+
+    if (saldos.length == 0)
+      throw new Error(
+        `No hay encontramos saldos, muestra a sistemas esto: ${id_agente}, ${type}`
+      );
+
+    const items = await executeQuery(
+      `SELECT * FROM items WHERE id_hospedaje = ? LIMIT 1`,
+      [id_hospedaje]
+    );
+
+    if (items.length == 0)
+      throw new Error(
+        `No hay items, muestra a sistemas este mensaje y el id hospedaje siguiente: ${id_hospedaje}`
+      );
+
+    const item = items[0];
+    res.status(200).json({
+      message: "Saldos obtenidos correctamente",
+      data: { saldos, item },
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(error.statusCode || 500).json({
+      error,
+      message:
+        error.message || "Error desconocido en servidor, read saldos by type",
+      data: null,
+    });
+  }
+};
 const readSaldoByAgente = async (req, res) => {
   const { id } = req.params;
   try {
@@ -53,14 +158,19 @@ INNER JOIN agente_details AS a
 WHERE sf.id_agente = ?;`,
       [id]
     );
-    console.log("Si es esta query 👌👌👌")
+    console.log("Si es esta query 👌👌👌");
     console.log(saldo);
     res
       .status(200)
       .json({ message: "Saldos obtenidos correctamente", data: saldo });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ error: "Error en el servidor", details: error });
+    res.status(error.status || 500).json({
+      error,
+      message:
+        error.message || "Error desconocido en servidor, read saldo by agente",
+      data: null,
+    });
   }
 };
 
@@ -114,30 +224,31 @@ const createNewSaldo = async (req, res) => {
   }
 };
 
-const update_saldo_by_id = async (req,res) => {
+const update_saldo_by_id = async (req, res) => {
   console.log("Llegando al endpoint de update_saldo_by_id");
   const {
-id_saldos,
-id_agente,
-saldo,
-monto,
-metodo_pago,
-fecha_pago,
-concepto,
-referencia,
-currency,
-tipo_tarjeta,
-comentario,
-link_stripe,
-is_facturable,
-is_descuento,
-comprobante,
-activo
+    id_saldos,
+    id_agente,
+    saldo,
+    monto,
+    metodo_pago,
+    fecha_pago,
+    concepto,
+    referencia,
+    currency,
+    tipo_tarjeta,
+    comentario,
+    link_stripe,
+    is_facturable,
+    is_descuento,
+    comprobante,
+    activo,
   } = req.body;
   console.log("Datos recibidos para actualizar saldo a favor:", req.body);
   try {
-    const result =  await executeTransactionSP(
-      STORED_PROCEDURE.PATCH.ACTUALIZA_SALDO_A_FAVOR,[
+    const result = await executeTransactionSP(
+      STORED_PROCEDURE.PATCH.ACTUALIZA_SALDO_A_FAVOR,
+      [
         id_saldos,
         id_agente,
         saldo,
@@ -153,12 +264,15 @@ activo
         is_facturable,
         is_descuento,
         comprobante,
-        activo
-      ]);
+        activo,
+      ]
+    );
     console.log("Resultado de la actualización:", result);
     if (!result || result.length === 0) {
-      return res.status(404).json({ message: "No se encontró el saldo a favor para actualizar" });
-    }else{
+      return res
+        .status(404)
+        .json({ message: "No se encontró el saldo a favor para actualizar" });
+    } else {
       res.status(200).json({
         message: "Saldo a favor actualizado correctamente",
         data: result,
@@ -167,12 +281,40 @@ activo
   } catch (error) {
     res.status(500).json({ error: "Error en el servidor", details: error });
   }
-}
+};
+
+const stripe = require("stripe")(
+  "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"
+);
+
+const getStripeInfo = async (req, res) => {
+  console.log("Recibiendo solicitud para obtener detalles del pago de Stripe");
+  const { chargeId } = req.query;
+  try {
+    const charge = await stripe.charges.retrieve(chargeId);
+    console.log("Detalles del cargo:", charge);
+    if (!charge) {
+      return res.status(404).json({ message: "Cargo no encontrado" });
+    }
+    res.status(200).json({
+      message: "Detalles del pago obtenidos correctamente",
+      data: charge,
+    });
+  } catch (error) {
+    console.error("Error al obtener detalles del pago:", error);
+    res
+      .status(500)
+      .json({ error: "Error en el servidor", details: error.message });
+  }
+};
 
 module.exports = {
   create,
   read,
   createNewSaldo,
   readSaldoByAgente,
-  update_saldo_by_id
+  update_saldo_by_id,
+  getStripeInfo,
+  saldosAgrupadosPorMetodoPorIdClient,
+  saldosByType,
 };
