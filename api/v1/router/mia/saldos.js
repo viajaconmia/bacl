@@ -4,7 +4,7 @@ const controller = require("../../controller/saldos");
 
 router.get("/types", controller.saldosAgrupadosPorMetodoPorIdClient);
 router.get("/type", controller.saldosByType);
-router.get("/stripe-info", controller.getStripeInfo);
+// router.get("/stripe-info", controller.getStripeInfo);
 router.post("/", controller.create);
 router.get("/", controller.read);
 router.post(

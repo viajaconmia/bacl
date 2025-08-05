@@ -1,4 +1,4 @@
-const { response } = require("express");
+// const { response } = require("express");
 const { executeTransactionSP, executeQuery } = require("../../../config/db");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
 const { CustomError } = require("../../../middleware/errorHandler");
@@ -23,6 +23,41 @@ const read = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Error en el servidor", details: error });
+  }
+};
+
+const stripe = require("stripe")(process.env.API_STRIPE);
+
+const getStripeInfo = async (req, res) => {
+  const { chargeId } = req.query;
+  try {
+    const charge = await stripe.charges.retrieve(chargeId);
+
+    const stripeInfo = {
+      id: charge.id,
+      monto: charge.amount / 100,
+      currency: charge.currency.toUpperCase(),
+      estado: charge.status,
+      fecha_pago: new Date(charge.created * 1000),
+      ultimos_4_digitos: charge.payment_method_details.card.last4,
+      tipo_tarjeta: charge.payment_method_details.card.brand,
+      funding: charge.payment_method_details.card.funding,
+      pais: charge.payment_method_details.card.country,
+      authorization_code: charge.payment_method_details.card.authorization_code,
+    };
+
+    if (!charge) {
+      return res.status(404).json({ message: "Cargo no encontrado" });
+    }
+    res.status(200).json({
+      message: "Detalles del pago obtenidos correctamente",
+      data: stripeInfo,
+    });
+  } catch (error) {
+    console.error("Error al obtener detalles del pago:", error);
+    res
+      .status(500)
+      .json({ error: "Error en el servidor", details: error.message });
   }
 };
 
@@ -162,7 +197,7 @@ WHERE sf.id_agente = ?;`,
     );
     console.log("Si es esta query 👌👌👌");
     console.log(saldo);
-    console.log("Si es esta query 👌👌👌")
+    console.log("Si es esta query 👌👌👌");
     // console.log(saldo);
     res
       .status(200)
@@ -263,9 +298,9 @@ const update_saldo_by_id = async (req, res) => {
     is_descuento,
     comprobante,
     activo,
-ult_digits,  
-numero_autorizacion,
-banco_tarjeta,
+    ult_digits,
+    numero_autorizacion,
+    banco_tarjeta,
   } = req.body;
   console.log("Datos recibidos para actualizar saldo a favor:", req.body);
   try {
@@ -288,13 +323,11 @@ banco_tarjeta,
         is_descuento,
         comprobante,
         activo,
+        ult_digits,
+        numero_autorizacion,
+        banco_tarjeta,
       ]
     );
-        activo,
-        ult_digits, 
-        numero_autorizacion,
-        banco_tarjeta
-      ]);
     console.log("Resultado de la actualización:", result);
     if (!result || result.length === 0) {
       return res
@@ -309,12 +342,15 @@ banco_tarjeta,
   } catch (error) {
     res.status(500).json({ error: "Error en el servidor", details: error });
   }
-}
+};
 
 module.exports = {
   create,
   read,
   createNewSaldo,
   readSaldoByAgente,
-  update_saldo_by_id
+  update_saldo_by_id,
+  saldosAgrupadosPorMetodoPorIdClient,
+  saldosByType,
+  getStripeInfo,
 };
