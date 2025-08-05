@@ -135,6 +135,8 @@ const createNewSaldo = async (req, res) => {
   }
 };
 
+
+
 const update_saldo_by_id = async (req,res) => {
   console.log("Llegando al endpoint de update_saldo_by_id");
   const {
