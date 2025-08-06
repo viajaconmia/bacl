@@ -26,12 +26,18 @@ const read = async (req, res) => {
   }
 };
 const readClient = async (req, res) => {
+  const { user_id } = req.query;
+  req.context.logStep('Llegando al endpoint de readClient con user_id:', user_id);
   try {
-    const { user_id } = req.query;
-    let solicitudes = await model.getSolicitudesClient(user_id);
-    res.status(200).json(solicitudes);
+    const result = await executeSP('sp_get_solicitudes_con_pagos_con_facturas_by_id_agente',[user_id]);
+    if (!result || result.length === 0) {
+      return res.status(404).json({ message: "No se encontraron solicitudes" });
+    }else{
+    res.status(200).json({message:"Solicitudes obtenidas correctamente",data:result});
+    }
   } catch (error) {
     console.error(error);
+    req.context.logStep('Error en la ejecucion del SP', error);
     res.status(500).json({ error: "Internal Server Error", details: error });
   }
 };
@@ -61,6 +67,7 @@ const readSolicitudById = async (req, res) => {
 const readForClient = async (req, res) => {
   try {
     const { id } = req.query;
+    console.log("PRUEBA PARA BACKEND HACIA PRUEBAS 😒✌️✌️");
     let solicitudes = await model.readForClient(id);
     res.status(200).json(solicitudes);
   } catch (error) {
@@ -125,51 +132,51 @@ const getItemsSolicitud = async (req, res) => {
 const filtro_solicitudes_y_reservas = async (req, res) => {
   req.context.logStep("Llegando al endpoint de filtro_solicitudes_y_reservas");
   const {
-    p_codigo,
-    p_start_date,
-    p_end_date,
-    p_hotel,
-    p_id_cliente,
+    codigo,
+    start_date,
+    end_date,
+    hotel,
+    id_cliente,
     cliente,
-    p_nombre_viajero,
-    p_etapa_reservacion,
-    p_status_reservacion,
-    p_tipo_reservante,
-    p_metodo_pago,
-    p_criterio_filtro,
+    nombre_viajero,
+    etapa_reservacion,
+    status_reservacion,
+    tipo_reservante,
+    metodo_pago,
+    criterio_filtro,
   } = req.body;
   const { p_criterio } = req.query;
   console.log("recuperando criterio", p_criterio);
   try {
     const result = await executeSP("sp_filtrar_solicitudes_y_reservas", [
-      p_codigo,
-      p_start_date,
-      p_end_date,
-      p_hotel,
-      p_id_cliente,
+      codigo,
+      start_date,
+      end_date,
+      hotel,
+      id_cliente,
       cliente,
-      p_nombre_viajero,
-      p_etapa_reservacion,
-      p_status_reservacion,
-      p_tipo_reservante,
-      p_metodo_pago,
-      p_criterio_filtro,
-      p_criterio,
+      nombre_viajero,
+      etapa_reservacion,
+      status_reservacion,
+      tipo_reservante,
+      metodo_pago,
+      criterio_filtro,
+      criterio,
     ]);
     req.context.logStep("parametros enviados al SP", {
-      p_codigo,
-      p_start_date,
-      p_end_date,
-      p_hotel,
-      p_id_cliente,
+      codigo,
+      start_date,
+      end_date,
+      hotel,
+      id_cliente,
       cliente,
-      p_nombre_viajero,
-      p_etapa_reservacion,
-      p_status_reservacion,
-      p_tipo_reservante,
-      p_metodo_pago,
-      p_criterio_filtro,
-      p_criterio,
+      nombre_viajero,
+      etapa_reservacion,
+      status_reservacion,
+      tipo_reservante,
+      metodo_pago,
+      criterio_filtro,
+      criterio,
     });
     if (!result || result.length === 0) {
       req.context.logStep("Result vacio");
@@ -178,6 +185,7 @@ const filtro_solicitudes_y_reservas = async (req, res) => {
         .json({
           message:
             "No se encontraron resultados para los filtros proporcionados",
+            data:[]
         });
     }else{
       res.status(200).json({

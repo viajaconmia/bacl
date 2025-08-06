@@ -1,6 +1,11 @@
 const model = require("../model/reservas");
-const {executeQuery, executeSP} = require("../../../config/db");
+const {
+  executeQuery,
+  executeSP,
+  runTransaction,
+} = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+const { CustomError } = require("../../../middleware/errorHandler");
 
 const create = async (req, res) => {
   //revisemos el body
@@ -8,9 +13,8 @@ const create = async (req, res) => {
 
   const { reserva } = req.body;
   const { estado_reserva, solicitud } = reserva;
-  if (estado_reserva === "Cancelada")
+  if (estado_reserva === "Cancelada") {
     //SI AL PROCESAR LA SOLICITUD SE SETEA COMO CANCELADA, SE CANCELA LA SOLICITUD Y NO SE CREA LA RESERVA
-    {
     try {
       await executeQuery(
         `UPDATE solicitudes 
@@ -23,13 +27,14 @@ const create = async (req, res) => {
         .json({ message: "Solicitud cancelada correctamente" });
     } catch (error) {
       console.error(error);
-      return res
-        .status(500)
-        .json({ error: "Error interno al cancelar solicitud", details: error.message });
+      return res.status(500).json({
+        error: "Error interno al cancelar solicitud",
+        details: error.message,
+      });
     }
   }
   try {
-       let response = await model.insertarReserva(req.body);
+    let response = await model.insertarReserva(req.body);
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });
@@ -40,7 +45,6 @@ const create = async (req, res) => {
       .json({ error: "Internal Server Error", details: error.message });
   }
 };
-
 
 // const updateReserva = async (req, res) => {
 //   try {
@@ -58,7 +62,7 @@ const create = async (req, res) => {
 
 const updateReserva2 = async (req, res) => {
   console.log("Llegando al endpoint de updateReserva2");
-  const { id} = req.query;
+  const { id } = req.query;
   const {
     viajero,
     check_in,
@@ -72,43 +76,43 @@ const updateReserva2 = async (req, res) => {
     noches,
     comments,
     items,
-    impuestos
+    impuestos,
   } = req.body;
-console.log(id)
+  console.log(id);
   try {
     // 1) Generar id_item para cada ítem nuevo
-    const itemsConIds = (items?.current || []).map(item => ({
+    const itemsConIds = (items?.current || []).map((item) => ({
       ...item,
-      id_item: item.id_item || `ite-${uuidv4()}`
+      id_item: item.id_item || `ite-${uuidv4()}`,
     }));
 
     // 2) Serializar JSON
-    const itemsJson     = JSON.stringify(itemsConIds);
+    const itemsJson = JSON.stringify(itemsConIds);
     const impuestosJson = JSON.stringify(impuestos?.current || []);
 
     // 3) Construir array de 19 parámetros para el SP
     const params = [
-      id,                                   // 1) p_id_booking
-      viajero?.current?.id_viajero    ?? null,      // 2) p_id_viajero
-      check_in?.current               ?? null,      // 3) p_check_in
-      check_out?.current              ?? null,      // 4) p_check_out
-      venta?.current?.total           ?? null,      // 5) p_total
-      venta?.current?.subtotal        ?? null,      // 6) p_subtotal
-      venta?.current?.impuestos       ?? null,      // 7) p_impuestos
-      estado_reserva?.current         ?? null,      // 8) p_estado_reserva
-      proveedor?.current?.total       ?? null,      // 9) p_costo_total
-      proveedor?.current?.subtotal    ?? null,      // 10) p_costo_subtotal
-      proveedor?.current?.impuestos   ?? null,      // 11) p_costo_impuestos
-      hotel?.current?.content?.nombre_hotel ?? null,// 12) p_nombre_hotel
-      hotel?.current?.content?.id_hotel     ?? null,// 13) p_id_hotel
-      codigo_reservacion_hotel?.current      ?? null,// 14) p_codigo_reservacion_hotel
-      habitacion?.current                   ?? null,// 15) p_tipo_cuarto
-      noches?.current                       ?? null,// 16) p_noches
-      comments?.current                     ?? null,// 17) p_comments
-      itemsJson,                                  // 18) p_items_json
-      impuestosJson                              // 19) p_impuestos_json
+      id, // 1) p_id_booking
+      viajero?.current?.id_viajero ?? null, // 2) p_id_viajero
+      check_in?.current ?? null, // 3) p_check_in
+      check_out?.current ?? null, // 4) p_check_out
+      venta?.current?.total ?? null, // 5) p_total
+      venta?.current?.subtotal ?? null, // 6) p_subtotal
+      venta?.current?.impuestos ?? null, // 7) p_impuestos
+      estado_reserva?.current ?? null, // 8) p_estado_reserva
+      proveedor?.current?.total ?? null, // 9) p_costo_total
+      proveedor?.current?.subtotal ?? null, // 10) p_costo_subtotal
+      proveedor?.current?.impuestos ?? null, // 11) p_costo_impuestos
+      hotel?.current?.content?.nombre_hotel ?? null, // 12) p_nombre_hotel
+      hotel?.current?.content?.id_hotel ?? null, // 13) p_id_hotel
+      codigo_reservacion_hotel?.current ?? null, // 14) p_codigo_reservacion_hotel
+      habitacion?.current ?? null, // 15) p_tipo_cuarto
+      noches?.current ?? null, // 16) p_noches
+      comments?.current ?? null, // 17) p_comments
+      itemsJson, // 18) p_items_json
+      impuestosJson, // 19) p_impuestos_json
     ];
-console.log("por entrar al sp")
+    console.log("por entrar al sp");
     // 4) Llamar al SP
     const result = await executeSP("sp_editar_reserva_procesada", params);
 
@@ -125,8 +129,8 @@ console.log("por entrar al sp")
         id_booking: id,
         items: itemsConIds,
         impuestos: impuestos?.current || [],
-        rawResult: result
-      }
+        rawResult: result,
+      },
     });
   } catch (error) {
     console.error("Error en updateReserva2:", error);
@@ -135,10 +139,6 @@ console.log("por entrar al sp")
       .json({ error: "Internal Server Error", details: error.message });
   }
 };
-
-
-
-
 
 const createFromOperaciones = async (req, res) => {
   try {
@@ -210,6 +210,107 @@ const readAllFacturacion = async (req, res) => {
       .json({ error: "Internal Server Error", details: error.message });
   }
 };
+const getItemsFromBooking = async (req, res) => {
+  try {
+    const { id_hospedaje } = req.query;
+    const response = await executeQuery(
+      `select * from items where id_hospedaje = ?;`,
+      [id_hospedaje]
+    );
+    res
+      .status(200)
+      .json({ message: "Items obtenidos con exito", data: response });
+  } catch (error) {
+    console.error(error);
+    res.status(error.status || 500).json({
+      message: error.message || "Error de servidor",
+      error,
+      data: null,
+    });
+  }
+};
+const actualizarPrecioVenta = async (req, res) => {
+  try {
+    const { items } = req.body;
+
+    await runTransaction(async (connection) => {
+      try {
+        const query = `
+          UPDATE items
+          SET total = ?
+          WHERE id_item = ?`;
+
+        for (const item of items) {
+          await connection.execute(query, [item.total, item.id_item]);
+        }
+      } catch (error) {
+        throw new CustomError(
+          "Error corriendo la transaction",
+          500,
+          "ERROR_RUN_TRANSACTION",
+          error
+        );
+      }
+    });
+
+    res
+      .status(200)
+      .json({ message: "Items actualizados con exito", data: items });
+  } catch (error) {
+    console.error(error);
+    res.status(error.status || 500).json({
+      message: error.message || "Error de servidor",
+      error,
+      data: null,
+    });
+  }
+};
+
+const getReservasWithIAtemsByidAgente = async (req, res) => {
+  console.log("ESTE ENDPOINT SOLO TRAE RESERVAS CON ITEMS SIN FACTURAR");
+  const { id_agente } = req.query;
+  console.log("id_agente", id_agente);
+  try {
+    const reservas = await executeSP(
+      "mia2.sp_reservas_con_items_by_id_agente",
+      [id_agente]
+    );
+    if (!reservas) {
+      return res.status(404).json({ message: "No se encontraron reservas" });
+    } else {
+      return res
+        .status(200)
+        .json({ message: "Reservas encontradas", data: reservas });
+    }
+  } catch (error) {
+    console.error(error);
+    return res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.message });
+  }
+};
+const getReservasWithItemsSinPagarByAgente = async (req, res) => {
+  console.log("ESTE ENDPOINT SOLO TRAE RESERVAS CON ITEMS SIN PAGAR");
+  const { id_agente } = req.query;
+  try {
+    const result = await executeSP("sp_get_items_sin_pagar_by_id_agente", [
+      id_agente,
+    ]);
+    if (!result) {
+      return res
+        .status(404)
+        .json({ message: "No se encontraron reservas con items sin pagar" });
+    }
+    return res
+      .status(200)
+      .json({
+        message: "Reservas con items sin pagar encontradas",
+        data: result,
+      });
+  } catch (error) {
+    res.status(500).json({ error: "Error en el servidor", details: error });
+  }
+};
 
 module.exports = {
   create,
@@ -220,5 +321,9 @@ module.exports = {
   readOnlyById,
   //updateReserva,
   readAllFacturacion,
-  updateReserva2
+  updateReserva2,
+  getItemsFromBooking,
+  actualizarPrecioVenta,
+  getReservasWithIAtemsByidAgente,
+  getReservasWithItemsSinPagarByAgente,
 };

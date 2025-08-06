@@ -1,4 +1,6 @@
+const { executeSP } = require("../../../config/db");
 const model = require("../model/facturas");
+const { v4: uuidv4 } = require("uuid");
 
 const create = async (req, res) => {
   try {
@@ -106,6 +108,104 @@ const deleteFacturas = async (req, res) => {
   }
 };
 
+const crearFacturaDesdeCarga = async (req,res) => {
+  req.context.logStep('crearFacturaDesdeCarga', 'Iniciando creación de factura desde carga');
+  const {
+        fecha_emision,
+        estado,
+        usuario_creador,
+        id_agente,
+        total,
+        subtotal,
+        impuestos,
+        saldo,
+        rfc,
+        id_empresa,
+        uuid_factura,
+        rfc_emisor,
+        url_pdf,
+        url_xml,
+        items
+  } = req.body;
+  const id_factura = "fac-"+uuidv4();
+  try {
+    const response = await executeSP("sp_inserta_factura_desde_carga",[
+      id_factura,
+      fecha_emision,
+        estado,
+        usuario_creador,
+        id_agente,
+        total,
+        subtotal,
+        impuestos,
+        saldo,
+        rfc,
+        id_empresa,
+        uuid_factura,
+        rfc_emisor,
+        url_pdf,
+        url_xml,
+        items
+    ])
+    if (!response) {
+      req.context.logStep('crearFacturaDesdeCarga:', 'Error al crear factura desde carga');
+      throw new Error("No se pudo crear la factura desde carga");
+    } else {
+      res.status(201).json({
+        message: "Factura creada correctamente desde carga",
+        data: { id_factura, ...response }, 
+        id_facturacreada:id_factura,
+        items:items
+      });
+    }
+  } catch (error) {
+    req.context.logStep('Error en crearFacturaDesdeCarga:', error);
+    res.status(500).json({
+      error: "Error al crear factura desde carga",
+      details: error.message || error,
+      otherDetails: error.response?.data || null,
+    });
+  }
+}
+const asignarFacturaItems = async (req, res) => {
+  const { id_factura, items } = req.body;
+  console.log("body", req.body)
+  
+  try {
+    const response = await executeSP("sp_asigna_facturas_items", [id_factura, items]);
+    return res.status(200).json({
+        message: "Items asignados correctamente a la factura",
+        data: response
+      });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Error al asignar items a la factura",
+      details: error.message || error,
+      otherDetails: error.response?.data || null,
+    });
+  }
+}
+
+const filtrarFacturas = async (req, res) => {
+  const {estatusFactura} = req.body;
+  try {
+    const result = await executeSP("sp_filtrar_facturas",[estatusFactura]);
+    if(!result){
+      return res.status(404).json({
+        message: "No se encontraron facturas con el parametro deseado"
+      });}
+    return res.status(200).json({
+      message: "Facturas filtradas correctamente",
+      data: result
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Error al filtrar facturas",
+      details: error.message || error,
+      otherDetails: error.response?.data || null,
+    });
+  }
+}
 module.exports = {
   create,
   deleteFacturas,
@@ -115,4 +215,7 @@ module.exports = {
   readAllConsultas,
   readDetailsFactura,
   isFacturada,
+  crearFacturaDesdeCarga,
+  asignarFacturaItems,
+  filtrarFacturas
 };

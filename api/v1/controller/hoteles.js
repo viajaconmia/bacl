@@ -802,6 +802,8 @@ const eliminarLogicaTarifa = async (req, res) => {
 };
 
 const filtroAvanzado = async (req, res) => {
+
+  console.log("PRUEBA PARA BACKEND HACIA PRUEBAS 😒✌️✌️");
   req.context.logStep('Llegó al endpoint de filtro avanzado');
   const {
     desayuno,

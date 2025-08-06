@@ -42,6 +42,8 @@ app.post("/disputa", express.raw({ type: "application/json" }), (req, res) => {
 });
 /** aqui*/
 
+const { errorHandler } = require("./middleware/errorHandler");
+
 const { checkApiKey } = require("./middleware/auth");
 const v1Router = require("./api/v1/router/general");
 const cors = require("cors");
@@ -64,6 +66,7 @@ const corsOptions = {
     "https://www.viajaconmia.com",
     "https://admin.viajaconmia.com",
     "https://mia-git-pruebasmia-mias-projects-f396ca8b.vercel.app",
+    "https://admin-mia-git-pruebasadmin-mias-projects-f396ca8b.vercel.app"
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: [
@@ -119,13 +122,7 @@ app.get("/", (req, res) =>
 );
 
 // 7. Manejador de errores global (solo formatea respuesta; no llama a logger.error)
-app.use((err, req, res, next) => {
-  res.status(err.status || 500).json({
-    error: true,
-    mensaje: err.message || "Ocurrió un error interno en el servidor",
-    data: err || null,
-  });
-});
+app.use(errorHandler);
 
 // 8. Inicio del servidor
 app.listen(PORT, () => {
