@@ -280,10 +280,9 @@ const createNewSaldo = async (req, res) => {
     res.status(500).json({ error: "Error en el servidor", details: error });
   }
 };
-
 const update_saldo_by_id = async (req, res) => {
   console.log("Llegando al endpoint de update_saldo_by_id");
-  const {
+    const {
     id_saldos,
     id_agente,
     saldo,
