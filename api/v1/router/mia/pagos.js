@@ -19,6 +19,10 @@ router.get("/todos", controller.getAgenteAgentesYEmpresas);
 router.post("/agente", controller.updateCreditAgent);
 router.post("/empresa", controller.updateCreditEmpresa);
 router.get("/pagosAgente", controller.getPagosAgente);
+router.put(
+  "/precio-contado-regresar-saldo",
+  controller.handlerPagoContadoRegresarSaldo
+);
 router.get("/pendientesAgente", controller.getPendientesAgente);
 router.get("/allPendientes", controller.getAllPendientes);
 router.get("/getAllPagos", controller.getAllPagos);
