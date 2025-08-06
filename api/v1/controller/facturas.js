@@ -124,7 +124,7 @@ const crearFacturaDesdeCarga = async (req,res) => {
         uuid_factura,
         rfc_emisor,
         url_pdf,
-        xml_pdf,
+        url_xml,
         items
   } = req.body;
   const id_factura = "fac-"+uuidv4();
@@ -144,7 +144,7 @@ const crearFacturaDesdeCarga = async (req,res) => {
         uuid_factura,
         rfc_emisor,
         url_pdf,
-        xml_pdf,
+        url_xml,
         items
     ])
     if (!response) {

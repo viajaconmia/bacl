@@ -210,6 +210,7 @@ const getAllPagos = async (req, res) => {
   try {
     const pagos = await model.getAllPagos();
     res.status(200).json(pagos);
+    console.log("sirvo")
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Error en el servidor", details: error });

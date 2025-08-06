@@ -188,7 +188,9 @@ const readSaldoByAgente = async (req, res) => {
   sf.is_facturable,
   sf.is_descuento,
   sf.comprobante,
-  sf.activo
+  sf.activo,
+  sf.numero_autorizacion,
+  sf.banco_tarjeta
 FROM saldos_a_favor AS sf
 INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
@@ -278,10 +280,9 @@ const createNewSaldo = async (req, res) => {
     res.status(500).json({ error: "Error en el servidor", details: error });
   }
 };
-
 const update_saldo_by_id = async (req, res) => {
   console.log("Llegando al endpoint de update_saldo_by_id");
-  const {
+    const {
     id_saldos,
     id_agente,
     saldo,
