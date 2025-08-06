@@ -176,12 +176,14 @@ const crearItemdeAjuste = async (req, res) => {
         throw error; // Lanzar error para que se maneje en el bloque catch
       }
     });
-    res.status(200).json(response);
+    res.status(204).json({ message: "Actualizado correctamente", data: null });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error al crear el item de ajuste",
-      error: error.message || "Error desconocido",
+    console.log(error);
+    res.status(error.statusCode || 500).json({
+      message:
+        error.message || "Error desconocido al actualizar precio de credito",
+      error: error || "ERROR_BACK",
+      data: null,
     });
   }
 };
@@ -210,7 +212,7 @@ const getAllPagos = async (req, res) => {
   try {
     const pagos = await model.getAllPagos();
     res.status(200).json(pagos);
-    console.log("sirvo")
+    console.log("sirvo");
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Error en el servidor", details: error });
