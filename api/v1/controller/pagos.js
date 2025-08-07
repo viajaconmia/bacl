@@ -638,6 +638,23 @@ const pagoPorSaldoAFavor = async (req, res) => {
   }
 };
 
+const getAllPagosPrepago = async (req, res) => {
+  try {
+   const pagos = await executeQuery(
+      `SELECT * FROM vw_pagos_prepago;`);
+
+    res.status(200).json({message: "Pagos de prepago obtenidos correctamente",
+    data: pagos});
+  
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener los pagos de prepago",
+      error: error.message || "Error desconocido",
+  })
+}}
+
+
 module.exports = {
   create,
   read,
@@ -655,4 +672,5 @@ module.exports = {
   handlerPagoContadoRegresarSaldo,
   pagoPorSaldoAFavor,
   crearItemdeAjuste,
+  getAllPagosPrepago,
 };
