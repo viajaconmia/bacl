@@ -641,7 +641,7 @@ const pagoPorSaldoAFavor = async (req, res) => {
 const getAllPagosPrepago = async (req, res) => {
   try {
    const pagos = await executeQuery(
-      `SELECT * FROM vw_pagos_prepago;`);
+      `SELECT * FROM vw_pagos_prepago_facturables;`);
 
     res.status(200).json({message: "Pagos de prepago obtenidos correctamente",
     data: pagos});
