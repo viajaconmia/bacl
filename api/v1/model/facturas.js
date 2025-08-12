@@ -406,7 +406,7 @@ function sanitizeCfdi(cfdiRaw = {}) {
 //   }
 // };
 
-const crearFacturaEmi = async (req, payload) => {
+const  crearFacturaEmi = async (req, payload) => {
   let { cfdi, info_user, datos_empresa, solicitudesArray = [] } = payload || {};
 
   // Compat: si info_user / datos_empresa venían dentro del CFDI, extraerlos
@@ -486,6 +486,7 @@ const crearFacturaEmi = async (req, payload) => {
       let response_factura;
       try {
         response_factura = await crearCfdi(req, body);
+        console.log("respuesta de facturama",response_factura)
       } catch (error) {
         const msg = error?.response?.data || error?.message || error;
         console.error("Error al crear CFDI:", msg);
