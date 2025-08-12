@@ -17,6 +17,7 @@ router.post(
   // middleware.validateParams(["info_user", "cfdi"]),
   controller.createEmi
 );
+router.post("/crearFacturaDesdeCargaPagos", controller.crearFacturaDesdeCargaPagos);
 router.post("/CrearFacturaDesdeCarga", controller.crearFacturaDesdeCarga);
 router.patch("/AsignarFacturaItems", controller.asignarFacturaItems);
 router.get("/getFacturas", controller.readAllFacturas);
