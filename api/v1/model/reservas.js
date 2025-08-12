@@ -632,7 +632,7 @@ const insertarReservaOperaciones = async (reserva) => {
                 itemConId.costo.impuestos.toFixed(2),
                 // Asumimos IVA del 16% sobre el costo total del item. ¡VERIFICA ESTA LÓGICA!
                 (itemConId.costo.total * 0.16).toFixed(2),
-                0, // saldo inicial - Ajusta si es diferente
+                itemConId.venta.total.toFixed(2), // saldo inicial - Ajusta si es diferente
               ]
             );
             await connection.execute(query_items_insert, params_items_insert);

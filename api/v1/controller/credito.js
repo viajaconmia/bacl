@@ -36,7 +36,7 @@ const actualizarPrecioCredito = async (req, res) => {
      * - id_agente: para validaciones de credito
      */
 
-    const {
+    let {
       id_agente,
       diferencia,
       id_servicio,
@@ -69,6 +69,7 @@ const actualizarPrecioCredito = async (req, res) => {
         }).filter(([_, value]) => !value)
       );
     }
+    diferencia = Number(diferencia.toFixed(2));
 
     /* 0.- Verificamos que el cliente tenga saldo:
      *  validaciones:
@@ -101,6 +102,7 @@ const actualizarPrecioCredito = async (req, res) => {
         null
       );
     }
+
     if (Number(agente.saldo) < diferencia) {
       throw new CustomError(
         `El cliente no cuenta con saldo suficiente`,
@@ -176,7 +178,7 @@ const actualizarPrecioCredito = async (req, res) => {
           throw new Error(
             `No hay items, muestra a sistemas este mensaje y el id hospedaje siguiente: ${id_hospedaje}`
           );
-        let update_precio = precio_actualizado;
+        let update_precio = Number(precio_actualizado);
 
         let nuevo_monto_item = Number(
           (update_precio / items.length).toFixed(2)

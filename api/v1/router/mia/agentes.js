@@ -197,7 +197,8 @@ router.get("/all-with-active-facturable-saldos", async (req, res) => {
                 'comprobante', sf.comprobante,
                 'activo', sf.activo,
                 'numero_autorizacion', sf.numero_autorizacion,
-                'banco_tarjeta', sf.banco_tarjeta
+                'banco_tarjeta', sf.banco_tarjeta,
+                'is_facturado', sf.is_facturado
               )
             )
             FROM saldos_a_favor sf
