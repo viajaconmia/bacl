@@ -1,4 +1,4 @@
-const { executeSP } = require("../../../config/db");
+const { executeSP, runTransaction } = require("../../../config/db");
 const model = require("../model/facturas");
 const { v4: uuidv4 } = require("uuid");
 
@@ -205,6 +205,63 @@ const filtrarFacturas = async (req, res) => {
       otherDetails: error.response?.data || null,
     });
   }
+}
+// Este es el endpoint para el caso 1a1
+const crearFacturaDesdeCargaPagos = async(req,res)=>{
+  const { fecha_emision, estado, usuario_creador, id_agente, total, subtotal, impuestos, saldo, rfc, id_empresa, uuid_factura, rfc_emisor, url_pdf, url_xml , raw_id
+  } = req.body;
+// de una validamos el tipo de pago 
+
+  const id_factura = "fac-"+uuidv4();
+  const query = `INSERT INTO facturas (id_factura, fecha_emision, estado, usuario_creador, id_agente, total, subtotal, impuestos, saldo, rfc, id_empresa, uuid_factura, rfc_emisor, url_pdf, url_xml)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+if (raw_id.toString().includes("pag-")) {
+  var id = 'id_pago';  
+} else {
+  var id = 'id_saldo_a_favor'; 
+}
+const query2 = `INSERT INTO facturas_pagos_y_saldos (${id}, id_factura, monto)
+                 VALUES (?, ?, ?)`; 
+  try {
+    runTransaction(async (connection) => {
+      const [result] = await connection.query(query, [
+        id_factura,
+        fecha_emision,
+        estado,
+        usuario_creador,
+        id_agente,
+        total,
+        subtotal,
+        impuestos,
+        saldo,
+        rfc,
+        id_empresa,
+        uuid_factura,
+        rfc_emisor,
+        url_pdf,
+        url_xml
+      ]);
+      if (result.affectedRows === 0) {
+        throw new Error("No se pudo crear la factura desde carga");
+      }
+      const [result2] = await connection.query(query2, [
+        raw_id, 
+        id_factura, 
+        total
+      ]);
+      if (result2.affectedRows === 0) {
+        throw new Error("No se pudo asignar el pago o saldo a favor a la factura");
+      }
+      res.status(201).json({
+        message: "Factura creada correctamente desde carga con pago o saldo a favor",
+        data: { id_factura, raw_id }
+      });
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Error al crear factura desde carga con pago o saldo a favor", 
+  })
+}
 }
 module.exports = {
   create,
