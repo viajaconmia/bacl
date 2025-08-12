@@ -156,13 +156,6 @@ const facturama = () => {
       Remove: (id) => deleteSyncWithParam("client", id),
       Update: (id, data) => putSyncWithData(`client/${id}`, data),
     },
-    Products: {
-      Get: (id) => retrieve("product", id),
-      List: () => list("product"),
-      Create: (data) => postSyncWithData("product", data),
-      Remove: (id) => deleteSyncWithParam("product", id),
-      Update: (id, data) => putSyncWithData(`product/${id}`, data),
-    },
     BranchOffice: {
       Get: (id) => retrieve("branchOffice", id),
       List: () => list("branchOffice"),

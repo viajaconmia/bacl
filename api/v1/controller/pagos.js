@@ -176,12 +176,14 @@ const crearItemdeAjuste = async (req, res) => {
         throw error; // Lanzar error para que se maneje en el bloque catch
       }
     });
-    res.status(200).json(response);
+    res.status(204).json({ message: "Actualizado correctamente", data: null });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error al crear el item de ajuste",
-      error: error.message || "Error desconocido",
+    console.log(error);
+    res.status(error.statusCode || 500).json({
+      message:
+        error.message || "Error desconocido al actualizar precio de credito",
+      error: error || "ERROR_BACK",
+      data: null,
     });
   }
 };
@@ -210,7 +212,7 @@ const getAllPagos = async (req, res) => {
   try {
     const pagos = await model.getAllPagos();
     res.status(200).json(pagos);
-    console.log("sirvo")
+    console.log("sirvo");
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Error en el servidor", details: error });
@@ -340,18 +342,18 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
       );
     }
     diferencia = diferencia * -1;
-    const agentes_encontrados = await executeQuery(
-      "select * from agente_details where id_agente = ?;",
-      [id_agente]
-    );
-    if (agentes_encontrados.length == 0)
-      throw new CustomError(
-        `Parece que no encontramos el agente con el id ${id_agente}`,
-        404,
-        "ERROR_CLIENT",
-        id_agente
-      );
-    const agente = agentes_encontrados[0];
+    // const agentes_encontrados = await executeQuery(
+    //   "select * from agente_details where id_agente = ?;",
+    //   [id_agente]
+    // );
+    // if (agentes_encontrados.length == 0)
+    //   throw new CustomError(
+    //     `Parece que no encontramos el agente con el id ${id_agente}`,
+    //     404,
+    //     "ERROR_CLIENT",
+    //     id_agente
+    //   );
+    // const agente = agentes_encontrados[0];
     const pagos_encontrados = await executeQuery(
       "select * from pagos where id_pago = ?;",
       [id_pago]
@@ -364,7 +366,20 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
         id_pago
       );
     const pago = pagos_encontrados[0];
-    console.log(pago);
+
+    const pagos_facturas_saldos = await executeQuery(
+      `SELECT * FROM facturas_pagos_y_saldos WHERE id_pago = ?`,
+      [pago.id_pago]
+    );
+
+    if (pago.id_saldo_a_favor != null)
+      throw new CustomError(
+        `Lo siento, el pago se realizo con saldo a favor, no se podra modificar por este medio, el id del saldo a favor es:${pago.id_saldo_a_favor}, se puede hacer el cambio pero tomara tiempo, avisar si se desea agregar eso, para eso se agregaria un wallet pero ese no seria facturable ya que hay un saldo a favor que paso por eso`,
+        402,
+        "ERROR_PAYMENT",
+        pago
+      );
+
     const response = await runTransaction(async (connection) => {
       try {
         //* 1.- Crear saldo a favor con el saldo sobrante
@@ -400,9 +415,16 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
           pago.autorizacion_stripe || null, // numero_autorizacion
           pago.banco || null, // banco_tarjeta
         ];
-
         const [result] = await connection.execute(query, valores);
         const id_saldo_creado = result.insertId;
+
+        if (pagos_facturas_saldos.length > 0) {
+          await connection.execute(
+            `UPDATE facturas_pagos_y_saldos SET id_saldo_a_favor = ? WHERE id_pago = ?`,
+            [id_saldo_creado, id_pago]
+          );
+        }
+
         const query_update_pago = `
         UPDATE pagos
           SET
