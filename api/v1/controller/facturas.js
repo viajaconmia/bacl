@@ -56,6 +56,57 @@ const createCombinada = async (req, res) => {
     });
   }
 };
+// const createEmi = async (req, res) => {
+//   req.context.logStep(
+//     "createCombinada",
+//     "Inicio del proceso de creación de factura combinada"
+//   );
+//   try {
+//     const resp = await model.crearFacturaEmi(req, req.body);
+//     req.context.logStep("resultado del model.createFacturaCombinada");
+//     console.log(resp);
+//     return res.status(201).json(resp.data.data);
+//   } catch (error) {
+//     console.log("ESTE ES EL ERRORRRRRRRRRrrr", error);
+//     res.status(400).json({
+//       error: "Error en el servidor",
+//       details: error.message || error,
+//       otherDetails: error || error.response?.data || null,
+//     });
+//   }
+// };
+
+const createEmi = async (req, res) => {
+  req.context.logStep("createEmi", "Inicio del proceso de creación de factura (emi)");
+  try {
+    const resp = await model.crearFacturaEmi(req, req.body);
+
+    const facturamaData =
+      resp?.facturama?.Id ? resp.facturama :
+      resp?.data?.facturama?.Id ? resp.data.facturama :
+      resp?.data?.Id ? resp.data :
+      resp?.Id ? resp :
+      null;
+
+    if (!facturamaData) {
+      return res.status(500).json({
+        ok: false,
+        message: "El modelo no devolvió los datos de Facturama esperados",
+        detail: resp
+      });
+    }
+
+    return res.status(201).json({ data: facturamaData });
+  } catch (error) {
+    const status = error?.response?.status || error?.statusCode || 500;
+    const payload = error?.response?.data || error?.details || { message: error?.message || "Error" };
+    return res.status(status).json({
+      ok: false,
+      message: payload.Message || payload.message || "Error al timbrar",
+      detail: payload,
+    });
+  }
+};
 
 const readConsultas = async (req, res) => {
   try {
@@ -154,8 +205,6 @@ const crearFacturaDesdeCarga = async (req,res) => {
       res.status(201).json({
         message: "Factura creada correctamente desde carga",
         data: { id_factura, ...response }, 
-        id_facturacreada:id_factura,
-        items:items
       });
     }
   } catch (error) {
@@ -217,5 +266,6 @@ module.exports = {
   isFacturada,
   crearFacturaDesdeCarga,
   asignarFacturaItems,
-  filtrarFacturas
+  filtrarFacturas,
+  createEmi
 };
