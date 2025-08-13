@@ -629,7 +629,7 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
         resp?.facturama?.Id ? resp.facturama :
         resp?.data?.facturama?.Id ? resp.data.facturama :
         resp?.data?.Id ? resp.data :
-        resp?.Id ? resp :
+            resp?.Id ? resp :      
         null;
 
       if (!facturamaData) {
@@ -658,7 +658,7 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
         saldo: saldo ?? facturamaArgs.saldo,
         rfc: rfc || facturamaArgs.rfc,
         id_empresa: id_empresa ?? facturamaArgs.id_empresa,
-        uuid_factura: uuid_factura || resp.data.facturama.Complement.TaxStamp.Uuid,
+        uuid_factura: uuid_factura,
         rfc_emisor: rfc_emisor || facturamaArgs.rfc_emisor,
         url_pdf: url_pdf || facturamaArgs.url_pdf,
         url_xml: url_xml || facturamaArgs.url_xml,
