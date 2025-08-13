@@ -288,8 +288,6 @@ const createEmi = async (req, res) => {
   try {
     const resp = await model.crearFacturaEmi(req, req.body);
 
-    console.log("response facturama controller:",resp)
-
     const facturamaData =
       resp?.facturama?.Id ? resp.facturama :
       resp?.data?.facturama?.Id ? resp.data.facturama :
@@ -317,209 +315,8 @@ const createEmi = async (req, res) => {
   }
 };
 
-// const crearFacturaDesdeCargaPagos = async (req, res) => {
-//   // desestructuracion para el case de carga de factura
-//   let {
-//     fecha_emision,
-//     estado,
-//     usuario_creador,
-//     id_agente,
-//     total,
-//     subtotal,
-//     impuestos,
-//     saldo,
-//     rfc,
-//     id_empresa,
-//     uuid_factura,
-//     rfc_emisor,
-//     url_pdf,
-//     url_xml,
-//     raw_id, // siempre viene del body: "pag-..." (uuid) o entero (id saldo)
-//   } = req.body;
-//   // desestructuracion para facturama
-//   //const { fecha_emision,total,subtotal,impuestos} = req.body
-//   const { info_user } = req.body;
-//   const { datos_empresa } = req.body;
-//   const facturamaArgs = [fecha_emision, 'Confirmada', info_user.id_user
-//     , total, subtotal, impuestos, 0,datos_empresa.rfc,datos_empresa.id_empresa,"","NAL190807BU2",]
-//   const {info_pago } = req.body
-//   console.log("body", req.body)
-//   console.log("raw", info_pago.raw_id)
-
-//   usuario_creador = usuario_creador || id_agente;
-
-//   if (raw_id === undefined || raw_id === null) {
-//     if (info_pago.raw_id === undefined) {
-//       return res.status(400).json({ error: "Se requiere raw_id para vincular la factura." });
-//     } else {
-//       raw_id === info_pago.raw_id;
-//     }
-//   }
-
-//   // Solo para decidir la columna FK; el valor original de raw_id se conserva para el INSERT
-//   const rawIdStr = String(raw_id).trim().toLowerCase();
-//   const fkColumn = rawIdStr.startsWith("pag-") ? "id_pago" : "id_saldo_a_favor";
-
-//   const id_factura = "fac-" + uuidv4();
-
-//   // ¿El body ya trae datos suficientes de la factura?
-//   const bodyTieneFactura =
-//     Boolean(fecha_emision) &&
-//     (Boolean(uuid_factura) || Boolean(url_xml)) &&
-//     (total != null) &&
-//     (subtotal != null);
-
-//   const mapFacturamaToFacturaRow = (fd) => {
-//     const f = fd || {};
-//     const links = f.Links || f.links || {};
-//     const comp = f.Complemento || f.complemento || {};
-//     const timbre = comp.TimbreFiscalDigital || comp.timbreFiscalDigital || {};
-//     const emisor = f.Emisor || f.emisor || {};
-//     const totales = f.Totales || f.totales || {};
-
-//     const mTotal = f.Total ?? totales.Total ?? total ?? 0;
-//     const mSub   = f.SubTotal ?? f.Subtotal ?? totales.SubTotal ?? subtotal ?? 0;
-//     const mImp   = (mTotal != null && mSub != null) ? Number(mTotal) - Number(mSub) : (impuestos ?? 0);
-
-//     return {
-//       fecha_emision: f.Fecha || f.fecha || new Date(),
-//       estado: estado || "Timbrada",
-//       usuario_creador: usuario_creador || id_agente,
-//       id_agente,
-//       total: mTotal,
-//       subtotal: mSub,
-//       impuestos: mImp,
-//       saldo: saldo ?? 0,
-//       rfc,
-//       id_empresa: id_empresa ?? null,
-//       uuid_factura: timbre.UUID || timbre.Uuid || f.Uuid || f.UUID || uuid_factura || null,
-//       rfc_emisor: emisor.Rfc || emisor.RFC || rfc_emisor || null,
-//       url_pdf: links.Pdf || links.pdf || f.PdfUrl || f.pdfUrl || url_pdf || null,
-//       url_xml: links.Xml || links.xml || f.XmlUrl || f.xmlUrl || url_xml || null,
-//     };
-//   };
-
-//   let row;
-//   let facturamaData = null;
-//   let source = "body";
-
-//   try {
-//     if (!bodyTieneFactura) {
-//       // Timbra con Facturama (lógica de createEmi integrada)
-//       const resp = await model.crearFacturaEmi(facturamaArgs);
-//       facturamaData =
-//         resp?.facturama?.Id ? resp.facturama :
-//         resp?.data?.facturama?.Id ? resp.data.facturama :
-//         resp?.data?.Id ? resp.data :
-//         resp?.Id ? resp :
-//         null;
-
-//       if (!facturamaData) {
-//         return res.status(500).json({
-//           ok: false,
-//           message: "El modelo no devolvió los datos de Facturama esperados",
-//           detail: resp
-//         });
-//       }
-//       row = mapFacturamaToFacturaRow(facturamaData);
-//       source = "facturama";
-//     } else {
-//       // Usa los datos del body
-//       const mTotal = total ?? 0;
-//       const mSub   = subtotal ?? 0;
-//       const mImp = (impuestos != null) ? impuestos : (Number(mTotal) - Number(mSub));
-//       console.log("row", row)
-      
-//       row = {
-//         estado,
-//         usuario_creador: usuario_creador || id_agente,
-//         id_agente,
-//         total: mTotal,
-//         subtotal: mSub,
-//         impuestos: mImp,
-//         saldo: saldo ?? 0,
-//         rfc,
-//         id_empresa: id_empresa ?? null,
-//         uuid_factura: uuid_factura ?? null,
-//         rfc_emisor: rfc_emisor ?? null,
-//         url_pdf: url_pdf ?? null,
-//         url_xml: url_xml ?? null,
-//       };
-//       if (row.id_agente == null) {
-//         row==facturamaArgs
-//       }
-//     }
-    
-//       console.log("row", row)
-
-//     const insertFacturaSQL = `
-//       INSERT INTO facturas (
-//         id_factura, fecha_emision, estado, usuario_creador, id_agente,
-//         total, subtotal, impuestos, saldo, rfc, id_empresa,
-//         uuid_factura, rfc_emisor, url_pdf, url_xml
-//       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-//     `;
-
-//     // fkColumn es seguro (solo "id_pago" o "id_saldo_a_favor")
-//     const insertLinkSQL = `
-//       INSERT INTO facturas_pagos_y_saldos (${fkColumn}, id_factura, monto)
-//       VALUES (?, ?, ?)
-//     `;
-
-//     await runTransaction(async (connection) => {
-//       const [r1] = await connection.query(insertFacturaSQL, [
-//         id_factura,
-//         row.fecha_emision,
-//         row.estado,
-//         row.usuario_creador || row.id_agente,
-//         row.id_agente,
-//         row.total,
-//         row.subtotal,
-//         row.impuestos,
-//         row.saldo,
-//         row.rfc,
-//         row.id_empresa,
-//         row.uuid_factura,
-//         row.rfc_emisor,
-//         row.url_pdf,
-//         row.url_xml
-//       ]);
-//       if (!r1?.affectedRows) throw new Error("No se pudo crear la factura");
-
-//       // IMPORTANTE: aquí usamos el valor ORIGINAL de raw_id (uuid o entero)
-//       const [r2] = await connection.query(insertLinkSQL, [
-//         raw_id,
-//         id_factura,
-//         row.total
-//       ]);
-//       if (!r2?.affectedRows) throw new Error("No se pudo vincular el pago/saldo a la factura");
-
-//       return res.status(201).json({
-//         message: "Factura creada correctamente",
-//         data: {
-//           id_factura,
-//           raw_id,
-//           source,
-//           facturama: source === "facturama"
-//             ? { Id: facturamaData?.Id, Uuid: row.uuid_factura, links: { pdf: row.url_pdf, xml: row.url_xml } }
-//             : undefined
-//         }
-//       });
-//     });
-//   } catch (error) {
-//     const status  = error?.response?.status || error?.statusCode || 500;
-//     const payload = error?.response?.data || error?.details || { message: error?.message || "Error" };
-//     return res.status(status).json({
-//       ok: false,
-//       message: payload.Message || payload.message || "Error al crear la factura",
-//       detail: payload,
-//     });
-//   }
-// };
-
 const crearFacturaDesdeCargaPagos = async (req, res) => {
-  // desestructuracion para el case de carga de factura
-  let {
+  const {
     fecha_emision,
     estado,
     usuario_creador,
@@ -536,41 +333,9 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
     url_xml,
     raw_id, // siempre viene del body: "pag-..." (uuid) o entero (id saldo)
   } = req.body;
-  
-  // desestructuracion para facturama
-  const { info_user } = req.body;
-  const { datos_empresa } = req.body;
-  
-  // Preparar argumentos por defecto de Facturama
-  const facturamaArgs = {
-    fecha_emision: fecha_emision || new Date(),
-    estado: estado || 'Confirmada',
-    usuario_creador: usuario_creador || info_user?.id_user,
-    id_agente: id_agente || info_user?.id_user,
-    total: total || 0,
-    subtotal: subtotal || 0,
-    impuestos: impuestos || 0,
-    saldo: saldo || 0,
-    rfc: rfc || datos_empresa?.rfc,
-    id_empresa: id_empresa || datos_empresa?.id_empresa,
-    uuid_factura: uuid_factura || "",
-    rfc_emisor: rfc_emisor || "NAL190807BU2",
-    url_pdf: url_pdf || "",
-    url_xml: url_xml || ""
-  };
-
-  const {info_pago } = req.body;
-  console.log("body", req.body);
-  console.log("raw", info_pago?.raw_id);
-
-  usuario_creador = usuario_creador || id_agente;
 
   if (raw_id === undefined || raw_id === null) {
-    if (info_pago?.raw_id === undefined) {
-      return res.status(400).json({ error: "Se requiere raw_id para vincular la factura." });
-    } else {
-      raw_id = info_pago.raw_id; // Aquí había un error (=== en lugar de =)
-    }
+    return res.status(400).json({ error: "Se requiere raw_id para vincular la factura." });
   }
 
   // Solo para decidir la columna FK; el valor original de raw_id se conserva para el INSERT
@@ -599,20 +364,20 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
     const mImp   = (mTotal != null && mSub != null) ? Number(mTotal) - Number(mSub) : (impuestos ?? 0);
 
     return {
-      fecha_emision: f.Fecha || f.fecha || facturamaArgs.fecha_emision,
+      fecha_emision: f.Fecha || f.fecha || new Date(),
       estado: estado || "Timbrada",
-      usuario_creador: usuario_creador || facturamaArgs.usuario_creador,
-      id_agente: id_agente || facturamaArgs.id_agente,
+      usuario_creador: usuario_creador ?? null,
+      id_agente,
       total: mTotal,
       subtotal: mSub,
       impuestos: mImp,
-      saldo: saldo ?? facturamaArgs.saldo,
-      rfc: rfc || facturamaArgs.rfc,
-      id_empresa: id_empresa ?? facturamaArgs.id_empresa,
-      uuid_factura: timbre.UUID || timbre.Uuid || f.Uuid || f.UUID || uuid_factura || facturamaArgs.uuid_factura,
-      rfc_emisor: emisor.Rfc || emisor.RFC || rfc_emisor || facturamaArgs.rfc_emisor,
-      url_pdf: links.Pdf || links.pdf || f.PdfUrl || f.pdfUrl || url_pdf || facturamaArgs.url_pdf,
-      url_xml: links.Xml || links.xml || f.XmlUrl || f.xmlUrl || url_xml || facturamaArgs.url_xml,
+      saldo: saldo ?? 0,
+      rfc,
+      id_empresa: id_empresa ?? null,
+      uuid_factura: timbre.UUID || timbre.Uuid || f.Uuid || f.UUID || uuid_factura || null,
+      rfc_emisor: emisor.Rfc || emisor.RFC || rfc_emisor || null,
+      url_pdf: links.Pdf || links.pdf || f.PdfUrl || f.pdfUrl || url_pdf || null,
+      url_xml: links.Xml || links.xml || f.XmlUrl || f.xmlUrl || url_xml || null,
     };
   };
 
@@ -624,7 +389,6 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
     if (!bodyTieneFactura) {
       // Timbra con Facturama (lógica de createEmi integrada)
       const resp = await model.crearFacturaEmi(req, req.body);
-      console.log("HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH",resp,resp.data.facturama.Complement.TaxStamp.Uuid)
       facturamaData =
         resp?.facturama?.Id ? resp.facturama :
         resp?.data?.facturama?.Id ? resp.data.facturama :
@@ -642,16 +406,15 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
       row = mapFacturamaToFacturaRow(facturamaData);
       source = "facturama";
     } else {
-      // Usa los datos del body o los valores por defecto de facturamaArgs
-      const mTotal = total ?? facturamaArgs.total;
-      const mSub   = subtotal ?? facturamaArgs.subtotal;
-      const mImp = (impuestos != null) ? impuestos : (Number(mTotal) - Number(mSub));
-      
+      // Usa los datos del body
+      const mTotal = total ?? 0;
+      const mSub   = subtotal ?? 0;
+      const mImp   = (impuestos != null) ? impuestos : (Number(mTotal) - Number(mSub));
       row = {
-        fecha_emision: fecha_emision || facturamaArgs.fecha_emision,
-        estado: estado || facturamaArgs.estado,
-        usuario_creador: usuario_creador || facturamaArgs.usuario_creador,
-        id_agente: id_agente || facturamaArgs.id_agente,
+        fecha_emision,
+        estado,
+        usuario_creador: usuario_creador ?? null,
+        id_agente,
         total: mTotal,
         subtotal: mSub,
         impuestos: mImp,
@@ -664,8 +427,6 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
         url_xml: url_xml || facturamaArgs.url_xml,
       };
     }
-    
-    console.log("row final", row);
 
     const insertFacturaSQL = `
       INSERT INTO facturas (
@@ -710,7 +471,6 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
       if (!r2?.affectedRows) throw new Error("No se pudo vincular el pago/saldo a la factura");
 
       return res.status(201).json({
-        data: facturamaData,
         message: "Factura creada correctamente",
         data: {
           id_factura,
@@ -721,7 +481,6 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
             : undefined
         }
       });
-      
     });
   } catch (error) {
     const status  = error?.response?.status || error?.statusCode || 500;
@@ -732,7 +491,201 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
       detail: payload,
     });
   }
-}
+};
+
+// Crea 1 factura y la vincula con N pagos/saldos.
+// Si no viene "factura" en el body, timbra con Facturama (model.crearFacturaEmi).
+const crearFacturaMultiplesPagos = async (req, res) => {
+  const { factura: facturaBody, pagos_asociados } = req.body || {};
+  const { info_user } = req.body;
+
+  if (!Array.isArray(pagos_asociados) || pagos_asociados.length === 0) {
+    return res.status(400).json({ ok: false, message: "Se requiere pagos_asociados (array con al menos un elemento)." });
+  }
+
+  // Normaliza cada pago: { raw_id, monto }
+  let pagos;
+  try {
+    pagos = pagos_asociados.map((p, idx) => {
+      const rid = p?.raw_id;
+      const mnt = p?.monto ?? p?.monto_facturado ?? p?.amount;
+      if (rid === undefined || rid === null || String(rid).trim() === "") {
+        throw new Error(`pagos_asociados[${idx}]: raw_id es requerido`);
+      }
+      if (mnt === undefined || mnt === null || isNaN(Number(mnt)) || Number(mnt) < 0) {
+        throw new Error(`pagos_asociados[${idx}]: monto inválido`);
+      }
+      return { raw_id: rid, monto: Number(mnt) };
+    });
+  } catch (e) {
+    return res.status(400).json({ ok: false, message: e.message });
+  }
+
+  const id_factura = "fac-" + uuidv4();
+  const getFk = (rid) => (String(rid).trim().toLowerCase().startsWith("pag-") ? "id_pago" : "id_saldo_a_favor");
+
+  // ¿La factura ya viene completa en el body?
+  const fb = facturaBody || {};
+  const bodyTieneFactura =
+    Boolean(fb.fecha_emision) &&
+    (Boolean(fb.uuid_factura) || Boolean(fb.url_xml)) &&
+    (fb.total != null) &&
+    (fb.subtotal != null);
+
+  const mapFacturamaToFacturaRow = (fd) => {
+    const f = fd || {};
+    const links = f.Links || f.links || {};
+    const comp = f.Complemento || f.complemento || {};
+    const timbre = comp.TimbreFiscalDigital || comp.timbreFiscalDigital || {};
+    const emisor = f.Emisor || f.emisor || {};
+    const totales = f.Totales || f.totales || {};
+    const total = f.Total ?? totales.Total ?? 0;
+    const subtotal = f.SubTotal ?? f.Subtotal ?? totales.SubTotal ?? 0;
+    const impuestos = Number(total) - Number(subtotal);
+
+    return {
+      fecha_emision: f.Fecha || f.fecha || new Date(),
+      estado: "Confirmada",
+      usuario_creador: fb.usuario_creador ?? info_user.id_agente,
+      id_agente: fb.id_agente ?? info_user.id_agente,
+      total,
+      subtotal,
+      impuestos,
+      saldo: fb.saldo ?? 0,
+      rfc: fb.rfc,
+      id_empresa: fb.id_empresa ?? null,
+      uuid_factura: timbre.UUID || timbre.Uuid || f.Uuid || f.UUID || fb.uuid_factura || null,
+      rfc_emisor: emisor.Rfc || emisor.RFC || fb.rfc_emisor || null,
+      url_pdf: links.Pdf || links.pdf || f.PdfUrl || f.pdfUrl || fb.url_pdf || null,
+      url_xml: links.Xml || links.xml || f.XmlUrl || f.xmlUrl || fb.url_xml || null,
+    };
+  };
+
+  let rowFactura;
+  let facturamaData = null;
+  let source = "body";
+
+  try {
+    if (!bodyTieneFactura) {
+      const resp = await model.crearFacturaEmi(req, req.body);
+      facturamaData =
+        resp?.facturama?.Id ? resp.facturama :
+        resp?.data?.facturama?.Id ? resp.data.facturama :
+        resp?.data?.Id ? resp.data :
+        resp?.Id ? resp :
+        null;
+
+      if (!facturamaData) {
+        return res.status(500).json({
+          ok: false,
+          message: "El modelo no devolvió los datos de Facturama esperados",
+          detail: resp
+        });
+      }
+      rowFactura = mapFacturamaToFacturaRow(facturamaData);
+      source = "facturama";
+    } else {
+      const total = fb.total ?? 0;
+      const subtotal = fb.subtotal ?? 0;
+      const impuestos = (fb.impuestos != null) ? fb.impuestos : (Number(total) - Number(subtotal));
+      rowFactura = {
+        fecha_emision: fb.fecha_emision,
+        estado: fb.estado,
+        usuario_creador: fb.usuario_creador ?? null,
+        id_agente: fb.id_agente,
+        total,
+        subtotal,
+        impuestos,
+        saldo: fb.saldo ?? 0,
+        rfc: fb.rfc,
+        id_empresa: fb.id_empresa ?? null,
+        uuid_factura: fb.uuid_factura ?? null,
+        rfc_emisor: fb.rfc_emisor ?? null,
+        url_pdf: fb.url_pdf ?? null,
+        url_xml: fb.url_xml ?? null,
+      };
+    }
+
+    // --------- Validación dura: suma de pagos == total de la factura (en centavos) ----------
+    const totalFacturaCents = Math.round(Number(rowFactura.total) * 100);
+    const sumPagosCents = pagos.reduce((acc, p) => acc + Math.round(Number(p.monto) * 100), 0);
+    if (sumPagosCents !== totalFacturaCents) {
+      return res.status(400).json({
+        ok: false,
+        message: "La suma de los pagos no coincide con el total de la factura.",
+        total_factura: Number(rowFactura.total),
+        total_vinculado: sumPagosCents / 100,
+        diferencia: (totalFacturaCents - sumPagosCents) / 100
+      });
+    }
+    // ---------------------------------------------------------------------------------------
+
+    const insertFacturaSQL = `
+      INSERT INTO facturas (
+        id_factura, fecha_emision, estado, usuario_creador, id_agente,
+        total, subtotal, impuestos, saldo, rfc, id_empresa,
+        uuid_factura, rfc_emisor, url_pdf, url_xml
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    await runTransaction(async (connection) => {
+      const [r1] = await connection.query(insertFacturaSQL, [
+        id_factura,
+        rowFactura.fecha_emision,
+        rowFactura.estado,
+        rowFactura.usuario_creador,
+        rowFactura.id_agente,
+        rowFactura.total,
+        rowFactura.subtotal,
+        rowFactura.impuestos,
+        rowFactura.saldo,
+        rowFactura.rfc,
+        rowFactura.id_empresa,
+        rowFactura.uuid_factura,
+        rowFactura.rfc_emisor,
+        rowFactura.url_pdf,
+        rowFactura.url_xml
+      ]);
+      if (!r1?.affectedRows) throw new Error("No se pudo crear la factura");
+
+      // Vincula cada pago/saldo
+      for (const { raw_id, monto } of pagos) {
+        const fk = getFk(raw_id);
+        const insertLinkSQL = `
+          INSERT INTO facturas_pagos_y_saldos (${fk}, id_factura, monto)
+          VALUES (?, ?, ?)
+        `;
+        const valorId = fk === "id_pago" ? String(raw_id) : Number(raw_id);
+        const [r2] = await connection.query(insertLinkSQL, [valorId, id_factura, monto]);
+        if (!r2?.affectedRows) throw new Error("No se pudo vincular un pago/saldo a la factura");
+      }
+
+      return res.status(201).json({
+        ok: true,
+        message: "Factura creada y vinculada con pagos/saldos",
+        data: {
+          id_factura,
+          source,
+          total_factura: Number(rowFactura.total),
+          total_vinculado: sumPagosCents / 100,
+          diferencia: 0,
+          facturama: source === "facturama"
+            ? { Id: facturamaData?.Id, Uuid: rowFactura.uuid_factura, links: { pdf: rowFactura.url_pdf, xml: rowFactura.url_xml } }
+            : undefined
+        }
+      });
+    });
+  } catch (err) {
+    const status = err?.response?.status || err?.statusCode || 500;
+    const payload = err?.response?.data || err?.details || { message: err?.message || "Error" };
+    return res.status(status).json({
+      ok: false,
+      message: payload.Message || payload.message || "Error al crear la factura con pagos",
+      detail: payload,
+    });
+  }
+};
+
 
 module.exports = {
   create,
@@ -748,4 +701,5 @@ module.exports = {
   filtrarFacturas,
   createEmi,
   crearFacturaDesdeCargaPagos,
+  crearFacturaMultiplesPagos
 };
