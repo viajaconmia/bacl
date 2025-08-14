@@ -642,9 +642,13 @@ const getAllPagosPrepago = async (req, res) => {
   try {
    const pagos = await executeQuery(
       `SELECT * FROM vw_pagos_prepago_facturables;`);
+    const balance = await executeQuery(
+      `SELECT * FROM mia2.vw_balance_pagos_facturas;`
+    );
 
     res.status(200).json({message: "Pagos de prepago obtenidos correctamente",
-    data: pagos});
+    data: pagos, 
+    balance: balance});
   
   } catch (error) {
     res.status(500).json({
