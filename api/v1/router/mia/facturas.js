@@ -19,7 +19,7 @@ router.post(
 );
 router.post("/crearFacturaDesdeCargaPagos", controller.crearFacturaDesdeCargaPagos);
 router.post("/CrearFacturaDesdeCarga", controller.crearFacturaDesdeCarga);
-router.post("/CrearFacturasMultiplesPagos", controller.crearFacturasMultiplesPagos);
+router.post("/CrearFacturasMultiplesPagos", controller.crearFacturaMultiplesPagos);
 router.patch("/AsignarFacturaItems", controller.asignarFacturaItems);
 router.get("/getFacturas", controller.readAllFacturas);
 router.get("/isFacturada/:id", controller.isFacturada);

@@ -393,7 +393,7 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
         resp?.facturama?.Id ? resp.facturama :
         resp?.data?.facturama?.Id ? resp.data.facturama :
         resp?.data?.Id ? resp.data :
-        resp?.Id ? resp :
+            resp?.Id ? resp :      
         null;
 
       if (!facturamaData) {
@@ -418,13 +418,13 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
         total: mTotal,
         subtotal: mSub,
         impuestos: mImp,
-        saldo: saldo ?? 0,
-        rfc,
-        id_empresa: id_empresa ?? null,
-        uuid_factura: uuid_factura ?? null,
-        rfc_emisor: rfc_emisor ?? null,
-        url_pdf: url_pdf ?? null,
-        url_xml: url_xml ?? null,
+        saldo: saldo ?? facturamaArgs.saldo,
+        rfc: rfc || facturamaArgs.rfc,
+        id_empresa: id_empresa ?? facturamaArgs.id_empresa,
+        uuid_factura: uuid_factura,
+        rfc_emisor: rfc_emisor || facturamaArgs.rfc_emisor,
+        url_pdf: url_pdf || facturamaArgs.url_pdf,
+        url_xml: url_xml || facturamaArgs.url_xml,
       };
     }
 
@@ -497,6 +497,7 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
 // Si no viene "factura" en el body, timbra con Facturama (model.crearFacturaEmi).
 const crearFacturaMultiplesPagos = async (req, res) => {
   const { factura: facturaBody, pagos_asociados } = req.body || {};
+  const { info_user } = req.body;
 
   if (!Array.isArray(pagos_asociados) || pagos_asociados.length === 0) {
     return res.status(400).json({ ok: false, message: "Se requiere pagos_asociados (array con al menos un elemento)." });
@@ -544,9 +545,9 @@ const crearFacturaMultiplesPagos = async (req, res) => {
 
     return {
       fecha_emision: f.Fecha || f.fecha || new Date(),
-      estado: fb.estado || "Timbrada",
-      usuario_creador: fb.usuario_creador ?? null,
-      id_agente: fb.id_agente,
+      estado: "Confirmada",
+      usuario_creador: fb.usuario_creador ?? info_user.id_agente,
+      id_agente: fb.id_agente ?? info_user.id_agente,
       total,
       subtotal,
       impuestos,
