@@ -184,7 +184,7 @@ router.get("/get-payment-methods", async (req, res) => {
     res.json(paymentMethods.data);
   } catch (error) {
     console.error("Error obteniendo métodos de pago:", error);
-    res.status(500).json({ error: "Error en el servidor" });
+    res.status(500).json({ message: "Error en el servidor", error });
   }
 });
 
