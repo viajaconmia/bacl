@@ -70,7 +70,7 @@ async function executeSP(procedure, params = []) {
     return Array.isArray(rows[0]) ? rows[0] : rows;
   } catch (error) {
     throw new CustomError(
-      "Error en el sp",
+      error.sqlMessage,
       500,
       "ERROR_STORED_PROCEDURE",
       error
