@@ -207,9 +207,9 @@ const asignarFacturaItems = async (req, res) => {
 }
 
 const filtrarFacturas = async (req, res) => {
-  const {estatusFactura} = req.body;
+  const {estatusFactura,id_factura} = req.body;
   try {
-    const result = await executeSP("sp_filtrar_facturas",[estatusFactura]);
+    const result = await executeSP("sp_filtrar_facturas",[estatusFactura,id_factura]);
     if(!result){
       return res.status(404).json({
         message: "No se encontraron facturas con el parametro deseado"
