@@ -18,6 +18,7 @@ const create = async (req, res) => {
   }
 };
 
+
 const isFacturada = async (req, res) => {
   try {
     const { id } = req.params;
@@ -703,3 +704,13 @@ module.exports = {
   crearFacturaDesdeCargaPagos,
   crearFacturaMultiplesPagos
 };
+
+//ya quedo "#$%&/()="
+
+
+
+
+
+
+
+
