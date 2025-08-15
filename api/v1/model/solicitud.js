@@ -60,9 +60,10 @@ const createSolicitudes = async (body) => {
           const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_servicio, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales) VALUES ${solicitudes
             .map(() => "(?,?,?,?,?,?,?,?,?,?,?,?,?)")
             .join(",")};`;
-
+          let ids_solicitudes = [];
           const params_solicitudes_map = solicitudes.map((solicitud) => {
             let id_solicitud = `sol-${uuidv4()}`;
+            ids_solicitudes.push(id_solicitud);
             // Correct destructuring to match incoming data keys
             const {
               confirmation_code,
@@ -649,8 +650,8 @@ const getItemsSolicitud = async (id_solicitud) => {
 };
 
 // const filtro_solicitudes_y_reservas = async (req,res) => {
-//   const 
-  
+//   const
+
 // }
 module.exports = {
   // createSolicitudYTicket,
