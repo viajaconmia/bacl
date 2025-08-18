@@ -574,8 +574,9 @@ const insertarReservaOperaciones = async (reserva) => {
               id_hospedaje, id_booking, nombre_hotel, cadena_hotel, 
               codigo_reservacion_hotel, tipo_cuarto, noches, 
               is_rembolsable, monto_penalizacion, conciliado, 
-              credito, comments, id_hotel
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+              credito, comments, id_hotel,nuevo_incluye_desayuno,tipo_desayuno,comentario_desayuno,
+              precio_desayuno 
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?);
           `;
           const params_hospedaje = [
             id_hospedaje,
@@ -591,6 +592,10 @@ const insertarReservaOperaciones = async (reserva) => {
             null, // credito (¿se refiere al método de pago o a una línea de crédito del hotel?)
             reserva.comments,
             hotel.content?.id_hotel,
+            reserva.nuevo_incluye_desayuno || null, // nuevo_incluye_desayuno
+            hotel.tipos_cuarto.tipo_desayuno,
+            hotel.tipos_cuarto.comentario_desayuno || null,
+            hotel.tipos_cuarto.precio_desayuno || null,
           ];
           await connection.execute(query_hospedaje, params_hospedaje);
 
