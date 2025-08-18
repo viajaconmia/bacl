@@ -1,9 +1,9 @@
 const router = require("express").Router();
 const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/pagos");
-router.post("/crearItemdeAjuste",controller.crearItemdeAjuste);
-router.post("/aplicarpagoPorSaldoAFavor",controller.pagoPorSaldoAFavor);
-router.get("/getAllPagosPrepago",controller.getAllPagosPrepago);
+router.post("/crearItemdeAjuste", controller.crearItemdeAjuste);
+router.post("/aplicarpagoPorSaldoAFavor", controller.pagoPorSaldoAFavor);
+router.get("/getAllPagosPrepago", controller.getAllPagosPrepago);
 router.post("/", controller.create);
 router.get("/", controller.read);
 router.get(
@@ -28,6 +28,7 @@ router.get("/pendientesAgente", controller.getPendientesAgente);
 router.get("/allPendientes", controller.getAllPendientes);
 router.get("/getAllPagos", controller.getAllPagos);
 router.get("/consultas", controller.readConsultas);
+router.get("/metodos_pago", controller.getMetodosPago);
 router.post(
   "/credito",
   (req, res, next) => {
@@ -50,7 +51,5 @@ router.post(
   ]),
   controller.pagoPorCredito
 );
-
-
 
 module.exports = router;
