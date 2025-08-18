@@ -877,76 +877,83 @@ ORDER BY s.created_at DESC;`;
 
 const getReservaAllFacturacion = async () => {
   try {
-    const query = `SELECT 
-	s.id_servicio,
-    CASE
-		WHEN so.check_in > CURRENT_DATE THEN 'Reservado'
-		WHEN so.check_out < CURRENT_DATE THEN 'Check-out'
-		WHEN CURRENT_DATE BETWEEN so.check_in AND so.check_out THEN 'In house'
-		ELSE 'Sin estado'
-	END AS estado_reserva,
-	s.created_at,
-	s.is_credito,
-	so.id_solicitud,
-	so.id_viajero,
-    so.hotel,
-    so.check_in,
-    so.check_out,
-    so.room,
-    so.total,
-    so.status,
-    so.nombre_viajero,
-	b.id_booking,
-	b.updated_at,
-  b.costo_total,
-  h.id_hospedaje,
-  h.comments,
-	h.codigo_reservacion_hotel,  
-	p.id_pago,
-    p.metodo_de_pago,
-    p.tipo_de_pago,
-	p_c.id_credito, 
-	p_c.pendiente_por_cobrar,
-	p.monto_a_credito,
-    vw.id_agente as id_usuario_generador,
-	CONCAT_WS(' ', vw.primer_nombre, vw.segundo_nombre, vw.apellido_paterno, vw.apellido_materno) AS nombre_viajero_completo,
-	CONCAT_WS(' ', vwa.primer_nombre, vwa.segundo_nombre, vwa.apellido_paterno, vwa.apellido_materno) AS nombre_agente_completo,
-    vwa.correo,
-    vwa.telefono,
-    vwae.razon_social,
-    vwae.rfc,
-    vwae.tipo_persona,
-    (
+    const query = `SELECT
+  ad.id_agente as id_usuario_generador,
+  rc.id_servicio,
+  rc.status_reserva           AS estado_reserva,
+  rc.created_at_reserva       AS created_at,
+  rc.id_solicitud,
+  rc.id_viajero_reserva       AS id_viajero,
+  rc.hotel_reserva            AS hotel,
+  rc.check_in,
+  rc.check_out,
+  rc.tipo_cuarto              AS room,
+  rc.total,
+  rc.nombre_viajero_reservacion AS nombre_viajero,
+  rc.id_booking,
+  rc.updated_at,
+  rc.costo_total,
+  rc.id_hospedaje,
+  rc.comments,
+  rc.codigo_reservacion_hotel,
+  GROUP_CONCAT(DISTINCT rc.id_pago     SEPARATOR ',') AS id_pago,
+  GROUP_CONCAT(DISTINCT rc.id_credito  SEPARATOR ',') AS id_credito,
+  ad.nombre        AS nombre_agente_completo,
+  ad.correo,
+  ad.telefono,
+  ad.razon_social,
+  ad.rfc,
+  ad.tipo_persona,
+  (
     SELECT JSON_ARRAYAGG(
-      JSON_OBJECT(
-        'id_item', i.id_item,
-        'fecha_uso', i.fecha_uso,
-        'total', i.total,
-        'subtotal', i.subtotal,
-        'impuestos', i.impuestos,
-        'costo_total', i.costo_total,
-        'costo_subtotal', i.costo_subtotal,
-        'costo_impuestos', i.costo_impuestos,
-        'saldo', i.saldo,
-        'is_facturado', i.is_facturado,
-        'id_factura', i.id_factura
-      )
-    )
+             JSON_OBJECT(
+               'id_item', i.id_item,
+               'fecha_uso', i.fecha_uso,
+               'total', i.total,
+               'subtotal', i.subtotal,
+               'impuestos', i.impuestos,
+               'costo_total', i.costo_total,
+               'costo_subtotal', i.costo_subtotal,
+               'costo_impuestos', i.costo_impuestos,
+               'saldo', i.saldo,
+               'is_facturado', i.is_facturado,
+               'id_factura', i.id_factura
+             )
+             -- ORDER BY i.fecha_uso
+           )
     FROM items i
     WHERE i.id_hospedaje = h.id_hospedaje
-    ORDER BY i.fecha_uso
   ) AS items
-FROM solicitudes as so
-LEFT JOIN servicios as s ON so.id_servicio = s.id_servicio
-LEFT JOIN bookings as b ON so.id_solicitud = b.id_solicitud
-LEFT JOIN hospedajes as h ON b.id_booking = h.id_booking
-LEFT JOIN pagos_credito as p_c ON s.id_servicio = p_c.id_servicio
-LEFT JOIN pagos as p ON so.id_servicio = p.id_servicio
-LEFT JOIN viajeros_con_empresas_con_agentes as vw ON vw.id_viajero = so.id_viajero
-LEFT JOIN vw_details_agente as vwa ON vw.id_agente = vwa.id_agente 
-LEFT JOIN vw_agente_primer_empresa as vwae ON vwae.id_agente = vw.id_agente
-Where so.status = "complete"
-ORDER BY s.created_at DESC;`;
+FROM vw_reservas_client rc
+LEFT JOIN agente_details ad ON ad.id_agente = rc.id_agente
+LEFT JOIN hospedajes h
+       ON h.id_hospedaje = rc.id_hospedaje
+WHERE rc.status_reserva = 'Confirmada'
+GROUP BY
+  rc.id_hospedaje,
+  rc.id_servicio,
+  rc.status_reserva,
+  rc.created_at_reserva,
+  rc.id_solicitud,
+  rc.id_viajero_reserva,
+  rc.hotel_reserva,
+  rc.check_in,
+  rc.check_out,
+  rc.tipo_cuarto,
+  rc.total,
+  rc.nombre_viajero_reservacion,
+  rc.id_booking,
+  rc.updated_at,
+  rc.costo_total,
+  rc.comments,
+  rc.codigo_reservacion_hotel,
+  ad.nombre,
+  ad.correo,
+  ad.telefono,
+  ad.razon_social,
+  ad.rfc,
+  ad.tipo_persona
+ORDER BY rc.created_at_reserva DESC;`;
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);

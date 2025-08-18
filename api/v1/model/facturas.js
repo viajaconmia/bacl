@@ -106,13 +106,18 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
     throw error;
   }
 };
+
 const createFacturaCombinada = async (req, { cfdi, info_user }) => {
   req.context.logStep(
     "LLgando al model de crear factura combinada con los datos:",
     JSON.stringify({ cfdi, info_user })
   );
   try {
-    const { id_solicitud, id_user, datos_empresa } = info_user;
+    const { id_solicitud, id_user, id_items, datos_empresa } = info_user;
+    const solicitudesArray = Array.isArray(id_solicitud)
+      ? id_solicitud
+      : [id_solicitud];
+    const itemsArray = Array.isArray(id_items) ? id_items : [id_items];
 
     // 0. Calcular totales
     const { total, subtotal, impuestos } = cfdi.Items.reduce(
@@ -177,27 +182,27 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         ]);
 
         // 5. Insertar registros en facturas_pagos
-        // const resultados_pagos = await conn.execute(
-        //   `
-        // INSERT INTO facturas_pagos (
-        //   id_factura, 
-        //   monto_pago, 
-        //   id_pago
-        //   )
-        //   SELECT 
-        //   ? AS id_factura,
-        //   ? AS monto_pago,
-        //   p.id_pago
-        //   FROM 
-        //   solicitudes s
-        //   JOIN servicios se ON s.id_servicio = se.id_servicio
-        //   JOIN pagos p ON se.id_servicio = p.id_servicio
-        //   WHERE 
-        //   s.id_solicitud IN (${solicitudesArray.map(() => "?").join(",")})
-        //   AND p.id_pago IS NOT NULL
-        //   `,
-        //   [id_factura, total, ...solicitudesArray]
-        // );
+        const resultados_pagos = await conn.execute(
+          `
+        INSERT INTO facturas_pagos (
+          id_factura, 
+          monto_pago, 
+          id_pago
+          )
+          SELECT 
+          ? AS id_factura,
+          ? AS monto_pago,
+          p.id_pago
+          FROM 
+          solicitudes s
+          JOIN servicios se ON s.id_servicio = se.id_servicio
+          JOIN pagos p ON se.id_servicio = p.id_servicio
+          WHERE 
+          s.id_solicitud IN (${solicitudesArray.map(() => "?").join(",")})
+          AND p.id_pago IS NOT NULL
+          `,
+          [id_factura, total, ...solicitudesArray]
+        );
         console.log("resultado pagos", resultados_pagos);
 
         return {
@@ -754,3 +759,5 @@ module.exports = {
   isFacturada,
   crearFacturaEmi
 };
+
+
