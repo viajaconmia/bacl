@@ -710,6 +710,14 @@ const insertarReservaOperaciones = async (reserva) => {
             id_hospedaje,
             1,
           ]);
+          // Insertamos a los acompañantes del viajero
+          reserva.acompanantes.forEach(async acompanante => {
+            await connection.execute(query_insert_relacion,[
+              acompanante.id_viajero,
+              id_hospedaje,
+              0
+            ])
+          });
 
           /* FALTA AGREGAR EL CREDITO CON PAGO Y LOS ITEMS A SUS CREDITOS */
           const queryCredito = `
