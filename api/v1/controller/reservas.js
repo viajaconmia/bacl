@@ -142,6 +142,9 @@ const updateReserva2 = async (req, res) => {
 
 const createFromOperaciones = async (req, res) => {
   try {
+    console.log("Revisando el body ", req.body);
+    let {hotel} = req.body
+
     let response = await model.insertarReservaOperaciones(req.body);
     res
       .status(201)
