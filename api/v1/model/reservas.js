@@ -569,6 +569,19 @@ const insertarReservaOperaciones = async (reserva) => {
           // 1. Insertar Hospedaje
           const id_hospedaje = `hos-${uuidv4()}`;
           // Asegúrate de que estas columnas coincidan con tu tabla 'hospedajes'
+          //Antes ubicamos el tipo de cuarto para poder ir por los detalles del desayuno
+          if(reserva.habitacion ==='SENCILLO'){
+            var tipo_desayuno = reserva.hotel.content.tipos_cuartos[0].tipo_desayuno;
+            var comentario_desayuno = reserva.hotel.content.tipos_cuartos[0].comentario_desayuno;
+            var precio_desayuno = reserva.hotel.content.tipos_cuartos[0].precio_desayuno;
+            var incluye_desayuno = reserva.hotel.content.tipos_cuartos[0].incluye_desayuno;
+
+          }else if(reserva.habitacion=== 'DOBLE'){
+             tipo_desayuno = reserva.hotel.content.tipos_cuartos[1].tipo_desayuno;
+             comentario_desayuno = reserva.hotel.content.tipos_cuartos[1].comentario_desayuno;
+             precio_desayuno = reserva.hotel.content.tipos_cuartos[1].precio_desayuno;
+              incluye_desayuno = reserva.hotel.content.tipos_cuartos[1].incluye_desayuno;
+          }
           const query_hospedaje = `
             INSERT INTO hospedajes (
               id_hospedaje, id_booking, nombre_hotel, cadena_hotel, 
@@ -576,7 +589,7 @@ const insertarReservaOperaciones = async (reserva) => {
               is_rembolsable, monto_penalizacion, conciliado, 
               credito, comments, id_hotel,nuevo_incluye_desayuno,tipo_desayuno,comentario_desayuno,
               precio_desayuno 
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?);
           `;
           const params_hospedaje = [
             id_hospedaje,
@@ -593,10 +606,12 @@ const insertarReservaOperaciones = async (reserva) => {
             reserva.comments,
             hotel.content?.id_hotel,
             reserva.nuevo_incluye_desayuno || null, // nuevo_incluye_desayuno
-            hotel.tipos_cuarto.tipo_desayuno,
-            hotel.tipos_cuarto.comentario_desayuno || null,
-            hotel.tipos_cuarto.precio_desayuno || null,
+            tipo_desayuno || null,
+            comentario_desayuno || null,
+            precio_desayuno || null
           ];
+
+          console.log("Revisando la lista de parametros que enviamos a la query 😎😎😎😎",params_hospedaje);
           await connection.execute(query_hospedaje, params_hospedaje);
 
           // Preparar items con ID (común para ambos casos: crédito o contado)
@@ -745,6 +760,7 @@ INSERT INTO pagos_credito (
           return {
             message: "Reserva procesada exitosamente",
             id_booking: id_booking,
+            id_hospedaje: id_hospedaje
             // puedes añadir más datos al objeto de respuesta si es necesario
           };
         } catch (errorInTransaction) {

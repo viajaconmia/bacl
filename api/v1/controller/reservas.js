@@ -142,7 +142,11 @@ const updateReserva2 = async (req, res) => {
 
 const createFromOperaciones = async (req, res) => {
   try {
-    let response = await model.insertarReservaOperaciones(req.body);
+    console.log("Revisando el body ", req.body);
+    let {hotel} = req.body
+    console.log("Hotel desde el body", hotel);
+    console.log("Revisando el tipos cuartos 😍😘", hotel.content.tipos_cuartos);
+      let response = await model.insertarReservaOperaciones(req.body);
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });

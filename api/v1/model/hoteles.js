@@ -19,7 +19,7 @@ const getHotelesWithCuartos = async () => {
     tc.nombre AS nombre_tipo_cuarto,
     t.tipo_desayuno,
     t.comentario_desayuno,
-    t.precio_desayuno
+    t.precio_desayuno,
     t.id_tarifa,
     t.costo,
     t.precio,
