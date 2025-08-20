@@ -45,6 +45,7 @@ const getStripeInfo = async (req, res) => {
       pais: charge.payment_method_details.card.country,
       authorization_code: charge.payment_method_details.card.authorization_code,
     };
+  console.log("chargeId recibido:", stripeInfo);
 
     if (!charge) {
       return res.status(404).json({ message: "Cargo no encontrado" });

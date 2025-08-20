@@ -272,7 +272,7 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
   console.log("id_agente", id_agente);
   try {
     const reservas = await executeSP(
-      "mia2.sp_reservas_con_items_by_id_agente",
+      "mia3.sp_reservas_con_items_by_id_agente",
       [id_agente]
     );
     if (!reservas) {
