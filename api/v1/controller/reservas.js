@@ -142,6 +142,9 @@ const updateReserva2 = async (req, res) => {
 
 const createFromOperaciones = async (req, res) => {
   try {
+    console.log("Revisando el body ", req.body);
+    let {hotel} = req.body
+
     let response = await model.insertarReservaOperaciones(req.body);
     res
       .status(201)
@@ -272,7 +275,7 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
   console.log("id_agente", id_agente);
   try {
     const reservas = await executeSP(
-      "mia2.sp_reservas_con_items_by_id_agente",
+      "mia3.sp_reservas_con_items_by_id_agente",
       [id_agente]
     );
     if (!reservas) {

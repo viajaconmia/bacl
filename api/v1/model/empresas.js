@@ -24,21 +24,26 @@ const createEmpresa = async (empresa) => {
       empresa.codigo_postal || null,
     ];
 
+    // La principal corrección está aquí:
+    // El segundo 'await' se hace dentro del callback de 'executeTransaction'.
     const response = await executeTransaction(
       query,
       params,
       async (result, connection) => {
         console.log("Se crea empresa");
 
-        const query2 =
-          "INSERT INTO empresas_agentes (id_empresa, id_agente) VALUES (?, ?);";
+        const query2 = "INSERT INTO empresas_agentes (id_empresa, id_agente) VALUES (?, ?);";
         const params2 = [id_empresa, empresa.agente_id];
 
         try {
-          const result = await connection.execute(query2, params2);
+          // Usamos 'await' en la conexión para asegurarnos de que se ejecute en la misma transacción.
+          await connection.execute(query2, params2);
           console.log("Se crea agente empresa");
+          // Devolvemos el resultado del primer 'execute' o simplemente confirmamos el éxito.
           return result;
         } catch (error) {
+          // Si hay un error, lo relanzamos para que la transacción se revierta.
+          console.error("Error en la segunda inserción:", error);
           throw error;
         }
       }
@@ -49,6 +54,8 @@ const createEmpresa = async (empresa) => {
       id_empresa: id_empresa,
     };
   } catch (error) {
+    // Si la transacción falla en cualquier punto, el error se captura aquí.
+    console.error("Error en la transacción principal:", error);
     throw error;
   }
 };
