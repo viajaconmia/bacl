@@ -141,22 +141,44 @@ const updateReserva2 = async (req, res) => {
 };
 
 const createFromOperaciones = async (req, res) => {
-  try {
-    console.log("Revisando el body ", req.body);
-    let {hotel} = req.body
+try {
+  console.log("Revisando el body  😭😭😭😭", req.body);
+  let { hotel } = req.body;
+  const { check_in, check_out } = req.body;
+  console.log(check_in,check_out)
+  const parseMySQLDate = (dateStr) => {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(year, month - 1, day); 
+  };
 
-    let response = await model.insertarReservaOperaciones(req.body);
-    res
-      .status(201)
-      .json({ message: "Solicitud created successfully", data: response });
-  } catch (error) {
-    console.error(error);
-    res
-      .status(500)
-      .json({ error: "Internal Server Error", details: error.message });
+  const checkInDate = parseMySQLDate(check_in);
+  const checkOutDate = parseMySQLDate(check_out);
+
+  console.log("a ver esto,", checkInDate, checkOutDate);
+  console.log("REVISANDO FECHAS", checkOutDate.getTime() - checkInDate.getTime());
+
+  if (checkOutDate.getTime() < checkInDate.getTime()) {
+    // return res.status(400).json({ 
+    //   error: "La fecha de check-out no puede ser anterior a la fecha de check-in" 
+    // });
+    throw new CustomError(
+      "La fecha de check-out no puede ser anterior a la fecha de check-in",
+      400,
+      "INVALID_CHECKOUT_DATE"
+    );
   }
-};
 
+   let response = await model.insertarReservaOperaciones(req.body);
+  res
+    .status(201)
+    .json({ message: "Solicitud created successfully", data: response });
+} catch (error) {
+  console.error(error);
+  res
+    .status(500)
+    .json({ error: "Internal Server Error", message: error.message, data:null });
+}
+}
 const read = async (req, res) => {
   try {
     let response = await model.getReserva();
