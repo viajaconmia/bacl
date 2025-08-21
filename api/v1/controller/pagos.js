@@ -252,9 +252,14 @@ const getMetodosPago = async (req, res) => {
       [id]
     );
 
+    console.log(saldos);
+
     res.status(200).json({
       message: "Saldos obtenidos con exito",
-      data: { credito: agente[0].saldo, wallet: saldos[0].saldo },
+      data: {
+        credito: agente[0].saldo,
+        wallet: saldos.length == 0 ? 0 : saldos[0].saldo,
+      },
     });
   } catch (error) {
     console.log(error);
