@@ -1,4 +1,5 @@
 const { executeQuery } = require("../../../config/db");
+const { calcularNoches } = require("../../../lib/utils/calculates");
 const { CustomError } = require("../../../middleware/errorHandler");
 
 /****************+ GET ********************* */
@@ -17,7 +18,8 @@ const getCartItemsById = async (req, res) => {
       `select 
   c.*, 
   s.id_servicio, 
-  s.id_viajero, 
+  s.id_viajero,
+  CONCAT_WS(' ', v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno) AS viajero_principal,
   s.hotel, 
   s.check_in, 
   s.check_out, 
@@ -26,33 +28,24 @@ const getCartItemsById = async (req, res) => {
   s.id_acompanantes 
   from cart c 
 left join solicitudes s on s.id_solicitud = c.id_solicitud
+left join viajeros v on s.id_viajero = v.id_viajero
 where (c.id_agente = ? OR c.usuario_generador = ?) AND c.active = 1;`,
       [id_agente || "", id_viajero || ""]
     );
 
-    const carItems = cartItemsSolicitudes.map((item) => ({
-      id: item.id,
-      total: Number(item.total),
-      type: item.type,
-      selected: Boolean(item.selected),
-      details: {
-        hotel: item.hotel,
-        id_hotel: item.id_hotel,
-        id_agente: item.id_agente,
-        check_in: item.check_in,
-        check_out: item.check_out,
-        room: item.room,
-        viajero_principal: item.id_viajero,
-        id_acompanantes: item.id_acompanantes,
-        noches: 0,
-        usuario_creador: item.usuario_generador,
-        active: item.active,
-        id_servicio: item.id_servicio,
-        id_solicitud: item.id_solicitud,
-        created_at: item.created_at,
-        updated_at: item.updated_at,
-      },
-    }));
+    const carItems = cartItemsSolicitudes.map(
+      ({ id, total, type, selected, ...item }) => ({
+        id,
+        total: Number(total),
+        type,
+        selected: Boolean(selected),
+        details: {
+          ...item,
+          noches: calcularNoches(item.check_in, item.check_out),
+          usuario_creador: item.usuario_generador,
+        },
+      })
+    );
 
     res.status(200).json({
       message: "Obtenidos con exito",
@@ -130,7 +123,14 @@ const createCartItem = async (req, res) => {
     id_solicitud,
     usuario_generador
 ) VALUES ( ?, ?, ?, ?, ?, ?); `,
-      [total, id_agente, type, selected, id_solicitud, usuario_generador]
+      [
+        total,
+        id_agente,
+        type,
+        /*selected*/ true,
+        id_solicitud,
+        usuario_generador,
+      ]
     );
 
     res.status(201).json({

@@ -229,6 +229,45 @@ const readConsultas = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error", details: error });
   }
 };
+const getMetodosPago = async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    if (!id)
+      throw new CustomError("Falta el id de usuario", 400, "MISSING_ID", null);
+    const agente = await executeQuery(
+      `SELECT * FROM agentes WHERE id_agente = ?`,
+      [id]
+    );
+    if (agente.length == 0)
+      throw new CustomError("No se encontro el agente", 404, "NOT_FOUND", null);
+    const saldos = await executeQuery(
+      `select id_agente, SUM(saldo) as saldo 
+      from saldos_a_favor
+      where
+        id_agente = ?
+        and metodo_pago not in("tarjeta_de_credito","tarjeta_de_debito","")
+        and activo = 1
+      group by id_agente;`,
+      [id]
+    );
+
+    res.status(200).json({
+      message: "Saldos obtenidos con exito",
+      data: { credito: agente[0].saldo, wallet: saldos[0].saldo },
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.response ||
+        error.message ||
+        "Error desconocido en verificar registro del usuario",
+      error,
+      data: null,
+    });
+  }
+};
 
 const getPendientesAgente = async (req, res) => {
   try {
@@ -640,24 +679,26 @@ const pagoPorSaldoAFavor = async (req, res) => {
 
 const getAllPagosPrepago = async (req, res) => {
   try {
-   const pagos = await executeQuery(
-      `SELECT * FROM vw_pagos_prepago_facturables;`);
+    const pagos = await executeQuery(
+      `SELECT * FROM vw_pagos_prepago_facturables;`
+    );
     const balance = await executeQuery(
-      `SELECT * FROM mia2.vw_balance_pagos_facturas;`
+      `SELECT * FROM vw_balance_pagos_facturas;`
     );
 
-    res.status(200).json({message: "Pagos de prepago obtenidos correctamente",
-    data: pagos, 
-    balance: balance});
-  
+    res.status(200).json({
+      message: "Pagos de prepago obtenidos correctamente",
+      data: pagos,
+      balance:balance,
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: "Error al obtener los pagos de prepago",
       error: error.message || "Error desconocido",
-  })
-}}
-
+    });
+  }
+};
 
 module.exports = {
   create,
@@ -677,4 +718,5 @@ module.exports = {
   pagoPorSaldoAFavor,
   crearItemdeAjuste,
   getAllPagosPrepago,
+  getMetodosPago,
 };
