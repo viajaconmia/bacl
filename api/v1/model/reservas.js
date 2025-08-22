@@ -719,46 +719,46 @@ const insertarReservaOperaciones = async (reserva) => {
             ])
           });
 
-          /* FALTA AGREGAR EL CREDITO CON PAGO Y LOS ITEMS A SUS CREDITOS */
-          const queryCredito = `
-INSERT INTO pagos_credito (
-  id_credito,
-  id_servicio,
-  monto_a_credito,
-  responsable_pago_empresa,
-  responsable_pago_agente,
-  fecha_creacion,
-  pago_por_credito,
-  pendiente_por_cobrar,
-  total,
-  subtotal,
-  impuestos,
-  concepto,
-  referencia,
-  currency,
-  tipo_de_pago
-) VALUES (
-  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-);`;
-          const paramsCredito = [
-            `cre-${uuidv4()}`,
-            id_servicio,
-            venta.total,
-            null,
-            reserva.solicitud.id_agente,
-            new Date(),
-            venta.total,
-            venta.total,
-            venta.total,
-            venta.subtotal,
-            venta.impuestos,
-            `Reserva por ${reserva.noches} a ${hotel.name}`,
-            null,
-            "mxn",
-            "credito",
-          ];
+          /* FALTA AGREGAR EL CREDITO CON PAGO Y LOS ITEMS A SUS CREDITOS */ /*vamos a comentar la query de credito por el momento*/
+//           const queryCredito = `
+// INSERT INTO pagos_credito (
+//   id_credito,
+//   id_servicio,
+//   monto_a_credito,
+//   responsable_pago_empresa,
+//   responsable_pago_agente,
+//   fecha_creacion,
+//   pago_por_credito,
+//   pendiente_por_cobrar,
+//   total,
+//   subtotal,
+//   impuestos,
+//   concepto,
+//   referencia,
+//   currency,
+//   tipo_de_pago
+// ) VALUES (
+//   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+// );`;
+//           const paramsCredito = [
+//             `cre-${uuidv4()}`,
+//             id_servicio,
+//             venta.total,
+//             null,
+//             reserva.solicitud.id_agente,
+//             new Date(),
+//             venta.total,
+//             venta.total,
+//             venta.total,
+//             venta.subtotal,
+//             venta.impuestos,
+//             `Reserva por ${reserva.noches} a ${hotel.name}`,
+//             null,
+//             "mxn",
+//             "credito",
+//           ];
 
-          await connection.execute(queryCredito, paramsCredito);
+//           await connection.execute(queryCredito, paramsCredito);
 
           await connection.execute(
             `UPDATE solicitudes SET status = "complete" WHERE id_solicitud = ?;`,
@@ -767,6 +767,7 @@ INSERT INTO pagos_credito (
 
           return {
             message: "Reserva procesada exitosamente",
+            id_servicio : id_servicio,
             id_booking: id_booking,
             id_hospedaje: id_hospedaje,
             total: venta.total,
