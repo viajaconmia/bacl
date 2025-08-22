@@ -768,7 +768,9 @@ INSERT INTO pagos_credito (
           return {
             message: "Reserva procesada exitosamente",
             id_booking: id_booking,
-            id_hospedaje: id_hospedaje
+            id_hospedaje: id_hospedaje,
+            total: venta.total,
+            items: itemsConIdAnadido
             // puedes añadir más datos al objeto de respuesta si es necesario
           };
         } catch (errorInTransaction) {
