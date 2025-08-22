@@ -32,8 +32,9 @@ async function executeQuery(query, params = []) {
     const [results] = await pool.execute(query, params);
     return results;
   } catch (error) {
+    console.log(error);
     throw new CustomError(
-      "Ha ocurrido un error al hacer la petición",
+      error.sqlMessage || "Ha ocurrido un error al hacer la petición",
       500,
       "DATABASE_ERROR",
       error
@@ -88,16 +89,16 @@ async function runTransaction(callback) {
     await connection.commit();
     return resultsCallback;
   } catch (error) {
-    console.log(error);
+    console.log("ERRRRRRRRRRRRROR", error);
     await connection.rollback();
     if (error instanceof CustomError) {
       throw error;
     }
     throw new CustomError(
-      "Error corriendo la transaction",
-      500,
-      "ERROR_RUN TRANSACTION",
-      error
+      error.message || "Error corriendo la transaction",
+      error.statusCode || 500,
+      error.errorCode || "ERROR_RUN TRANSACTION",
+      error.details || error
     );
   } finally {
     connection.release();
