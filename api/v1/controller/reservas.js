@@ -152,10 +152,6 @@ try {
     return new Date(year, month - 1, day); 
   };
 
-  const checkInDate = parseMySQLDate(check_in);
-  const checkOutDate = parseMySQLDate(check_out);
-
-
     const checkInDate = parseMySQLDate(check_in);
     const checkOutDate = parseMySQLDate(check_out);
 
