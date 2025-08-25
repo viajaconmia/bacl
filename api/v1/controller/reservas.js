@@ -143,7 +143,7 @@ const updateReserva2 = async (req, res) => {
 const createFromOperaciones = async (req, res) => {
 try {
   console.log("Revisando el body  😭😭😭😭", req.body);
-  let { hotel } = req.body;
+  const {bandera } = req.body;
   const { check_in, check_out } = req.body;
   console.log(check_in,check_out)
   const parseMySQLDate = (dateStr) => {
@@ -168,7 +168,7 @@ try {
     );
   }
 
-   let response = await model.insertarReservaOperaciones(req.body);
+   let response = await model.insertarReservaOperaciones(req.body,bandera);
   res
     .status(201)
     .json({ message: "Solicitud created successfully", data: response });
