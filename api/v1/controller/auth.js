@@ -70,7 +70,6 @@ const newCreateAgente = async (req, res) => {
     try {
       stripe_client = await stripeTest.customers.create({ email: body.correo });
     } catch (error) {
-      console.log("\n\n\n\n\n", error);
       throw new CustomError(
         "Ocurrio un error con stripe",
         500,

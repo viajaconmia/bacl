@@ -96,9 +96,9 @@ const updateReserva2 = async (req, res) => {
       viajero?.current?.id_viajero ?? null, // 2) p_id_viajero
       check_in?.current ?? null, // 3) p_check_in
       check_out?.current ?? null, // 4) p_check_out
-      venta?.current?.total ?? null, // 5) p_total
-      venta?.current?.subtotal ?? null, // 6) p_subtotal
-      venta?.current?.impuestos ?? null, // 7) p_impuestos
+      // venta?.current?.total ?? null, // 5) p_total
+      // venta?.current?.subtotal ?? null, // 6) p_subtotal
+      // venta?.current?.impuestos ?? null, // 7) p_impuestos
       estado_reserva?.current ?? null, // 8) p_estado_reserva
       proveedor?.current?.total ?? null, // 9) p_costo_total
       proveedor?.current?.subtotal ?? null, // 10) p_costo_subtotal
@@ -141,6 +141,7 @@ const updateReserva2 = async (req, res) => {
 };
 
 const createFromOperaciones = async (req, res) => {
+
 try {
   console.log("Revisando el body  😭😭😭😭", req.body);
   const {bandera } = req.body;
@@ -154,31 +155,44 @@ try {
   const checkInDate = parseMySQLDate(check_in);
   const checkOutDate = parseMySQLDate(check_out);
 
-  console.log("a ver esto,", checkInDate, checkOutDate);
-  console.log("REVISANDO FECHAS", checkOutDate.getTime() - checkInDate.getTime());
 
-  if (checkOutDate.getTime() < checkInDate.getTime()) {
-    // return res.status(400).json({ 
-    //   error: "La fecha de check-out no puede ser anterior a la fecha de check-in" 
-    // });
-    throw new CustomError(
-      "La fecha de check-out no puede ser anterior a la fecha de check-in",
-      400,
-      "INVALID_CHECKOUT_DATE"
+    const checkInDate = parseMySQLDate(check_in);
+    const checkOutDate = parseMySQLDate(check_out);
+
+    console.log("a ver esto,", checkInDate, checkOutDate);
+    console.log(
+      "REVISANDO FECHAS",
+      checkOutDate.getTime() - checkInDate.getTime()
     );
-  }
 
-   let response = await model.insertarReservaOperaciones(req.body,bandera);
-  res
-    .status(201)
-    .json({ message: "Solicitud created successfully", data: response });
-} catch (error) {
-  console.error(error);
-  res
-    .status(500)
-    .json({ error: "Internal Server Error", message: error.message, data:null });
-}
-}
+
+    if (checkOutDate.getTime() < checkInDate.getTime()) {
+      // return res.status(400).json({
+      //   error: "La fecha de check-out no puede ser anterior a la fecha de check-in"
+      // });
+      throw new CustomError(
+        "La fecha de check-out no puede ser anterior a la fecha de check-in",
+        400,
+        "INVALID_CHECKOUT_DATE"
+      );
+    }
+
+    let response = await model.insertarReservaOperaciones(req.body);
+    res
+      .status(201)
+      .json({ message: "Solicitud created successfully", data: response });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({
+        error: "Internal Server Error",
+        message: error.message,
+        data: null,
+      });
+  }
+};
+
 const read = async (req, res) => {
   try {
     let response = await model.getReserva();
@@ -326,12 +340,10 @@ const getReservasWithItemsSinPagarByAgente = async (req, res) => {
         .status(404)
         .json({ message: "No se encontraron reservas con items sin pagar" });
     }
-    return res
-      .status(200)
-      .json({
-        message: "Reservas con items sin pagar encontradas",
-        data: result,
-      });
+    return res.status(200).json({
+      message: "Reservas con items sin pagar encontradas",
+      data: result,
+    });
   } catch (error) {
     res.status(500).json({ error: "Error en el servidor", details: error });
   }
