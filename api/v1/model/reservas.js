@@ -467,7 +467,10 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
   }
 };
 
-const insertarReservaOperaciones = async (reserva,bandera) => {
+const insertarReservaOperaciones = async (reserva, bandera) => {
+  
+  const { ejemplo_saldos } = reserva
+  console.log("Ejemplo de saldos recibidos:", reserva);
    const agentes = await executeQuery(
     `SELECT * FROM agentes WHERE id_agente = ?`,
     [reserva.solicitud.id_agente]
@@ -645,7 +648,7 @@ const insertarReservaOperaciones = async (reserva,bandera) => {
               it.costo.subtotal.toFixed(2),
               it.costo.impuestos.toFixed(2),
               (it.costo.total * 0.16).toFixed(2), // si aplica
-              it.venta.total.toFixed(2),
+              bandera=== 0 ? it.venta.total.toFixed(2) : 0,
             ]);
             await connection.execute(query_items_insert, params_items_insert);
           }
@@ -783,7 +786,7 @@ const insertarReservaOperaciones = async (reserva,bandera) => {
             // Validación de saldos
             for (const saldo of ejemplo_saldos) {
               const [rows] = await connection.execute(
-                `SELECT saldo FROM saldos_a_favor WHERE id_saldo = ?`,
+                `SELECT saldo FROM saldos_a_favor WHERE id_saldos = ?`,
                 [saldo.id_saldo]
               );
               const saldo_real = rows && rows[0] ? rows[0].saldo : null;
@@ -807,7 +810,7 @@ const insertarReservaOperaciones = async (reserva,bandera) => {
               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
             `;
             const query_update_saldo = `
-              UPDATE saldos_a_favor SET saldo = saldo - ? WHERE id_saldo = ?;
+              UPDATE saldos_a_favor SET saldo = saldo - ? WHERE id_saldos = ?;
             `;
 
             for (const saldo of ejemplo_saldos) {
@@ -873,7 +876,7 @@ if (relaciones.length > 0) {
 // --- update final: reflejar saldo_actual en saldos_a_favor ---
 for (const pago of pagosOrdenados) {
   await connection.execute(
-    `UPDATE saldos_a_favor SET saldo = ? WHERE id_saldo = ?`,
+    `UPDATE saldos_a_favor SET saldo = ? WHERE id_saldos = ?`,
     [pago.saldo_actual, pago.id_saldo]
   );
 }
@@ -906,6 +909,19 @@ for (const pago of pagosOrdenados) {
     throw error;
   }
 }
+
+const getReserva = async () => {
+  try {
+    const query = `select * from bookings left join hospedajes on bookings.id_booking = hospedajes.id_booking;`;
+
+    // Ejecutar el procedimiento almacenado
+    const response = await executeQuery(query);
+
+    return response; // Retorna el resultado de la ejecución
+  } catch (error) {
+    throw error; // Lanza el error para que puedas manejarlo donde llames la función
+  }
+};
 
 const getReservaById = async (id) => {
   try {
