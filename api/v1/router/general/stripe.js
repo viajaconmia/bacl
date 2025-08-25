@@ -5,6 +5,7 @@ const stripe = require("stripe")(API_STRIPE);
 const stripeTest = require("stripe")(API_STRIPE_TEST);
 const router = require("express").Router();
 const { executeTransaction, executeQuery } = require("../../../../config/db");
+const { CustomError } = require("../../../../middleware/errorHandler");
 
 router.post("/create-checkout-session", async (req, res) => {
   try {
@@ -20,32 +21,45 @@ router.post("/create-checkout-session", async (req, res) => {
 router.post("/save-payment-method", async (req, res) => {
   try {
     const { id_agente, paymentMethodId } = req.body;
-    // Consultar el `customer_id` de la base de datos
-    const [rows] = await executeQuery(
+
+    if (!id_agente || !paymentMethodId)
+      throw new CustomError(
+        "Falta un parametro",
+        400,
+        "MISSING",
+        Object.entries(req.body).filter(([, value]) => !!value)
+      );
+
+    const rows = await executeQuery(
       "SELECT id_cliente_stripe FROM clientes_stripe WHERE id_agente = ?;",
       [id_agente]
-    ).catch((err) => {
-      console.error("Database query error:", err);
-      throw new Error("Database connection error");
-    });
+    );
 
-    if (rows.length === 0) {
-      return res
-        .status(404)
-        .json({ error: "Cliente de Stripe no encontrado para este agente" });
-    }
+    if (rows.length === 0)
+      throw new CustomError(
+        "No se encontro el cliente de stripe para este agente",
+        404,
+        "NOT_FOUND",
+        null
+      );
 
-    const customerId = rows.id_cliente_stripe;
+    const customerId = rows[0].id_cliente_stripe;
 
     //Guardar metodo de pago en el cliente
     await stripeTest.paymentMethods.attach(paymentMethodId, {
       customer: customerId,
     });
 
-    res.json({ success: true, message: "Se guardo el metodo de pago" });
+    res
+      .status(204)
+      .json({ message: "Se guardo el metodo de pago", data: null });
   } catch (error) {
-    console.log(error);
-    res.json(error);
+    console.log("Este es el error", error.message);
+    return res.status(error.statusCode || 500).json({
+      error: error.details,
+      message: error.message,
+      data: null,
+    });
   }
 });
 
@@ -129,51 +143,51 @@ router.post("/make-payment", async (req, res) => {
   }
 });
 
-router.post("/create-user-stripe", async (req, res) => {
-  try {
-    const { email, id_agente } = req.body;
-    const customer = await stripeTest.customers.create({ email });
-    const { error } = await executeQuery(
-      "INSERT INTO clientes_stripe (id_agente, id_cliente_stripe) VALUES (?, ?)",
-      [id_agente, customer.id]
-    );
-    if (error) {
-      throw new Error("Error al almacenar el Log del payment");
-    }
-    console.log("Agente creado con Customer ID:", customer.id);
-    res.json({
-      success: true,
-      message: "Customer id almacenado correctamente",
-    });
-  } catch (error) {
-    console.log(error);
-    res.json(error);
-  }
-});
+// router.post("/create-user-stripe", async (req, res) => {
+//   try {
+//     const { email, id_agente } = req.body;
+//     const customer = await stripeTest.customers.create({ email });
+//     const { error } = await executeQuery(
+//       "INSERT INTO clientes_stripe (id_agente, id_cliente_stripe) VALUES (?, ?)",
+//       [id_agente, customer.id]
+//     );
+//     if (error) {
+//       throw new Error("Error al almacenar el Log del payment");
+//     }
+//     console.log("Agente creado con Customer ID:", customer.id);
+//     res.json({
+//       success: true,
+//       message: "Customer id almacenado correctamente",
+//     });
+//   } catch (error) {
+//     console.log(error);
+//     res.json(error);
+//   }
+// });
 
 router.get("/get-payment-methods", async (req, res) => {
   try {
     const { id_agente } = req.query;
-    if (!id_agente) {
-      return res.status(400).json({ error: "Falta el parámetro id_agente" });
-    }
+    if (!id_agente)
+      throw new CustomError("Falta el id del agente", 404, "MISSING_PARAMS", {
+        id_agente,
+      });
 
     // Consultar el `customer_id` de la base de datos
-    const [rows] = await executeQuery(
+    const rows = await executeQuery(
       "SELECT id_cliente_stripe FROM clientes_stripe WHERE id_agente = ?;",
       [id_agente]
-    ).catch((err) => {
-      console.error("Database query error:", err);
-      throw new Error("Database connection error");
-    });
+    );
 
-    if (rows.length === 0) {
-      return res
-        .status(404)
-        .json({ error: "Cliente de Stripe no encontrado para este agente" });
-    }
-    console.log(rows);
-    const customerId = rows.id_cliente_stripe;
+    if (rows.length === 0)
+      throw new CustomError(
+        "No se encontro el cliente de stripe para este agente",
+        404,
+        "NOT_FOUND",
+        null
+      );
+
+    const customerId = rows[0].id_cliente_stripe;
 
     //Consultar métodos de pago en Stripe
     const paymentMethods = await stripeTest.paymentMethods.list({
@@ -181,10 +195,17 @@ router.get("/get-payment-methods", async (req, res) => {
       type: "card", // Puedes cambiarlo según el tipo de método que necesites
     });
 
-    res.json(paymentMethods.data);
+    res.status(200).json({
+      message: "Tarjetas obtenidas con exito",
+      data: paymentMethods.data,
+    });
   } catch (error) {
-    console.error("Error obteniendo métodos de pago:", error);
-    res.status(500).json({ message: "Error en el servidor", error });
+    console.log("Este es el error", error.message);
+    return res.status(error.statusCode || error.status || 500).json({
+      error: error.details || error,
+      message: error.message || "",
+      data: null,
+    });
   }
 });
 

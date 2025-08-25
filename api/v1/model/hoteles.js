@@ -75,10 +75,6 @@ const getHotelesWithCuartos = async () => {
         hotel.tipos_cuartos.push(tipoCuarto);
       }
     });
-
-    console.log(agrupado);
-
-    console.log(agrupado);
     return agrupado;
   } catch (error) {
     throw error;
