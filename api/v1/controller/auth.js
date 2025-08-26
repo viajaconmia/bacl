@@ -27,9 +27,9 @@ const verificarRegistroUsuario = async (req, res) => {
 
     const { data, error } = await supabaseAdmin
       .from("user_info")
-      .select("id_viajero")
-      .eq("id_viajero", usuario.id_viajero)
-      .maybeSingle();
+      .select("id_viajero");
+
+    console.log("HEYYYYYY", data, error);
 
     if (error) {
       throw new CustomError(
@@ -39,12 +39,14 @@ const verificarRegistroUsuario = async (req, res) => {
         error
       );
     }
+
     if (!data) {
       return res.status(200).json({
         message: "usuario existe pero no en supabase",
         data: { registrar: true, usuario },
       });
     }
+
     return res
       .status(200)
       .json({ message: "usuario encontrado", data: { registrar: false } });
