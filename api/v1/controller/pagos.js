@@ -6,6 +6,7 @@ const {
   executeSP,
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+const { calcularPrecios } = require("../../../lib/utils/calculates");
 const create = async (req, res) => {
   try {
     const response = await model.createPagos(req.body);
@@ -347,6 +348,137 @@ const pagoPorCredito = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Error en el servidor", details: error });
+  }
+};
+
+const pagarCarritoConCredito = async (req, res) => {
+  try {
+    const { id_agente, monto, id_viajero, itemsCart } = req.body;
+
+    if (!id_agente || !monto || !id_viajero) {
+      throw new CustomError("Faltan parametros", 400, "MISSING_PARAMS", {
+        id_agente,
+        monto,
+        id_viajero,
+      });
+    }
+
+    //Obtenemos el cliente de stripe
+    const rows = await executeQuery(
+      "SELECT * FROM agentes WHERE id_agente = ?;",
+      [id_agente]
+    );
+    if (rows.length === 0)
+      throw new ShortError("No se encontro el agente", 404);
+
+    let saldo_agente = rows[0].saldo;
+    if (saldo_agente < monto)
+      throw new ShortError("No se cuenta con credito suficiente", 402);
+    /* TERMINA VALIDACION DE DATOS */
+
+    /* INICIA TRANSACTION DE ACCIONES */
+    const response = await runTransaction(async (conn) => {
+      try {
+        /* INICIA EL GUARDADO EN LA BASE DEDATOS Y LA ASIGNACIóN DE SERVICIO */
+        const id_servicio = `ser-${uuidv4()}`;
+        const precio_venta = calcularPrecios(monto);
+        const query_create_service = `
+    INSERT INTO servicios
+    (id_servicio, id_agente, total, subtotal, impuestos) VALUES (?, ?, ?, ?,?)`;
+        const params_create_service = [
+          id_servicio,
+          id_agente,
+          precio_venta.total,
+          precio_venta.subtotal,
+          precio_venta.impuestos,
+        ];
+        await conn.execute(query_create_service, params_create_service);
+
+        const id_credito = `cre-${uuidv4()}`;
+        const query_agregar_credito_pago = `
+      INSERT INTO pagos_credito
+      (
+        id_credito,
+        id_servicio,
+        responsable_pago_agente,
+        fecha_creacion,
+        monto_a_credito,
+        pago_por_credito,
+        pendiente_por_cobrar,
+        total,
+        subtotal,
+        impuestos,
+        usuario_generador,
+        concepto
+      ) 
+      VALUES (?,?,?,NOW(),?,?,?,?,?,?,?,?)`;
+
+        const params_agregar_pago_credito = [
+          id_credito,
+          id_servicio, // Requerido de la relación con servicios
+          id_agente, // Requerido
+          precio_venta.total || "0",
+          precio_venta.total || "0",
+          precio_venta.total || "0",
+          precio_venta.total || "0",
+          precio_venta.subtotal || "0",
+          precio_venta.impuestos || "0",
+          id_viajero,
+          `Ejecución de pago a credito por los servicios con el id: ${
+            id_servicio || "Error al obtener el id"
+          }`,
+        ];
+
+        await conn.execute(
+          query_agregar_credito_pago,
+          params_agregar_pago_credito
+        );
+
+        const ids_solicitudes = itemsCart.map(
+          (item) => item.details.id_solicitud
+        );
+        const ids_carrito = itemsCart.map((item) => item.id);
+
+        await Promise.all(
+          ids_solicitudes.map((id) =>
+            conn.execute(
+              `UPDATE solicitudes SET id_servicio = ? WHERE id_solicitud = ?`,
+              [id_servicio, id]
+            )
+          )
+        );
+        await Promise.all(
+          ids_carrito.map((id) =>
+            conn.execute(`UPDATE cart SET active = 0 WHERE id = ?`, [id], [id])
+          )
+        );
+        await conn.execute(`UPDATE agentes SET saldo = ? WHERE id_agente = ?`, [
+          (Number(saldo_agente) - monto).toFixed(2),
+          id_agente,
+        ]);
+
+        return { current_saldo: (Number(saldo_agente) - monto).toFixed(2) };
+      } catch (error) {
+        throw new CustomError(
+          error.message || "Error al intentar hacer el pago",
+          error.status || error.statusCode || 500,
+          "CREATE_PAYMENT_ERROR",
+          error
+        );
+      }
+    });
+
+    res.status(200).json({
+      message: "Pago procesado exitosamente",
+      data: response,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error desconocido al pagar a credito",
+      error: error || "ERROR_BACK",
+      data: null,
+    });
   }
 };
 
@@ -694,7 +826,7 @@ const getAllPagosPrepago = async (req, res) => {
     res.status(200).json({
       message: "Pagos de prepago obtenidos correctamente",
       data: pagos,
-      balance:balance,
+      balance: balance,
     });
   } catch (error) {
     res.status(500).json({
@@ -724,4 +856,5 @@ module.exports = {
   crearItemdeAjuste,
   getAllPagosPrepago,
   getMetodosPago,
+  pagarCarritoConCredito,
 };

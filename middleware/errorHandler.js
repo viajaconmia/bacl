@@ -11,6 +11,15 @@ class CustomError extends Error {
     Object.setPrototypeOf(this, CustomError.prototype);
   }
 }
+class ShortError extends Error {
+  statusCode;
+
+  constructor(message, statusCode = 500) {
+    super(message);
+    this.statusCode = statusCode;
+    Object.setPrototypeOf(this, ShortError.prototype);
+  }
+}
 
 const errorHandler = (err, req, res, next) => {
   let statusCode = 500;
@@ -46,4 +55,4 @@ const errorHandler = (err, req, res, next) => {
   res.status(statusCode).json(errorResponse);
 };
 
-module.exports = { errorHandler, CustomError };
+module.exports = { errorHandler, CustomError, ShortError };
