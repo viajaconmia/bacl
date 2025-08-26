@@ -2,6 +2,7 @@ const router = require("express").Router();
 const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/pagos");
 
+router.post("/carrito/credito", controller.pagarCarritoConCredito);
 router.post("/crearItemdeAjuste", controller.crearItemdeAjuste);
 router.post("/aplicarpagoPorSaldoAFavor", controller.pagoPorSaldoAFavor);
 router.get("/getAllPagosPrepago", controller.getAllPagosPrepago);
@@ -32,10 +33,6 @@ router.get("/consultas", controller.readConsultas);
 router.get("/metodos_pago", controller.getMetodosPago);
 router.post(
   "/credito",
-  (req, res, next) => {
-    console.log("Datos recibidos para pago con crédito:", req.body);
-    next();
-  },
   middleware.validateParams([
     "id_servicio",
     "monto_a_credito",
