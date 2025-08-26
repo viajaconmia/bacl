@@ -189,42 +189,6 @@ try {
   }
 };
 
-const createFromCart = async (req,res) => {
-
-  const ejemplo = {
-    "items": [
-        {
-            "id": "a244dcd1-7f65-11f0-aba2-0a2c204555ab",
-            "total": 14297,
-            "type": "hotel",
-            "selected": true,
-            "details": {
-                "id_agente": "c14a0038-8100-47b1-ad28-63b77acef6e1",
-                "id_solicitud": "sol-3d0a0783-2339-46a8-a574-477e6d6f39f5",
-                "created_at": "2025-08-22T14:38:13.000Z",
-                "updated_at": "2025-08-22T20:36:41.000Z",
-                "usuario_generador": "77a53162-c49c-4758-8dfa-a019fc54bb3d",
-                "active": 1,
-                "id_servicio": "ser-bff36982-3cb0-45b1-876e-25c36fd28ad6",
-                "id_viajero": "77a53162-c49c-4758-8dfa-a019fc54bb3d",
-                "viajero_principal": "luis castaneda",
-                "hotel": "HOLIDAY INN EXPRESS MONTERREY GALERIAS SAN JERONIMO",
-                "check_in": "2025-06-02T06:00:00.000Z",
-                "check_out": "2025-06-07T06:00:00.000Z",
-                "room": "DOBLE",
-                "id_hotel": null,
-                "id_acompanantes": null,
-                "noches": 5,
-                "usuario_creador": "77a53162-c49c-4758-8dfa-a019fc54bb3d"
-            }
-        }
-    ],
-    "total": "14297.00",
-    "id_agente": "c14a0038-8100-47b1-ad28-63b77acef6e1"
-}
-  // const {items} = req.body;
-
-}
 
 const read = async (req, res) => {
   try {
@@ -396,5 +360,4 @@ module.exports = {
   actualizarPrecioVenta,
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
-  createFromCart,
 };
