@@ -141,15 +141,16 @@ const updateReserva2 = async (req, res) => {
 };
 
 const createFromOperaciones = async (req, res) => {
-  try {
-    console.log("Revisando el body  😭😭😭😭", req.body);
-    let { hotel } = req.body;
-    const { check_in, check_out } = req.body;
-    console.log(check_in, check_out);
-    const parseMySQLDate = (dateStr) => {
-      const [year, month, day] = dateStr.split("-").map(Number);
-      return new Date(year, month - 1, day);
-    };
+
+try {
+  console.log("Revisando el body  😭😭😭😭", req.body);
+  const {bandera } = req.body;
+  const { check_in, check_out } = req.body;
+  console.log(check_in,check_out)
+  const parseMySQLDate = (dateStr) => {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(year, month - 1, day); 
+  };
 
     const checkInDate = parseMySQLDate(check_in);
     const checkOutDate = parseMySQLDate(check_out);
@@ -159,6 +160,7 @@ const createFromOperaciones = async (req, res) => {
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime()
     );
+
 
     if (checkOutDate.getTime() < checkInDate.getTime()) {
       // return res.status(400).json({
@@ -186,6 +188,7 @@ const createFromOperaciones = async (req, res) => {
       });
   }
 };
+
 const read = async (req, res) => {
   try {
     let response = await model.getReserva();

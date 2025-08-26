@@ -10,7 +10,7 @@ const createEmpresa = async (empresa) => {
         id_empresa, razon_social, nombre_comercial, tipo_persona, 
         calle, colonia, estado, municipio, codigo_postal
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-    `;
+    `; 
 
     let params = [
       id_empresa,
