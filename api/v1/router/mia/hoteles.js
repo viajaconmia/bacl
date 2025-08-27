@@ -4,6 +4,7 @@ const controller = require("../../controller/hoteles");
 router.get("/", controller.readGroupByHotel);
 router.get("/hotelesWithTarifa", controller.readHotelesWithTarifa);
 router.get("/hotelesWithTarifaclient", controller.readHotelesWithTarifaClient);
+router.get("/tarifas_by_id", controller.readHotelesTarifasById);
 
 router.post("/Agregar-hotel", controller.AgregarHotel);
 router.get("/Consultar-hoteles", controller.consultaHoteles);

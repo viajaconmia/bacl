@@ -86,10 +86,10 @@ select
     primer_viajero_por_agente.nombre_agente_completo,
     primer_viajero_por_agente.empresas,
     primer_viajero_por_agente.rn,
-    primer_viajero_por_agente.wallet
-    
-    
+    primer_viajero_por_agente.wallet,
+    usuarios.*
 from primer_viajero_por_agente
+left join usuarios on usuarios.id_viajero = primer_viajero_por_agente.id_viajero
 where primer_viajero_por_agente.id_agente = ?
 Order by primer_viajero_por_agente.rn desc;
 `;
