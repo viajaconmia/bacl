@@ -261,6 +261,7 @@ const createFromCartWallet = async (req, res) => {
 
         // 3) Crear id_servicio
         const id_servicio = `ser-${uuidv4()}`;
+        const iva = items.total * 0.16;
 
         const queryInsertServicio = ` insert into servicios (
           id_servicio,total,subtotal,impuestos,otros_impuestos,is_credito,
@@ -270,6 +271,16 @@ const createFromCartWallet = async (req, res) => {
           id_servicio,
           items.total,
           // ACA ME QUEDE 
+          items.total-iva,
+          iva,
+          0,
+          0,
+          null,
+          new Date(),
+          new Date(),
+          id_agente,
+          null// perdirle a luis que lo agregue al body
+        ]);
 
 
           // 4) Vincular servicio a solicitudes de los items seleccionados
@@ -300,7 +311,8 @@ const createFromCartWallet = async (req, res) => {
         `;
         const queryUpdateSaldo = `
           UPDATE saldos_a_favor
-          SET saldo = saldo - ?
+          SET saldo = saldo - ?,
+          activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END,
           WHERE id_saldos = ?
         `;
 
