@@ -1,6 +1,7 @@
 const { executeSP, runTransaction } = require("../../../config/db");
 const model = require("../model/facturas");
 const { v4: uuidv4 } = require("uuid");
+const { get } = require("../router/mia/reservasClient");
 
 const create = async (req, res) => {
   try {
@@ -187,6 +188,7 @@ const crearFacturaDesdeCarga = async (req,res) => {
     });
   }
 }
+
 const asignarFacturaItems = async (req, res) => {
   const { id_factura, items } = req.body;
   console.log("body", req.body)
@@ -230,18 +232,18 @@ const filtrarFacturas = async (req, res) => {
 // const crearFacturaDesdeCargaPagos = async(req,res)=>{
 //   const { fecha_emision, estado, usuario_creador, id_agente, total, subtotal, impuestos, saldo, rfc, id_empresa, uuid_factura, rfc_emisor, url_pdf, url_xml , raw_id
 //   } = req.body;
-// // de una validamos el tipo de pago 
+// // de una validamos el tipo de pago
 
 //   const id_factura = "fac-"+uuidv4();
 //   const query = `INSERT INTO facturas (id_factura, fecha_emision, estado, usuario_creador, id_agente, total, subtotal, impuestos, saldo, rfc, id_empresa, uuid_factura, rfc_emisor, url_pdf, url_xml)
 //                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 // if (raw_id.toString().includes("pag-")) {
-//   var id = 'id_pago';  
+//   var id = 'id_pago';
 // } else {
-//   var id = 'id_saldo_a_favor'; 
+//   var id = 'id_saldo_a_favor';
 // }
 // const query2 = `INSERT INTO facturas_pagos_y_saldos (${id}, id_factura, monto)
-//                  VALUES (?, ?, ?)`; 
+//                  VALUES (?, ?, ?)`;
 //   try {
 //     runTransaction(async (connection) => {
 //       const [result] = await connection.query(query, [
@@ -265,8 +267,8 @@ const filtrarFacturas = async (req, res) => {
 //         throw new Error("No se pudo crear la factura desde carga");
 //       }
 //       const [result2] = await connection.query(query2, [
-//         raw_id, 
-//         id_factura, 
+//         raw_id,
+//         id_factura,
 //         total
 //       ]);
 //       if (result2.affectedRows === 0) {
@@ -279,10 +281,42 @@ const filtrarFacturas = async (req, res) => {
 //     });
 //   } catch (error) {
 //     res.status(500).json({
-//       error: "Error al crear factura desde carga con pago o saldo a favor", 
+//       error: "Error al crear factura desde carga con pago o saldo a favor",
 //   })
 // }
 // }
+
+const get_agente_facturas = async (req, res) => {
+    
+    const { id_agente } = req.query;
+
+    try {
+        // 2. Ejecutar el Stored Procedure y pasar el ID del agente
+        const facturas = await executeSP("get_agente_facturas", [id_agente]);
+        console.log(id_agente,"efnroingoir")
+        // 3. Verificar si se encontraron facturas
+        if (facturas.length === 0) {
+            return res.status(400).json({
+                message: "No se encontraron facturas para el agente proporcionado.",
+                data: []
+            });
+        }
+
+        // 4. Enviar la respuesta con las facturas encontradas
+        res.status(200).json({
+            message: "Facturas del agente obtenidas correctamente.",
+            data: facturas
+        });
+    } catch (error) {
+        // 5. Manejar errores
+        req.context.logStep('Error en get_agente_facturas:', error);
+        res.status(500).json({
+            error: "Error al obtener las facturas del agente",
+            details: error.message || error,
+            otherDetails: error.response?.data || null,
+        });
+    }
+};
 
 const createEmi = async (req, res) => {
   req.context.logStep("createEmi", "Inicio del proceso de creación de factura (emi)");
@@ -690,6 +724,7 @@ const crearFacturaMultiplesPagos = async (req, res) => {
 
 module.exports = {
   create,
+  get_agente_facturas,
   deleteFacturas,
   readAllFacturas,
   createCombinada,

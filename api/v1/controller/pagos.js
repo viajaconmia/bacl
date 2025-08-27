@@ -6,7 +6,11 @@ const {
   executeSP,
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+
+const { get } = require("../router/mia/reservasClient");
+
 const { calcularPrecios } = require("../../../lib/utils/calculates");
+
 const create = async (req, res) => {
   try {
     const response = await model.createPagos(req.body);
@@ -837,7 +841,40 @@ const getAllPagosPrepago = async (req, res) => {
   }
 };
 
+const get_pagos_prepago_by_ID = async (req, res) => {
+  try {
+    const id_agente =
+      req.params.id_agente ??
+      req.params.id ??
+      req.query.id_agente ??
+      req.body.id_agente ??
+      "";
+
+    const sql = "CALL sp_get_pagos_prepago(?)";
+    const result = await executeQuery(sql, [id_agente]);
+
+    const data =
+      Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+
+    return res.status(200).json({
+      ok: true,
+      id_agente,
+      count: Array.isArray(data) ? data.length : 0,
+      data,
+    });
+  } catch (error) {
+    console.error("Error en get_pagos_prepago_by_ID:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al obtener pagos de prepago",
+
+      details: error?.message || error,
+    });
+  }
+};
+
 module.exports = {
+  get_pagos_prepago_by_ID,
   create,
   read,
   getAgenteCredito,
