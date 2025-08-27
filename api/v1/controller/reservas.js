@@ -173,7 +173,7 @@ try {
       );
     }
 
-    let response = await model.insertarReservaOperaciones(req.body);
+    let response = await model.insertarReservaOperaciones(req.body, req.body.bandera);
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });
@@ -188,6 +188,7 @@ try {
       });
   }
 };
+
 
 const read = async (req, res) => {
   try {
