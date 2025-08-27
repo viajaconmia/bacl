@@ -21,7 +21,6 @@ router.post(
 
 router.get(
   "/get_agente_facturas",
-  middleware.validateParamsQuery(["id_agente"]),
   controller.get_agente_facturas,
 );
 

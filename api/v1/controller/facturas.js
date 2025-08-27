@@ -288,12 +288,12 @@ const filtrarFacturas = async (req, res) => {
 
 const get_agente_facturas = async (req, res) => {
     
-    const { id_agente } = req.params;
+    const { id_agente } = req.query;
 
     try {
         // 2. Ejecutar el Stored Procedure y pasar el ID del agente
         const facturas = await executeSP("get_agente_facturas", [id_agente]);
-
+        console.log(id_agente,"efnroingoir")
         // 3. Verificar si se encontraron facturas
         if (facturas.length === 0) {
             return res.status(400).json({
