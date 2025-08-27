@@ -468,10 +468,9 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
-  
-  const { ejemplo_saldos } = reserva
+  const { ejemplo_saldos } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
-   const agentes = await executeQuery(
+  const agentes = await executeQuery(
     `SELECT * FROM agentes WHERE id_agente = ?`,
     [reserva.solicitud.id_agente]
   );
@@ -648,7 +647,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               it.costo.subtotal.toFixed(2),
               it.costo.impuestos.toFixed(2),
               (it.costo.total * 0.16).toFixed(2), // si aplica
-              bandera=== 0 ? it.venta.total.toFixed(2) : 0,
+              bandera === 0 ? it.venta.total.toFixed(2) : 0,
             ]);
             await connection.execute(query_items_insert, params_items_insert);
           }
@@ -675,7 +674,9 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             if (taxesDataParaDb.length > 0) {
               const query_impuestos_items = `
                 INSERT INTO impuestos_items (id_item, base, total, porcentaje, monto, nombre_impuesto, tipo_impuesto)
-                VALUES ${taxesDataParaDb.map(() => "(?, ?, ?, ?, ?, ?, ?)").join(", ")};
+                VALUES ${taxesDataParaDb
+                  .map(() => "(?, ?, ?, ?, ?, ?, ?)")
+                  .join(", ")};
               `;
               const params_impuestos_items = taxesDataParaDb.flatMap((t) => [
                 t.id_item,
@@ -715,7 +716,14 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           }
 
           // ======== SOLO PAGO (según bandera) =========
+          console.log(
+            "Procesando bandera 0 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:",
+          );
           if (bandera === 0) {
+            console.log(
+              "Procesando bandera 0 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:",
+              saldo
+            );
             // Crédito: descuenta saldo del agente + inserta pagos_credito
             await connection.execute(
               `UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?;`,
@@ -749,6 +757,9 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             ];
             await connection.execute(queryCredito, paramsCredito);
           } else if (bandera === 1) {
+            console.log(
+              "Procesando bandera 1 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:",
+            );
             // Wallet: validar saldos y generar pagos (SIN relación)
             // const ejemplo_saldos = [
             //   {
@@ -814,7 +825,9 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             `;
 
             for (const saldo of ejemplo_saldos) {
+              console.log("Procesando saldo:", saldo);
               const id_pago = `pag-${uuidv4()}`;
+              console.log("Generando pago con ID:", id_pago);
               await connection.execute(query_pagos, [
                 id_pago,
                 id_servicio,
@@ -838,48 +851,54 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             }
 
             const pagosOrdenados = ejemplo_saldos
-  .map((s, idx) => ({
-    id_pago: pagos_insertados[idx], // mismo orden en que los insertaste
-    restante: Number(s.aplicado),
-    id_saldo: s.id_saldo,
-    saldo_actual: s.saldo_actual,
-  }))
-  .sort((a, b) => a.restante - b.restante);
+              .map((s, idx) => ({
+                id_pago: pagos_insertados[idx], // mismo orden en que los insertaste
+                restante: Number(s.aplicado),
+                id_saldo: s.id_saldo,
+                saldo_actual: s.saldo_actual,
+              }))
+              .sort((a, b) => a.restante - b.restante);
 
-// Clonar items con su total pendiente
-const itemsPendientes = itemsConIdAnadido.map(it => ({
-  id_item: it.id_item,
-  restante: Number(it.venta.total),
-}));
+            // Clonar items con su total pendiente
+            const itemsPendientes = itemsConIdAnadido.map((it) => ({
+              id_item: it.id_item,
+              restante: Number(it.venta.total),
+            }));
 
-const relaciones = [];
+            const relaciones = [];
 
-for (const pago of pagosOrdenados) {
-  while (pago.restante > 0 && itemsPendientes.some(it => it.restante > 0)) {
-    const item = itemsPendientes.find(it => it.restante > 0);
-    const asignado = Math.min(item.restante, pago.restante);
-    relaciones.push([item.id_item, pago.id_pago, asignado]);
-    item.restante -= asignado;
-    pago.restante -= asignado;
-  }
-}
+            for (const pago of pagosOrdenados) {
+              while (
+                pago.restante > 0 &&
+                itemsPendientes.some((it) => it.restante > 0)
+              ) {
+                const item = itemsPendientes.find((it) => it.restante > 0);
+                const asignado = Math.min(item.restante, pago.restante);
+                relaciones.push([item.id_item, pago.id_pago, asignado]);
+                item.restante -= asignado;
+                pago.restante -= asignado;
+              }
+            }
 
-if (relaciones.length > 0) {
-  const values = relaciones.map(() => "(?,?,?)").join(",");
-  const flat = relaciones.flat();
-  await connection.execute(
-    `INSERT INTO items_pagos (id_item, id_pago, monto) VALUES ${values}`,
-    flat
-  );
-}
+            if (relaciones.length > 0) {
+              const values = relaciones.map(() => "(?,?,?)").join(",");
+              const flat = relaciones.flat();
+              await connection.execute(
+                `INSERT INTO items_pagos (id_item, id_pago, monto) VALUES ${values}`,
+                flat
+              );
+            }
 
-// --- update final: reflejar saldo_actual en saldos_a_favor ---
-for (const pago of pagosOrdenados) {
-  await connection.execute(
-    `UPDATE saldos_a_favor SET saldo = ? WHERE id_saldos = ?`,
-    [pago.saldo_actual, pago.id_saldo]
-  );
-}
+            // --- update final: reflejar saldo_actual en saldos_a_favor ---
+            for (const pago of pagosOrdenados) {
+              await connection.execute(
+                `UPDATE saldos_a_favor 
+                SET saldo = ?,
+                activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END,
+                WHERE id_saldos = ?`,
+                [pago.saldo_actual, pago.id_saldo]
+              );
+            }
           }
 
           // Completar solicitud
@@ -908,7 +927,7 @@ for (const pago of pagosOrdenados) {
     console.error("Error al insertar reserva:", error);
     throw error;
   }
-}
+};
 
 const getReserva = async () => {
   try {
