@@ -25,12 +25,13 @@ const verificarRegistroUsuario = async (req, res) => {
         .json({ message: "usuario no encontrado", data: { registrar: false } });
     }
 
+    // console.log(usuario);
+
     const { data, error } = await supabaseAdmin
       .from("user_info")
-      .select("id_viajero");
-
-    console.log("HEYYYYYY", data, error);
-
+      .select("*")
+      .eq("id_viajero", usuario.id_viajero);
+    console.log(data);
     if (error) {
       throw new CustomError(
         error.message || "Error en el mensaje",
@@ -40,7 +41,7 @@ const verificarRegistroUsuario = async (req, res) => {
       );
     }
 
-    if (!data) {
+    if (!data[0]) {
       return res.status(200).json({
         message: "usuario existe pero no en supabase",
         data: { registrar: true, usuario },
@@ -106,6 +107,14 @@ const newCreateAgente = async (req, res) => {
       body.numero_pasaporte || null,
       body.numero_empleado || null,
     ]);
+    await executeQuery(
+      `INSERT INTO usuarios (id_agente, id_viajero, id_supabase, rol) VALUES (?,?,?,?);`,
+      [body.id_agente, id_viajero, body.id_agente, "administrador"]
+    );
+    await executeQuery(
+      `UPDATE viajeros SET is_user = true where id_viajero = ?;`,
+      [id_viajero]
+    );
     await executeQuery(`UPDATE otp_storage SET verify = ? WHERE email = ?`, [
       true,
       body.correo,
@@ -195,17 +204,29 @@ const newViajeroWithRol = async (req, res) => {
       },
     });
 
-    //Agregar su info y su rol
-    await supabaseAdmin.from("user_info").insert({
+    const user_info = {
       id_user: data.user.id,
       id_viajero: viajero.id_viajero,
       id_agente,
       rol,
-    });
+    };
+
+    //Agregar su info y su rol
+    await supabaseAdmin.from("user_info").insert(user_info);
 
     await executeQuery(
       `UPDATE viajeros SET is_user = true where id_viajero = ?;`,
       [id_viajero]
+    );
+
+    await executeQuery(
+      `INSERT INTO usuarios (id_agente, id_viajero, id_supabase, rol) VALUES (?,?,?,?);`,
+      [
+        user_info.id_agente,
+        user_info.id_viajero,
+        user_info.id_user,
+        user_info.rol,
+      ]
     );
 
     res.status(201).json({

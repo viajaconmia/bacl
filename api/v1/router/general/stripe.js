@@ -129,7 +129,7 @@ router.post("/make-payment", async (req, res) => {
       try {
         /* INICIA PAGO Y GUARDADO DE LOG */
         const paymentIntent = await stripeTest.paymentIntents.create({
-          amount: amount,
+          amount: Number(amount.toFixed(0)),
           currency: "mxn",
           customer: customerId,
           payment_method: paymentMethodId,
