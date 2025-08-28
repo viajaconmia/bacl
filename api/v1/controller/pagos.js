@@ -1,5 +1,5 @@
 const model = require("../model/pagos");
-const { CustomError } = require("../../../middleware/errorHandler");
+const { CustomError, ShortError } = require("../../../middleware/errorHandler");
 const {
   executeQuery,
   runTransaction,
@@ -849,26 +849,26 @@ const get_pagos_prepago_by_ID = async (req, res) => {
       req.query.id_agente ??
       req.body.id_agente ??
       "";
+    if (!id_agente) throw new ShortError("No existe id_agente", 404);
 
     const sql = "CALL sp_get_pagos_prepago(?)";
     const result = await executeQuery(sql, [id_agente]);
+
+    console.log(result);
 
     const data =
       Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
 
     return res.status(200).json({
-      ok: true,
-      id_agente,
-      count: Array.isArray(data) ? data.length : 0,
-      data,
+      message: "Datos obtenidos con exito",
+      data: { pagos: data, count: Array.isArray(data) ? data.length : 0 },
     });
   } catch (error) {
     console.error("Error en get_pagos_prepago_by_ID:", error);
     return res.status(500).json({
-      ok: false,
-      message: "Error al obtener pagos de prepago",
-
-      details: error?.message || error,
+      error: error,
+      message: error.message || "Error al obtener pagos de prepago",
+      data: null,
     });
   }
 };
