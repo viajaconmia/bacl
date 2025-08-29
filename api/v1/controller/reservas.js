@@ -1,6 +1,7 @@
 const model = require("../model/reservas");
 const {
   executeQuery,
+  executeSP2,
   executeSP,
   runTransaction,
 } = require("../../../config/db");
@@ -346,6 +347,25 @@ const getReservasWithItemsSinPagarByAgente = async (req, res) => {
   }
 };
 
+const getDetallesConexionReservas = async (req,res) => {
+  const {id_agente, id_hospedaje}= req.query;
+  try {
+   const [facturas = [], pagos = []]= await executeSP2("sp_get_detalles_conexion_reservas", [id_agente, id_hospedaje], { allSets: true });
+    // console.log(detalles);
+    // if (!detalles || detalles.length === 0) {
+    //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
+   // }
+    return res.status(200).json({ message: "Detalles de conexión encontrados", data: {
+      facturas: facturas,
+      pagos: pagos
+    } });
+  } catch (error) {
+    res.status(500).json({ error: "Error en el servidor", details: error });
+    console.error(error);
+  }
+  
+}
+
 module.exports = {
   create,
   read,
@@ -360,4 +380,5 @@ module.exports = {
   actualizarPrecioVenta,
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
+  getDetallesConexionReservas
 };

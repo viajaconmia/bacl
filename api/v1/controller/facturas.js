@@ -1,4 +1,4 @@
-const { executeSP, runTransaction } = require("../../../config/db");
+const { executeSP, runTransaction,executeSP2 } = require("../../../config/db");
 const model = require("../model/facturas");
 const { v4: uuidv4 } = require("uuid");
 
@@ -687,6 +687,22 @@ const crearFacturaMultiplesPagos = async (req, res) => {
   }
 };
 
+const getDetallesConexionesFactura = async (req,res) => {
+  const {id_factura,id_agente} = req.query;
+  try{
+    const [pagos = [], reservas = []]= await executeSP2("sp_get_detalles_conexion_fcaturas", [ id_agente,id_factura], { allSets: true });
+    res.status(200).json({
+      message: "Consulta exitosa",
+      pagos: pagos,
+      reservas: reservas
+    });
+  }catch(error){
+    console.log(error);
+    res.status(500).json({message: "Error en el servidor", details: error});
+  }
+  
+}
+
 
 module.exports = {
   create,
@@ -702,7 +718,8 @@ module.exports = {
   filtrarFacturas,
   createEmi,
   crearFacturaDesdeCargaPagos,
-  crearFacturaMultiplesPagos
+  crearFacturaMultiplesPagos,
+  getDetallesConexionesFactura
 };
 
 //ya quedo "#$%&/()="
