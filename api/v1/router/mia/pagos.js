@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/pagos");
+const { get_agente_facturas } = require("../../controller/facturas");
 
 router.post("/carrito/credito", controller.pagarCarritoConCredito);
 router.post("/crearItemdeAjuste", controller.crearItemdeAjuste);
@@ -18,6 +19,13 @@ router.get(
   middleware.validateParamsQuery(["id_agente"]),
   controller.getAgenteCredito
 );
+
+router.get(
+  "/get_pagos_prepago_by_ID",
+  middleware.validateParamsQuery(["id_agente"]),
+  controller.get_pagos_prepago_by_ID
+);
+
 router.get("/todos", controller.getAgenteAgentesYEmpresas);
 router.post("/agente", controller.updateCreditAgent);
 router.post("/empresa", controller.updateCreditEmpresa);
@@ -26,6 +34,7 @@ router.put(
   "/precio-contado-regresar-saldo",
   controller.handlerPagoContadoRegresarSaldo
 );
+
 router.get("/pendientesAgente", controller.getPendientesAgente);
 router.get("/allPendientes", controller.getAllPendientes);
 router.get("/getAllPagos", controller.getAllPagos);

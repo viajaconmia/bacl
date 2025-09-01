@@ -1,5 +1,5 @@
 const model = require("../model/pagos");
-const { CustomError } = require("../../../middleware/errorHandler");
+const { CustomError, ShortError } = require("../../../middleware/errorHandler");
 const {
   executeQuery,
   runTransaction,
@@ -7,7 +7,11 @@ const {
   executeSP2
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+
+const { get } = require("../router/mia/reservasClient");
+
 const { calcularPrecios } = require("../../../lib/utils/calculates");
+
 const create = async (req, res) => {
   try {
     const response = await model.createPagos(req.body);
@@ -838,6 +842,7 @@ const getAllPagosPrepago = async (req, res) => {
   }
 };
 
+
 const getDetallesConexionesPagos = async (req,res ) =>{
    const {id_agente,id_raw} = req.query;
    try{
@@ -860,7 +865,40 @@ const getDetallesConexionesPagos = async (req,res ) =>{
    }
 }
 
+const get_pagos_prepago_by_ID = async (req, res) => {
+  try {
+    const id_agente =
+      req.params.id_agente ??
+      req.params.id ??
+      req.query.id_agente ??
+      req.body.id_agente ??
+      "";
+    if (!id_agente) throw new ShortError("No existe id_agente", 404);
+
+    const sql = "CALL sp_get_pagos_prepago(?)";
+    const result = await executeQuery(sql, [id_agente]);
+
+    console.log(result);
+
+    const data =
+      Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+
+    return res.status(200).json({
+      message: "Datos obtenidos con exito",
+      data: { pagos: data, count: Array.isArray(data) ? data.length : 0 },
+    });
+  } catch (error) {
+    console.error("Error en get_pagos_prepago_by_ID:", error);
+    return res.status(500).json({
+      error: error,
+      message: error.message || "Error al obtener pagos de prepago",
+      data: null,
+    });
+  }
+};
+
 module.exports = {
+  get_pagos_prepago_by_ID,
   create,
   read,
   getAgenteCredito,
