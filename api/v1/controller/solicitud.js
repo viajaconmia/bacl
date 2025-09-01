@@ -285,10 +285,14 @@ const createFromCartWallet = async (req, res) => {
 
           // 4) Vincular servicio a solicitudes de los items seleccionados
         const queryUpdateSolicitud = `UPDATE solicitudes SET id_servicio = ? WHERE id_solicitud = ?`;
+      const query_deactivate_cart = `update cart set active = 0 where 
+      where id = ?;`;
         const ids_solicitudes = [];
         for (const it of itemsSeleccionados) {
           await connection.execute(queryUpdateSolicitud, [id_servicio, it.details.id_solicitud]);
+          await executeQuery(query_deactivate_cart,[it.id])
           ids_solicitudes.push(it.details.id_solicitud);
+          
         }
 
         // 5) Ir aplicando saldos hasta cubrir el total
