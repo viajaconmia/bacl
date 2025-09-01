@@ -58,5 +58,5 @@ router.post(
   ]),
   controller.pagoPorCredito
 );
-
+router.get("/getDetallesConexion", controller.getDetallesConexionesPagos);
 module.exports = router;
