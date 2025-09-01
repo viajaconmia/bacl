@@ -1,4 +1,8 @@
-const { executeSP, executeQuery } = require("../../../config/db");
+const {
+  executeSP,
+  executeQuery,
+  executeTransaction,
+} = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 let model = require("../model/solicitud");
 
@@ -28,17 +32,25 @@ const read = async (req, res) => {
 };
 const readClient = async (req, res) => {
   const { user_id } = req.query;
-  req.context.logStep('Llegando al endpoint de readClient con user_id:', user_id);
+  req.context.logStep(
+    "Llegando al endpoint de readClient con user_id:",
+    user_id
+  );
   try {
-    const result = await executeSP('sp_get_solicitudes_con_pagos_con_facturas_by_id_agente',[user_id]);
+    const result = await executeSP(
+      "sp_get_solicitudes_con_pagos_con_facturas_by_id_agente",
+      [user_id]
+    );
     if (!result || result.length === 0) {
       return res.status(404).json({ message: "No se encontraron solicitudes" });
-    }else{
-    res.status(200).json({message:"Solicitudes obtenidas correctamente",data:result});
+    } else {
+      res
+        .status(200)
+        .json({ message: "Solicitudes obtenidas correctamente", data: result });
     }
   } catch (error) {
     console.error(error);
-    req.context.logStep('Error en la ejecucion del SP', error);
+    req.context.logStep("Error en la ejecucion del SP", error);
     res.status(500).json({ error: "Internal Server Error", details: error });
   }
 };
@@ -53,12 +65,10 @@ const readSolicitudById = async (req, res) => {
         .status(404)
         .json({ message: "No se encontró un detalle para esta solicitud" });
     }
-    res
-      .status(200)
-      .json({
-        message: "Detalle de solicitud obtenido correctamente",
-        data: result,
-      });
+    res.status(200).json({
+      message: "Detalle de solicitud obtenido correctamente",
+      data: result,
+    });
   } catch (error) {
     req.context.logStep("error en la ejecucion del SP", error);
     console.error(error);
@@ -181,18 +191,15 @@ const filtro_solicitudes_y_reservas = async (req, res) => {
     });
     if (!result || result.length === 0) {
       req.context.logStep("Result vacio");
-      return res
-        .status(404)
-        .json({
-          message:
-            "No se encontraron resultados para los filtros proporcionados",
-            data:[]
-        });
-    }else{
+      return res.status(404).json({
+        message: "No se encontraron resultados para los filtros proporcionados",
+        data: [],
+      });
+    } else {
       res.status(200).json({
         message: "Resultados obtenidos correctamente",
         data: result,
-      }); 
+      });
     }
   } catch (error) {
     req.context.logStep("Error en la ejecucion del SP", error);
@@ -206,20 +213,31 @@ const createFromCartWallet = async (req, res) => {
 
     // --- Validaciones de entrada ---
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ ok: false, message: "items requerido (array no vacío)" });
+      return res
+        .status(400)
+        .json({ ok: false, message: "items requerido (array no vacío)" });
     }
     if (!id_agente) {
-      return res.status(400).json({ ok: false, message: "id_agente requerido" });
+      return res
+        .status(400)
+        .json({ ok: false, message: "id_agente requerido" });
     }
     const totalNumerico = Number(total);
     if (!Number.isFinite(totalNumerico) || totalNumerico <= 0) {
-      return res.status(400).json({ ok: false, message: "total inválido (> 0)" });
+      return res
+        .status(400)
+        .json({ ok: false, message: "total inválido (> 0)" });
     }
 
     // Solo actualizamos solicitudes de items seleccionados
-    const itemsSeleccionados = items.filter(i => i?.selected && i?.details?.id_solicitud);
+    const itemsSeleccionados = items.filter(
+      (i) => i?.selected && i?.details?.id_solicitud
+    );
     if (itemsSeleccionados.length === 0) {
-      return res.status(400).json({ ok: false, message: "No hay items seleccionados con id_solicitud" });
+      return res.status(400).json({
+        ok: false,
+        message: "No hay items seleccionados con id_solicitud",
+      });
     }
 
     // --- Transacción ---
@@ -251,17 +269,24 @@ const createFromCartWallet = async (req, res) => {
         );
 
         // 2) Verificar cobertura
-        const disponible = rowsSaldos.reduce((acc, r) => acc + Number(r.saldo || 0), 0);
+        const disponible = rowsSaldos.reduce(
+          (acc, r) => acc + Number(r.saldo || 0),
+          0
+        );
         if (disponible < totalNumerico) {
           // Lanzar error para que haga rollback
-          const err = new Error(`Fondos insuficientes en wallet. Disponible: ${disponible}, requerido: ${totalNumerico}`);
+          const err = new Error(
+            `Fondos insuficientes en wallet. Disponible: ${disponible}, requerido: ${totalNumerico}`
+          );
           err.status = 409;
           throw err;
         }
 
         // 3) Crear id_servicio
         const id_servicio = `ser-${uuidv4()}`;
-        const iva = items.total * 0.16;
+        const iva = total - total / 1.16;
+
+        console.log("items total", total);
 
         const queryInsertServicio = ` insert into servicios (
           id_servicio,total,subtotal,impuestos,otros_impuestos,is_credito,
@@ -269,9 +294,9 @@ const createFromCartWallet = async (req, res) => {
           values (?,?,?,?,?,?,?,?,?,?,?)`;
         await connection.execute(queryInsertServicio, [
           id_servicio,
-          items.total,
-          // ACA ME QUEDE 
-          items.total-iva,
+          total,
+          // ACA ME QUEDE
+          total - iva,
           iva,
           0,
           0,
@@ -279,16 +304,18 @@ const createFromCartWallet = async (req, res) => {
           new Date(),
           new Date(),
           id_agente,
-          null// perdirle a luis que lo agregue al body
+          null, // perdirle a luis que lo agregue al body
         ]);
 
-
-          // 4) Vincular servicio a solicitudes de los items seleccionados
+        // 4) Vincular servicio a solicitudes de los items seleccionados
         const queryUpdateSolicitud = `UPDATE solicitudes SET id_servicio = ? WHERE id_solicitud = ?`;
+      const query_deactivate_cart = `update cart set active = 0 where  id = ?;`;
         const ids_solicitudes = [];
         for (const it of itemsSeleccionados) {
           await connection.execute(queryUpdateSolicitud, [id_servicio, it.details.id_solicitud]);
+          await executeQuery(query_deactivate_cart,[it.id])
           ids_solicitudes.push(it.details.id_solicitud);
+          
         }
 
         // 5) Ir aplicando saldos hasta cubrir el total
@@ -312,7 +339,7 @@ const createFromCartWallet = async (req, res) => {
         const queryUpdateSaldo = `
           UPDATE saldos_a_favor
           SET saldo = saldo - ?,
-          activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END,
+          activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END
           WHERE id_saldos = ?
         `;
 
@@ -332,7 +359,7 @@ const createFromCartWallet = async (req, res) => {
           await connection.execute(queryInsertPago, [
             id_pago,
             id_servicio,
-            s.id_saldos,           // id_saldo_a_favor
+            s.id_saldos, // id_saldo_a_favor
             id_agente,
             s.metodo_pago || null, // columnas en pagos usan "metodo_de_pago"
             s.fecha_pago || new Date(),
@@ -341,19 +368,26 @@ const createFromCartWallet = async (req, res) => {
             s.currency || "MXN",
             s.tipo_tarjeta || null,
             s.link_stripe || null,
-            s.ult_digits || null,  // map a last_digits
-            items.total               // total aplicado en este pago
+            s.ult_digits || null, // map a last_digits
+            total, // total aplicado en este pago
           ]);
 
           // Descontar saldo aplicado en la fila bloqueada
-          await connection.execute(queryUpdateSaldo, [aplicado, s.id_saldos]);
+          console.log("SALDOS", aplicado, s);
+          await connection.execute(queryUpdateSaldo, [
+            aplicado,
+            aplicado,
+            s.id_saldos,
+          ]);
 
           pagos.push({ id_pago, id_saldos: s.id_saldos, aplicado });
           restante -= aplicado;
         }
 
         if (restante > 0) {
-          const err = new Error(`Fondos quedaron cortos tras aplicar. Restante: ${restante}`);
+          const err = new Error(
+            `Fondos quedaron cortos tras aplicar. Restante: ${restante}`
+          );
           err.status = 500;
           throw err;
         }
@@ -362,22 +396,22 @@ const createFromCartWallet = async (req, res) => {
         return {
           id_servicio,
           pagos,
-          ids_solicitudes
+          ids_solicitudes,
         };
       }
     );
 
     return res.status(201).json({
       message: "Pagos creados y solicitudes vinculadas",
-      data:resultsCallback
+      data: resultsCallback,
     });
   } catch (error) {
     console.error(error);
     const status = error?.statusCode || error.status || 500;
     return res.status(status).json({
       error: error,
-      data:null,
-      message: error?.message || "Error interno al crear pagos desde wallet"
+      data: null,
+      message: error?.message || "Error interno al crear pagos desde wallet",
     });
   }
 };
@@ -393,5 +427,5 @@ module.exports = {
   getItemsSolicitud,
   readForClient,
   filtro_solicitudes_y_reservas,
-  createFromCartWallet
+  createFromCartWallet,
 };
