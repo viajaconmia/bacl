@@ -85,7 +85,7 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         const result = await connection.execute(query2, params2);
 
         const query3 = `
-        INSERT INTO facturas_pagos (id_factura, monto_pago, id_pago)
+        INSERT INTO facturas_pagos_y_saldos (id_factura, monto, id_pago)
           SELECT ?, ?, p.id_pago
             FROM solicitudes s
               JOIN servicios se ON s.id_servicio = se.id_servicio
