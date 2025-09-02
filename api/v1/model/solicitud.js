@@ -234,7 +234,7 @@ ORDER BY s.created_at DESC;`;
   }
 };
 
-const getSolicitudById = async (id) => {
+const getSolicitudById = async (id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     let query = `
 SELECT 
@@ -288,7 +288,7 @@ ORDER BY s.created_at DESC;`;
   }
 };
 
-const getSolicitudesClientWithViajero = async (id) => {
+const getSolicitudesClientWithViajero = async (id) => {/*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     const query = `SELECT 
   p_c.id_credito,
@@ -341,7 +341,7 @@ ORDER BY a.id_agente, a.created_at`;
     throw error;
   }
 };
-const readForClient = async (id) => {
+const readForClient = async (id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     const query = `
 SELECT
@@ -393,7 +393,7 @@ order by se.created_at desc;`;
   }
 };
 
-const getSolicitudesClient = async (user_id) => {
+const getSolicitudesClient = async (user_id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     let query = `
 SELECT
@@ -453,7 +453,7 @@ const getViajeroAgenteSolicitud = async (id_agente) => {
   }
 };
 
-const getSolicitudesConsultas = async (user_id) => {
+const getSolicitudesConsultas = async (user_id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     let query = `
 SELECT
