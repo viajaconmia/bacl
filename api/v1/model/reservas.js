@@ -942,7 +942,7 @@ const getReserva = async () => {
   }
 };
 
-const getReservaById = async (id) => {
+const getReservaById = async (id) => {/*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     const query = `select 
 s.id_servicio,
@@ -987,7 +987,7 @@ ORDER BY s.created_at DESC;`;
     throw error; // Lanza el error para que puedas manejarlo donde llames la función
   }
 };
-const getReservaAll = async () => {
+const getReservaAll = async () => {/*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     const query = `select 
 s.id_servicio,

@@ -78,7 +78,8 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
           JOIN hospedajes h ON i.id_hospedaje = h.id_hospedaje
           JOIN bookings b ON h.id_booking = b.id_booking
         SET i.id_factura = ?,
-            i.is_facturado = 1
+            i.is_facturado = 1,
+       
         WHERE b.id_solicitud = ?;`;
         const params2 = [id_factura, id_solicitud];
 
@@ -93,6 +94,12 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
             WHERE s.id_solicitud = ?;`;
         const params3 = [id_factura, total, id_solicitud];
         const result2 = await connection.execute(query3, params3);
+
+        const update_hospedaje = `UPDATE hospedajes h
+        JOIN bookings b ON h.id_booking = b.id_booking
+        SET h.is_facturado = 1
+        WHERE b.id_solicitud = ?;`;
+        await connection.execute(update_hospedaje, [id_solicitud]);
 
         return response_factura.data;
       } catch (error) {
@@ -184,7 +191,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         ]);
 
         // 5. Insertar registros en facturas_pagos
-        const resultados_pagos = await conn.execute(
+       /* const resultados_pagos = await conn.execute( LO COMENTO POR SI ACASO
           `
         INSERT INTO facturas_pagos (
           id_factura, 
@@ -205,7 +212,28 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           `,
           [id_factura, total, ...solicitudesArray]
         );
-        console.log("resultado pagos", resultados_pagos);
+        console.log("resultado pagos", resultados_pagos);*/
+        const insertPagosSql = `
+  INSERT INTO facturas_pagos_y_saldos (
+    id_factura,
+    id_pago,
+    monto
+  )
+  SELECT 
+    ?            AS id_factura,
+    p.id_pago    AS id_pago,
+    p.monto      AS monto
+  FROM solicitudes s
+  JOIN servicios se ON s.id_servicio = se.id_servicio
+  JOIN pagos p     ON se.id_servicio = p.id_servicio
+  WHERE s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
+    AND p.id_pago IS NOT NULL
+`;
+const resultados_pagos = await conn.execute(insertPagosSql, [
+  id_factura,
+  ...solicitudesArray,
+]);
+console.log("resultado pagos", resultados_pagos);
 
         return {
           id_factura,
@@ -254,8 +282,10 @@ function sanitizeCfdi(cfdiRaw = {}) {
   if (!cfdi.Exportation) cfdi.Exportation = "01"; // no aplica
   if (!cfdi.ExpeditionPlace) throw new Error("ExpeditionPlace requerido");
   if (cfdi.CfdiType === "I") {
-    if (!cfdi.PaymentForm)   throw new Error("PaymentForm requerido para CfdiType=I");
-    if (!cfdi.PaymentMethod) throw new Error("PaymentMethod requerido para CfdiType=I");
+    if (!cfdi.PaymentForm)
+      throw new Error("PaymentForm requerido para CfdiType=I");
+    if (!cfdi.PaymentMethod)
+      throw new Error("PaymentMethod requerido para CfdiType=I");
   }
 
   // Helper para 2 decimales
@@ -269,10 +299,10 @@ function sanitizeCfdi(cfdiRaw = {}) {
     const prod = String(item.ProductCode || "");
     if (!/^\d{8}$/.test(prod)) item.ProductCode = "81112100";
 
-    item.Quantity  = Number(item.Quantity ?? 1);
+    item.Quantity = Number(item.Quantity ?? 1);
     item.UnitPrice = to2(item.UnitPrice);
-    item.Subtotal  = to2(item.Subtotal);
-    item.Total     = to2(item.Total);
+    item.Subtotal = to2(item.Subtotal);
+    item.Total = to2(item.Total);
 
     if (Array.isArray(item.Taxes)) {
       item.Taxes = item.Taxes.map((t) => ({
@@ -281,7 +311,7 @@ function sanitizeCfdi(cfdiRaw = {}) {
         Base: to2(t.Base),
         Total: to2(t.Total),
         IsRetention: t.IsRetention === true, // default false si no viene
-        IsFederalTax: t.IsFederalTax !== false // default true
+        IsFederalTax: t.IsFederalTax !== false, // default true
       }));
     }
 
@@ -297,7 +327,6 @@ function sanitizeCfdi(cfdiRaw = {}) {
 
   return cfdi;
 }
-
 
 // const crearFacturaEmi = async (req, { cfdi }) => {
 //   const {info_user} = cfdi
@@ -413,7 +442,7 @@ function sanitizeCfdi(cfdiRaw = {}) {
 //   }
 // };
 
-const  crearFacturaEmi = async (req, payload) => {
+const crearFacturaEmi = async (req, payload) => {
   let { cfdi, info_user, datos_empresa, solicitudesArray = [] } = payload || {};
 
   // Compat: si info_user / datos_empresa venían dentro del CFDI, extraerlos
@@ -439,7 +468,9 @@ const  crearFacturaEmi = async (req, payload) => {
     const { id_user } = info_user || {};
     if (!id_user) throw new Error("id_user requerido");
     if (!datos_empresa?.rfc || !datos_empresa?.id_empresa) {
-      throw new Error("datos_empresa.rfc y datos_empresa.id_empresa son requeridos");
+      throw new Error(
+        "datos_empresa.rfc y datos_empresa.id_empresa son requeridos"
+      );
     }
 
     // Totales para tu BD
@@ -461,7 +492,9 @@ const  crearFacturaEmi = async (req, payload) => {
     // y como último recurso Receiver.TaxZipCode (solo sandbox).
     if (!cfdi.ExpeditionPlace || String(cfdi.ExpeditionPlace).trim() === "") {
       const emisorCP =
-        datos_empresa?.expedition_cp || datos_empresa?.cp || cfdi?.Receiver?.TaxZipCode;
+        datos_empresa?.expedition_cp ||
+        datos_empresa?.cp ||
+        cfdi?.Receiver?.TaxZipCode;
       if (!emisorCP) {
         throw new Error(
           "ExpeditionPlace requerido: faltan CP del emisor (datos_empresa.expedition_cp o .cp)."
@@ -473,7 +506,7 @@ const  crearFacturaEmi = async (req, payload) => {
     if (!cfdi.CfdiType) cfdi.CfdiType = "I";
     if (!cfdi.Exportation) cfdi.Exportation = "01";
     if (cfdi.CfdiType === "I") {
-      if (!cfdi.PaymentForm) cfdi.PaymentForm = "03";  // ajusta a tu operación real
+      if (!cfdi.PaymentForm) cfdi.PaymentForm = "03"; // ajusta a tu operación real
       if (!cfdi.PaymentMethod) cfdi.PaymentMethod = "PUE";
     }
     // -------------------------------------------------------------------------------
@@ -488,45 +521,44 @@ const  crearFacturaEmi = async (req, payload) => {
     // Transacción: crear en Facturama y luego guardar local
     const result = await runTransaction(async (conn) => {
       try {
-        
-      // 1) Crear CFDI en Facturama
-      let response_factura;
-      try {
-        response_factura = await crearCfdi(req, body);
-        console.log("respuesta de facturama",response_factura)
-      } catch (error) {
-        const msg = error?.response?.data || error?.message || error;
-        console.error("Error al crear CFDI:", msg);
-        throw new Error(msg);
-      }
+        // 1) Crear CFDI en Facturama
+        let response_factura;
+        try {
+          response_factura = await crearCfdi(req, body);
+          console.log("respuesta de facturama", response_factura);
+        } catch (error) {
+          const msg = error?.response?.data || error?.message || error;
+          console.error("Error al crear CFDI:", msg);
+          throw new Error(msg);
+        }
 
-      // 2) Insert local
-      const id_factura = `fac-${uuidv4()}`;
-      const insertFacturaQuery = `
+        // 2) Insert local
+        const id_factura = `fac-${uuidv4()}`;
+        const insertFacturaQuery = `
         INSERT INTO facturas (
           id_factura, fecha_emision, estado, usuario_creador,
           total, subtotal, impuestos, id_facturama, rfc, id_empresa, uuid_factura
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
       `;
 
-      await conn.execute(insertFacturaQuery, [
-        id_factura,
-        new Date(),
-        "Confirmada",
-        id_user,
-        total,
-        subtotal,
-        impuestos,
-        response_factura.data.Id,
-        datos_empresa.rfc,
-        datos_empresa.id_empresa,
-        response_factura.data.Complement.TaxStamp.Uuid,
-      ]);
+        await conn.execute(insertFacturaQuery, [
+          id_factura,
+          new Date(),
+          "Confirmada",
+          id_user,
+          total,
+          subtotal,
+          impuestos,
+          response_factura.data.Id,
+          datos_empresa.rfc,
+          datos_empresa.id_empresa,
+          response_factura.data.Complement.TaxStamp.Uuid,
+        ]);
 
-      // 3) (Opcional) relacionar pagos por solicitudes
-      if (Array.isArray(solicitudesArray) && solicitudesArray.length) {
-        const placeholders = solicitudesArray.map(() => "?").join(",");
-        const sql = `
+        // 3) (Opcional) relacionar pagos por solicitudes
+        /*if (Array.isArray(solicitudesArray) && solicitudesArray.length) {
+          const placeholders = solicitudesArray.map(() => "?").join(",");
+          const sql = `
           INSERT INTO facturas_pagos (id_factura, monto_pago, id_pago)
           SELECT ?, ?,
                  p.id_pago
@@ -536,16 +568,32 @@ const  crearFacturaEmi = async (req, payload) => {
           WHERE s.id_solicitud IN (${placeholders})
             AND p.id_pago IS NOT NULL
         `;
-        await conn.execute(sql, [id_factura, total, ...solicitudesArray]);
-      }
+          await conn.execute(sql, [id_factura, total, ...solicitudesArray]);
+        } LO COMENTO POR SI ACASO*/
 
-      return {
-        id_factura,
-        facturama: response_factura.data,
+        if (Array.isArray(solicitudesArray) && solicitudesArray.length) {
+  const placeholders = solicitudesArray.map(() => "?").join(",");
+  const sql = `
+    INSERT INTO facturas_pagos_y_saldos (id_factura, id_pago, monto)
+    SELECT
+      ?          AS id_factura,
+      p.id_pago  AS id_pago,
+      p.monto    AS monto
+    FROM solicitudes s
+    JOIN servicios se ON s.id_servicio = se.id_servicio
+    JOIN pagos p      ON se.id_servicio = p.id_servicio
+    WHERE s.id_solicitud IN (${placeholders})
+      AND p.id_pago IS NOT NULL
+  `;
+  await conn.execute(sql, [id_factura, ...solicitudesArray]);
+}
+
+        return {
+          id_factura,
+          facturama: response_factura.data,
         };
-        
       } catch (error) {
-       throw error 
+        throw error;
       }
     });
 
@@ -557,8 +605,7 @@ const  crearFacturaEmi = async (req, payload) => {
 
 module.exports = { crearFacturaEmi };
 
-
-const getFacturasConsultas = async (user_id) => {
+const getFacturasConsultas = async (user_id) => {/*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     let query = `
 SELECT
@@ -759,7 +806,5 @@ module.exports = {
   getAllFacturasConsultas,
   getDetailsFactura,
   isFacturada,
-  crearFacturaEmi
+  crearFacturaEmi,
 };
-
-
