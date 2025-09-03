@@ -77,14 +77,15 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         UPDATE items i
           JOIN hospedajes h ON i.id_hospedaje = h.id_hospedaje
           JOIN bookings b ON h.id_booking = b.id_booking
-        SET i.id_factura = ?
+        SET i.id_factura = ?,
+            i.is_facturado = 1
         WHERE b.id_solicitud = ?;`;
         const params2 = [id_factura, id_solicitud];
 
         const result = await connection.execute(query2, params2);
 
         const query3 = `
-        INSERT INTO facturas_pagos (id_factura, monto_pago, id_pago)
+        INSERT INTO facturas_pagos_y_saldos (id_factura, monto, id_pago)
           SELECT ?, ?, p.id_pago
             FROM solicitudes s
               JOIN servicios se ON s.id_servicio = se.id_servicio
@@ -173,7 +174,8 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         // 4. Actualizar solo los items seleccionados
         const updateItemsSql = `
         UPDATE items
-        SET id_factura = ?
+        SET id_factura = ?,
+        is_facturado = 1
         WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
         `;
         const resultados_items = await conn.execute(updateItemsSql, [
