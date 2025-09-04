@@ -163,6 +163,7 @@ router.post("/make-payment", async (req, res) => {
         await conn.execute(query_create_service, params_create_service);
 
         const id_pago = `pag-${uuidv4()}`;
+        const id_transaccion = uuidv4();
         const query_agregar_pago = `
       INSERT INTO pagos
       (
@@ -183,9 +184,11 @@ router.post("/make-payment", async (req, res) => {
         metodo_de_pago,
         tipo_de_tarjeta,
         tipo_de_pago,
-        id_agente
+        id_agente,
+        transaccion,
+        monto_transaccion
       ) 
-      VALUES (?,?,?,NOW(),?,?,?,?,NOW(),?,?,?,NOW(),?,?,?,?,?)`;
+      VALUES (?,?,?,NOW(),?,?,?,?,NOW(),?,?,?,NOW(),?,?,?,?,?,?,?)`;
 
         const params_agregar_pago = [
           id_pago,
@@ -205,6 +208,8 @@ router.post("/make-payment", async (req, res) => {
           card.funding || null,
           "contado",
           id_agente,
+          id_transaccion,
+          precio_venta.total || "0",
         ];
 
         await conn.execute(query_agregar_pago, params_agregar_pago);

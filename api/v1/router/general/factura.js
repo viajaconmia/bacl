@@ -28,6 +28,7 @@ router.post(
 
 // Descargar facturas por CFDI ID
 router.post("/download", controller.descargarFacturas);
+router.post("/descarga", controller.newDescargarFacturas);
 
 router.post("/downloadXML", controller.descargarFacturasXML);
 
