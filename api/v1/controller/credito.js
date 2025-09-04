@@ -338,9 +338,6 @@ const handlerPagoCreditoRegresarSaldo = async (req, res) => {
     }
     /* PASAMOS LA DIFERENCIA A POSITIVO*/
     diferencia = diferencia * -1;
-    /* 0.- OBTENEMOS AL AGENTE
-     *  validaciones:
-     *    - Que exista */
 
     const agentes_encontrados = await executeQuery(
       "select * from agente_details where id_agente = ?;",
