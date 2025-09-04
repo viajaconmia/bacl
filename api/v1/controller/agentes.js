@@ -20,6 +20,7 @@ const read = async (req, res) => {
   try {
     const { id_agente } = req.query;
     const agentes = await model.getAgente(id_agente);
+    
 
     res.status(200).json({ data: agentes });
   } catch (error) {
