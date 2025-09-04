@@ -126,6 +126,7 @@ const crearItemdeAjuste = async (req, res) => {
         const idsPagos = [];
         for (const saldoObj of updatedSaldos) {
           const id_pago = "pag-" + uuidv4();
+          const transaccion= "tra-" + uuidv4();
           idsPagos.push(id_pago);
 
           // parseo de fecha de pago
@@ -142,8 +143,8 @@ const crearItemdeAjuste = async (req, res) => {
             `INSERT INTO pagos (
            id_pago, id_servicio, id_saldo_a_favor, id_agente,
            metodo_de_pago, fecha_pago, concepto, referencia,
-           currency, tipo_de_tarjeta, link_pago, last_digits, total
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           currency, tipo_de_tarjeta, link_pago, last_digits, total,saldo_aplicado,transaccion,monto_transaccion
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?)`,
             [
               id_pago,
               id_servicio,
@@ -157,7 +158,11 @@ const crearItemdeAjuste = async (req, res) => {
               saldoObj.tipo_tarjeta,
               saldoObj.link_stripe,
               saldoObj.ult_digits,
+              precioActualizado, // referimos el nuevo precio de venta
               saldoObj.monto_cargado_al_item,
+              transaccion,
+              saldoObj.monto_cargado_al_item
+
             ]
           );
 
