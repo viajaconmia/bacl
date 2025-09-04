@@ -260,7 +260,7 @@ const pagoConCredito = async (body) => {
   }
 };
 
-const getPagosConsultas = async (user_id) => {
+const getPagosConsultas = async (user_id) => {/*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     let query = `
 SELECT

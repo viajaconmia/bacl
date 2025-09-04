@@ -2,7 +2,7 @@ const { error } = require("winston");
 const { executeSP } = require("../../../config/db");
 const { CustomError } = require("../../../middleware/errorHandler");
 
-    const get_reservasClient_by_id_agente = async (req, res) => {
+const get_reservasClient_by_id_agente = async (req, res) => {
   try {
     req.context.logStep(
       "Llegando al endpoint de get_reservasClient_by_id_agente"
@@ -36,6 +36,7 @@ const { CustomError } = require("../../../middleware/errorHandler");
 };
 
 const filtro_solicitudes_y_reservas = async (req, res) => {
+  console.log("", req.query, req.params);
   req.context.logStep("Llegando al endpoint de filtro_solicitudes_y_reservas");
 
   // Recibe los filtros con nombres del frontend
