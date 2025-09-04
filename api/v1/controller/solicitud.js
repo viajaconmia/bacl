@@ -261,8 +261,8 @@ const createFromCartWallet = async (req, res) => {
             saf.link_stripe,
             saf.ult_digits
           FROM saldos_a_favor saf
-          WHERE saf.id_agente = ?
-          ORDER BY saf.fecha_pago ASC, saf.id_saldos ASC
+          WHERE saf.id_agente = ? and saf.activo =1 and saf.saldo > 0
+          ORDER BY saf.saldo ASC,saf.fecha_pago ASC 
           FOR UPDATE
           `,
           [id_agente]
@@ -333,8 +333,10 @@ const createFromCartWallet = async (req, res) => {
             tipo_de_tarjeta,
             link_pago,
             last_digits,
-            total
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            total,
+            saldo_aplicado
+          
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
         `;
         const queryUpdateSaldo = `
           UPDATE saldos_a_favor
@@ -370,6 +372,7 @@ const createFromCartWallet = async (req, res) => {
             s.link_stripe || null,
             s.ult_digits || null, // map a last_digits
             total, // total aplicado en este pago
+            aplicado
           ]);
 
           // Descontar saldo aplicado en la fila bloqueada
