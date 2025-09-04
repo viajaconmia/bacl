@@ -152,7 +152,9 @@ const crearFacturaDesdeCarga = async (req, res) => {
     items,
   } = req.body;
   const id_factura = "fac-" + uuidv4();
+
   try {
+    console.log( '😒😒😒😒😒' ,req.bo)
     const response = await executeSP("sp_inserta_factura_desde_carga", [
       id_factura,
       fecha_emision,
@@ -171,6 +173,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
       url_xml,
       items,
     ]);
+
     if (!response) {
       req.context.logStep(
         "crearFacturaDesdeCarga:",
@@ -178,6 +181,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
       );
       throw new Error("No se pudo crear la factura desde carga");
     } else {
+      console.log(id_factura,response,items)
       res.status(201).json({
         message: "Factura creada correctamente desde carga",
         data: { id_factura, ...response },
