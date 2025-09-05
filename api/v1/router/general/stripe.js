@@ -313,6 +313,7 @@ router.get("/get-payment-methods", async (req, res) => {
       data: paymentMethods.data,
     });
   } catch (error) {
+
     console.log("Este es el error", error.message);
     return res.status(error.statusCode || error.status || 500).json({
       error: error.details || error,
