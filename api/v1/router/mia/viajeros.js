@@ -1,7 +1,7 @@
 const router = require("express").Router()
 const middleware = require("../../middleware/validateParams")
 const controller = require("../../controller/viajeros")
-const { executeQuery } = require("../../../../config/db");
+const { executeQuery } = require("../../../../config/db");  
 
 router.post("/", middleware.validateParams(["id_empresas", "primer_nombre", "apellido_paterno"]), controller.create)
 router.get("/", controller.read)

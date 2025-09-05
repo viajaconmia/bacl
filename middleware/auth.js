@@ -4,7 +4,9 @@ function checkApiKey(req, res, next) {
   if (req.path === "/v1/stripe/payment-links-hook") {
     return next();
   }
+
   const apiKey = req.headers["x-api-key"];
+  console.log("\n\n\n\n\n");
   if (!apiKey) {
     return res.status(401).json({
       error: {
@@ -15,6 +17,7 @@ function checkApiKey(req, res, next) {
       },
     });
   }
+
   if (!apiKey || apiKey !== API_KEY) {
     return res.status(401).json({
       error: {

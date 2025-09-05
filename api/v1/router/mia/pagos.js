@@ -1,7 +1,12 @@
 const router = require("express").Router();
 const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/pagos");
+const { get_agente_facturas } = require("../../controller/facturas");
 
+router.post("/carrito/credito", controller.pagarCarritoConCredito);
+router.post("/crearItemdeAjuste", controller.crearItemdeAjuste);
+router.post("/aplicarpagoPorSaldoAFavor", controller.pagoPorSaldoAFavor);
+router.get("/getAllPagosPrepago", controller.getAllPagosPrepago);
 router.post("/", controller.create);
 router.get("/", controller.read);
 router.get(
@@ -14,20 +19,29 @@ router.get(
   middleware.validateParamsQuery(["id_agente"]),
   controller.getAgenteCredito
 );
+
+router.get(
+  "/get_pagos_prepago_by_ID",
+  middleware.validateParamsQuery(["id_agente"]),
+  controller.get_pagos_prepago_by_ID
+);
+
 router.get("/todos", controller.getAgenteAgentesYEmpresas);
 router.post("/agente", controller.updateCreditAgent);
 router.post("/empresa", controller.updateCreditEmpresa);
 router.get("/pagosAgente", controller.getPagosAgente);
+router.put(
+  "/precio-contado-regresar-saldo",
+  controller.handlerPagoContadoRegresarSaldo
+);
+
 router.get("/pendientesAgente", controller.getPendientesAgente);
 router.get("/allPendientes", controller.getAllPendientes);
 router.get("/getAllPagos", controller.getAllPagos);
 router.get("/consultas", controller.readConsultas);
+router.get("/metodos_pago", controller.getMetodosPago);
 router.post(
   "/credito",
-  (req, res, next) => {
-    console.log("Datos recibidos para pago con crédito:", req.body);
-    next();
-  },
   middleware.validateParams([
     "id_servicio",
     "monto_a_credito",
@@ -44,5 +58,5 @@ router.post(
   ]),
   controller.pagoPorCredito
 );
-
+router.get("/getDetallesConexion", controller.getDetallesConexionesPagos);
 module.exports = router;
