@@ -4,7 +4,7 @@ const {
   executeQuery,
   runTransaction,
   executeSP,
-  executeSP2
+  executeSP2,
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 
@@ -555,7 +555,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
 
     if (pago.id_saldo_a_favor != null)
       throw new CustomError(
-        `Lo siento, el pago se realizo con saldo a favor, no se podra modificar por este medio, el id del saldo a favor es:${pago.id_saldo_a_favor}, se puede hacer el cambio pero tomara tiempo, avisar si se desea agregar eso, para eso se agregaria un wallet pero ese no seria facturable ya que hay un saldo a favor que paso por eso`,
+        `Lo siento, el pago se realizo con saldo a favor, no se podra modificar por este medio, el id del saldo a favor es:${pago.id_saldo_a_favor}, se puede hacer el cambio pero tomara tiempo, avisar si se desea agregar eso, para eso se agregaria un wallet pero ese no seria facturable ya que hay un saldo a favor que paso por eso, comentarlo con TI`,
         402,
         "ERROR_PAYMENT",
         pago
@@ -842,28 +842,36 @@ const getAllPagosPrepago = async (req, res) => {
   }
 };
 
-
-const getDetallesConexionesPagos = async (req,res ) =>{
-   const {id_agente,id_raw} = req.query;
-   try{
-    const [facturas =[], reservas =[]] = await executeSP2('sp_get_detalles_conexion_pagos',[id_agente,id_raw],{allSets:true});
-    if(facturas.length ===0 && reservas.length ===0){
-      throw new CustomError('No se encontraron detalles para el pago especificado',404,'NOT_FOUND',{id_agente,id_raw});
+const getDetallesConexionesPagos = async (req, res) => {
+  const { id_agente, id_raw } = req.query;
+  try {
+    const [facturas = [], reservas = []] = await executeSP2(
+      "sp_get_detalles_conexion_pagos",
+      [id_agente, id_raw],
+      { allSets: true }
+    );
+    if (facturas.length === 0 && reservas.length === 0) {
+      throw new CustomError(
+        "No se encontraron detalles para el pago especificado",
+        404,
+        "NOT_FOUND",
+        { id_agente, id_raw }
+      );
     }
     res.status(200).json({
-      message:'Detalles obtenidos correctamente',
-      data:{facturas:facturas || [], reservas:reservas || []}
+      message: "Detalles obtenidos correctamente",
+      data: { facturas: facturas || [], reservas: reservas || [] },
     });
-   }
-   catch(error){
+  } catch (error) {
     console.error(error);
     res.status(error.statusCode || 500).json({
-      message:error.message || 'Error desconocido al obtener detalles de conexiones',
-      error:error || 'ERROR_BACK',
-      data:null
+      message:
+        error.message || "Error desconocido al obtener detalles de conexiones",
+      error: error || "ERROR_BACK",
+      data: null,
     });
-   }
-}
+  }
+};
 
 const get_pagos_prepago_by_ID = async (req, res) => {
   try {
@@ -918,5 +926,5 @@ module.exports = {
   getAllPagosPrepago,
   getMetodosPago,
   pagarCarritoConCredito,
-  getDetallesConexionesPagos
+  getDetallesConexionesPagos,
 };
