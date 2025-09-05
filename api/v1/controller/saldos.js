@@ -45,6 +45,7 @@ const getStripeInfo = async (req, res) => {
       pais: charge.payment_method_details.card.country,
       authorization_code: charge.payment_method_details.card.authorization_code,
     };
+  console.log("chargeId recibido:", stripeInfo);
 
     if (!charge) {
       return res.status(404).json({ message: "Cargo no encontrado" });
@@ -131,7 +132,7 @@ const saldosByType = async (req, res) => {
       );
     }
     const saldos = await executeQuery(
-      `SELECT * FROM saldos_a_favor WHERE metodo_pago = ? AND id_agente = ? AND saldo > 0;`,
+      `SELECT * FROM saldos_a_favor WHERE metodo_pago = ? AND id_agente = ? AND saldo > 0 AND activo = 1;`,
       [type, id_agente]
     );
 
@@ -282,7 +283,7 @@ const createNewSaldo = async (req, res) => {
 };
 const update_saldo_by_id = async (req, res) => {
   console.log("Llegando al endpoint de update_saldo_by_id");
-    const {
+  const {
     id_saldos,
     id_agente,
     saldo,

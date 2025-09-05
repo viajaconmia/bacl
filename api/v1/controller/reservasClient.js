@@ -8,6 +8,7 @@ const get_reservasClient_by_id_agente = async (req, res) => {
       "Llegando al endpoint de get_reservasClient_by_id_agente"
     );
     const { user_id } = req.query;
+    console.log("user_id recibido:", user_id);
     if (!user_id) {
       throw new CustomError(
         "Falta el parametro user_id",
@@ -35,6 +36,7 @@ const get_reservasClient_by_id_agente = async (req, res) => {
 };
 
 const filtro_solicitudes_y_reservas = async (req, res) => {
+  console.log("", req.query, req.params);
   req.context.logStep("Llegando al endpoint de filtro_solicitudes_y_reservas");
 
   // Recibe los filtros con nombres del frontend

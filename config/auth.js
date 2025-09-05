@@ -15,7 +15,7 @@ const API_SENDGRID = process.env.API_SENDGRID;
 const SERVICE_ROLE_KEY_SPB = process.env.SERVICE_ROLE_KEY_SPB;
 
 const supabase = createClient(
-  "https://iqicycjdypiypfxwaapj.supabase.co",
+  process.env.SUPABASE_URL,
   SERVICE_ROLE_KEY_SPB // 👈 aquí va la Service Role Key
 );
 

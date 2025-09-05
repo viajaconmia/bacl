@@ -32,81 +32,42 @@ const { v4: uuidv4 } = require("uuid");
 const createSolicitudes = async (body) => {
   try {
     const { solicitudes } = body;
-    console.log(solicitudes);
-    const id_servicio = `ser-${uuidv4()}`;
-    const query_servicio = `INSERT INTO servicios (id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago, id_agente) VALUES (?,?,?,?,?,?,?,?);`;
-    const total = solicitudes.reduce(
-      (prev, current) => prev + current.total,
-      0
-    );
-    const subtotal = parseFloat((total * 0.84).toFixed(2));
-    const impuestos = parseFloat((total * 0.16).toFixed(2));
-    const params_servicio = [
-      id_servicio,
+    const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales, id_agente) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+    const id_solicitud = `sol-${uuidv4()}`;
+    const {
+      confirmation_code,
+      id_agente,
+      hotel,
+      check_in,
+      check_out,
+      room,
       total,
-      subtotal,
-      impuestos,
-      null,
-      null,
-      null,
-      solicitudes[0].id_agente,
+      status,
+      id_viajero,
+      nombre_viajero,
+      viajeros_adicionales,
+    } = solicitudes[0];
+    const params_solicitud = [
+      id_solicitud,
+      id_agente,
+      confirmation_code,
+      id_viajero,
+      hotel,
+      check_in,
+      check_out,
+      room,
+      total,
+      status,
+      nombre_viajero,
+      JSON.stringify(viajeros_adicionales) || [],
+      id_agente,
     ];
 
-    const response = await executeTransaction(
-      query_servicio,
-      params_servicio,
-      async (results, connection) => {
-        try {
-          const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_servicio, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales) VALUES ${solicitudes
-            .map(() => "(?,?,?,?,?,?,?,?,?,?,?,?,?)")
-            .join(",")};`;
+    const response = await executeQuery(query_solicitudes, params_solicitud);
 
-          const params_solicitudes_map = solicitudes.map((solicitud) => {
-            let id_solicitud = `sol-${uuidv4()}`;
-            // Correct destructuring to match incoming data keys
-            const {
-              confirmation_code,
-              id_agente,
-              hotel,
-              check_in,
-              check_out,
-              room,
-              total,
-              status,
-              id_viajero,
-              nombre_viajero,
-              viajeros_adicionales,
-            } = solicitud;
-            return [
-              id_solicitud,
-              id_servicio,
-              id_agente,
-              confirmation_code,
-              id_viajero,
-              hotel,
-              check_in,
-              check_out,
-              room,
-              total,
-              status,
-              nombre_viajero,
-              JSON.stringify(viajeros_adicionales) || [],
-            ];
-          });
-          const params_solicitudes_flat = params_solicitudes_map.flat();
-
-          const response_solicitudes = await connection.execute(
-            query_solicitudes,
-            params_solicitudes_flat
-          );
-          return params_solicitudes_map.map((list) => list[0]);
-        } catch (error) {
-          throw error;
-        }
-      }
-    );
-
-    return { id_servicio: id_servicio, response };
+    return {
+      id_solicitud,
+    };
   } catch (error) {
     throw error;
   }
@@ -273,7 +234,7 @@ ORDER BY s.created_at DESC;`;
   }
 };
 
-const getSolicitudById = async (id) => {
+const getSolicitudById = async (id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     let query = `
 SELECT 
@@ -327,7 +288,7 @@ ORDER BY s.created_at DESC;`;
   }
 };
 
-const getSolicitudesClientWithViajero = async (id) => {
+const getSolicitudesClientWithViajero = async (id) => {/*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     const query = `SELECT 
   p_c.id_credito,
@@ -380,7 +341,7 @@ ORDER BY a.id_agente, a.created_at`;
     throw error;
   }
 };
-const readForClient = async (id) => {
+const readForClient = async (id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     const query = `
 SELECT
@@ -432,7 +393,7 @@ order by se.created_at desc;`;
   }
 };
 
-const getSolicitudesClient = async (user_id) => {
+const getSolicitudesClient = async (user_id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     let query = `
 SELECT
@@ -492,7 +453,7 @@ const getViajeroAgenteSolicitud = async (id_agente) => {
   }
 };
 
-const getSolicitudesConsultas = async (user_id) => {
+const getSolicitudesConsultas = async (user_id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     let query = `
 SELECT
@@ -649,8 +610,8 @@ const getItemsSolicitud = async (id_solicitud) => {
 };
 
 // const filtro_solicitudes_y_reservas = async (req,res) => {
-//   const 
-  
+//   const
+
 // }
 module.exports = {
   // createSolicitudYTicket,

@@ -6,6 +6,10 @@ const stripeTest = require("stripe")(API_STRIPE_TEST);
 const { createClient } = require("@supabase/supabase-js");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
 
+const supabase_url = process.env.SUPABASE_URL;
+const supabase_service_role = process.env.SERVICE_ROLE_KEY_SPB;
+const supabaseAdmin = createClient(supabase_url, supabase_service_role);
+
 const verificarRegistroUsuario = async (req, res) => {
   try {
     const { email } = req.query;
@@ -20,16 +24,14 @@ const verificarRegistroUsuario = async (req, res) => {
         .status(200)
         .json({ message: "usuario no encontrado", data: { registrar: false } });
     }
-    const supabase_url = process.env.SUPABASE_URL;
-    const supabase_service_role = process.env.SERVICE_ROLE_KEY_SPB;
-    const supabaseAdmin = createClient(supabase_url, supabase_service_role);
+
+    // console.log(usuario);
 
     const { data, error } = await supabaseAdmin
       .from("user_info")
-      .select("id_viajero")
-      .eq("id_viajero", usuario.id_viajero)
-      .maybeSingle();
-
+      .select("*")
+      .eq("id_viajero", usuario.id_viajero);
+    console.log(data);
     if (error) {
       throw new CustomError(
         error.message || "Error en el mensaje",
@@ -38,12 +40,14 @@ const verificarRegistroUsuario = async (req, res) => {
         error
       );
     }
-    if (!data) {
+
+    if (!data[0]) {
       return res.status(200).json({
         message: "usuario existe pero no en supabase",
         data: { registrar: true, usuario },
       });
     }
+
     return res
       .status(200)
       .json({ message: "usuario encontrado", data: { registrar: false } });
@@ -69,7 +73,6 @@ const newCreateAgente = async (req, res) => {
     try {
       stripe_client = await stripeTest.customers.create({ email: body.correo });
     } catch (error) {
-      console.log("\n\n\n\n\n", error);
       throw new CustomError(
         "Ocurrio un error con stripe",
         500,
@@ -104,6 +107,14 @@ const newCreateAgente = async (req, res) => {
       body.numero_pasaporte || null,
       body.numero_empleado || null,
     ]);
+    await executeQuery(
+      `INSERT INTO usuarios (id_agente, id_viajero, id_supabase, rol) VALUES (?,?,?,?);`,
+      [body.id_agente, id_viajero, body.id_agente, "administrador"]
+    );
+    await executeQuery(
+      `UPDATE viajeros SET is_user = true where id_viajero = ?;`,
+      [id_viajero]
+    );
     await executeQuery(`UPDATE otp_storage SET verify = ? WHERE email = ?`, [
       true,
       body.correo,
@@ -121,4 +132,119 @@ const newCreateAgente = async (req, res) => {
   }
 };
 
-module.exports = { newCreateAgente, verificarRegistroUsuario };
+const newViajeroWithRol = async (req, res) => {
+  try {
+    const { correo, password, id_viajero, id_agente, rol } = req.body;
+
+    if (!correo || !password || !id_viajero)
+      throw new CustomError(
+        "Faltan parametros",
+        400,
+        "MISSING_PARAMETERS",
+        Object.entries(req.body).filter(([, value]) => !!value)
+      );
+    // //Extraer el id del viajero y tambien el correo, debemos extraer por correos y si hay un numero mayor a 1 decimos que ya existe una cuenta con ese correo,
+    // //Debemos verificar que el id del viajero tenga el correo que se nos mando
+    const viajeros_registrados = await executeQuery(
+      `select * from viajeros where LOWER(correo) = LOWER(?) AND is_user = true;`,
+      [correo]
+    );
+
+    console.log(viajeros_registrados);
+
+    if (viajeros_registrados.length > 0)
+      throw new CustomError(
+        "Ya existe un usuario con ese correo",
+        403,
+        "AUTH_ERROR",
+        { correo }
+      );
+
+    const viajeros = await executeQuery(
+      `select * from viajeros where id_viajero = ?;`,
+      [id_viajero]
+    );
+
+    if (viajeros.length < 1)
+      throw new CustomError("No encontramos el viajero", 400, "AUTH_ERROR", {
+        id_viajero,
+      });
+    const viajero = viajeros[0];
+
+    const nombreCompleto = [
+      viajero.primer_nombre,
+      viajero.segundo_nombre,
+      viajero.apellido_paterno,
+      viajero.apellido_materno,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email: correo,
+      password: password,
+      email_confirm: true,
+    });
+
+    if (error) {
+      throw new CustomError(
+        error.message || "Error al registrar el usuario",
+        error.status || 500,
+        error.code,
+        error
+      );
+    }
+
+    // Actualizar metadata con nombre y teléfono
+    await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+      user_metadata: {
+        full_name: nombreCompleto,
+        display_name: nombreCompleto, // <- Este es el que aparece en Supabase UI
+        phone: viajero.telefono,
+      },
+    });
+
+    const user_info = {
+      id_user: data.user.id,
+      id_viajero: viajero.id_viajero,
+      id_agente,
+      rol,
+    };
+
+    //Agregar su info y su rol
+    await supabaseAdmin.from("user_info").insert(user_info);
+
+    await executeQuery(
+      `UPDATE viajeros SET is_user = true where id_viajero = ?;`,
+      [id_viajero]
+    );
+
+    await executeQuery(
+      `INSERT INTO usuarios (id_agente, id_viajero, id_supabase, rol) VALUES (?,?,?,?);`,
+      [
+        user_info.id_agente,
+        user_info.id_viajero,
+        user_info.id_user,
+        user_info.rol,
+      ]
+    );
+
+    res.status(201).json({
+      message: "Usuario creado con exito",
+      data: { correo, viajeros_registrados, data, viajeros },
+    });
+  } catch (error) {
+    console.log("Este es el error qiuien c", error.message);
+    return res.status(error.statusCode || 500).json({
+      error: error.details,
+      message: error.message,
+      data: null,
+    });
+  }
+};
+
+module.exports = {
+  newCreateAgente,
+  verificarRegistroUsuario,
+  newViajeroWithRol,
+};

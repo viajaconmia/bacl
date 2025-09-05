@@ -1,6 +1,7 @@
 const model = require("../model/reservas");
 const {
   executeQuery,
+  executeSP2,
   executeSP,
   runTransaction,
 } = require("../../../config/db");
@@ -96,9 +97,9 @@ const updateReserva2 = async (req, res) => {
       viajero?.current?.id_viajero ?? null, // 2) p_id_viajero
       check_in?.current ?? null, // 3) p_check_in
       check_out?.current ?? null, // 4) p_check_out
-      venta?.current?.total ?? null, // 5) p_total
-      venta?.current?.subtotal ?? null, // 6) p_subtotal
-      venta?.current?.impuestos ?? null, // 7) p_impuestos
+      // venta?.current?.total ?? null, // 5) p_total
+      // venta?.current?.subtotal ?? null, // 6) p_subtotal
+      // venta?.current?.impuestos ?? null, // 7) p_impuestos
       estado_reserva?.current ?? null, // 8) p_estado_reserva
       proveedor?.current?.total ?? null, // 9) p_costo_total
       proveedor?.current?.subtotal ?? null, // 10) p_costo_subtotal
@@ -141,8 +142,39 @@ const updateReserva2 = async (req, res) => {
 };
 
 const createFromOperaciones = async (req, res) => {
-  try {
-    let response = await model.insertarReservaOperaciones(req.body);
+
+try {
+  console.log("Revisando el body  😭😭😭😭", req.body);
+  const {bandera } = req.body;
+  const { check_in, check_out } = req.body;
+  console.log(check_in,check_out)
+  const parseMySQLDate = (dateStr) => {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(year, month - 1, day); 
+  };
+
+    const checkInDate = parseMySQLDate(check_in);
+    const checkOutDate = parseMySQLDate(check_out);
+
+    console.log("a ver esto,", checkInDate, checkOutDate);
+    console.log(
+      "REVISANDO FECHAS",
+      checkOutDate.getTime() - checkInDate.getTime()
+    );
+
+
+    if (checkOutDate.getTime() < checkInDate.getTime()) {
+      // return res.status(400).json({
+      //   error: "La fecha de check-out no puede ser anterior a la fecha de check-in"
+      // });
+      throw new CustomError(
+        "La fecha de check-out no puede ser anterior a la fecha de check-in",
+        400,
+        "INVALID_CHECKOUT_DATE"
+      );
+    }
+
+    let response = await model.insertarReservaOperaciones(req.body, req.body.bandera);
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });
@@ -150,9 +182,14 @@ const createFromOperaciones = async (req, res) => {
     console.error(error);
     res
       .status(500)
-      .json({ error: "Internal Server Error", details: error.message });
+      .json({
+        error: "Internal Server Error",
+        message: error.message,
+        data: null,
+      });
   }
 };
+
 
 const read = async (req, res) => {
   try {
@@ -272,7 +309,7 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
   console.log("id_agente", id_agente);
   try {
     const reservas = await executeSP(
-      "mia2.sp_reservas_con_items_by_id_agente",
+      "mia3.sp_reservas_con_items_by_id_agente",
       [id_agente]
     );
     if (!reservas) {
@@ -301,16 +338,33 @@ const getReservasWithItemsSinPagarByAgente = async (req, res) => {
         .status(404)
         .json({ message: "No se encontraron reservas con items sin pagar" });
     }
-    return res
-      .status(200)
-      .json({
-        message: "Reservas con items sin pagar encontradas",
-        data: result,
-      });
+    return res.status(200).json({
+      message: "Reservas con items sin pagar encontradas",
+      data: result,
+    });
   } catch (error) {
     res.status(500).json({ error: "Error en el servidor", details: error });
   }
 };
+
+const getDetallesConexionReservas = async (req,res) => {
+  const {id_agente, id_hospedaje}= req.query;
+  try {
+   const [facturas = [], pagos = []]= await executeSP2("sp_get_detalles_conexion_reservas", [id_agente, id_hospedaje], { allSets: true });
+    // console.log(detalles);
+    // if (!detalles || detalles.length === 0) {
+    //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
+   // }
+    return res.status(200).json({ message: "Detalles de conexión encontrados", data: {
+      facturas: facturas,
+      pagos: pagos
+    } });
+  } catch (error) {
+    res.status(500).json({ error: "Error en el servidor", details: error });
+    console.error(error);
+  }
+  
+}
 
 module.exports = {
   create,
@@ -326,4 +380,5 @@ module.exports = {
   actualizarPrecioVenta,
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
+  getDetallesConexionReservas
 };

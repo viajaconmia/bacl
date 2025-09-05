@@ -3,7 +3,7 @@ const controller = require("../../controller/reservas");
 const middleware = require("../../middleware/validateParams");
 
 const requiredParamsToCreate = [];
-
+router.get("/detallesConexion", controller.getDetallesConexionReservas);
 router.put(
   "/",
   //middleware.validateParams(requiredParamsToCreate),
@@ -32,5 +32,6 @@ router.get(
   "/reservasConItemsSinPagar",
   controller.getReservasWithItemsSinPagarByAgente
 );
+
 
 module.exports = router;
