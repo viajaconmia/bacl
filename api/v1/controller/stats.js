@@ -14,7 +14,7 @@ const getCardStats = async (req, res) => {
     res
       .status(200)
       .json({ message: "Stats halladas con exito", data: response });
-  } catch (error) {
+  } catch (error) { 
     console.error(error);
     res
       .status(500)

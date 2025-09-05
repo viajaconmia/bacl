@@ -720,6 +720,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             "Procesando bandera 0 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:"
           );
           if (bandera === 0) {
+
             // Crédito: descuenta saldo del agente + inserta pagos_credito
             await connection.execute(
               `UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?;`,
@@ -816,9 +817,12 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
                 currency, tipo_de_tarjeta, link_pago, last_digits, total
               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
             `;
-            const query_update_saldo = `
-              UPDATE saldos_a_favor SET saldo = saldo - ? WHERE id_saldos = ?;
-            `;
+            const query_update_saldo = `UPDATE saldos_a_favor
+SET
+  saldo = GREATEST(saldo - ?, 0),
+  activo = CASE WHEN saldo <= 0 THEN 0 ELSE 1 END
+WHERE id_saldos = ?;
+`;
 
             for (const saldo of ejemplo_saldos) {
               console.log("Procesando saldo:", saldo);
@@ -887,14 +891,16 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
 
             // --- update final: reflejar saldo_actual en saldos_a_favor ---
             for (const pago of pagosOrdenados) {
-              await connection.execute(
-                `UPDATE saldos_a_favor 
-                SET saldo = ?,
-                activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END,
-                WHERE id_saldos = ?`,
-                [pago.saldo_actual, pago.id_saldo]
-              );
-            }
+  await connection.execute(
+    `UPDATE saldos_a_favor
+     SET
+       saldo = ?,
+       activo = CASE WHEN ? <= 0 THEN 0 ELSE 1 END
+     WHERE id_saldos = ?;`,
+    [pago.saldo_actual, pago.saldo_actual, pago.id_saldo] // 3 params para 3 "?"
+  );
+}
+
           }
 
           // Completar solicitud
