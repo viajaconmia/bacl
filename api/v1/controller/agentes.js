@@ -42,6 +42,7 @@ const readAgentesCompanies = async (req, res) => {
 };
 
 const readEmpresasDatosFiscales = async (req, res) => {
+  console.log("Entrando al controller")
   try {
     const { id_agente } = req.query;
     const agentes = await model.getEmpresasDatosFiscales(id_agente);

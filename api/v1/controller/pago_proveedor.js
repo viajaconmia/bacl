@@ -11,6 +11,7 @@ const createSolicitud = async (req, res) => {
     const {
       monto_a_pagar,
       paymentMethod,
+      paymentStatus, // Recibido del frontend
       comments,
       date,
       paymentType,
@@ -18,33 +19,59 @@ const createSolicitud = async (req, res) => {
       id_hospedaje,
     } = solicitud;
 
+    console.log("📥 Datos recibidos:", solicitud);
+
     let response;
-    if (paymentType != "credit") {
-      if (paymentMethod == "transfer") {
+    if (paymentType !== "credit") {
+      // Mapear paymentStatus a estado_pago según sea necesario
+      const estado_pago = paymentStatus; // O puedes transformarlo si es necesario
+      
+      if (paymentMethod === "transfer") {
         const parametros = [
-          monto_a_pagar, //Monto a pagar
-          "transfer", //Metodo de pago
-          null, //Tarjeta seleccionada
-          "Operaciones", //Usuario solicitante
-          "Operaciones", //Usuario generador
-          comments, //comentarios
-          id_hospedaje, //id hospedaje
-          date, //fecha solicitud
+          monto_a_pagar,
+          "transfer",
+          null,
+          "Operaciones",
+          "Operaciones",
+          comments,
+          id_hospedaje,
+          date,
+          estado_pago // Usamos el valor mapeado
         ];
+        
+        response = await executeSP(
+          STORED_PROCEDURE.POST.SOLICITUD_PAGO_PROVEEDOR,
+          parametros
+        );
+      } else if (paymentMethod === "card" || paymentMethod === "link") {
+        const parametros = [
+          monto_a_pagar,
+          paymentMethod,
+          selectedCard,
+          "Operaciones",
+          "Operaciones",
+          comments,
+          id_hospedaje,
+          date,
+          estado_pago // Usamos el valor mapeado
+        ];
+        
         response = await executeSP(
           STORED_PROCEDURE.POST.SOLICITUD_PAGO_PROVEEDOR,
           parametros
         );
       }
     }
+    
     res.status(200).json({
-      message: "Agregado con exito el objeto",
+      message: "Solicitud procesada con éxito",
       ok: true,
-      data: solicitud,
+      data: solicitud
     });
+    
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Internal Server Error", details: error });
+    console.error("❌ Error:", error);
+    res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
 };
 

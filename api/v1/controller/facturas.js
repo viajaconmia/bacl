@@ -14,9 +14,9 @@ const create = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({
-      error: "Error create from v1/mia/factura - GET",
-      details: error.response?.data || error.message || error,
-    });
+      error: error.message || "Error create from v1/mia/factura - GET",
+      details: error.response?.data || error.details.data || error,
+    })
   }
 };
 
