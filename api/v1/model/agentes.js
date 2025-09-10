@@ -51,6 +51,7 @@ const getAgenteEmpresa = async (id_agente) => {
 };
 
 const getEmpresasDatosFiscales = async (id_agente) => {
+  console.log("ENTRANDO AL MODELO")
   try {
     const query = `SELECT 
 vw.*, 
