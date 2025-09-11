@@ -27,6 +27,7 @@ from agentes_viajeros va
 inner join viajeros v on v.id_viajero = va.id_viajero
 inner join viajeros_con_empresas_con_agentes vca on vca.id_viajero = v.id_viajero
 where va.id_agente = ?;`;
+
     const params = [id_agente];
     const response = await executeQuery(query, params);
     console.log(response);

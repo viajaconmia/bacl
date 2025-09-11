@@ -5,6 +5,7 @@ const {
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 let model = require("../model/solicitud");
+const { ShortError } = require("../../../middleware/errorHandler");
 
 const create = async (req, res) => {
   try {
@@ -212,22 +213,14 @@ const createFromCartWallet = async (req, res) => {
     const { items, id_agente, total } = req.body;
 
     // --- Validaciones de entrada ---
-    if (!Array.isArray(items) || items.length === 0) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "items requerido (array no vacío)" });
-    }
-    if (!id_agente) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "id_agente requerido" });
-    }
+    if (!Array.isArray(items) && items.length === 0)
+      throw new ShortError("carrito vacio", 400);
+
+    if (!id_agente) throw new ShortError("No hay agente", 400);
+
     const totalNumerico = Number(total);
-    if (!Number.isFinite(totalNumerico) || totalNumerico <= 0) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "total inválido (> 0)" });
-    }
+    if (!Number.isFinite(totalNumerico) || totalNumerico <= 0)
+      throw new ShortError("total invaildo", 400);
 
     // Solo actualizamos solicitudes de items seleccionados
     const itemsSeleccionados = items.filter(
@@ -309,13 +302,15 @@ const createFromCartWallet = async (req, res) => {
 
         // 4) Vincular servicio a solicitudes de los items seleccionados
         const queryUpdateSolicitud = `UPDATE solicitudes SET id_servicio = ? WHERE id_solicitud = ?`;
-      const query_deactivate_cart = `update cart set active = 0 where  id = ?;`;
+        const query_deactivate_cart = `update cart set active = 0 where  id = ?;`;
         const ids_solicitudes = [];
         for (const it of itemsSeleccionados) {
-          await connection.execute(queryUpdateSolicitud, [id_servicio, it.details.id_solicitud]);
-          await executeQuery(query_deactivate_cart,[it.id])
+          await connection.execute(queryUpdateSolicitud, [
+            id_servicio,
+            it.details.id_solicitud,
+          ]);
+          await executeQuery(query_deactivate_cart, [it.id]);
           ids_solicitudes.push(it.details.id_solicitud);
-          
         }
 
         // 5) Ir aplicando saldos hasta cubrir el total
@@ -334,9 +329,11 @@ const createFromCartWallet = async (req, res) => {
             link_pago,
             last_digits,
             total,
-            saldo_aplicado
+            saldo_aplicado,
+            transaccion,
+            monto_transaccion
           
-          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+          ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
         `;
         const queryUpdateSaldo = `
           UPDATE saldos_a_favor
@@ -347,6 +344,7 @@ const createFromCartWallet = async (req, res) => {
 
         let restante = totalNumerico;
         const pagos = [];
+        const id_transaccion = uuidv4();
 
         for (const s of rowsSaldos) {
           if (restante <= 0) break;
@@ -372,7 +370,9 @@ const createFromCartWallet = async (req, res) => {
             s.link_stripe || null,
             s.ult_digits || null, // map a last_digits
             total, // total aplicado en este pago
-            aplicado
+            aplicado,
+            id_transaccion,
+            totalNumerico,
           ]);
 
           // Descontar saldo aplicado en la fila bloqueada

@@ -15,7 +15,7 @@ const impersonateUser = async (req, res) => {
       email,
       options: {
         redirectTo:
-          process.env.REDIRECT_URL || "https://mia-gray.vercel.app/impersonado",
+          process.env.REDIRECT_URL || "https://viajaconmia.com/impersonado",
       },
     });
 
