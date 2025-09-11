@@ -80,6 +80,18 @@ const obtenerClientes = async (req, res) => {
       .json({ error: "Internal Server Error", details: error.response.data });
   }
 };
+const obtenerCfdiByFechas = async (req, res) => {
+  try {
+    const { start, end } = req.query || req.params;
+    const listClients = await model.listaByFechas(start, end);
+    res.status(200).json(listClients);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.response.data });
+  }
+};
 
 const obtenerFacturasCliente = async (req, res) => {
   try {
@@ -245,4 +257,5 @@ module.exports = {
   cancelarCfdi,
   descargarFacturasXML,
   getCdfi,
+  obtenerCfdiByFechas,
 };

@@ -142,16 +142,15 @@ const updateReserva2 = async (req, res) => {
 };
 
 const createFromOperaciones = async (req, res) => {
-
-try {
-  console.log("Revisando el body  😭😭😭😭", req.body);
-  const {bandera } = req.body;
-  const { check_in, check_out } = req.body;
-  console.log(check_in,check_out)
-  const parseMySQLDate = (dateStr) => {
-    const [year, month, day] = dateStr.split("-").map(Number);
-    return new Date(year, month - 1, day); 
-  };
+  try {
+    console.log("Revisando el body  😭😭😭😭", req.body);
+    const { bandera } = req.body;
+    const { check_in, check_out } = req.body;
+    console.log(check_in, check_out);
+    const parseMySQLDate = (dateStr) => {
+      const [year, month, day] = dateStr.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    };
 
     const checkInDate = parseMySQLDate(check_in);
     const checkOutDate = parseMySQLDate(check_out);
@@ -161,7 +160,6 @@ try {
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime()
     );
-
 
     if (checkOutDate.getTime() < checkInDate.getTime()) {
       // return res.status(400).json({
@@ -174,22 +172,22 @@ try {
       );
     }
 
-    let response = await model.insertarReservaOperaciones(req.body, req.body.bandera);
+    let response = await model.insertarReservaOperaciones(
+      req.body,
+      req.body.bandera
+    );
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({
-        error: "Internal Server Error",
-        message: error.message,
-        data: null,
-      });
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: error.message,
+      data: null,
+    });
   }
 };
-
 
 const read = async (req, res) => {
   try {
@@ -308,10 +306,9 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
   const { id_agente } = req.query;
   console.log("id_agente", id_agente);
   try {
-    const reservas = await executeSP(
-      "mia3.sp_reservas_con_items_by_id_agente",
-      [id_agente]
-    );
+    const reservas = await executeSP("sp_reservas_con_items_by_id_agente", [
+      id_agente,
+    ]);
     if (!reservas) {
       return res.status(404).json({ message: "No se encontraron reservas" });
     } else {
@@ -347,24 +344,30 @@ const getReservasWithItemsSinPagarByAgente = async (req, res) => {
   }
 };
 
-const getDetallesConexionReservas = async (req,res) => {
-  const {id_agente, id_hospedaje}= req.query;
+const getDetallesConexionReservas = async (req, res) => {
+  const { id_agente, id_hospedaje } = req.query;
   try {
-   const [facturas = [], pagos = []]= await executeSP2("sp_get_detalles_conexion_reservas", [id_agente, id_hospedaje], { allSets: true });
+    const [facturas = [], pagos = []] = await executeSP2(
+      "sp_get_detalles_conexion_reservas",
+      [id_agente, id_hospedaje],
+      { allSets: true }
+    );
     // console.log(detalles);
     // if (!detalles || detalles.length === 0) {
     //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
-   // }
-    return res.status(200).json({ message: "Detalles de conexión encontrados", data: {
-      facturas: facturas,
-      pagos: pagos
-    } });
+    // }
+    return res.status(200).json({
+      message: "Detalles de conexión encontrados",
+      data: {
+        facturas: facturas,
+        pagos: pagos,
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: "Error en el servidor", details: error });
     console.error(error);
   }
-  
-}
+};
 
 module.exports = {
   create,
@@ -380,5 +383,5 @@ module.exports = {
   actualizarPrecioVenta,
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
-  getDetallesConexionReservas
+  getDetallesConexionReservas,
 };
