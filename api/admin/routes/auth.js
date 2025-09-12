@@ -2,6 +2,7 @@ const controller = require("../controllers/auth");
 const validacion = require("../../v1/middleware/validateParams");
 const jwt = require("jsonwebtoken");
 const { SECRET_KEY } = require("../../../lib/constant");
+const { verificarPermiso } = require("../../../middleware/verifyPermission");
 const router = require("express").Router();
 
 //Midleware para manejar la sessión
@@ -14,11 +15,16 @@ router.use((req, res, next) => {
       req.session.user = session;
     } catch (error) {
       console.log(error);
-      res.status(500).json({
-        message: error.message || "Error al salir",
-        error,
-        data: null,
-      });
+      if (error.message == "jwt expired")
+        error.message = "sesion expirada, inicia sesión nuevamente";
+      res
+        .status(500)
+        .clearCookie("access-token")
+        .json({
+          message: error.message || "Error al salir",
+          error,
+          data: null,
+        });
       return;
     }
   }
@@ -26,6 +32,12 @@ router.use((req, res, next) => {
 });
 
 router.get("/verify-session", controller.verifySession);
+
+router.get(
+  "/usuarios",
+  verificarPermiso("usuarios.get"),
+  controller.getUsuariosAdmin
+);
 
 router.post(
   "/signup",

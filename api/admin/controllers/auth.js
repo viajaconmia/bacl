@@ -100,7 +100,7 @@ const logIn = async (req, res) => {
     const permisos = permisos_obj.map((permiso) => permiso.name);
 
     const token = jwt.sign({ ...user, permisos }, SECRET_KEY, {
-      expiresIn: "1h",
+      expiresIn: "1d",
     });
 
     res
@@ -108,7 +108,7 @@ const logIn = async (req, res) => {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-        maxAge: 1000 * 60 * 60,
+        maxAge: 1000 * 60 * 60 * 24,
       })
       .status(200)
       .json({
@@ -152,10 +152,33 @@ const verifySession = async (req, res) => {
     });
   }
 };
+const getUsuariosAdmin = async (req, res) => {
+  try {
+    const usuarios = await executeQuery(`
+        select ua.id, ua.name, ua.email, ua.created_at, ur.role_id, r.name as role_name, COUNT(up.permission_id) as permissions_extra, ua.active from users_admin ua
+          left join user_roles ur on ur.user_id = ua.id
+          left join roles r on r.id = ur.role_id
+          left join user_permissions up on up.user_id = ua.id
+        group by ua.id;
+        `);
+
+    res
+      .status(200)
+      .json({ message: "Comprobando verificación", data: usuarios });
+  } catch (error) {
+    console.error(error.message || "Error al crear usuario");
+    res.status(error.statusCode || error.status || 500).json({
+      message: error.message || "Error al registrar el usuario",
+      data: null,
+      error,
+    });
+  }
+};
 
 module.exports = {
   signUp,
   logIn,
   logOut,
   verifySession,
+  getUsuariosAdmin,
 };
