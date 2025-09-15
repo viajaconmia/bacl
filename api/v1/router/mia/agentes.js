@@ -36,6 +36,7 @@ WHERE e_a.id_agente ='a6cc4918-0ce0-416d-8ab6-ce157d9a708a';`;
     res.status(500).json({ message: "Error server", details: error });
   }
 });
+
 router.get("/all", async (req, res) => {
   try {
     const { query } = req;
