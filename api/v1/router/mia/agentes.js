@@ -1,25 +1,24 @@
-const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/agentes");
 const { executeQuery } = require("../../../../config/db");
 const router = require("express").Router();
 
-router.post("/", middleware.validateParams([]), controller.create);
+router.post("/",  controller.create);
 router.get(
   "/viajeros-con-empresas",
-  middleware.validateParams([]),
+  
   controller.read
 );
 router.get(
   "/empresas-con-agentes",
-  middleware.validateParams([]),
+  
   controller.readAgentesCompanies
 );
 router.get(
   "/empresas-con-datos-fiscales",
-  middleware.validateParams([]),
+  
   controller.readEmpresasDatosFiscales
 );
-router.get("/agentes", middleware.validateParams([]), controller.readAgentes);
+router.get("/agentes",  controller.readAgentes);
 router.get("/get-agente-id/", controller.getAgenteId);
 
 router.get("/empresas", async (req, res) => {
