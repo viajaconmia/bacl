@@ -25,10 +25,9 @@ router.get("/get-agente-id/", controller.getAgenteId);
 router.get("/empresas", async (req, res) => {
   try {
     const queryget = `
-select *,df.rfc from empresas as e
+select * from empresas as e
 INNER JOIN empresas_agentes as e_a ON e_a.id_empresa = e. id_empresa
-inner join datos_fiscales as df on df.id_empresa = e.id_empresa
-WHERE e_a.id_agente ='a6cc4918-0ce0-416d-8ab6-ce157d9a708a';`;
+WHERE e_a.id_agente = ?;`;
     const response = await executeQuery(queryget, [req.query.id]);
     res.status(200).json(response);
   } catch (error) {
@@ -36,7 +35,6 @@ WHERE e_a.id_agente ='a6cc4918-0ce0-416d-8ab6-ce157d9a708a';`;
     res.status(500).json({ message: "Error server", details: error });
   }
 });
-
 router.get("/all", async (req, res) => {
   try {
     const { query } = req;
