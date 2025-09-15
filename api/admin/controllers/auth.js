@@ -9,6 +9,8 @@ const signUp = async (req, res) => {
   try {
     let { username, password, email, role } = req.body;
 
+    console.log("entrando");
+
     Validation.password(password);
     Validation.username(username);
     Validation.email(email);
@@ -174,6 +176,39 @@ const getUsuariosAdmin = async (req, res) => {
     });
   }
 };
+const getPermisos = async (req, res) => {
+  try {
+    const { id } = req.query;
+    console.log(id);
+    const permisos = await executeQuery(
+      `
+        SELECT 
+    p.id,
+    p.name,
+    p.description,
+    CASE 
+        WHEN vw.permission_id IS NOT NULL THEN 1
+        ELSE 0
+    END AS active
+FROM permissions p
+LEFT JOIN vw_permisos_by_user vw 
+    ON vw.permission_id = p.id 
+   AND vw.user_id = ?;`,
+      [id || ""]
+    );
+
+    res
+      .status(200)
+      .json({ message: "Permisos obtenidos con exito", data: permisos });
+  } catch (error) {
+    console.error(error.message || "Error al crear usuario");
+    res.status(error.statusCode || error.status || 500).json({
+      message: error.message || "Error al registrar el usuario",
+      data: null,
+      error,
+    });
+  }
+};
 
 module.exports = {
   signUp,
@@ -181,4 +216,5 @@ module.exports = {
   logOut,
   verifySession,
   getUsuariosAdmin,
+  getPermisos,
 };

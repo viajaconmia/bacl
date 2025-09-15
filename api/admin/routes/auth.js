@@ -35,9 +35,11 @@ router.get("/verify-session", controller.verifySession);
 
 router.get(
   "/usuarios",
-  verificarPermiso("usuarios.get"),
+  // verificarPermiso("usuarios.get"),
   controller.getUsuariosAdmin
 );
+
+router.get("/permisos", controller.getPermisos);
 
 router.post(
   "/signup",
