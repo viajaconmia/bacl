@@ -25,9 +25,10 @@ router.get("/get-agente-id/", controller.getAgenteId);
 router.get("/empresas", async (req, res) => {
   try {
     const queryget = `
-select * from empresas as e
+select *,df.rfc from empresas as e
 INNER JOIN empresas_agentes as e_a ON e_a.id_empresa = e. id_empresa
-WHERE e_a.id_agente = ?;`;
+inner join datos_fiscales as df on df.id_empresa = e.id_empresa
+WHERE e_a.id_agente =?;`;
     const response = await executeQuery(queryget, [req.query.id]);
     res.status(200).json(response);
   } catch (error) {
