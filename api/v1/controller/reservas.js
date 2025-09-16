@@ -61,9 +61,10 @@ const create = async (req, res) => {
 //   }
 // };
 
-const updateReserva2 = async (req, res) => {
+/*const updateReserva2 = async (req, res) => {
   console.log("Llegando al endpoint de updateReserva2");
   const { id } = req.query;
+  const {metadata} = req.body;
   const {
     viajero,
     check_in,
@@ -80,12 +81,16 @@ const updateReserva2 = async (req, res) => {
     impuestos,
   } = req.body;
   console.log(id);
+  console.log("Revisando el body ⚠️⚠️⚠️⚠️", req.body);
   try {
     // 1) Generar id_item para cada ítem nuevo
     const itemsConIds = (items?.current || []).map((item) => ({
       ...item,
       id_item: item.id_item || `ite-${uuidv4()}`,
     }));
+
+    console.log("Checando que trae este rollo");
+    console.log(itemsConIds);
 
     // 2) Serializar JSON
     const itemsJson = JSON.stringify(itemsConIds);
@@ -114,8 +119,65 @@ const updateReserva2 = async (req, res) => {
       impuestosJson, // 19) p_impuestos_json
     ];
     console.log("por entrar al sp");
+    // Verificamos primero el total de items de la reserva
+   
+const infoItems = req.body.items.current || [];
+const nochesBefore = noches.before || 0;
+const nochesActual = noches.current || 0;
+const query_insert_items = `insert into items (id_item,total,subtotal,impuestos,is_facturado,fecha_uso,id_hospedaje,costo_total,costo_subtotal,costo_impuestos,saldo,costo_iva,is_ajuste)
+    values (?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+
+// Si hay cambio en el número de noches
+if (nochesBefore !== nochesActual) {
+  if (nochesActual > nochesBefore) {
+    // Caso 1: Se aumentaron noches - agregar nuevos items
+    const itemTemplate = itemsConIds[0]; // Tomamos el primer item como template
+    const nuevosItems = [];
+    
+    for (let i = nochesBefore; i < nochesActual; i++) {
+      const nuevoItem = {
+        ...itemTemplate,
+        noche: i + 1,
+        id_item: `ite-${uuidv4()}`
+      };
+      nuevosItems.push(nuevoItem);
+      
+      // Insertar el nuevo item
+      await executeQuery(query_insert_items, [
+        nuevoItem.id_item,
+        nuevoItem.venta.total,
+        nuevoItem.venta.subtotal,
+        nuevoItem.venta.impuestos,
+        0, // is_facturado
+        new Date(),
+        metadata.id_hospedaje, // id_hospedaje
+        nuevoItem.costo.total,
+        nuevoItem.costo.subtotal,
+        nuevoItem.costo.impuestos,
+        metadata.id_credito != null ? nuevoItem.venta.total :0,  // saldo
+        nuevoItem.impuestos[1]?.importe || 0, // costo_iva
+        0 // is_ajuste
+      ]);
+    }
+  } else {
+    // Caso 2: Se redujeron noches - desactivar items sobrantes
+    const itemsADesactivar = nochesActual - nochesBefore;
+    if (itemsADesactivar > 0) {
+      await executeQuery(
+        `UPDATE items 
+         SET estado = 0 
+         WHERE id_hospedaje = ? 
+         AND estado = 1
+         ORDER BY created_at ASC 
+         LIMIT ?`,
+        [metadata.id_hospedaje, itemsADesactivar]
+      );
+    }
+  }
+}
+console
     // 4) Llamar al SP
-    const result = await executeSP("sp_editar_reserva_procesada", params);
+    // const result = await executeSP("sp_editar_reserva_procesada", params);
 
     // 5) Verificar resultado
     // dependiendo de tu helper, puede que sea result.affectedRows o result[0].affectedRows
@@ -139,7 +201,197 @@ const updateReserva2 = async (req, res) => {
       .status(500)
       .json({ error: "Internal Server Error", details: error.message });
   }
+};*/
+// Asegúrate de tener importado uuidv4 en tu archivo:
+// const { v4: uuidv4 } = require('uuid');
+
+// const { v4: uuidv4 } = require('uuid');
+
+const updateReserva2 = async (req, res) => {
+  console.log("Llegando al endpoint de updateReserva2");
+  const { id } = req.query;
+  const { metadata } = req.body;
+
+  const {
+    viajero,
+    check_in,
+    check_out,
+    estado_reserva,
+    proveedor,
+    hotel,
+    codigo_reservacion_hotel,
+    habitacion,
+    noches,
+    comments,
+    items,
+    impuestos,
+  } = req.body;
+
+  console.log("id booking:", id);
+  console.log("Revisando el body ⚠️", JSON.stringify(req.body, null, 2));
+
+  // Helper de logging
+  const planned = [];
+  const logExec = (type, sql, params) => {
+    planned.push({ type, sql, params });
+    console.log(`\n[EXEC] ${type}\nSQL:\n${sql}\nPARAMS:`);
+    console.dir(params, { depth: null });
+  };
+
+  // Asegurar ids en items entrantes (plantilla para inserts)
+  const itemsConIds = (items?.current || []).map((item) => ({
+    ...item,
+    id_item: item.id_item || `ite-${uuidv4()}`,
+  }));
+
+  // JSON para SP
+  const itemsJson = JSON.stringify(itemsConIds);
+  const impuestosJson = JSON.stringify(impuestos?.current || []);
+
+  // Parámetros del SP (19, manteniendo los comentados fuera)
+  const spParams = [
+    id, // 1) p_id_booking
+    viajero?.current?.id_viajero ?? null, // 2) p_id_viajero
+    check_in?.current ?? null, // 3) p_check_in
+    check_out?.current ?? null, // 4) p_check_out
+    // venta?.current?.total ?? null, // 5) p_total
+    // venta?.current?.subtotal ?? null, // 6) p_subtotal
+    // venta?.current?.impuestos ?? null, // 7) p_impuestos
+    estado_reserva?.current ?? null, // 8) p_estado_reserva
+    proveedor?.current?.total ?? null, // 9) p_costo_total
+    proveedor?.current?.subtotal ?? null, // 10) p_costo_subtotal
+    proveedor?.current?.impuestos ?? null, // 11) p_costo_impuestos
+    hotel?.current?.content?.nombre_hotel ?? null, // 12) p_nombre_hotel
+    hotel?.current?.content?.id_hotel ?? null, // 13) p_id_hotel
+    codigo_reservacion_hotel?.current ?? null, // 14) p_codigo_reservacion_hotel
+    habitacion?.current ?? null, // 15) p_tipo_cuarto
+    noches?.current ?? null, // 16) p_noches
+    comments?.current ?? null, // 17) p_comments
+    itemsJson, // 18) p_items_json
+    impuestosJson, // 19) p_impuestos_json
+  ];
+
+  const nochesBefore = noches?.before || 0;
+  const nochesActual = noches?.current || 0;
+
+  const sqlInsertItem = `
+    INSERT INTO items (
+      id_item, total, subtotal, impuestos, is_facturado, fecha_uso, id_hospedaje,
+      costo_total, costo_subtotal, costo_impuestos, saldo, costo_iva, is_ajuste
+    )
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+  `.trim();
+
+  try {
+    await runTransaction(async (connection) => {
+      // (A) Si aumentan noches → insertar nuevos items clonando del primero
+      if (nochesActual > nochesBefore) {
+        const itemTemplate = itemsConIds[0];
+        if (!itemTemplate) {
+          console.warn("No hay item template disponible para crear nuevas noches.");
+        } else {
+          const cantidad = nochesActual - nochesBefore;
+          for (let i = 0; i < cantidad; i++) {
+            const nuevoItem = {
+              ...itemTemplate,
+              id_item: `ite-${uuidv4()}`,
+            };
+
+            const ivaCosto =
+              (nuevoItem.impuestos || []).find((x) => (x.name || "").toLowerCase() === "iva")?.total || 0;
+
+            const paramsInsert = [
+              nuevoItem.id_item,
+              nuevoItem.venta.total,
+              nuevoItem.venta.subtotal,
+              nuevoItem.venta.impuestos,
+              0,              // is_facturado
+              new Date(),     // fecha_uso
+              metadata.id_hospedaje,
+              nuevoItem.costo.total,
+              nuevoItem.costo.subtotal,
+              nuevoItem.costo.impuestos,
+              metadata.id_credito != null ? nuevoItem.venta.total : 0, // saldo
+              ivaCosto,       // costo_iva
+              0,              // is_ajuste
+            ];
+
+            logExec("INSERT items (+noche)", sqlInsertItem, paramsInsert);
+            await connection.execute(sqlInsertItem, paramsInsert);
+          }
+        }
+      }
+
+      // (B) Si reducen noches → desactivar los más recientes (LIFO)
+if (nochesActual < nochesBefore) {
+  const itemsADesactivar = Math.max(0, (nochesBefore - nochesActual) | 0);
+
+  if (itemsADesactivar > 0) {
+    // 👇 Sanitiza el límite como entero literal (sin placeholder)
+    const limit = Number.isFinite(itemsADesactivar) && itemsADesactivar > 0
+      ? Math.floor(itemsADesactivar)
+      : 0; // LIMIT 0 devuelve 0 filas (seguro)
+
+    // 1) Seleccionar ids más recientes (sin `?` en LIMIT)
+    const sqlSelectIds = `
+      SELECT id_item
+      FROM items
+      WHERE id_hospedaje = ?
+        AND estado = 1
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+    `.trim();
+
+    const selectParams = [metadata.id_hospedaje];
+    console.log("[EXEC] SELECT ids LIFO para desactivar\nSQL:\n", sqlSelectIds, "\nPARAMS:\n", selectParams);
+    const [rows] = await connection.execute(sqlSelectIds, selectParams);
+    const ids = rows.map(r => r.id_item);
+
+    // 2) UPDATE por IN (...)
+    if (ids.length > 0) {
+      const placeholders = ids.map(() => "?").join(",");
+      const sqlUpdate = `
+        UPDATE items
+        SET estado = 0
+        WHERE id_item IN (${placeholders})
+      `.trim();
+
+      console.log("[EXEC] UPDATE items (desactivar LIFO)\nSQL:\n", sqlUpdate, "\nPARAMS:\n", ids);
+      await connection.execute(sqlUpdate, ids);
+    } else {
+      console.warn("No se encontraron items activos para desactivar.");
+    }
+  }
+}
+
+      // (C) Llamar al SP
+      const spName = "sp_editar_reserva_procesada";
+      const spPlaceholders = Array(spParams.length).fill("?").join(",");
+      const sqlCall = `CALL ${spName}(${spPlaceholders})`;
+
+      logExec(`CALL ${spName}`, sqlCall, spParams);
+      await connection.query(sqlCall, spParams); // query() se lleva mejor con CALL y múltiples resultsets
+    });
+
+    // Si todo fue bien, responde OK
+    return res.status(200).json({
+      message: "Reserva actualizada correctamente",
+      data: {
+        id_booking: id,
+        items: itemsConIds,
+        impuestos: impuestos?.current || [],
+        planned,
+        meta: { nochesBefore, nochesActual },
+      },
+    });
+  } catch (error) {
+    console.error("Error en updateReserva2 (runTransaction):", error);
+    return res
+      .status(error.statusCode || 500)
+      .json({ error: "Internal Server Error", details: error.message });
+  }
 };
+
 
 const createFromOperaciones = async (req, res) => {
 
