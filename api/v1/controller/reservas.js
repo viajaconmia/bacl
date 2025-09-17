@@ -317,7 +317,7 @@ const updateReserva2 = async (req, res) => {
             ];
 
             logExec("INSERT items (+noche)", sqlInsertItem, paramsInsert);
-            await connection.execute(sqlInsertItem, paramsInsert);
+            // await connection.execute(sqlInsertItem, paramsInsert);
           }
         }
       }
@@ -357,7 +357,7 @@ if (nochesActual < nochesBefore) {
       `.trim();
 
       console.log("[EXEC] UPDATE items (desactivar LIFO)\nSQL:\n", sqlUpdate, "\nPARAMS:\n", ids);
-      await connection.execute(sqlUpdate, ids);
+      // await connection.execute(sqlUpdate, ids);
     } else {
       console.warn("No se encontraron items activos para desactivar.");
     }
@@ -370,7 +370,7 @@ if (nochesActual < nochesBefore) {
       const sqlCall = `CALL ${spName}(${spPlaceholders})`;
 
       logExec(`CALL ${spName}`, sqlCall, spParams);
-      await connection.query(sqlCall, spParams); // query() se lleva mejor con CALL y múltiples resultsets
+      // await connection.query(sqlCall, spParams); // query() se lleva mejor con CALL y múltiples resultsets
     });
 
     // Si todo fue bien, responde OK
@@ -391,7 +391,25 @@ if (nochesActual < nochesBefore) {
       .json({ error: "Internal Server Error", details: error.message });
   }
 };
+ const updateReserva3 = async (req,res) => {
+// update de campos generales
+// para ello vamos a mapear los campos por tabla
+/* TABLA HOSPEDAJES 
+id_hotel, nombre_hotel, tipo_cuarto,codigo_reservacion_hotel,noches,comments,nuevo_incluye_desayuno,
+*/
+const query_update_hospedajes = `update hospedajes set id_hotel=?, nombre_hotel=?, tipo_cuarto=?, codigo_reservacion_hotel=?, noches=?, comments=?, nuevo_incluye_desayuno=? where id_hospedaje = ?`;
+await executeQuery(query_update_hospedajes, [req.body.hotel.current.content.id_hotel,req.body.hotel.current.content.nombre_hotel,
+  req.body.habitacion.current, req.body.codigo_reservacion_hotel.current, req.body.noches.current,req.body.comments.current, req.body.nuevo_incluye_desayuno.current, req.body.metadata.id_hospedaje]);
+/*TABLA BOOKINGS*/   
+const query_update_bookings = `update bookings set check_in = ?, check_out = ?, total = ?, subtotal= ?,impuestos=?, subtotal =?
+where id_booking = ?`;
+  // primero definamos el modo de pago
+  const {metadata} = req.body;
 
+  if(!metadata.id_credito){
+
+  }
+ }
 
 const createFromOperaciones = async (req, res) => {
 
