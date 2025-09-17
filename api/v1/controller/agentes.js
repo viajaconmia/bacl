@@ -6,7 +6,7 @@ const stripeTest = require("stripe")(API_STRIPE_TEST);
 const create = async (req, res) => {
   try {
     const response = await model.createAgente(req.body);
-
+ 
     res
       .status(201)
       .json({ message: "Agente creado correctamente", data: response });
