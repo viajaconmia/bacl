@@ -1112,7 +1112,7 @@ FROM vw_reservas_client rc
 LEFT JOIN agente_details ad ON ad.id_agente = rc.id_agente
 LEFT JOIN hospedajes h
        ON h.id_hospedaje = rc.id_hospedaje
-WHERE rc.status_reserva = 'Confirmada'
+WHERE rc.status_reserva = 'Confirmada' AND rc.id_credito is not null
 GROUP BY
   rc.id_hospedaje,
   rc.id_servicio,
