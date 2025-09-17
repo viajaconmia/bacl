@@ -154,6 +154,7 @@ const verifySession = async (req, res) => {
     });
   }
 };
+
 const getUsuariosAdmin = async (req, res) => {
   try {
     const usuarios = await executeQuery(`
@@ -176,6 +177,7 @@ const getUsuariosAdmin = async (req, res) => {
     });
   }
 };
+
 const getPermisos = async (req, res) => {
   try {
     const { id } = req.query;
