@@ -288,7 +288,9 @@ const updateReserva2 = async (req, res) => {
       if (nochesActual > nochesBefore) {
         const itemTemplate = itemsConIds[0];
         if (!itemTemplate) {
-          console.warn("No hay item template disponible para crear nuevas noches.");
+          console.warn(
+            "No hay item template disponible para crear nuevas noches."
+          );
         } else {
           const cantidad = nochesActual - nochesBefore;
           for (let i = 0; i < cantidad; i++) {
@@ -298,22 +300,24 @@ const updateReserva2 = async (req, res) => {
             };
 
             const ivaCosto =
-              (nuevoItem.impuestos || []).find((x) => (x.name || "").toLowerCase() === "iva")?.total || 0;
+              (nuevoItem.impuestos || []).find(
+                (x) => (x.name || "").toLowerCase() === "iva"
+              )?.total || 0;
 
             const paramsInsert = [
               nuevoItem.id_item,
               nuevoItem.venta.total,
               nuevoItem.venta.subtotal,
               nuevoItem.venta.impuestos,
-              0,              // is_facturado
-              new Date(),     // fecha_uso
+              0, // is_facturado
+              new Date(), // fecha_uso
               metadata.id_hospedaje,
               nuevoItem.costo.total,
               nuevoItem.costo.subtotal,
               nuevoItem.costo.impuestos,
               metadata.id_credito != null ? nuevoItem.venta.total : 0, // saldo
-              ivaCosto,       // costo_iva
-              0,              // is_ajuste
+              ivaCosto, // costo_iva
+              0, // is_ajuste
             ];
 
             logExec("INSERT items (+noche)", sqlInsertItem, paramsInsert);
@@ -323,17 +327,18 @@ const updateReserva2 = async (req, res) => {
       }
 
       // (B) Si reducen noches → desactivar los más recientes (LIFO)
-if (nochesActual < nochesBefore) {
-  const itemsADesactivar = Math.max(0, (nochesBefore - nochesActual) | 0);
+      if (nochesActual < nochesBefore) {
+        const itemsADesactivar = Math.max(0, (nochesBefore - nochesActual) | 0);
 
-  if (itemsADesactivar > 0) {
-    // 👇 Sanitiza el límite como entero literal (sin placeholder)
-    const limit = Number.isFinite(itemsADesactivar) && itemsADesactivar > 0
-      ? Math.floor(itemsADesactivar)
-      : 0; // LIMIT 0 devuelve 0 filas (seguro)
+        if (itemsADesactivar > 0) {
+          // 👇 Sanitiza el límite como entero literal (sin placeholder)
+          const limit =
+            Number.isFinite(itemsADesactivar) && itemsADesactivar > 0
+              ? Math.floor(itemsADesactivar)
+              : 0; // LIMIT 0 devuelve 0 filas (seguro)
 
-    // 1) Seleccionar ids más recientes (sin `?` en LIMIT)
-    const sqlSelectIds = `
+          // 1) Seleccionar ids más recientes (sin `?` en LIMIT)
+          const sqlSelectIds = `
       SELECT id_item
       FROM items
       WHERE id_hospedaje = ?
@@ -342,27 +347,37 @@ if (nochesActual < nochesBefore) {
       LIMIT ${limit}
     `.trim();
 
-    const selectParams = [metadata.id_hospedaje];
-    console.log("[EXEC] SELECT ids LIFO para desactivar\nSQL:\n", sqlSelectIds, "\nPARAMS:\n", selectParams);
-    const [rows] = await connection.execute(sqlSelectIds, selectParams);
-    const ids = rows.map(r => r.id_item);
+          const selectParams = [metadata.id_hospedaje];
+          console.log(
+            "[EXEC] SELECT ids LIFO para desactivar\nSQL:\n",
+            sqlSelectIds,
+            "\nPARAMS:\n",
+            selectParams
+          );
+          const [rows] = await connection.execute(sqlSelectIds, selectParams);
+          const ids = rows.map((r) => r.id_item);
 
-    // 2) UPDATE por IN (...)
-    if (ids.length > 0) {
-      const placeholders = ids.map(() => "?").join(",");
-      const sqlUpdate = `
+          // 2) UPDATE por IN (...)
+          if (ids.length > 0) {
+            const placeholders = ids.map(() => "?").join(",");
+            const sqlUpdate = `
         UPDATE items
         SET estado = 0
         WHERE id_item IN (${placeholders})
       `.trim();
 
-      console.log("[EXEC] UPDATE items (desactivar LIFO)\nSQL:\n", sqlUpdate, "\nPARAMS:\n", ids);
-      // await connection.execute(sqlUpdate, ids);
-    } else {
-      console.warn("No se encontraron items activos para desactivar.");
-    }
-  }
-}
+            console.log(
+              "[EXEC] UPDATE items (desactivar LIFO)\nSQL:\n",
+              sqlUpdate,
+              "\nPARAMS:\n",
+              ids
+            );
+            // await connection.execute(sqlUpdate, ids);
+          } else {
+            console.warn("No se encontraron items activos para desactivar.");
+          }
+        }
+      }
 
       // (C) Llamar al SP
       const spName = "sp_editar_reserva_procesada";
@@ -391,37 +406,68 @@ if (nochesActual < nochesBefore) {
       .json({ error: "Internal Server Error", details: error.message });
   }
 };
- const updateReserva3 = async (req,res) => {
-// update de campos generales
-// para ello vamos a mapear los campos por tabla
-/* TABLA HOSPEDAJES 
+
+const updateReserva3 = async (req, res) => {
+  // update de campos generales
+  // para ello vamos a mapear los campos por tabla
+  /* TABLA HOSPEDAJES 
 id_hotel, nombre_hotel, tipo_cuarto,codigo_reservacion_hotel,noches,comments,nuevo_incluye_desayuno,
 */
-const query_update_hospedajes = `update hospedajes set id_hotel=?, nombre_hotel=?, tipo_cuarto=?, codigo_reservacion_hotel=?, noches=?, comments=?, nuevo_incluye_desayuno=? where id_hospedaje = ?`;
-await executeQuery(query_update_hospedajes, [req.body.hotel.current.content.id_hotel,req.body.hotel.current.content.nombre_hotel,
-  req.body.habitacion.current, req.body.codigo_reservacion_hotel.current, req.body.noches.current,req.body.comments.current, req.body.nuevo_incluye_desayuno.current, req.body.metadata.id_hospedaje]);
-/*TABLA BOOKINGS*/   
-const query_update_bookings = `update bookings set check_in = ?, check_out = ?, total = ?, subtotal= ?,impuestos=?, subtotal =?
-where id_booking = ?`;
-  // primero definamos el modo de pago
-  const {metadata} = req.body;
+  const query_update_hospedajes = `update hospedajes set id_hotel=?, nombre_hotel=?, tipo_cuarto=?, codigo_reservacion_hotel=?, noches=?, comments=?, nuevo_incluye_desayuno=? where id_hospedaje = ?`;
+  await executeQuery(query_update_hospedajes, [
+    req.body.hotel.current.content.id_hotel,
+    req.body.hotel.current.content.nombre_hotel,
+    req.body.habitacion.current,
+    req.body.codigo_reservacion_hotel.current,
+    req.body.noches.current,
+    req.body.comments.current,
+    req.body.nuevo_incluye_desayuno.current,
+    req.body.metadata.id_hospedaje,
+  ]);
+  /*TABLA BOOKINGS*/
+  const query_update_bookings = `UPDATE bookings
+SET
+    check_in = ?,
+    check_out = ?,
+    ${
+      /*total = ?,
+    subtotal = ?,
+    impuestos = ?,*/
+      ""
+    }
+    estado = ?,
+    costo_total = ?,
+    costo_subtotal = ?,
+    costo_impuestos = ?,
+WHERE id_booking = ?;`;
+  const costos = calcularPrecios(req.body.proveedor.current.total);
+  await executeQuery(query_update_hospedajes, [
+    req.body.check_in.current,
+    req.body.check_out.current,
+    req.body.estado_reserva.current,
+    req.body.proveedor.current.total,
+    costos.total,
+    costos.subtotal,
+    costos.impuestos,
+    req.body.metadata.id_booking,
+  ]);
 
-  if(!metadata.id_credito){
+  const { metadata } = req.body;
 
+  if (!metadata.id_credito) {
   }
- }
+};
 
 const createFromOperaciones = async (req, res) => {
-
-try {
-  console.log("Revisando el body  😭😭😭😭", req.body);
-  const {bandera } = req.body;
-  const { check_in, check_out } = req.body;
-  console.log(check_in,check_out)
-  const parseMySQLDate = (dateStr) => {
-    const [year, month, day] = dateStr.split("-").map(Number);
-    return new Date(year, month - 1, day); 
-  };
+  try {
+    console.log("Revisando el body  😭😭😭😭", req.body);
+    const { bandera } = req.body;
+    const { check_in, check_out } = req.body;
+    console.log(check_in, check_out);
+    const parseMySQLDate = (dateStr) => {
+      const [year, month, day] = dateStr.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    };
 
     const checkInDate = parseMySQLDate(check_in);
     const checkOutDate = parseMySQLDate(check_out);
@@ -431,7 +477,6 @@ try {
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime()
     );
-
 
     if (checkOutDate.getTime() < checkInDate.getTime()) {
       // return res.status(400).json({
@@ -444,22 +489,22 @@ try {
       );
     }
 
-    let response = await model.insertarReservaOperaciones(req.body, req.body.bandera);
+    let response = await model.insertarReservaOperaciones(
+      req.body,
+      req.body.bandera
+    );
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({
-        error: "Internal Server Error",
-        message: error.message,
-        data: null,
-      });
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: error.message,
+      data: null,
+    });
   }
 };
-
 
 const read = async (req, res) => {
   try {
@@ -578,10 +623,9 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
   const { id_agente } = req.query;
   console.log("id_agente", id_agente);
   try {
-    const reservas = await executeSP(
-      "sp_reservas_con_items_by_id_agente",
-      [id_agente]
-    );
+    const reservas = await executeSP("sp_reservas_con_items_by_id_agente", [
+      id_agente,
+    ]);
     if (!reservas) {
       return res.status(404).json({ message: "No se encontraron reservas" });
     } else {
@@ -617,24 +661,30 @@ const getReservasWithItemsSinPagarByAgente = async (req, res) => {
   }
 };
 
-const getDetallesConexionReservas = async (req,res) => {
-  const {id_agente, id_hospedaje}= req.query;
+const getDetallesConexionReservas = async (req, res) => {
+  const { id_agente, id_hospedaje } = req.query;
   try {
-   const [facturas = [], pagos = []]= await executeSP2("sp_get_detalles_conexion_reservas", [id_agente, id_hospedaje], { allSets: true });
+    const [facturas = [], pagos = []] = await executeSP2(
+      "sp_get_detalles_conexion_reservas",
+      [id_agente, id_hospedaje],
+      { allSets: true }
+    );
     // console.log(detalles);
     // if (!detalles || detalles.length === 0) {
     //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
-   // }
-    return res.status(200).json({ message: "Detalles de conexión encontrados", data: {
-      facturas: facturas,
-      pagos: pagos
-    } });
+    // }
+    return res.status(200).json({
+      message: "Detalles de conexión encontrados",
+      data: {
+        facturas: facturas,
+        pagos: pagos,
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: "Error en el servidor", details: error });
     console.error(error);
   }
-  
-}
+};
 
 module.exports = {
   create,
@@ -650,5 +700,5 @@ module.exports = {
   actualizarPrecioVenta,
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
-  getDetallesConexionReservas
+  getDetallesConexionReservas,
 };
