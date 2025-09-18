@@ -191,7 +191,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         ]);
 
         // 5. Insertar registros en facturas_pagos
-       /* const resultados_pagos = await conn.execute( LO COMENTO POR SI ACASO
+        /* const resultados_pagos = await conn.execute( LO COMENTO POR SI ACASO
           `
         INSERT INTO facturas_pagos (
           id_factura, 
@@ -222,18 +222,18 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
   SELECT 
     ?            AS id_factura,
     p.id_pago    AS id_pago,
-    p.monto      AS monto
+    p.total     AS monto
   FROM solicitudes s
   JOIN servicios se ON s.id_servicio = se.id_servicio
   JOIN pagos p     ON se.id_servicio = p.id_servicio
-  WHERE s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
+  WHERE s.id_solicitud IN (${solicitudesArray.map(() => "?").join(",")})
     AND p.id_pago IS NOT NULL
 `;
-const resultados_pagos = await conn.execute(insertPagosSql, [
-  id_factura,
-  ...solicitudesArray,
-]);
-console.log("resultado pagos", resultados_pagos);
+        const resultados_pagos = await conn.execute(insertPagosSql, [
+          id_factura,
+          ...solicitudesArray,
+        ]);
+        console.log("resultado pagos", resultados_pagos);
 
         return {
           id_factura,
@@ -572,21 +572,21 @@ const crearFacturaEmi = async (req, payload) => {
         } LO COMENTO POR SI ACASO*/
 
         if (Array.isArray(solicitudesArray) && solicitudesArray.length) {
-  const placeholders = solicitudesArray.map(() => "?").join(",");
-  const sql = `
+          const placeholders = solicitudesArray.map(() => "?").join(",");
+          const sql = `
     INSERT INTO facturas_pagos_y_saldos (id_factura, id_pago, monto)
     SELECT
       ?          AS id_factura,
       p.id_pago  AS id_pago,
-      p.monto    AS monto
+      p.total    AS monto
     FROM solicitudes s
     JOIN servicios se ON s.id_servicio = se.id_servicio
     JOIN pagos p      ON se.id_servicio = p.id_servicio
     WHERE s.id_solicitud IN (${placeholders})
       AND p.id_pago IS NOT NULL
   `;
-  await conn.execute(sql, [id_factura, ...solicitudesArray]);
-}
+          await conn.execute(sql, [id_factura, ...solicitudesArray]);
+        }
 
         return {
           id_factura,
@@ -605,7 +605,8 @@ const crearFacturaEmi = async (req, payload) => {
 
 module.exports = { crearFacturaEmi };
 
-const getFacturasConsultas = async (user_id) => {/*PARECE SER QUE YA NO SE OCUPA*/ 
+const getFacturasConsultas = async (user_id) => {
+  /*PARECE SER QUE YA NO SE OCUPA*/
   try {
     let query = `
 SELECT
