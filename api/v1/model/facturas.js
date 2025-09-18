@@ -3,6 +3,7 @@ const {
   executeTransaction,
   runTransaction,
 } = require("../../../config/db");
+const { CustomError } = require("../../../middleware/errorHandler");
 const { crearCfdi } = require("./facturamaModel");
 const { v4: uuidv4 } = require("uuid");
 
@@ -45,7 +46,7 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         response_factura = await crearCfdi(req, cfdi);
       } catch (error) {
         console.error("Error al crear CFDI:", error.response.data);
-        throw error;
+        throw new CustomError(error.response.data.Message || "Error al crear la factura", 500, "FACTURA_ERROR", {data:error.response.data.ModelState});
       }
       try {
         const id_factura = `fac-${uuidv4()}`;
@@ -73,15 +74,16 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         ];
         const result_creates = await connection.execute(query, params);
 
+        const [rows] = await connection.execute(`SELECT * FROM vw_reservas_client WHERE id_solicitud = ?;`,[id_solicitud])
+
+        const [reserva] = rows
+        console.log(reserva)
         const query2 = `
-        UPDATE items i
-          JOIN hospedajes h ON i.id_hospedaje = h.id_hospedaje
-          JOIN bookings b ON h.id_booking = b.id_booking
-        SET i.id_factura = ?,
-            i.is_facturado = 1,
-       
-        WHERE b.id_solicitud = ?;`;
-        const params2 = [id_factura, id_solicitud];
+        UPDATE items
+        SET id_factura = ?,
+            is_facturado = 1
+        WHERE id_hospedaje = ?;`;
+        const params2 = [id_factura, reserva.id_hospedaje];
 
         const result = await connection.execute(query2, params2);
 

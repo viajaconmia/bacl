@@ -6,7 +6,7 @@ const stripeTest = require("stripe")(API_STRIPE_TEST);
 const create = async (req, res) => {
   try {
     const response = await model.createAgente(req.body);
-
+ 
     res
       .status(201)
       .json({ message: "Agente creado correctamente", data: response });
@@ -42,6 +42,7 @@ const readAgentesCompanies = async (req, res) => {
 };
 
 const readEmpresasDatosFiscales = async (req, res) => {
+  console.log("Entrando al controller")
   try {
     const { id_agente } = req.query;
     const agentes = await model.getEmpresasDatosFiscales(id_agente);

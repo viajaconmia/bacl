@@ -814,19 +814,19 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               INSERT INTO pagos (
                 id_pago, id_servicio, id_saldo_a_favor, id_agente,
                 metodo_de_pago, fecha_pago, concepto, referencia,
-                currency, tipo_de_tarjeta, link_pago, last_digits, total
-              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+                currency, tipo_de_tarjeta, link_pago, last_digits, total,saldo_aplicado,transaccion,monto_transaccion
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
             `;
-            const query_update_saldo = `UPDATE saldos_a_favor
-SET
-  saldo = GREATEST(saldo - ?, 0),
-  activo = CASE WHEN saldo <= 0 THEN 0 ELSE 1 END
-WHERE id_saldos = ?;
-`;
+
+            const query_update_saldo = `
+              UPDATE saldos_a_favor SET saldo = saldo - ? WHERE id_saldos = ?;
+            `;
+            const transaccion = `tra-${uuidv4()}`;
 
             for (const saldo of ejemplo_saldos) {
               console.log("Procesando saldo:", saldo);
               const id_pago = `pag-${uuidv4()}`;
+              
               console.log("Generando pago con ID:", id_pago);
               await connection.execute(query_pagos, [
                 id_pago,
@@ -842,6 +842,10 @@ WHERE id_saldos = ?;
                 saldo.link_pago,
                 saldo.last_digits,
                 venta.total, // (mantengo tu código tal cual)
+                saldo.aplicado,
+                transaccion,
+                venta.total,
+
               ]);
               await connection.execute(query_update_saldo, [
                 saldo.aplicado,
@@ -890,16 +894,17 @@ WHERE id_saldos = ?;
             }
 
             // --- update final: reflejar saldo_actual en saldos_a_favor ---
+            console.log("Pagos ordenados para update final:", pagosOrdenados);
             for (const pago of pagosOrdenados) {
-  await connection.execute(
-    `UPDATE saldos_a_favor
-     SET
-       saldo = ?,
-       activo = CASE WHEN ? <= 0 THEN 0 ELSE 1 END
-     WHERE id_saldos = ?;`,
-    [pago.saldo_actual, pago.saldo_actual, pago.id_saldo] // 3 params para 3 "?"
-  );
-}
+
+              await connection.execute(
+                `UPDATE saldos_a_favor 
+                SET saldo = ?,
+                activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END
+                WHERE id_saldos = ?`,
+                [pago.saldo_actual ,pago.restante, pago.id_saldo]
+              );
+            }
 
           }
 
@@ -1107,7 +1112,7 @@ FROM vw_reservas_client rc
 LEFT JOIN agente_details ad ON ad.id_agente = rc.id_agente
 LEFT JOIN hospedajes h
        ON h.id_hospedaje = rc.id_hospedaje
-WHERE rc.status_reserva = 'Confirmada'
+WHERE rc.status_reserva = 'Confirmada' AND rc.id_credito is not null
 GROUP BY
   rc.id_hospedaje,
   rc.id_servicio,

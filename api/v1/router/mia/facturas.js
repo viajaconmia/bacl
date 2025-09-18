@@ -39,3 +39,4 @@ router.get("/getDetailsFactura", controller.readDetailsFactura);
 router.delete("/delete/:id", controller.deleteFacturas);
 
 module.exports = router;
+  
