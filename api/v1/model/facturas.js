@@ -46,7 +46,12 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         response_factura = await crearCfdi(req, cfdi);
       } catch (error) {
         console.error("Error al crear CFDI:", error.response.data);
-        throw new CustomError(error.response.data.Message || "Error al crear la factura", 500, "FACTURA_ERROR", {data:error.response.data.ModelState});
+        throw new CustomError(
+          error.response.data.Message || "Error al crear la factura",
+          500,
+          "FACTURA_ERROR",
+          { data: error.response.data.ModelState }
+        );
       }
       try {
         const id_factura = `fac-${uuidv4()}`;
@@ -74,10 +79,13 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         ];
         const result_creates = await connection.execute(query, params);
 
-        const [rows] = await connection.execute(`SELECT * FROM vw_reservas_client WHERE id_solicitud = ?;`,[id_solicitud])
+        const [rows] = await connection.execute(
+          `SELECT * FROM vw_reservas_client WHERE id_solicitud = ?;`,
+          [id_solicitud]
+        );
 
-        const [reserva] = rows
-        console.log(reserva)
+        const [reserva] = rows;
+        console.log(reserva);
         const query2 = `
         UPDATE items
         SET id_factura = ?,
@@ -517,8 +525,8 @@ const crearFacturaEmi = async (req, payload) => {
     const body = sanitizeCfdi(cfdi);
 
     // 👀 Imprimir el BODY que se enviará a Facturama (full, sin truncar)
-    console.log("➡️ BODY a Facturama (POST /3/cfdis):");
-    console.dir(body, { depth: null });
+    // console.log("➡️ BODY a Facturama (POST /3/cfdis):");
+    // console.dir(body, { depth: null });
 
     // Transacción: crear en Facturama y luego guardar local
     const result = await runTransaction(async (conn) => {
@@ -527,7 +535,7 @@ const crearFacturaEmi = async (req, payload) => {
         let response_factura;
         try {
           response_factura = await crearCfdi(req, body);
-          console.log("respuesta de facturama", response_factura);
+          // console.log("respuesta de facturama", response_factura);
         } catch (error) {
           const msg = error?.response?.data || error?.message || error;
           console.error("Error al crear CFDI:", msg);
