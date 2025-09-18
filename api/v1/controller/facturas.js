@@ -1,4 +1,4 @@
-const { executeSP, runTransaction,executeSP2 } = require("../../../config/db");
+const { executeSP, runTransaction, executeSP2 } = require("../../../config/db");
 const model = require("../model/facturas");
 const { v4: uuidv4 } = require("uuid");
 const { get } = require("../router/mia/reservasClient");
@@ -16,7 +16,7 @@ const create = async (req, res) => {
     res.status(500).json({
       error: error.message || "Error create from v1/mia/factura - GET",
       details: error.response?.data || error.details.data || error,
-    })
+    });
   }
 };
 
@@ -154,7 +154,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
   const id_factura = "fac-" + uuidv4();
 
   try {
-    console.log( '😒😒😒😒😒' ,req.bo)
+    console.log("😒😒😒😒😒", req.bo);
     const response = await executeSP("sp_inserta_factura_desde_carga", [
       id_factura,
       fecha_emision,
@@ -181,7 +181,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
       );
       throw new Error("No se pudo crear la factura desde carga");
     } else {
-      console.log(id_factura,response,items)
+      console.log(id_factura, response, items);
       res.status(201).json({
         message: "Factura creada correctamente desde carga",
         data: { id_factura, ...response },
@@ -683,6 +683,7 @@ const crearFacturaMultiplesPagos = async (req, res) => {
         });
       }
       rowFactura = mapFacturamaToFacturaRow(facturamaData);
+      rowFactura.uuid_factura = resp.facturama.Complement.TaxStamp.Uuid;
       source = "facturama";
     } else {
       const total = fb.total ?? 0;
@@ -804,22 +805,24 @@ const crearFacturaMultiplesPagos = async (req, res) => {
   }
 };
 
-const getDetallesConexionesFactura = async (req,res) => {
-  const {id_factura,id_agente} = req.query;
-  try{
-    const [pagos = [], reservas = []]= await executeSP2("sp_get_detalles_conexion_fcaturas", [ id_agente,id_factura], { allSets: true });
+const getDetallesConexionesFactura = async (req, res) => {
+  const { id_factura, id_agente } = req.query;
+  try {
+    const [pagos = [], reservas = []] = await executeSP2(
+      "sp_get_detalles_conexion_fcaturas",
+      [id_agente, id_factura],
+      { allSets: true }
+    );
     res.status(200).json({
       message: "Consulta exitosa",
       pagos: pagos,
-      reservas: reservas
+      reservas: reservas,
     });
-  }catch(error){
+  } catch (error) {
     console.log(error);
-    res.status(500).json({message: "Error en el servidor", details: error});
+    res.status(500).json({ message: "Error en el servidor", details: error });
   }
-  
-}
-
+};
 
 module.exports = {
   create,
@@ -837,8 +840,7 @@ module.exports = {
   createEmi,
   crearFacturaDesdeCargaPagos,
   crearFacturaMultiplesPagos,
-  getDetallesConexionesFactura
-
+  getDetallesConexionesFactura,
 };
 
 //ya quedo "#$%&/()="
