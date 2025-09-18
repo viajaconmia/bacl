@@ -691,8 +691,6 @@ const crearFacturaMultiplesPagos = async (req, res) => {
       rowFactura.id_empresa = datos_empresa.id_empresa;
       rowFactura.uuid_factura = resp.data.facturama.Complement.TaxStamp.Uuid;
       source = "facturama";
-      console.log(rowFactura);
-      throw new Error("probando");
     } else {
       const total = fb.total ?? 0;
       const subtotal = fb.subtotal ?? 0;
