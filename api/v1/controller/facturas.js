@@ -202,7 +202,7 @@ const asignarFacturaItems = async (req, res) => {
   console.log("body", req.body);
 
   try {
-    const response = await executeSP("sp_asigna_facturas_items", [
+    const response = await executeSP("mia3.sp_asigna_facturas_items", [
       id_factura,
       items,
     ]);

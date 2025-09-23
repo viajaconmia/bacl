@@ -1112,7 +1112,7 @@ FROM vw_reservas_client rc
 LEFT JOIN agente_details ad ON ad.id_agente = rc.id_agente
 LEFT JOIN hospedajes h
        ON h.id_hospedaje = rc.id_hospedaje
-WHERE rc.status_reserva = 'Confirmada'
+WHERE rc.status_reserva = 'Confirmada' and rc.id_credito is not null
 GROUP BY
   rc.id_hospedaje,
   rc.id_servicio,
@@ -1137,7 +1137,7 @@ GROUP BY
   ad.razon_social,
   ad.rfc,
   ad.tipo_persona
-ORDER BY rc.created_at_reserva DESC;`;
+ORDER BY rc.created_at_reserva DESC`;
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);
