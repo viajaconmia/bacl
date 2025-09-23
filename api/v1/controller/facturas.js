@@ -631,11 +631,11 @@ const crearFacturaMultiplesPagos = async (req, res) => {
     const total = f.Total ?? totales.Total ?? 0;
     const subtotal = f.SubTotal ?? f.Subtotal ?? totales.SubTotal ?? 0;
     const impuestos = Number(total) - Number(subtotal);
-
+    console.log("datos factura 🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨",f)
     return {
       fecha_emision: f.Fecha || f.fecha || new Date(),
       estado: "Confirmada",
-      usuario_creador: fb.usuario_creador ?? info_user.id_agente,
+      usuario_creador:info_user.id_agente,
       id_agente: fb.id_agente ?? info_user.id_agente,
       total,
       subtotal,

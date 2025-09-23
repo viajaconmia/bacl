@@ -551,19 +551,19 @@ const crearFacturaEmi = async (req, payload) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
       `;
 
-        await conn.execute(insertFacturaQuery, [
-          id_factura,
-          new Date(),
-          "Confirmada",
-          id_user,
-          total,
-          subtotal,
-          impuestos,
-          response_factura.data.Id,
-          datos_empresa.rfc,
-          datos_empresa.id_empresa,
-          response_factura.data.Complement.TaxStamp.Uuid,
-        ]);
+        // await conn.execute(insertFacturaQuery, [
+        //   id_factura,
+        //   new Date(),
+        //   "Confirmada",
+        //   id_user,
+        //   total,
+        //   subtotal,
+        //   impuestos,
+        //   response_factura.data.Id,
+        //   datos_empresa.rfc,
+        //   datos_empresa.id_empresa,
+        //   response_factura.data.Complement.TaxStamp.Uuid,
+        // ]);
 
         // 3) (Opcional) relacionar pagos por solicitudes
         /*if (Array.isArray(solicitudesArray) && solicitudesArray.length) {
