@@ -46,7 +46,12 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         response_factura = await crearCfdi(req, cfdi);
       } catch (error) {
         console.error("Error al crear CFDI:", error.response.data);
-        throw new CustomError(error.response.data.Message || "Error al crear la factura", 500, "FACTURA_ERROR", {data:error.response.data.ModelState});
+        throw new CustomError(
+          error.response.data.Message || "Error al crear la factura",
+          500,
+          "FACTURA_ERROR",
+          { data: error.response.data.ModelState }
+        );
       }
       try {
         const id_factura = `fac-${uuidv4()}`;
@@ -74,10 +79,13 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         ];
         const result_creates = await connection.execute(query, params);
 
-        const [rows] = await connection.execute(`SELECT * FROM vw_reservas_client WHERE id_solicitud = ?;`,[id_solicitud])
+        const [rows] = await connection.execute(
+          `SELECT * FROM vw_reservas_client WHERE id_solicitud = ?;`,
+          [id_solicitud]
+        );
 
-        const [reserva] = rows
-        console.log(reserva)
+        const [reserva] = rows;
+        console.log(reserva);
         const query2 = `
         UPDATE items
         SET id_factura = ?,
@@ -193,7 +201,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         ]);
 
         // 5. Insertar registros en facturas_pagos
-       /* const resultados_pagos = await conn.execute( LO COMENTO POR SI ACASO
+        /* const resultados_pagos = await conn.execute( LO COMENTO POR SI ACASO
           `
         INSERT INTO facturas_pagos (
           id_factura, 
@@ -224,18 +232,18 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
   SELECT 
     ?            AS id_factura,
     p.id_pago    AS id_pago,
-    p.monto      AS monto
+    p.total     AS monto
   FROM solicitudes s
   JOIN servicios se ON s.id_servicio = se.id_servicio
   JOIN pagos p     ON se.id_servicio = p.id_servicio
-  WHERE s.id_solicitud IN (${solicitudesArray.map(() => '?').join(',')})
+  WHERE s.id_solicitud IN (${solicitudesArray.map(() => "?").join(",")})
     AND p.id_pago IS NOT NULL
 `;
-const resultados_pagos = await conn.execute(insertPagosSql, [
-  id_factura,
-  ...solicitudesArray,
-]);
-console.log("resultado pagos", resultados_pagos);
+        const resultados_pagos = await conn.execute(insertPagosSql, [
+          id_factura,
+          ...solicitudesArray,
+        ]);
+        console.log("resultado pagos", resultados_pagos);
 
         return {
           id_factura,
@@ -517,8 +525,8 @@ const crearFacturaEmi = async (req, payload) => {
     const body = sanitizeCfdi(cfdi);
 
     // 👀 Imprimir el BODY que se enviará a Facturama (full, sin truncar)
-    console.log("➡️ BODY a Facturama (POST /3/cfdis):");
-    console.dir(body, { depth: null });
+    // console.log("➡️ BODY a Facturama (POST /3/cfdis):");
+    // console.dir(body, { depth: null });
 
     // Transacción: crear en Facturama y luego guardar local
     const result = await runTransaction(async (conn) => {
@@ -527,7 +535,7 @@ const crearFacturaEmi = async (req, payload) => {
         let response_factura;
         try {
           response_factura = await crearCfdi(req, body);
-          console.log("respuesta de facturama", response_factura);
+          // console.log("respuesta de facturama", response_factura);
         } catch (error) {
           const msg = error?.response?.data || error?.message || error;
           console.error("Error al crear CFDI:", msg);
@@ -574,21 +582,21 @@ const crearFacturaEmi = async (req, payload) => {
         } LO COMENTO POR SI ACASO*/
 
         if (Array.isArray(solicitudesArray) && solicitudesArray.length) {
-  const placeholders = solicitudesArray.map(() => "?").join(",");
-  const sql = `
+          const placeholders = solicitudesArray.map(() => "?").join(",");
+          const sql = `
     INSERT INTO facturas_pagos_y_saldos (id_factura, id_pago, monto)
     SELECT
       ?          AS id_factura,
       p.id_pago  AS id_pago,
-      p.monto    AS monto
+      p.total    AS monto
     FROM solicitudes s
     JOIN servicios se ON s.id_servicio = se.id_servicio
     JOIN pagos p      ON se.id_servicio = p.id_servicio
     WHERE s.id_solicitud IN (${placeholders})
       AND p.id_pago IS NOT NULL
   `;
-  await conn.execute(sql, [id_factura, ...solicitudesArray]);
-}
+          await conn.execute(sql, [id_factura, ...solicitudesArray]);
+        }
 
         return {
           id_factura,
@@ -607,7 +615,8 @@ const crearFacturaEmi = async (req, payload) => {
 
 module.exports = { crearFacturaEmi };
 
-const getFacturasConsultas = async (user_id) => {/*PARECE SER QUE YA NO SE OCUPA*/ 
+const getFacturasConsultas = async (user_id) => {
+  /*PARECE SER QUE YA NO SE OCUPA*/
   try {
     let query = `
 SELECT

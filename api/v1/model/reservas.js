@@ -516,8 +516,8 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           const query_solicitudes = `
             INSERT INTO solicitudes (
               id_solicitud, id_servicio, id_usuario_generador, confirmation_code,
-              id_viajero, hotel, check_in, check_out, room, total, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?);
+              id_viajero, hotel, check_in, check_out, room, total, status, origen
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
           `;
           const params_solicitud = [
             id_solicitud,
@@ -531,6 +531,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             reserva.habitacion,
             venta.total,
             reserva.estado_reserva,
+            "Operaciones"
           ];
           await connection.execute(query_solicitudes, params_solicitud);
 
@@ -720,7 +721,6 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             "Procesando bandera 0 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:"
           );
           if (bandera === 0) {
-
             // Crédito: descuenta saldo del agente + inserta pagos_credito
             await connection.execute(
               `UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?;`,
@@ -826,7 +826,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             for (const saldo of ejemplo_saldos) {
               console.log("Procesando saldo:", saldo);
               const id_pago = `pag-${uuidv4()}`;
-              
+
               console.log("Generando pago con ID:", id_pago);
               await connection.execute(query_pagos, [
                 id_pago,
@@ -845,7 +845,6 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
                 saldo.aplicado,
                 transaccion,
                 venta.total,
-
               ]);
               await connection.execute(query_update_saldo, [
                 saldo.aplicado,
@@ -896,16 +895,14 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             // --- update final: reflejar saldo_actual en saldos_a_favor ---
             console.log("Pagos ordenados para update final:", pagosOrdenados);
             for (const pago of pagosOrdenados) {
-
               await connection.execute(
                 `UPDATE saldos_a_favor 
                 SET saldo = ?,
                 activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END
                 WHERE id_saldos = ?`,
-                [pago.saldo_actual ,pago.restante, pago.id_saldo]
+                [pago.saldo_actual, pago.restante, pago.id_saldo]
               );
             }
-
           }
 
           // Completar solicitud
@@ -1112,7 +1109,7 @@ FROM vw_reservas_client rc
 LEFT JOIN agente_details ad ON ad.id_agente = rc.id_agente
 LEFT JOIN hospedajes h
        ON h.id_hospedaje = rc.id_hospedaje
-WHERE rc.status_reserva = 'Confirmada' and rc.id_credito is not null
+WHERE rc.status_reserva = 'Confirmada' AND rc.id_credito is not null
 GROUP BY
   rc.id_hospedaje,
   rc.id_servicio,
