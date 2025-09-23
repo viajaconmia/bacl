@@ -1,4 +1,4 @@
-const { executeSP, runTransaction, executeSP2 } = require("../../../config/db");
+const { executeSP, runTransaction, executeSP2, executeQuery } = require("../../../config/db");
 const model = require("../model/facturas");
 const { v4: uuidv4 } = require("uuid");
 const { get } = require("../router/mia/reservasClient");
@@ -201,14 +201,46 @@ const asignarFacturaItems = async (req, res) => {
   const { id_factura, items } = req.body;
   console.log("body", req.body);
 
+  // Asegura que items sea un array
+  let itemsArray = items;
+  if (typeof items === "string") {
+    try {
+      itemsArray = JSON.parse(items);
+    } catch (e) {
+      return res.status(400).json({
+        error: "El campo 'items' no es un JSON válido",
+        details: e.message,
+      });
+    }
+  }
+
   try {
-    const response = await executeSP("mia3.sp_asigna_facturas_items", [
-      id_factura,
-      items,
-    ]);
+    const updateitems = `UPDATE items
+    SET id_factura  = ?,
+        is_facturado = 1
+    WHERE id_item = ?;`;
+    const updateFactura = `  UPDATE facturas
+  SET saldo =  ?
+  WHERE id_factura = ?;`;
+  
+    const saldo_factura = await executeQuery(`select saldo from facturas where id_factura = ?;`,[id_factura]);
+    let suma_total_items = 0;
+    for (const item of itemsArray) {
+      // Asegura que item.total sea un número válido
+      const totalItem = Number(item.total) || 0;
+      suma_total_items += totalItem;
+      await executeQuery(updateitems, [id_factura, item.id_item]);
+    }
+    const nuevo_saldo = saldo_factura[0].saldo - suma_total_items;
+    if (nuevo_saldo < 0) {
+      throw new ShortError("El saldo de la factura no puede ser negativo", 400);
+    } else {
+      await executeQuery(updateFactura, [nuevo_saldo, id_factura]);
+    }
+  
     return res.status(200).json({
       message: "Items asignados correctamente a la factura",
-      data: response,
+      data: "Factura asociada: " + id_factura,
     });
   } catch (error) {
     return res.status(500).json({
