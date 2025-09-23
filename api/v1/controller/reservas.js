@@ -74,7 +74,7 @@ const updateReserva2 = async (req, res) => {
     hotel,
     codigo_reservacion_hotel,
     habitacion,
-    noches,
+    noches, 
     comments,
     items,
     impuestos,
@@ -309,7 +309,7 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
   console.log("id_agente", id_agente);
   try {
     const reservas = await executeSP(
-      "mia3.sp_reservas_con_items_by_id_agente",
+      "sp_reservas_con_items_by_id_agente",
       [id_agente]
     );
     if (!reservas) {
