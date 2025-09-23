@@ -75,7 +75,7 @@ const create = async (req, res) => {
     hotel,
     codigo_reservacion_hotel,
     habitacion,
-    noches,
+    noches, 
     comments,
     items,
     impuestos,

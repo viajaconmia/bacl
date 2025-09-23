@@ -61,7 +61,7 @@ const facturama = () => {
     req.context.logStep("▶️ postSyncWithData args:");
 
     try {
-      console.log(`${settings.url}${path}`);
+      // console.log(`${settings.url}${path}`);
       // 1) Ejecutamos la llamada y nos quedamos con todo el response
       //
 
@@ -75,10 +75,10 @@ const facturama = () => {
       });
 
       // 2) Opcional: sanity log de headers enviados
-      req.context.logStep(
-        "➡️ Facturama request headers:",
-        response.config.headers
-      );
+      // req.context.logStep(
+      //   "➡️ Facturama request headers:",
+      //   response.config.headers
+      // );
 
       // 3) Retornamos el objeto completo (status + data + headers, etc.)
       return response;
