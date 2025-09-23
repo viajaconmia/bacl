@@ -836,6 +836,27 @@ const getDetallesConexionesFactura = async (req, res) => {
   }
 };
 
+const asignarURLS_factura = async(req,res)=>{
+  const {id_factura, url_pdf, url_xml} = req.query;
+ try {
+  const response = await executeSP("sp_asignar_urls_a_facturas",[id_factura,url_pdf,url_xml])
+  if (!response) {
+    throw new ShortError("No se pudo actualizar las URLs de la factura", 500);
+  }
+  res.status(200).json({
+    message: "URLs asignadas correctamente a la factura",
+    data: response,
+  });
+  
+ } catch (error) {
+  res.status(500).json({
+    error: "Error al asignar URLs a la factura",
+    details: error.message || error,
+    otherDetails: error.response?.data || null,
+  });
+ }
+}
+
 module.exports = {
   create,
   get_agente_facturas,
@@ -853,6 +874,7 @@ module.exports = {
   crearFacturaDesdeCargaPagos,
   crearFacturaMultiplesPagos,
   getDetallesConexionesFactura,
+  asignarURLS_factura
 };
 
 //ya quedo "#$%&/()="
