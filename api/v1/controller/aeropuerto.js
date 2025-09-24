@@ -3,7 +3,7 @@ const { executeQuery } = require("../../../config/db");
 const getAeropuertos = async (req, res) => {
   try {
     const aerolineas = await executeQuery(
-      `SELECT Codigo_IATA as codigo, id_destino as id, NomeES as nombre FROM destinos`
+      `SELECT Codigo_IATA as codigo, id_destino as id, NomeES as nombre, Ubicacion as ciudad, Nombre_pais as pais FROM destinos`
     );
     res.status(200).json({ message: "", data: aerolineas });
   } catch (error) {

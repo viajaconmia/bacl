@@ -22,6 +22,7 @@ const pagar = require("../mia/pagar");
 const saldos = require("../mia/saldos");
 const pago_proveedor = require("../mia/pago_proveedor");
 const utils = require("../mia/utils");
+const vuelos = require("../mia/vuelos");
 const reservasClient = require("../mia/reservasClient");
 
 router.use("/auth", auth);
@@ -46,6 +47,7 @@ router.use("/impersonate", impersonate);
 router.use("/pagar", pagar);
 router.use("/saldo", saldos);
 router.use("/utils", utils);
+router.use("/vuelos", vuelos);
 router.use("/pago_proveedor", pago_proveedor);
 router.use("/reservasClient", reservasClient);
 
