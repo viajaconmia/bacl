@@ -78,7 +78,9 @@ const updateReserva2 = async (req, res) => {
     comments,
     items,
     impuestos,
-    nuevo_incluye_desayuno
+    nuevo_incluye_desayuno,
+    acompanantes,
+    metadata
   } = req.body;
   console.log(id);
   try {
@@ -115,9 +117,33 @@ const updateReserva2 = async (req, res) => {
       impuestosJson, // 19) p_impuestos_json
       nuevo_incluye_desayuno ?? null
     ];
+    const acompList = Array.isArray(acompanantes) ? acompanantes : [];
     console.log("por entrar al sp");
     // 4) Llamar al SP
     const result = await executeSP("sp_editar_reserva_procesada", params);
+
+    const query = `insert into viajeros_hospedajes (id_viajero,id_hospedaje,is_principal)
+    values (?,?,0);`;
+    const query_delete_acompanantes= `delete from viajeros_hospedajes where id_hospedaje= ?
+    and is_principal = 0;`;
+
+     await runTransaction((connection)=>{
+        try {
+          await connection.execute(query_delete_acompanantes,[metadata.id_hospedaje]);
+    if (acompList){
+      for( let acompanante in acompList){
+        await connection.execute(query,[acompanante.id_viajero,metadata.id_hospedaje]);
+      }
+    }
+
+    Promise.all(acompList.map((acompanante)=> connection.execute(query, [acompanante.id_viajero, metadata.id_hospedaje])))
+
+        } catch (error) {
+          throw error
+        }
+     });
+
+    }
 
     // 5) Verificar resultado
     // dependiendo de tu helper, puede que sea result.affectedRows o result[0].affectedRows
