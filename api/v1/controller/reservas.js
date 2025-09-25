@@ -78,6 +78,7 @@ const updateReserva2 = async (req, res) => {
     comments,
     items,
     impuestos,
+    nuevo_incluye_desayuno
   } = req.body;
   console.log(id);
   try {
@@ -112,6 +113,7 @@ const updateReserva2 = async (req, res) => {
       comments?.current ?? null, // 17) p_comments
       itemsJson, // 18) p_items_json
       impuestosJson, // 19) p_impuestos_json
+      nuevo_incluye_desayuno ?? null
     ];
     console.log("por entrar al sp");
     // 4) Llamar al SP
