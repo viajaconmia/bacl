@@ -138,7 +138,7 @@ const updateReserva2 = async (req, res) => {
     const result = await runTransaction(async (connection) => {
       // 4.1 SP (ajusta los ? al número real de parámetros del SP)
       await connection.execute(
-        "CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         params
       );
 
