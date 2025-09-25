@@ -64,6 +64,7 @@ const create = async (req, res) => {
 const updateReserva2 = async (req, res) => {
   console.log("Llegando al endpoint de updateReserva2");
   const { id } = req.query;
+
   const {
     viajero,
     check_in,
@@ -82,7 +83,7 @@ const updateReserva2 = async (req, res) => {
     acompanantes,
     metadata
   } = req.body;
-  console.log(id);
+
   try {
     // 1) Generar id_item para cada ítem nuevo
     const itemsConIds = (items?.current || []).map((item) => ({
@@ -94,73 +95,89 @@ const updateReserva2 = async (req, res) => {
     const itemsJson = JSON.stringify(itemsConIds);
     const impuestosJson = JSON.stringify(impuestos?.current || []);
 
-    // 3) Construir array de 19 parámetros para el SP
+    // 3) Array de **20** parámetros para el SP
     const params = [
-      id, // 1) p_id_booking
-      viajero?.current?.id_viajero ?? null, // 2) p_id_viajero
-      check_in?.current ?? null, // 3) p_check_in
-      check_out?.current ?? null, // 4) p_check_out
-      // venta?.current?.total ?? null, // 5) p_total
-      // venta?.current?.subtotal ?? null, // 6) p_subtotal
-      // venta?.current?.impuestos ?? null, // 7) p_impuestos
-      estado_reserva?.current ?? null, // 8) p_estado_reserva
-      proveedor?.current?.total ?? null, // 9) p_costo_total
-      proveedor?.current?.subtotal ?? null, // 10) p_costo_subtotal
-      proveedor?.current?.impuestos ?? null, // 11) p_costo_impuestos
-      hotel?.current?.content?.nombre_hotel ?? null, // 12) p_nombre_hotel
-      hotel?.current?.content?.id_hotel ?? null, // 13) p_id_hotel
-      codigo_reservacion_hotel?.current ?? null, // 14) p_codigo_reservacion_hotel
-      habitacion?.current ?? null, // 15) p_tipo_cuarto
-      noches?.current ?? null, // 16) p_noches
-      comments?.current ?? null, // 17) p_comments
-      itemsJson, // 18) p_items_json
-      impuestosJson, // 19) p_impuestos_json
-      nuevo_incluye_desayuno ?? null
+      id,                                           // 1) p_id_booking
+      viajero?.current?.id_viajero ?? null,         // 2) p_id_viajero
+      check_in?.current ?? null,                    // 3) p_check_in
+      check_out?.current ?? null,                   // 4) p_check_out
+      // venta?.current?.total ?? null,             // 5) p_total (si tu SP lo pide, descomenta 5-7 y ajusta placeholders)
+      // venta?.current?.subtotal ?? null,          // 6) p_subtotal
+      // venta?.current?.impuestos ?? null,         // 7) p_impuestos
+      estado_reserva?.current ?? null,              // 8) p_estado_reserva
+      proveedor?.current?.total ?? null,            // 9) p_costo_total
+      proveedor?.current?.subtotal ?? null,         // 10) p_costo_subtotal
+      proveedor?.current?.impuestos ?? null,        // 11) p_costo_impuestos
+      hotel?.current?.content?.nombre_hotel ?? null,// 12) p_nombre_hotel
+      hotel?.current?.content?.id_hotel ?? null,    // 13) p_id_hotel
+      codigo_reservacion_hotel?.current ?? null,    // 14) p_codigo_reservacion_hotel
+      habitacion?.current ?? null,                  // 15) p_tipo_cuarto
+      noches?.current ?? null,                      // 16) p_noches
+      comments?.current ?? null,                    // 17) p_comments
+      itemsJson,                                    // 18) p_items_json
+      impuestosJson,                                // 19) p_impuestos_json
+      nuevo_incluye_desayuno ?? null                // 20) p_nuevo_incluye_desayuno
     ];
+
+    // Prepara acompañantes
+    const idHosp = metadata?.id_hospedaje;
+    if (!idHosp) {
+      return res.status(400).json({ error: "metadata.id_hospedaje es requerido" });
+    }
+    const idViajeroPrincipal =
+      viajero?.current?.id_viajero ??
+      metadata?.id_viajero_reserva ??
+      null;
+
     const acompList = Array.isArray(acompanantes) ? acompanantes : [];
-    console.log("por entrar al sp");
-    // 4) Llamar al SP
-    const result = await executeSP("sp_editar_reserva_procesada", params);
+    const acompFiltrados = acompList
+      .map(a => a?.id_viajero)
+      .filter(idv => idv && idv !== idViajeroPrincipal);
 
-    const query = `insert into viajeros_hospedajes (id_viajero,id_hospedaje,is_principal)
-    values (?,?,0);`;
-    const query_delete_acompanantes= `delete from viajeros_hospedajes where id_hospedaje= ?
-    and is_principal = 0;`;
+    // 4) Ejecuta TODO dentro de una sola transacción
+    const result = await runTransaction(async (connection) => {
+      // 4.1 SP (ajusta los ? al número real de parámetros del SP)
+      await connection.execute(
+        "CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        params
+      );
 
-     await runTransaction((connection)=>{
-        try {
-          await connection.execute(query_delete_acompanantes,[metadata.id_hospedaje]);
-    if (acompList){
-      for( let acompanante in acompList){
-        await connection.execute(query,[acompanante.id_viajero,metadata.id_hospedaje]);
+      // 4.2 Borra acompañantes (no-principal)
+      await connection.execute(
+        `DELETE FROM viajeros_hospedajes
+          WHERE id_hospedaje = ?
+            AND (is_principal = 0 OR is_principal IS NULL)`,
+        [idHosp]
+      );
+
+      // 4.3 Inserta acompañantes del payload (si hay)
+      if (acompFiltrados.length > 0) {
+        const values = acompFiltrados.map(() => "(?,?,0)").join(",");
+        const paramsIns = acompFiltrados.flatMap(idv => [idv, idHosp]);
+
+        await connection.execute(
+          `INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal)
+           VALUES ${values}`,
+          paramsIns
+        );
       }
-    }
 
-    Promise.all(acompList.map((acompanante)=> connection.execute(query, [acompanante.id_viajero, metadata.id_hospedaje])))
+      // Opcional: devolver algo desde la TX
+      return { inserted: acompFiltrados.length };
+    });
 
-        } catch (error) {
-          throw error
-        }
-     });
-
-    }
-
-    // 5) Verificar resultado
-    // dependiendo de tu helper, puede que sea result.affectedRows o result[0].affectedRows
-    if (!result || result.length === 0) {
-      return res.status(404).json({ message: "No se encontró la reserva" });
-    }
-
-    // 6) Responder con los nuevos IDs de items
+    // 5) Responder
     return res.status(200).json({
+      ok: true,
       message: "Reserva actualizada correctamente",
       data: {
         id_booking: id,
         items: itemsConIds,
         impuestos: impuestos?.current || [],
-        rawResult: result,
-      },
+        tx: result
+      }
     });
+
   } catch (error) {
     console.error("Error en updateReserva2:", error);
     return res
