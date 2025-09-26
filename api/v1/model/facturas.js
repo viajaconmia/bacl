@@ -156,6 +156,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
 
         // 2. Generar ID local de factura
         const id_factura = `fac-${uuidv4()}`;
+        console.log("responses",info_user)
 
         // 3. Insertar factura principal
         const insertFacturaQuery = `
@@ -171,7 +172,8 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           rfc,
           id_empresa,
           uuid_factura
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?);
+          fecha_vencimiento
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?);
           `;
         console.log(datos_empresa);
         const results = await conn.execute(insertFacturaQuery, [
@@ -186,6 +188,8 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           datos_empresa.rfc,
           datos_empresa.id_empresa,
           response_factura.data.Complement.TaxStamp.Uuid,
+          //fecha de vencimiento
+          info_user.fecha_vencimiento,
         ]);
 
         // 4. Actualizar solo los items seleccionados
