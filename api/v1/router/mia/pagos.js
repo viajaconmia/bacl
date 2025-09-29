@@ -4,7 +4,7 @@ const controller = require("../../controller/pagos");
 const { get_agente_facturas } = require("../../controller/facturas");
 
 router.post("/carrito/credito", controller.pagarCarritoConCredito);
-router.post("/crearItemdeAjuste", controller.crearItemdeAjuste);
+router.post("/crearItemdeAjuste", controller.aplicarCambioNochesOAjuste);
 router.post("/aplicarpagoPorSaldoAFavor", controller.pagoPorSaldoAFavor);
 router.get("/getAllPagosPrepago", controller.getAllPagosPrepago);
 router.post("/", controller.create);
