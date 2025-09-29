@@ -218,23 +218,25 @@ const crearVuelo = async (req, res) => {
           "Operaciones", // Puede ser NULL.
           {
             tipo: viaje_aereo.trip_type,
-            salida: vuelos[0].check_in,
-            regreso:
-              indiceVueloRegresoOrigen > 1
-                ? vuelos[indiceVueloRegresoOrigen].check_in
-                : null,
-            horario_de_vuelo: null,
-            origen: vuelos[0].origen.nombre,
+            escalas_preferencia: null,
+            maleta: false,
+            origen: vuelos[0].origen,
             destino:
               vuelos[
                 indiceVueloRegresoOrigen > 1
                   ? indiceVueloRegresoOrigen - 1
                   : vuelos.length - 1
-              ].destino.nombre,
-            maleta: false,
+              ].destino,
+            salida: vuelos[0].check_in,
+            regreso:
+              indiceVueloRegresoOrigen > 1
+                ? vuelos[indiceVueloRegresoOrigen].check_in
+                : null,
+            horario_salida: null,
+            horario_regreso: null,
+            numero_personas: 1,
             seleccion_asiento: false,
             tarifa_flexible: false,
-            numero_personas: 1,
             comentarios: "",
           },
         ];
