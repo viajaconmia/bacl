@@ -45,7 +45,7 @@ const getStripeInfo = async (req, res) => {
       pais: charge.payment_method_details.card.country,
       authorization_code: charge.payment_method_details.card.authorization_code,
     };
-  console.log("chargeId recibido:", stripeInfo);
+    console.log("chargeId recibido:", stripeInfo);
 
     if (!charge) {
       return res.status(404).json({ message: "Cargo no encontrado" });
@@ -132,7 +132,10 @@ const saldosByType = async (req, res) => {
       );
     }
     const saldos = await executeQuery(
-      `SELECT * FROM saldos_a_favor WHERE metodo_pago = ? AND id_agente = ? AND saldo > 0 AND activo = 1;`,
+      `SELECT saf.*,fps.id_factura FROM saldos_a_favor saf 
+        inner join facturas_pagos_y_saldos fps on fps.id_saldo_a_favor = saf.id_saldos
+        WHERE saf.metodo_pago = ? 
+        AND saf.id_agente = ? AND saf.saldo > 0 AND saf.activo = 1;`,
       [type, id_agente]
     );
 
@@ -198,9 +201,6 @@ INNER JOIN agente_details AS a
 WHERE sf.id_agente = ?;`,
       [id]
     );
-    console.log("Si es esta query 👌👌👌");
-    console.log(saldo);
-    console.log("Si es esta query 👌👌👌");
     // console.log(saldo);
     res
       .status(200)
