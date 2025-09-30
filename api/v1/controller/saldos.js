@@ -262,7 +262,7 @@ const createNewSaldo = async (req, res) => {
       data.referencia || null,
       "MXN",
       data.tipo_tarjeta || null,
-      data.comentario || null,
+      null,
       data.link_stripe || null,
       data.is_facturable ?? false,
       data.descuento_aplicable ?? false,
