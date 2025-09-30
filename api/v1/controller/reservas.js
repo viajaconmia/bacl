@@ -79,9 +79,14 @@ const create = async (req, res) => {
     comments,
     items,
     impuestos,
+    nuevo_incluye_desayuno,
+    acompanantes,
+    metadata,
   } = req.body;
+
   console.log(id);
   console.log("Revisando el body ⚠️⚠️⚠️⚠️", req.body);
+
   try {
     // 1) Generar id_item para cada ítem nuevo
     const itemsConIds = (items?.current || []).map((item) => ({
@@ -96,15 +101,15 @@ const create = async (req, res) => {
     const itemsJson = JSON.stringify(itemsConIds);
     const impuestosJson = JSON.stringify(impuestos?.current || []);
 
-    // 3) Construir array de 19 parámetros para el SP
+    // 3) Array de **20** parámetros para el SP
     const params = [
       id, // 1) p_id_booking
       viajero?.current?.id_viajero ?? null, // 2) p_id_viajero
       check_in?.current ?? null, // 3) p_check_in
       check_out?.current ?? null, // 4) p_check_out
-      // venta?.current?.total ?? null, // 5) p_total
-      // venta?.current?.subtotal ?? null, // 6) p_subtotal
-      // venta?.current?.impuestos ?? null, // 7) p_impuestos
+      // venta?.current?.total ?? null,             // 5) p_total (si tu SP lo pide, descomenta 5-7 y ajusta placeholders)
+      // venta?.current?.subtotal ?? null,          // 6) p_subtotal
+      // venta?.current?.impuestos ?? null,         // 7) p_impuestos
       estado_reserva?.current ?? null, // 8) p_estado_reserva
       proveedor?.current?.total ?? null, // 9) p_costo_total
       proveedor?.current?.subtotal ?? null, // 10) p_costo_subtotal
@@ -117,7 +122,9 @@ const create = async (req, res) => {
       comments?.current ?? null, // 17) p_comments
       itemsJson, // 18) p_items_json
       impuestosJson, // 19) p_impuestos_json
+      nuevo_incluye_desayuno ?? null, // 20) p_nuevo_incluye_desayuno
     ];
+
     console.log("por entrar al sp");
     // Verificamos primero el total de items de la reserva
    
@@ -179,20 +186,62 @@ console
     // 4) Llamar al SP
     // const result = await executeSP("sp_editar_reserva_procesada", params);
 
-    // 5) Verificar resultado
-    // dependiendo de tu helper, puede que sea result.affectedRows o result[0].affectedRows
-    if (!result || result.length === 0) {
-      return res.status(404).json({ message: "No se encontró la reserva" });
+    // Prepara acompañantes
+    const idHosp = metadata?.id_hospedaje;
+    if (!idHosp) {
+      return res
+        .status(400)
+        .json({ error: "metadata.id_hospedaje es requerido" });
     }
+    const idViajeroPrincipal =
+      viajero?.current?.id_viajero ?? metadata?.id_viajero_reserva ?? null;
 
-    // 6) Responder con los nuevos IDs de items
+    const acompList = Array.isArray(acompanantes) ? acompanantes : [];
+    const acompFiltrados = acompList
+      .map((a) => a?.id_viajero)
+      .filter((idv) => idv && idv !== idViajeroPrincipal);
+
+    // 4) Ejecuta TODO dentro de una sola transacción
+    const result = await runTransaction(async (connection) => {
+      // 4.1 SP (ajusta los ? al número real de parámetros del SP)
+      await connection.execute(
+        "CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        params
+      );
+
+      // 4.2 Borra acompañantes (no-principal)
+      await connection.execute(
+        `DELETE FROM viajeros_hospedajes
+          WHERE id_hospedaje = ?
+            AND (is_principal = 0 OR is_principal IS NULL)`,
+        [idHosp]
+      );
+
+      // 4.3 Inserta acompañantes del payload (si hay)
+      if (acompFiltrados.length > 0) {
+        const values = acompFiltrados.map(() => "(?,?,0)").join(",");
+        const paramsIns = acompFiltrados.flatMap((idv) => [idv, idHosp]);
+
+        await connection.execute(
+          `INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal)
+           VALUES ${values}`,
+          paramsIns
+        );
+      }
+
+      // Opcional: devolver algo desde la TX
+      return { inserted: acompFiltrados.length };
+    });
+
+    // 5) Responder
     return res.status(200).json({
+      ok: true,
       message: "Reserva actualizada correctamente",
       data: {
         id_booking: id,
         items: itemsConIds,
         impuestos: impuestos?.current || [],
-        rawResult: result,
+        tx: result,
       },
     });
   } catch (error) {
@@ -1079,8 +1128,6 @@ async function updateReserva3(req, res) {
     });
   }
 }
-
-
 
 const createFromOperaciones = async (req, res) => {
   try {
