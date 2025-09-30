@@ -1,5 +1,6 @@
 const { executeQuery, executeTransaction } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+const { sumarDias } = require("../../../lib/utils/calculates");
 
 const editarReserva = async (edicionData, id_booking_a_editar) => {
   try {
@@ -531,7 +532,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             reserva.habitacion,
             venta.total,
             reserva.estado_reserva,
-            "Operaciones"
+            "Operaciones",
           ];
           await connection.execute(query_solicitudes, params_solicitud);
 
@@ -617,9 +618,10 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           // Items
           const itemsConIdAnadido =
             items && items.length > 0
-              ? items.map((item) => ({
+              ? items.map((item, index) => ({
                   ...item,
                   id_item: `ite-${uuidv4()}`,
+                  fecha_uso: sumarDias(new Date(reserva.check_in), index + 1),
                 }))
               : [];
 
@@ -642,7 +644,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               it.venta.subtotal.toFixed(2),
               it.venta.impuestos.toFixed(2),
               null,
-              new Date().toISOString().split("T")[0],
+              it.fecha_uso,
               id_hospedaje,
               it.costo.total.toFixed(2),
               it.costo.subtotal.toFixed(2),
@@ -1873,9 +1875,10 @@ const insertarReserva = async ({ reserva }) => {
     // Preparar items con ID
     const itemsConIdAnadido =
       items && items.length > 0
-        ? items.map((item) => ({
+        ? items.map((item, index) => ({
             ...item,
             id_item: `ite-${uuidv4()}`,
+            fecha_uso: sumarDias(new Date(reserva.check_in), index + 1),
           }))
         : [];
 
@@ -1957,7 +1960,7 @@ const insertarReserva = async ({ reserva }) => {
                 itemConId.venta.subtotal.toFixed(2),
                 itemConId.venta.impuestos.toFixed(2),
                 null,
-                new Date().toISOString().split("T")[0],
+                itemConId.fecha_uso,
                 id_hospedaje,
                 itemConId.costo.total.toFixed(2),
                 itemConId.costo.subtotal.toFixed(2),
