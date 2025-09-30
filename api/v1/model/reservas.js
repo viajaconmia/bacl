@@ -1136,7 +1136,7 @@ GROUP BY
   ad.razon_social,
   ad.rfc,
   ad.tipo_persona
-ORDER BY rc.created_at_reserva DESC;`;
+ORDER BY rc.created_at_reserva DESC`;
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);

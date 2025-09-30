@@ -1,4 +1,4 @@
-const { executeSP, runTransaction, executeSP2 } = require("../../../config/db");
+const { executeSP, runTransaction, executeSP2, executeQuery } = require("../../../config/db");
 const model = require("../model/facturas");
 const { v4: uuidv4 } = require("uuid");
 const { get } = require("../router/mia/reservasClient");
@@ -201,14 +201,46 @@ const asignarFacturaItems = async (req, res) => {
   const { id_factura, items } = req.body;
   console.log("body", req.body);
 
+  // Asegura que items sea un array
+  let itemsArray = items;
+  if (typeof items === "string") {
+    try {
+      itemsArray = JSON.parse(items);
+    } catch (e) {
+      return res.status(400).json({
+        error: "El campo 'items' no es un JSON válido",
+        details: e.message,
+      });
+    }
+  }
+
   try {
-    const response = await executeSP("sp_asigna_facturas_items", [
-      id_factura,
-      items,
-    ]);
+    const updateitems = `UPDATE items
+    SET id_factura  = ?,
+        is_facturado = 1
+    WHERE id_item = ?;`;
+    const updateFactura = `  UPDATE facturas
+  SET saldo =  ?
+  WHERE id_factura = ?;`;
+  
+    const saldo_factura = await executeQuery(`select saldo from facturas where id_factura = ?;`,[id_factura]);
+    let suma_total_items = 0;
+    for (const item of itemsArray) {
+      // Asegura que item.total sea un número válido
+      const totalItem = Number(item.total) || 0;
+      suma_total_items += totalItem;
+      await executeQuery(updateitems, [id_factura, item.id_item]);
+    }
+    const nuevo_saldo = saldo_factura[0].saldo - suma_total_items;
+    if (nuevo_saldo < 0) {
+      throw new ShortError("El saldo de la factura no puede ser negativo", 400);
+    } else {
+      await executeQuery(updateFactura, [nuevo_saldo, id_factura]);
+    }
+  
     return res.status(200).json({
       message: "Items asignados correctamente a la factura",
-      data: response,
+      data: "Factura asociada: " + id_factura,
     });
   } catch (error) {
     return res.status(500).json({
@@ -631,11 +663,11 @@ const crearFacturaMultiplesPagos = async (req, res) => {
     const total = f.Total ?? totales.Total ?? 0;
     const subtotal = f.SubTotal ?? f.Subtotal ?? totales.SubTotal ?? 0;
     const impuestos = Number(total) - Number(subtotal);
-
+    console.log("datos factura 🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨",f)
     return {
       fecha_emision: f.Fecha || f.fecha || new Date(),
       estado: "Confirmada",
-      usuario_creador: fb.usuario_creador ?? info_user.id_agente,
+      usuario_creador:info_user.id_agente,
       id_agente: fb.id_agente ?? info_user.id_agente,
       total,
       subtotal,
@@ -836,6 +868,27 @@ const getDetallesConexionesFactura = async (req, res) => {
   }
 };
 
+const asignarURLS_factura = async(req,res)=>{
+  const {id_factura, url_pdf, url_xml} = req.query;
+ try {
+  const response = await executeSP("sp_asignar_urls_a_facturas",[id_factura,url_pdf,url_xml])
+  if (!response) {
+    throw new ShortError("No se pudo actualizar las URLs de la factura", 500);
+  }
+  res.status(200).json({
+    message: "URLs asignadas correctamente a la factura",
+    data: response,
+  });
+  
+ } catch (error) {
+  res.status(500).json({
+    error: "Error al asignar URLs a la factura",
+    details: error.message || error,
+    otherDetails: error.response?.data || null,
+  });
+ }
+}
+
 module.exports = {
   create,
   get_agente_facturas,
@@ -853,6 +906,7 @@ module.exports = {
   crearFacturaDesdeCargaPagos,
   crearFacturaMultiplesPagos,
   getDetallesConexionesFactura,
+  asignarURLS_factura
 };
 
 //ya quedo "#$%&/()="
