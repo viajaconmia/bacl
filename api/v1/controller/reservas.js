@@ -81,7 +81,7 @@ const updateReserva2 = async (req, res) => {
     impuestos,
     nuevo_incluye_desayuno,
     acompanantes,
-    metadata
+    metadata,
   } = req.body;
 
   try {
@@ -97,42 +97,42 @@ const updateReserva2 = async (req, res) => {
 
     // 3) Array de **20** parámetros para el SP
     const params = [
-      id,                                           // 1) p_id_booking
-      viajero?.current?.id_viajero ?? null,         // 2) p_id_viajero
-      check_in?.current ?? null,                    // 3) p_check_in
-      check_out?.current ?? null,                   // 4) p_check_out
+      id, // 1) p_id_booking
+      viajero?.current?.id_viajero ?? null, // 2) p_id_viajero
+      check_in?.current ?? null, // 3) p_check_in
+      check_out?.current ?? null, // 4) p_check_out
       // venta?.current?.total ?? null,             // 5) p_total (si tu SP lo pide, descomenta 5-7 y ajusta placeholders)
       // venta?.current?.subtotal ?? null,          // 6) p_subtotal
       // venta?.current?.impuestos ?? null,         // 7) p_impuestos
-      estado_reserva?.current ?? null,              // 8) p_estado_reserva
-      proveedor?.current?.total ?? null,            // 9) p_costo_total
-      proveedor?.current?.subtotal ?? null,         // 10) p_costo_subtotal
-      proveedor?.current?.impuestos ?? null,        // 11) p_costo_impuestos
-      hotel?.current?.content?.nombre_hotel ?? null,// 12) p_nombre_hotel
-      hotel?.current?.content?.id_hotel ?? null,    // 13) p_id_hotel
-      codigo_reservacion_hotel?.current ?? null,    // 14) p_codigo_reservacion_hotel
-      habitacion?.current ?? null,                  // 15) p_tipo_cuarto
-      noches?.current ?? null,                      // 16) p_noches
-      comments?.current ?? null,                    // 17) p_comments
-      itemsJson,                                    // 18) p_items_json
-      impuestosJson,                                // 19) p_impuestos_json
-      nuevo_incluye_desayuno ?? null                // 20) p_nuevo_incluye_desayuno
+      estado_reserva?.current ?? null, // 8) p_estado_reserva
+      proveedor?.current?.total ?? null, // 9) p_costo_total
+      proveedor?.current?.subtotal ?? null, // 10) p_costo_subtotal
+      proveedor?.current?.impuestos ?? null, // 11) p_costo_impuestos
+      hotel?.current?.content?.nombre_hotel ?? null, // 12) p_nombre_hotel
+      hotel?.current?.content?.id_hotel ?? null, // 13) p_id_hotel
+      codigo_reservacion_hotel?.current ?? null, // 14) p_codigo_reservacion_hotel
+      habitacion?.current ?? null, // 15) p_tipo_cuarto
+      noches?.current ?? null, // 16) p_noches
+      comments?.current ?? null, // 17) p_comments
+      itemsJson, // 18) p_items_json
+      impuestosJson, // 19) p_impuestos_json
+      nuevo_incluye_desayuno ?? null, // 20) p_nuevo_incluye_desayuno
     ];
 
     // Prepara acompañantes
     const idHosp = metadata?.id_hospedaje;
     if (!idHosp) {
-      return res.status(400).json({ error: "metadata.id_hospedaje es requerido" });
+      return res
+        .status(400)
+        .json({ error: "metadata.id_hospedaje es requerido" });
     }
     const idViajeroPrincipal =
-      viajero?.current?.id_viajero ??
-      metadata?.id_viajero_reserva ??
-      null;
+      viajero?.current?.id_viajero ?? metadata?.id_viajero_reserva ?? null;
 
     const acompList = Array.isArray(acompanantes) ? acompanantes : [];
     const acompFiltrados = acompList
-      .map(a => a?.id_viajero)
-      .filter(idv => idv && idv !== idViajeroPrincipal);
+      .map((a) => a?.id_viajero)
+      .filter((idv) => idv && idv !== idViajeroPrincipal);
 
     // 4) Ejecuta TODO dentro de una sola transacción
     const result = await runTransaction(async (connection) => {
@@ -153,7 +153,7 @@ const updateReserva2 = async (req, res) => {
       // 4.3 Inserta acompañantes del payload (si hay)
       if (acompFiltrados.length > 0) {
         const values = acompFiltrados.map(() => "(?,?,0)").join(",");
-        const paramsIns = acompFiltrados.flatMap(idv => [idv, idHosp]);
+        const paramsIns = acompFiltrados.flatMap((idv) => [idv, idHosp]);
 
         await connection.execute(
           `INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal)
@@ -174,10 +174,9 @@ const updateReserva2 = async (req, res) => {
         id_booking: id,
         items: itemsConIds,
         impuestos: impuestos?.current || [],
-        tx: result
-      }
+        tx: result,
+      },
     });
-
   } catch (error) {
     console.error("Error en updateReserva2:", error);
     return res
@@ -187,16 +186,15 @@ const updateReserva2 = async (req, res) => {
 };
 
 const createFromOperaciones = async (req, res) => {
-
-try {
-  console.log("Revisando el body  😭😭😭😭", req.body);
-  const {bandera } = req.body;
-  const { check_in, check_out } = req.body;
-  console.log(check_in,check_out)
-  const parseMySQLDate = (dateStr) => {
-    const [year, month, day] = dateStr.split("-").map(Number);
-    return new Date(year, month - 1, day); 
-  };
+  try {
+    console.log("Revisando el body  😭😭😭😭", req.body);
+    const { bandera } = req.body;
+    const { check_in, check_out } = req.body;
+    console.log(check_in, check_out);
+    const parseMySQLDate = (dateStr) => {
+      const [year, month, day] = dateStr.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    };
 
     const checkInDate = parseMySQLDate(check_in);
     const checkOutDate = parseMySQLDate(check_out);
@@ -206,7 +204,6 @@ try {
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime()
     );
-
 
     if (checkOutDate.getTime() < checkInDate.getTime()) {
       // return res.status(400).json({
@@ -219,22 +216,22 @@ try {
       );
     }
 
-    let response = await model.insertarReservaOperaciones(req.body, req.body.bandera);
+    let response = await model.insertarReservaOperaciones(
+      req.body,
+      req.body.bandera
+    );
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({
-        error: "Internal Server Error",
-        message: error.message,
-        data: null,
-      });
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: error.message,
+      data: null,
+    });
   }
 };
-
 
 const read = async (req, res) => {
   try {
@@ -353,10 +350,9 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
   const { id_agente } = req.query;
   console.log("id_agente", id_agente);
   try {
-    const reservas = await executeSP(
-      "sp_reservas_con_items_by_id_agente",
-      [id_agente]
-    );
+    const reservas = await executeSP("sp_reservas_con_items_by_id_agente", [
+      id_agente,
+    ]);
     if (!reservas) {
       return res.status(404).json({ message: "No se encontraron reservas" });
     } else {
@@ -392,24 +388,30 @@ const getReservasWithItemsSinPagarByAgente = async (req, res) => {
   }
 };
 
-const getDetallesConexionReservas = async (req,res) => {
-  const {id_agente, id_hospedaje}= req.query;
+const getDetallesConexionReservas = async (req, res) => {
+  const { id_agente, id_hospedaje } = req.query;
   try {
-   const [facturas = [], pagos = []]= await executeSP2("sp_get_detalles_conexion_reservas", [id_agente, id_hospedaje], { allSets: true });
+    const [facturas = [], pagos = []] = await executeSP2(
+      "sp_get_detalles_conexion_reservas",
+      [id_agente, id_hospedaje],
+      { allSets: true }
+    );
     // console.log(detalles);
     // if (!detalles || detalles.length === 0) {
     //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
-   // }
-    return res.status(200).json({ message: "Detalles de conexión encontrados", data: {
-      facturas: facturas,
-      pagos: pagos
-    } });
+    // }
+    return res.status(200).json({
+      message: "Detalles de conexión encontrados",
+      data: {
+        facturas: facturas,
+        pagos: pagos,
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: "Error en el servidor", details: error });
     console.error(error);
   }
-  
-}
+};
 
 module.exports = {
   create,
@@ -425,5 +427,5 @@ module.exports = {
   actualizarPrecioVenta,
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
-  getDetallesConexionReservas
+  getDetallesConexionReservas,
 };
