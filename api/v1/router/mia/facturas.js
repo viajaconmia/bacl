@@ -35,6 +35,7 @@ router.get("/getFacturas", controller.readAllFacturas);
 router.get("/isFacturada/:id", controller.isFacturada);
 router.get("/consultas", controller.readConsultas);
 router.get("/consultasAll", controller.readAllConsultas);
+router.get("/getfacturasPagoPendiente",controller.getfacturasPagoPendiente)
 router.get("/getDetailsFactura", controller.readDetailsFactura);
 router.delete("/delete/:id", controller.deleteFacturas);
 router.post("/asignarURLS_factura", controller.asignarURLS_factura);
