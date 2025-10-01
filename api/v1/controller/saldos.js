@@ -132,10 +132,12 @@ const saldosByType = async (req, res) => {
       );
     }
     const saldos = await executeQuery(
-      `SELECT saf.*,fps.id_factura FROM saldos_a_favor saf 
+           /*`SELECT saf.*,fps.id_factura FROM saldos_a_favor saf 
         inner join facturas_pagos_y_saldos fps on fps.id_saldo_a_favor = saf.id_saldos
         WHERE saf.metodo_pago = ? 
-        AND saf.id_agente = ? AND saf.saldo > 0 AND saf.activo = 1;`,
+        AND saf.id_agente = ? AND saf.saldo > 0 AND saf.activo = 1;`*/
+        `SELECT * FROM saldos_a_favor WHERE metodo_pago = ? AND id_agente = ? AND saldo > 0 AND activo = 1;`
+      ,
       [type, id_agente]
     );
 
@@ -252,30 +254,30 @@ const createNewSaldo = async (req, res) => {
         break;
     }
     // Preparar valores para el stored procedure
-    const values = [
-      data.id_cliente,
-      data.monto_pagado,
-      data.monto_pagado,
-      data.forma_pago.replaceAll(" ", "_"),
-      data.fecha_pago,
-      data.comentario || null,
-      data.referencia || null,
-      "MXN",
-      data.tipo_tarjeta || null,
-      null,
-      data.link_stripe || null,
-      data.is_facturable ?? false,
-      data.descuento_aplicable ?? false,
-      null,
-      data.ult_digits || null,
-      data.numero_autorizacion || null,
-      data.banco_tarjeta || null,
-    ];
+const values = [
+  data.id_cliente,                        // p_id_agente
+  data.monto_pagado,                      // p_saldo
+  data.monto_pagado,                      // p_monto
+  data.forma_pago.replaceAll(" ", "_"),   // p_metodo_pago
+  data.fecha_pago,                        // p_fecha_pago
+  null,                                   // p_concepto
+  data.referencia || null,                // p_referencia
+  "MXN",                                  // p_currency
+  data.tipo_tarjeta || null,              // p_tipo_tarjeta
+  data.comentario || null,                // p_comentario
+  data.link_stripe || null,               // p_link_stripe
+  data.is_facturable ?? false,            // p_is_facturable
+  data.descuento_aplicable ?? false,      // p_is_descuento
+  null,                                   // p_comprobante
+  data.ult_digits || null,                // p_ult_digits
+  data.numero_autorizacion || null,       // p_numero_autorizacion
+  data.banco_tarjeta || null,             // p_banco_tarjeta
+];
     console.log("Valores para el stored procedure:", values);
-    const response = await executeTransactionSP(
+     const response = await executeTransactionSP(
       STORED_PROCEDURE.POST.SALDO_A_FAVOR_INSERTAR,
       values
-    );
+     );
     res
       .status(201)
       .json({ message: "Nuevo saldo creado correctamente", data: response });
