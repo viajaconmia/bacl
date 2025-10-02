@@ -122,12 +122,36 @@ router.post("/make-payment", async (req, res) => {
       throw new ShortError("No se encontro el cliente de stripe", 404);
     const customerId = rows[0].id_cliente_stripe;
 
+    const ids_solicitudes = itemsCart.map((item) => item.details.id_solicitud);
+    const solicitudes = await executeQuery(
+      `SELECT * FROM solicitudes where id_solicitud in (${ids_solicitudes
+        .map((id) => "?")
+        .join(",")})`,
+      ids_solicitudes
+    );
+
+    const totalSolicitudes = solicitudes.reduce(
+      (prev, current) => prev + Number(current.total),
+      0
+    );
+    console.log(
+      Number(totalSolicitudes.toFixed(2)),
+      Number(amount.toFixed()) / 100,
+      Number(amount.toFixed()) / 100 - Number(totalSolicitudes.toFixed(2))
+    );
+    if (
+      Number(amount.toFixed()) / 100 - Number(totalSolicitudes.toFixed(2)) <=
+      -2
+    )
+      throw new Error("Ha ocurrido un error, intenta de nuevo mas tarde");
+
     /* TERMINA VALIDACION DE DATOS */
 
     /* INICIA TRANSACTION DE ACCIONES */
     const response = await runTransaction(async (conn) => {
       try {
         /* INICIA PAGO Y GUARDADO DE LOG */
+
         const paymentIntent = await stripeTest.paymentIntents.create({
           amount: Number(amount.toFixed(0)),
           currency: "mxn",
@@ -214,9 +238,6 @@ router.post("/make-payment", async (req, res) => {
 
         await conn.execute(query_agregar_pago, params_agregar_pago);
 
-        const ids_solicitudes = itemsCart.map(
-          (item) => item.details.id_solicitud
-        );
         const ids_carrito = itemsCart.map((item) => item.id);
 
         await Promise.all(
@@ -313,7 +334,6 @@ router.get("/get-payment-methods", async (req, res) => {
       data: paymentMethods.data,
     });
   } catch (error) {
-
     console.log("Este es el error", error.message);
     return res.status(error.statusCode || error.status || 500).json({
       error: error.details || error,
