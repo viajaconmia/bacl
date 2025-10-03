@@ -37,7 +37,7 @@ function checkApiKey(req, res, next) {
 
 async function isSignToken(req, res, next) {
   try {
-    console.log(req.headers);
+    console.log("verificando");
     const token = req.headers.authorization?.split(" ")[1];
 
     if (!token) throw new Error("");
