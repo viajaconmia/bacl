@@ -202,9 +202,6 @@ INNER JOIN agente_details AS a
 WHERE sf.id_agente = ?;`,
       [id]
     );
-    console.log("Si es esta query 👌👌👌");
-    console.log(saldo);
-    console.log("Si es esta query 👌👌👌");
     // console.log(saldo);
     res
       .status(200)

@@ -42,8 +42,25 @@ async function executeQuery(query, params = []) {
   }
 }
 
-async function executeSP(procedure, params = []) { const connection = await pool.getConnection(); try { const placeholders = params.map(() => "?").join(", "); const query = `CALL ${procedure}(${placeholders});`
- const result = await connection.query(query, params); const [rows] = result; return Array.isArray(rows[0]) ? rows[0] : rows; } catch (error) { throw new CustomError( error.sqlMessage, 500, "ERROR_STORED_PROCEDURE", error ); } finally { connection.release(); } }
+async function executeSP(procedure, params = []) {
+  const connection = await pool.getConnection();
+  try {
+    const placeholders = params.map(() => "?").join(", ");
+    const query = `CALL ${procedure}(${placeholders});`;
+    const result = await connection.query(query, params);
+    const [rows] = result;
+    return Array.isArray(rows[0]) ? rows[0] : rows;
+  } catch (error) {
+    throw new CustomError(
+      error.sqlMessage,
+      500,
+      "ERROR_STORED_PROCEDURE",
+      error
+    );
+  } finally {
+    connection.release();
+  }
+}
 
 async function executeTransaction(query, params, callback) {
   const connection = await pool.getConnection();
@@ -61,8 +78,6 @@ async function executeTransaction(query, params, callback) {
     connection.release();
   }
 }
-
-
 
 async function executeSP2(procedure, params = [], { allSets = false } = {}) {
   const conn = await pool.getConnection();
@@ -94,7 +109,6 @@ async function runTransaction(callback) {
     await connection.commit();
     return resultsCallback;
   } catch (error) {
-    console.log("ERRRRRRRRRRRRROR", error);
     await connection.rollback();
     if (error instanceof CustomError) {
       throw error;
@@ -141,5 +155,5 @@ module.exports = {
   executeSP,
   runTransaction,
   executeTransactionSP,
-  executeSP2
+  executeSP2,
 };
