@@ -195,7 +195,7 @@ const readSaldoByAgente = async (req, res) => {
 FROM saldos_a_favor AS sf
 INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
-WHERE sf.id_agente = ?;`,
+WHERE sf.id_agente = ? and sf.saldo <> 0;`,
       [id]
     );
     // console.log(saldo);
