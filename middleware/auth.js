@@ -1,4 +1,6 @@
 const { API_KEY } = require("../config/auth");
+const { SALT_ROUNDS, SECRET_KEY } = require("../lib/constant");
+const jwt = require("jsonwebtoken");
 
 function checkApiKey(req, res, next) {
   if (req.path === "/v1/stripe/payment-links-hook") {
@@ -30,6 +32,14 @@ function checkApiKey(req, res, next) {
   }
 
   next();
+}
+
+function isSignToken(req, res, next) {
+  const token = req.headers["Authorization"]?.split(" ")[1];
+
+  if (token) {
+    const { jbi } = jwt.verify(token, SECRET_KEY);
+  }
 }
 
 module.exports = {
