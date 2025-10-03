@@ -1063,15 +1063,18 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
 
     return res.status(200).json({
       message: "Cambio aplicado correctamente.",
-      data:{ids_items_creados: idsItemsCreados,
-      ids_pagos_creados: idsPagos,
-      items_facturas: itemsFacturas,
+      data: {
+        ids_items_creados: idsItemsCreados,
+        ids_pagos_creados: idsPagos,
+        items_facturas: itemsFacturas,
+      },
     });
   } catch (error) {
     console.error(error);
     return res.status(error.statusCode || 500).json({
       message: error.message || "Error aplicando cambios",
-      error, data:null
+      error,
+      data: null,
     });
   }
 };
@@ -1454,7 +1457,8 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
     }
 
     const refundSolicitado = round2(Math.max(0, -1 * Number(diferencia)));
-    const nightsDelta = Number(hotel.noches.current) - Number(hotel.noches.before);
+    const nightsDelta =
+      Number(hotel.noches.current) - Number(hotel.noches.before);
     const checkInYMD = ymdFromInput(check_in);
 
     const data = await runTransaction(async (conn) => {
@@ -1531,7 +1535,13 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
       }
 
       // 2) Mutación de noches
-      let itemsFinal = [...oldItems.map(o => ({ id_item: o.id_item, fecha_uso: o.fecha_uso, total: 0 }))];
+      let itemsFinal = [
+        ...oldItems.map((o) => ({
+          id_item: o.id_item,
+          fecha_uso: o.fecha_uso,
+          total: 0,
+        })),
+      ];
 
       if (nightsDelta > 0) {
         // Crear N items nuevos con fecha_uso = check_in + (oldItems.length + i)
@@ -1580,7 +1590,9 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
       }
 
       // 3) Reasignar fechas de uso secuenciales desde check_in
-      itemsFinal.sort((a, b) => (a.fecha_uso < b.fecha_uso ? -1 : a.fecha_uso > b.fecha_uso ? 1 : 0));
+      itemsFinal.sort((a, b) =>
+        a.fecha_uso < b.fecha_uso ? -1 : a.fecha_uso > b.fecha_uso ? 1 : 0
+      );
       const nActivos = itemsFinal.length;
       const fechasUso = Array.from({ length: nActivos }, (_, i) =>
         addDaysYMD(checkInYMD, i)
@@ -1698,7 +1710,10 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
                 [newSaldo, newSaldo > 0 ? 1 : 0, sid]
               );
 
-              const [[pRow]] = await conn.execute(`SELECT total FROM pagos WHERE id_pago = ? FOR UPDATE`, [pid]);
+              const [[pRow]] = await conn.execute(
+                `SELECT total FROM pagos WHERE id_pago = ? FOR UPDATE`,
+                [pid]
+              );
               const pagoAntes = round2(+pRow.total || 0);
               const newPagoTotal = Math.max(0, round2(pagoAntes - delta));
               const sub = round2(newPagoTotal / 1.16);
@@ -1722,9 +1737,11 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
                   pid,
                   pagoAntes,
                   newPagoTotal,
-                  saldoAntes.toFixed ? saldoAntes.toFixed(2) : String(saldoAntes),
+                  saldoAntes.toFixed
+                    ? saldoAntes.toFixed(2)
+                    : String(saldoAntes),
                   newSaldo.toFixed ? newSaldo.toFixed(2) : String(newSaldo),
-                  id_servicio
+                  id_servicio,
                 ]
               );
             }
@@ -1741,7 +1758,6 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
             [newPagoTotal, sub, iva, pid]
           );
           // Si no hay sid (pago marcado como wallet pero sin FK), no insertamos para no romper FK.
-
         } else {
           // 6.B) Directo -> crear wallet y amarrarlo
           const oldPagoTotal = round2(info.total || 0);
@@ -1803,7 +1819,9 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
               `UPDATE facturas_pagos_y_saldos SET id_saldo_a_favor = ? WHERE id_pago = ?`,
               [id_saldo_creado, pid]
             );
-          } catch (e) { /* vista no actualizable, ignorar */ }
+          } catch (e) {
+            /* vista no actualizable, ignorar */
+          }
 
           // >>> Registro en wallet_devoluciones (saldo nuevo)
           const id_devolucion = "wdv-" + uuidv4();
@@ -1823,7 +1841,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
               newPagoTotal,
               saldoAntes.toFixed(2),
               saldoDespues.toFixed(2),
-              id_servicio
+              id_servicio,
             ]
           );
         }
@@ -1860,7 +1878,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
     return res.status(200).json({
       ok: true,
       message: "Rebaja aplicada y devolución registrada (wallet/directo).",
-      data
+      data,
     });
   } catch (error) {
     console.error(error);
