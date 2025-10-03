@@ -100,7 +100,7 @@ router.post("/delete-payment-method", async (req, res) => {
     res.json(error);
   }
 });
-router.post("/make-payment", isSignToken, async (req, res) => {
+router.post("/make-payment", async (req, res) => {
   try {
     /* INICIA VALIDACION DE DATOS */
     const { id_agente, paymentMethodId, amount, id_viajero, card, itemsCart } =
