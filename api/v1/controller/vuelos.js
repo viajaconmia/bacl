@@ -3,6 +3,18 @@ const { v4: uuidv4 } = require("uuid");
 const { verificarSaldos } = require("../../../lib/utils/validates");
 const { calcularPrecios } = require("../../../lib/utils/calculates");
 
+const getVuelos = async (req, res) => {
+  try {
+    const vuelos = await executeQuery(`select * from viajes_aereos`);
+    res.status(200).json({ data: vuelos, message: "" });
+  } catch (error) {
+    console.log(error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message, data: null, error });
+  }
+};
+
 const crearVuelo = async (req, res) => {
   try {
     //EXTRACCIÓN, VALIDACIÓN Y FORMATEO DE DATOS
@@ -581,4 +593,5 @@ VALUES (?, ?, ?, ?)
 
 module.exports = {
   crearVuelo,
+  getVuelos,
 };
