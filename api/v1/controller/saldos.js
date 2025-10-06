@@ -1,6 +1,7 @@
 // const { response } = require("express");
 const { executeTransactionSP, executeQuery } = require("../../../config/db");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
+const { sumarHoras } = require("../../../lib/utils/calculates");
 const { CustomError } = require("../../../middleware/errorHandler");
 const model = require("../model/saldos");
 
@@ -39,7 +40,7 @@ const getStripeInfo = async (req, res) => {
       monto: charge.amount / 100,
       currency: charge.currency.toUpperCase(),
       estado: charge.status,
-      fecha_pago: new Date(charge.created * 1000),
+      fecha_pago: sumarHoras(charge.created * 1000, -6),
       ultimos_4_digitos: charge.payment_method_details.card.last4,
       tipo_tarjeta: charge.payment_method_details.card.brand,
       funding: charge.payment_method_details.card.funding,
