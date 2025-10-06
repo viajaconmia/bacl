@@ -32,6 +32,7 @@ const getStripeInfo = async (req, res) => {
   const { chargeId } = req.query;
   try {
     const charge = await stripe.charges.retrieve(chargeId);
+    console.log("this is the charge about stripe:", charge);
 
     const stripeInfo = {
       id: charge.id,
