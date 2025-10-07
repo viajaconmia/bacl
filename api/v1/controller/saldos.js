@@ -194,10 +194,14 @@ const readSaldoByAgente = async (req, res) => {
   sf.comprobante,
   sf.activo,
   sf.numero_autorizacion,
-  sf.banco_tarjeta
+  sf.banco_tarjeta,
+  COALESCE(v.monto_facturado, 0)     AS monto_facturado,
+  COALESCE(v.monto_por_facturar, 0)  AS monto_por_facturar
 FROM saldos_a_favor AS sf
 INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
+LEFT JOIN vw_pagos_prepago_facturables AS v
+  ON v.raw_id = sf.id_saldos
 WHERE sf.id_agente = ?;`,
       [id]
     );
