@@ -261,6 +261,160 @@ const asignarFacturaItems = async (req, res) => {
   }
 };
 
+const asignarFacturaPagos = async (req, res) => {
+  try {
+    const { id_factura: facturasRaw, ejemplo_saldos: saldosRaw } = req.body || {};
+    if (!facturasRaw || (Array.isArray(facturasRaw) && facturasRaw.length === 0)) {
+      return res.status(400).json({ error: "Debes enviar 'id_factura' con 1+ elementos (array o string)." });
+    }
+
+    // --- Normalizar arrays ---
+    const facturasOrden = Array.isArray(facturasRaw) ? facturasRaw : [facturasRaw];
+
+    let items = saldosRaw;
+    if (!items) {
+      return res.status(400).json({ error: "Falta 'ejemplo_saldos' en el payload." });
+    }
+    if (typeof items === 'string') {
+      try { items = JSON.parse(items); }
+      catch (e) { return res.status(400).json({ error: "El campo 'ejemplo_saldos' no es un JSON válido", details: e.message }); }
+    }
+    if (!Array.isArray(items)) items = [items];
+
+    // --- Traer saldos actuales de las facturas, conservando ORDEN ---
+    const facturas = [];
+    for (const idf of facturasOrden) {
+      const r = await executeQuery(
+        'SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;',
+        [idf]
+      );
+      if (!r?.length) {
+        return res.status(404).json({ error: `Factura no encontrada: ${idf}` });
+      }
+      facturas.push({ id_factura: r[0].id_factura, saldo: Number(r[0].saldo) || 0 });
+    }
+
+    // --- Consultar en bloque la vista para obtener saldo disponible por raw_id ---
+    const rawIds = [...new Set(items.map(it => String(it.id_saldo)))];
+    const placeholders = rawIds.map(() => '?').join(',');
+    const viewRows = rawIds.length
+      ? await executeQuery(
+          `SELECT raw_id, saldo FROM vw_pagos_prepago_facturables WHERE raw_id IN (${placeholders});`,
+          rawIds
+        )
+      : [];
+
+    const disponiblePorRawId = new Map();
+    for (const row of viewRows || []) {
+      const rid = String(row.raw_id);
+      const disp = Number(row.saldo);
+      if (Number.isFinite(disp)) disponiblePorRawId.set(rid, Math.max(0, disp));
+    }
+
+    // --- Construir "pagos" a aplicar, usando SIEMPRE el saldo de la vista como tope ---
+    // Si un id_saldo no aparece en la vista => disponible = 0 (se ignora)
+    const creditos = items.map(it => {
+      const raw = String(it.id_saldo);
+      const disponible = disponiblePorRawId.has(raw) ? Number(disponiblePorRawId.get(raw)) : 0;
+      const isSaldoFavor = /^\d+$/.test(raw); // num puro => saldo a favor
+      return { raw_id: raw, disponible, restante: disponible, isSaldoFavor };
+    }).filter(c => c.disponible > 0);
+
+    if (creditos.length === 0) {
+      return res.status(400).json({
+        error: 'No hay saldo disponible para aplicar (según la vista).',
+        detalle: {
+          solicitados: items.map(i => ({ id_saldo: i.id_saldo })),
+          encontrados_en_vista: viewRows.length
+        }
+      });
+    }
+
+    // --- Aplicación secuencial: consumir factura[0] hasta 0, luego factura[1], etc. ---
+    const appliedByFactura = new Map(); // id_factura -> suma aplicada
+    const appliedByCredito = new Map(); // raw_id     -> suma aplicada
+
+    let idxFactura = 0;
+
+    for (const cred of creditos) {
+      while (cred.restante > 0 && idxFactura < facturas.length) {
+        // Saltar facturas agotadas
+        while (idxFactura < facturas.length && facturas[idxFactura].saldo <= 0) {
+          idxFactura++;
+        }
+        if (idxFactura >= facturas.length) break;
+
+        const f = facturas[idxFactura];
+        const aplicar = Math.min(f.saldo, cred.restante);
+
+        if (aplicar <= 0) { idxFactura++; continue; }
+
+        // Insertar en tabla puente con columnas correctas
+        //   - isSaldoFavor => id_saldo_a_favor (= raw_id num), id_pago = NULL
+        //   - no saldo a favor => id_pago (= raw_id string), id_saldo_a_favor = NULL
+        const insertSQL = `
+          INSERT INTO facturas_pagos_y_saldos (id_pago, id_saldo_a_favor, id_factura, monto)
+          VALUES (?, ?, ?, ?);
+        `;
+        const id_pago = cred.isSaldoFavor ? null : cred.raw_id;
+        const id_saldo_a_favor = cred.isSaldoFavor ? cred.raw_id : null;
+
+        await executeQuery(insertSQL, [id_pago, id_saldo_a_favor, f.id_factura, aplicar]);
+
+        // Actualizar saldos en memoria
+        f.saldo -= aplicar;
+        cred.restante -= aplicar;
+
+        // Acumular totales para respuesta
+        appliedByFactura.set(f.id_factura, (appliedByFactura.get(f.id_factura) || 0) + aplicar);
+        appliedByCredito.set(cred.raw_id, (appliedByCredito.get(cred.raw_id) || 0) + aplicar);
+
+        if (f.saldo <= 0) idxFactura++;
+      }
+    }
+
+    // --- Persistir nuevos saldos de facturas ---
+    for (const f of facturas) {
+      await executeQuery(
+        'UPDATE facturas SET saldo = ? WHERE id_factura = ?;',
+        [f.saldo, f.id_factura]
+      );
+    }
+
+    // --- Preparar respuesta ---
+    const detalleFacturas = facturas.map(f => ({
+      id_factura: f.id_factura,
+      aplicado: appliedByFactura.get(f.id_factura) || 0,
+      saldo_final: f.saldo,
+    }));
+
+    const detalleCreditos = creditos.map(c => ({
+      raw_id: c.raw_id,
+      tipo: c.isSaldoFavor ? 'saldo_a_favor' : 'pago',
+      disponible: c.disponible,
+      aplicado: appliedByCredito.get(c.raw_id) || 0,
+      sin_aplicar: Math.max(0, c.disponible - (appliedByCredito.get(c.raw_id) || 0)),
+    }));
+
+    const totalSinAplicar = detalleCreditos.reduce((s, p) => s + p.sin_aplicar, 0);
+
+    return res.status(200).json({
+      message: 'Pagos/Saldos aplicados secuencialmente a las facturas usando saldo de la vista.',
+      orden_facturas: facturasOrden,
+      facturas: detalleFacturas,
+      creditos: detalleCreditos,
+      total_sin_aplicar: totalSinAplicar
+    });
+
+  } catch (error) {
+    console.error('Error en asignarFacturaPagos:', error);
+    return res.status(500).json({
+      error: 'Error al asignar pagos a las facturas',
+      details: error?.message || String(error),
+    });
+  }
+};
+
 const filtrarFacturas = async (req, res) => {
   const { estatusFactura, id_factura } = req.body;
   try {
@@ -917,7 +1071,8 @@ module.exports = {
   crearFacturaMultiplesPagos,
   getDetallesConexionesFactura,
   asignarURLS_factura,
-  getfacturasPagoPendiente
+  getfacturasPagoPendiente,
+  asignarFacturaPagos
 };
 
 //ya quedo "#$%&/()="

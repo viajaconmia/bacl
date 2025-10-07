@@ -20,7 +20,7 @@ const pool = mysql.createPool({
       return JSON.parse(field.string());
     }
     return next();
-  },
+  }, 
 });
 
 pool.on("connection", (conn) => {
