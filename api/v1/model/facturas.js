@@ -156,6 +156,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
 
         // 2. Generar ID local de factura
         const id_factura = `fac-${uuidv4()}`;
+        console.log("responses",info_user)
 
         // 3. Insertar factura principal
         const insertFacturaQuery = `
@@ -170,8 +171,9 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           id_facturama,
           rfc,
           id_empresa,
-          uuid_factura
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?);
+          uuid_factura,
+          fecha_vencimiento
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?);
           `;
         console.log(datos_empresa);
         const results = await conn.execute(insertFacturaQuery, [
@@ -186,6 +188,8 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           datos_empresa.rfc,
           datos_empresa.id_empresa,
           response_factura.data.Complement.TaxStamp.Uuid,
+          //fecha de vencimiento
+          info_user.fecha_vencimiento,
         ]);
 
         // 4. Actualizar solo los items seleccionados
@@ -264,7 +268,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
 };
 //--helpers
 function calcularTotalesDesdeItems(items = []) {
-  return items.reduce(
+  return items.reduce( 
     (acc, item) => {
       acc.total += Number(item?.Total ?? 0);
       acc.subtotal += Number(item?.Subtotal ?? 0);
@@ -739,6 +743,18 @@ order by fecha_emision desc;`;
   }
 };
 
+const getAllFacturasPagosPendientes = async () => {
+  try {
+    const query = `SELECT * from vw_facturas where pagos_asociados is  null or COALESCE(JSON_LENGTH(pagos_asociados), 0) = 0
+or saldo <> 0 ;`;
+    let response = await executeQuery(query, []);
+
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
 const getDetailsFactura = async (id_factura) => {
   try {
     const query = `select count(*) AS noches_facturadas, i.*, h.*, b.total as total_booking, b.subtotal as subtotal_booking, b.impuestos as impuestos_booking from items i 
@@ -815,6 +831,7 @@ module.exports = {
   createFacturaCombinada,
   getFacturasConsultas,
   getAllFacturasConsultas,
+  getAllFacturasPagosPendientes,
   getDetailsFactura,
   isFacturada,
   crearFacturaEmi,

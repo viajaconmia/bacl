@@ -31,13 +31,15 @@ router.post("/crearFacturaDesdeCargaPagos", controller.crearFacturaDesdeCargaPag
 router.post("/CrearFacturaDesdeCarga", controller.crearFacturaDesdeCarga);
 router.post("/CrearFacturasMultiplesPagos", controller.crearFacturaMultiplesPagos);
 router.patch("/AsignarFacturaItems", controller.asignarFacturaItems);
+router.patch("/AsignarFacturaPagos", controller.asignarFacturaPagos);
 router.get("/getFacturas", controller.readAllFacturas);
 router.get("/isFacturada/:id", controller.isFacturada);
 router.get("/consultas", controller.readConsultas);
 router.get("/consultasAll", controller.readAllConsultas);
+router.get("/getfacturasPagoPendiente",controller.getfacturasPagoPendiente)
 router.get("/getDetailsFactura", controller.readDetailsFactura);
 router.delete("/delete/:id", controller.deleteFacturas);
-router.post("/asignarURLS_factura", controller.asignarURLS_factura);
+router.post("/asignarURLS_factura", controller.asignarURLS_factura); 
 
 module.exports = router;
   
