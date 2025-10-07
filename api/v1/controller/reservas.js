@@ -337,28 +337,52 @@ const updateReserva2 = async (req, res) => {
         params
       );
 
-      // 4.2 Borra acompañantes (no-principal)
+  const [viajerosActualesRows] = await connection.execute(
+    `SELECT id_viajero, is_principal FROM viajeros_hospedajes WHERE id_hospedaje = ?`,
+    [idHosp]
+  );
+  const viajerosActuales = viajerosActualesRows || [];
+
+  // 4.3 Construir lista de viajeros nuevos
+  const nuevosViajeros = [];
+  if (viajero?.current?.id_viajero) {
+    nuevosViajeros.push({ id_viajero: viajero.current.id_viajero, is_principal: 1 });
+  }
+  for (const idv of acompFiltrados) {
+    nuevosViajeros.push({ id_viajero: idv, is_principal: 0 });
+  }
+
+  // 4.4 Eliminar los que ya no estén
+  const nuevosIds = nuevosViajeros.map(v => v.id_viajero);
+  const idsAEliminar = (viajerosActuales || [])
+    .filter(v => !nuevosIds.includes(v.id_viajero))
+    .map(v => v.id_viajero);
+
+  if (idsAEliminar.length > 0) {
+    await connection.execute(
+      `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND id_viajero IN (${idsAEliminar.map(() => '?').join(',')})`,
+      [idHosp, ...idsAEliminar]
+    );
+  }
+
+  // 4.5 Insertar o actualizar los nuevos viajeros
+  for (const viajero of nuevosViajeros) {
+    const existe = viajerosActuales.find(v => v.id_viajero === viajero.id_viajero);
+    if (existe) {
       await connection.execute(
-        `DELETE FROM viajeros_hospedajes
-          WHERE id_hospedaje = ?
-            AND (is_principal = 0 OR is_principal IS NULL)`,
-        [idHosp]
+        `UPDATE viajeros_hospedajes SET is_principal = ? WHERE id_hospedaje = ? AND id_viajero = ?`,
+        [viajero.is_principal, idHosp, viajero.id_viajero]
       );
-
-      // 4.3 Inserta acompañantes del payload (si hay)
-      if (acompFiltrados.length > 0) {
-        const values = acompFiltrados.map(() => "(?,?,0)").join(",");
-        const paramsIns = acompFiltrados.flatMap(idv => [idv, idHosp]);
-
-        await connection.execute(
-          `INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal)
-           VALUES ${values}`,
-          paramsIns
-        );
-      }
+    } else {
+      await connection.execute(
+        `INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal) VALUES (?, ?, ?)`,
+        [viajero.id_viajero, idHosp, viajero.is_principal]
+      );
+    }
+  }
 
       // Opcional: devolver algo desde la TX
-      return { inserted: acompFiltrados.length };
+      return { inserted: nuevosViajeros.length };
     });
 
     // 5) Responder
