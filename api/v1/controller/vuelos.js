@@ -5,8 +5,96 @@ const { calcularPrecios } = require("../../../lib/utils/calculates");
 
 const getVuelos = async (req, res) => {
   try {
-    const vuelos = await executeQuery(`select * from viajes_aereos`);
-    res.status(200).json({ data: vuelos, message: "" });
+    const viajes_aereos =
+      await executeQuery(`select va.*, ad.id_agente, ad.nombre from viajes_aereos va
+inner join servicios s on s.id_servicio = va.id_servicio
+inner join agente_details ad on ad.id_agente = s.id_agente;`);
+    res.status(200).json({ data: viajes_aereos, message: "" });
+  } catch (error) {
+    console.log(error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message, data: null, error });
+  }
+};
+
+const getVueloById = async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    const [viaje_aereo] = await executeQuery(
+      `SELECT * FROM viajes_aereos WHERE id_viaje_aereo = ?`,
+      [id]
+    );
+
+    let vuelos = await executeQuery(
+      `select * from vuelos where id_viaje_aereo = ?`,
+      [id]
+    );
+
+    const [viajero] = await executeQuery(
+      `SELECT av.id_agente, v.*, CONCAT_WS(' ', v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno) AS nombre_completo FROM agentes_viajeros av
+      LEFT JOIN viajeros v on v.id_viajero = av.id_viajero
+    WHERE av.id_viajero = ?`,
+      [vuelos[0].id_viajero]
+    );
+
+    const aeropuertos = await executeQuery(
+      `SELECT Codigo_IATA as codigo, id_destino as id, NomeES as nombre, Ubicacion as ciudad, Nombre_pais as pais FROM destinos WHERE id_destino in (${vuelos
+        .map(() => "?,?")
+        .join(",")})`,
+      vuelos.flatMap((vuelo) => [
+        vuelo.departure_airport_code,
+        vuelo.arrival_airport_code,
+      ])
+    );
+
+    const [booking] = await executeQuery(
+      `select * from bookings where id_booking = ?`,
+      [viaje_aereo.id_booking]
+    );
+
+    const proveedores = await executeQuery(
+      `SELECT * FROM proveedores WHERE id in (${vuelos
+        .map(() => "?")
+        .join(",")})`,
+      vuelos.map((v) => v.airline_code)
+    );
+
+    const vuelosFromViaje = vuelos.map((vuelo) => ({
+      id: vuelo.id_vuelo,
+      tipo: vuelo.fly_type,
+      folio: vuelo.flight_number,
+      origen: aeropuertos.find(
+        (aeropuerto) => aeropuerto.id == vuelo.departure_airport_code
+      ),
+      destino: aeropuertos.find(
+        (aeropuerto) => aeropuerto.id == vuelo.arrival_airport_code
+      ),
+      check_in: `${vuelo.departure_date.toISOString().split("T")[0]}T${
+        vuelo.departure_time
+      }`,
+      check_out: `${vuelo.arrival_date.toISOString().split("T")[0]}T${
+        vuelo.arrival_time
+      }`,
+      aerolinea: proveedores.find((p) => p.id == vuelo.airline_code),
+      asiento: vuelo.seat_number,
+      ubicacion_asiento: vuelo.seat_location,
+      comentarios: vuelo.comentarios,
+      tipo_tarifa: vuelo.rate_type,
+    }));
+
+    res.status(200).json({
+      data: {
+        status: viaje_aereo.status,
+        precio: viaje_aereo.total,
+        codigo: viaje_aereo.codigo_confirmacion,
+        costo: booking.costo_total,
+        vuelos: vuelosFromViaje,
+        viajero,
+      },
+      message: "",
+    });
   } catch (error) {
     console.log(error);
     res
@@ -143,6 +231,8 @@ const crearVuelo = async (req, res) => {
       comentarios: vuelo.comentarios,
       fly_type: vuelo.tipo,
     }));
+
+    console.log(vuelosToCreate);
 
     //VALIDACIONES DE LOS DATOS DEL FRONT CON LOS DE LA BASE DE DATOS
     /**
@@ -527,32 +617,32 @@ VALUES (?, ?, ?, ?)
         await Promise.all(
           vuelosToCreate.map((vuelo) =>
             connection.execute(insertVuelosQuery, [
-              vuelo.id_viaje_aereo, // No es NULL, no tiene valor por defecto.
-              vuelo.id_viajero, // No es NULL, no tiene valor por defecto.
-              vuelo.flight_number, // Puede ser NULL.
-              vuelo.airline, // No es NULL, no tiene valor por defecto.
-              vuelo.airline_code, // No es NULL, no tiene valor por defecto.
-              vuelo.departure.airport, // No es NULL, no tiene valor por defecto.
-              vuelo.departure.airport_code, // No es NULL, no tiene valor por defecto.
-              vuelo.departure.city, // No es NULL, no tiene valor por defecto.
-              vuelo.departure.country, // No es NULL, no tiene valor por defecto.
-              vuelo.departure.date, // No es NULL, no tiene valor por defecto.
-              vuelo.departure.time, // No es NULL, no tiene valor por defecto.
-              vuelo.arrival.airport, // No es NULL, no tiene valor por defecto.
-              vuelo.arrival.airport_code, // No es NULL, no tiene valor por defecto.
-              vuelo.arrival.city, // No es NULL, no tiene valor por defecto.
-              vuelo.arrival.country, // No es NULL, no tiene valor por defecto.
-              vuelo.arrival.date, // No es NULL, no tiene valor por defecto.
+              vuelo.id_viaje_aereo || null, // No es NULL, no tiene valor por defecto.
+              vuelo.id_viajero || null, // No es NULL, no tiene valor por defecto.
+              vuelo.flight_number || null, // Puede ser NULL.
+              vuelo.airline || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.airline_code || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.departure.airport || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.departure.airport_code || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.departure.city || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.departure.country || "", // No es NULL||null, no tiene valor por defecto.
+              vuelo.departure.date || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.departure.time || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.arrival.airport || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.arrival.airport_code || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.arrival.city || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.arrival.country || "", // No es NULL||null, no tiene valor por defecto.
+              vuelo.arrival.date || null, // No es NULL||null, no tiene valor por defecto.
               vuelo.arrival.time,
-              vuelo.has_stops, // Puede ser NULL y tiene un valor por defecto de '0'.
-              vuelo.stop_count, // Puede ser NULL y tiene un valor por defecto de '0'.
-              vuelo.stops, // Puede ser NULL.
-              vuelo.seat_number, // No es NULL, no tiene valor por defecto.
-              vuelo.seat_location, // No es NULL, no tiene valor por defecto.
-              req?.session?.id || "general", // Puede ser NULL.
-              vuelo.rate_type, // Puede ser NULL.
-              vuelo.comentarios, // Puede ser NULL.
-              vuelo.fly_type, // Puede ser NULL.
+              vuelo.has_stops || null, // Puede ser NULL y tiene un valor por defecto de '0'.
+              vuelo.stop_count || null, // Puede ser NULL y tiene un valor por defecto de '0'.
+              vuelo.stops || null, // Puede ser NULL.
+              vuelo.seat_number || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.seat_location || null, // No es NULL||null, no tiene valor por defecto.
+              req?.session?.id || "general" || null, // Puede ser NULL.
+              vuelo.rate_type || null, // Puede ser NULL.
+              vuelo.comentarios || null, // Puede ser NULL.
+              vuelo.fly_type || null, // Puede ser NULL.
             ])
           )
         );
@@ -594,4 +684,5 @@ VALUES (?, ?, ?, ?)
 module.exports = {
   crearVuelo,
   getVuelos,
+  getVueloById,
 };

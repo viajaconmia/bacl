@@ -113,6 +113,7 @@ async function runTransaction(callback) {
     if (error instanceof CustomError) {
       throw error;
     }
+    console.log(error);
     throw new CustomError(
       error.message || "Error corriendo la transaction",
       error.statusCode || 500,
