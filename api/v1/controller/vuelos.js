@@ -2,6 +2,7 @@ const { executeQuery, runTransaction } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 const { verificarSaldos } = require("../../../lib/utils/validates");
 const { calcularPrecios } = require("../../../lib/utils/calculates");
+const { formateoViajeAereo } = require("../../../lib/utils/formats");
 
 const getVuelos = async (req, res) => {
   try {
@@ -106,133 +107,32 @@ const getVueloById = async (req, res) => {
 const crearVuelo = async (req, res) => {
   try {
     //EXTRACCIÓN, VALIDACIÓN Y FORMATEO DE DATOS
-    let { faltante, saldos, vuelos, reserva, id_agente } = req.body;
+    let { id_agente } = req.body;
 
-    if (vuelos.length == 0) throw new Error("No se encontraron vuelos");
+    if (req.body.vuelos.length == 0)
+      throw new Error("No se encontraron vuelos");
 
-    faltante = Number(faltante);
-    reserva = {
-      ...reserva,
-      costo: Number(reserva.costo),
-      precio: Number(reserva.precio),
-    };
-    saldos = saldos.map((saldo) => ({
-      ...saldo,
-      saldo: Number(saldo.saldo),
-      monto: Number(saldo.monto),
-      restante: Number(saldo.restante),
-      saldo_usado: Number(saldo.saldo_usado),
-    }));
+    const {
+      faltante,
+      reserva,
+      saldos,
+      vuelos,
+      id_booking,
+      id_servicio,
+      viaje_aereo,
+      indiceVueloRegresoOrigen,
+    } = formateoViajeAereo(
+      req.body.faltante,
+      req.body.reserva,
+      req.body.saldos,
+      req.body.vuelos
+    );
 
     //FORMATO DE LAS TABLAS PARA UN MANEJO MAS SENCILLO
     //VUELOS
-    const tipo_vuelo = vuelos.map((vuelo) => [
-      vuelo.tipo.includes("vuelta"),
-      vuelo.tipo.includes("escala"),
-    ]);
-
-    const indiceVueloIdaDestino = vuelos.findLastIndex((vuelo) =>
-      vuelo.tipo.includes("ida escala")
-    );
-    const indiceVueloRegresoOrigen = vuelos.findIndex((vuelo) =>
-      vuelo.tipo.includes("vuelta")
-    );
-    const indiceVueloRegresoDestino = vuelos.findLastIndex((vuelo) =>
-      vuelo.tipo.includes("vuelta escala")
-    );
-
-    const id_servicio = `ser-${uuidv4()}`;
-    const id_booking = `boo-${uuidv4()}`;
-    const id_viaje_aereo = `vue-${uuidv4()}`;
     const id_solicitud = `sol-${uuidv4()}`;
     const id_transaccion = `tra-${uuidv4()}`;
-
-    const viaje_aereo = {
-      id_viaje_aereo,
-      id_booking,
-      id_servicio,
-      codigo_confirmation: reserva.codigo,
-      trip_type: `${
-        tipo_vuelo.some(([vuelta, _]) => !!vuelta) ? "REDONDO" : "SENCILLO"
-      }${tipo_vuelo.some(([_, escala]) => !!escala) ? " CON ESCALA" : ""}`,
-      status: reserva.status,
-      ida: {
-        origen: {
-          aeropuerto: vuelos[0].origen.nombre || null,
-          ciudad: vuelos[0].origen.ciudad || null,
-        },
-        destino: {
-          aeropuerto:
-            vuelos[indiceVueloIdaDestino >= 0 ? indiceVueloIdaDestino : 0]
-              .destino.nombre,
-          ciudad:
-            vuelos[indiceVueloIdaDestino >= 0 ? indiceVueloIdaDestino : 0]
-              .destino.ciudad,
-        },
-      },
-      regreso:
-        indiceVueloRegresoOrigen > 0
-          ? {
-              origen: {
-                aeropuerto:
-                  vuelos[indiceVueloRegresoOrigen].origen.nombre || null,
-                ciudad: vuelos[indiceVueloRegresoOrigen].origen.ciudad || null,
-              },
-              destino: {
-                aeropuerto:
-                  vuelos[
-                    indiceVueloRegresoDestino > 0
-                      ? indiceVueloRegresoDestino
-                      : indiceVueloRegresoOrigen
-                  ].destino.nombre,
-                ciudad:
-                  vuelos[
-                    indiceVueloRegresoDestino > 0
-                      ? indiceVueloRegresoDestino
-                      : indiceVueloRegresoOrigen
-                  ].destino.ciudad,
-              },
-            }
-          : null,
-      payment_status: "pagado",
-      total_passengers: 1,
-      total: reserva.precio.toFixed(2),
-    };
-
-    const vuelosToCreate = vuelos.map((vuelo, index) => ({
-      id_viaje_aereo,
-      id_viajero: reserva.viajero.id_viajero,
-      flight_number: vuelo.folio,
-      airline: vuelo.aerolinea.nombre,
-      airline_code: vuelo.aerolinea.id,
-      airline_code: vuelo.aerolinea.id,
-      departure: {
-        airport: vuelo.origen.nombre,
-        airport_code: vuelo.origen.id,
-        city: vuelo.origen.ciudad || "",
-        country: vuelo.origen.pais || "",
-        date: vuelo.check_in.split("T")[0],
-        time: vuelo.check_in.split("T")[1],
-      },
-      arrival: {
-        airport: vuelo.destino.nombre,
-        airport_code: vuelo.destino.id,
-        city: vuelo.destino.ciudad || "",
-        country: vuelo.destino.pais || "",
-        date: vuelo.check_out.split("T")[0],
-        time: vuelo.check_out.split("T")[1],
-      },
-      has_stops: vuelos.length > 1,
-      stop_count: index + 1,
-      stops: vuelos.length,
-      seat_number: vuelo.asiento,
-      seat_location: vuelo.ubicacion_asiento,
-      rate_type: vuelo.tipo_tarifa,
-      comentarios: vuelo.comentarios,
-      fly_type: vuelo.tipo,
-    }));
-
-    console.log(vuelosToCreate);
+    console.log(vuelos);
 
     //VALIDACIONES DE LOS DATOS DEL FRONT CON LOS DE LA BASE DE DATOS
     /**
@@ -267,15 +167,14 @@ const crearVuelo = async (req, res) => {
       try {
         //SERVICIO
         const sqlInsertService = `
-  INSERT INTO servicios (
-    id_servicio,
-    total,
-    subtotal,
-    impuestos,
-    is_credito,
-    id_agente
-  ) VALUES (?, ?, ?, ?, ?, ?);
-`;
+          INSERT INTO servicios (
+            id_servicio,
+            total,
+            subtotal,
+            impuestos,
+            is_credito,
+            id_agente
+          ) VALUES (?, ?, ?, ?, ?, ?);`;
         const paramsInsertService = [
           id_servicio, // No es NULL, no tiene un valor por defecto.
           precio.total, // No es NULL, no tiene un valor por defecto.
@@ -288,21 +187,20 @@ const crearVuelo = async (req, res) => {
         await connection.execute(sqlInsertService, paramsInsertService);
 
         const insertSolicitudesQuery = `
-  INSERT INTO solicitudes (
-    id_solicitud,
-    id_servicio,
-    confirmation_code,
-    id_viajero,
-    check_in,
-    check_out,
-    total,
-    id_usuario_generador,
-    id_agente,
-    usuario_creador,
-    origen,
-    vuelo
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-`;
+          INSERT INTO solicitudes (
+            id_solicitud,
+            id_servicio,
+            confirmation_code,
+            id_viajero,
+            check_in,
+            check_out,
+            total,
+            id_usuario_generador,
+            id_agente,
+            usuario_creador,
+            origen,
+            vuelo
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
         const solicitudesParams = [
           id_solicitud, // No es NULL, no tiene valor por defecto. Es la clave primaria.
@@ -344,40 +242,40 @@ const crearVuelo = async (req, res) => {
         ];
 
         // Ejemplo de uso:
+        console.log((insertSolicitudesQuery, solicitudesParams));
         await connection.execute(insertSolicitudesQuery, solicitudesParams);
 
         const pagos_to_item_pagos = [];
         if (saldos.length > 0) {
           const insertPagosQuery = `
-  INSERT INTO pagos (
-    id_pago,
-    id_servicio,
-    responsable_pago_agente,
-    fecha_creacion,
-    total,
-    subtotal,
-    impuestos,
-    concepto,
-    referencia,
-    fecha_pago,
-    monto,
-    banco,
-    autorizacion_stripe,
-    last_digits,
-    fecha_transaccion,
-    metodo_de_pago,
-    tipo_de_tarjeta,
-    tipo_de_pago,
-    link_pago,
-    id_saldo_a_favor,
-    id_agente,
-    is_facturado,
-    monto_saldo,
-    transaccion,
-    monto_transaccion,
-    saldo_aplicado
-  ) VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, NOW(), ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-`;
+            INSERT INTO pagos (
+              id_pago,
+              id_servicio,
+              responsable_pago_agente,
+              fecha_creacion,
+              total,
+              subtotal,
+              impuestos,
+              concepto,
+              referencia,
+              fecha_pago,
+              monto,
+              banco,
+              autorizacion_stripe,
+              last_digits,
+              fecha_transaccion,
+              metodo_de_pago,
+              tipo_de_tarjeta,
+              tipo_de_pago,
+              link_pago,
+              id_saldo_a_favor,
+              id_agente,
+              is_facturado,
+              monto_saldo,
+              transaccion,
+              monto_transaccion,
+              saldo_aplicado
+            ) VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, NOW(), ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
           const pagosToInsert = saldos.map((saldo) => {
             const id_pago = `pag-${uuidv4()}`;
             const precio_saldo = calcularPrecios(Number(saldo.saldo_usado));
@@ -420,20 +318,19 @@ const crearVuelo = async (req, res) => {
         if (faltante > 0) {
           //PAGO A CREDITO
           const insertPagoCreditoQuery = `
-  INSERT INTO pagos_credito (
-    id_credito,
-    id_servicio,
-    monto_a_credito,
-    responsable_pago_agente,
-    fecha_creacion,
-    pago_por_credito,
-    pendiente_por_cobrar,
-    total,
-    subtotal,
-    impuestos,
-    concepto
-  ) VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?);
-`;
+            INSERT INTO pagos_credito (
+              id_credito,
+              id_servicio,
+              monto_a_credito,
+              responsable_pago_agente,
+              fecha_creacion,
+              pago_por_credito,
+              pendiente_por_cobrar,
+              total,
+              subtotal,
+              impuestos,
+              concepto
+            ) VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?);`;
 
           const pagoCreditoParams = [
             id_credito, // No es NULL, no tiene valor por defecto. Es la clave primaria.
@@ -456,27 +353,26 @@ const crearVuelo = async (req, res) => {
               connection.execute(
                 `INSERT INTO relacion_credito_pago 
                 (id_credito, id_pago, monto_del_pago, restante)
-VALUES (?, ?, ?, ?)
-`,
+                VALUES (?, ?, ?, ?)`,
                 [id_credito, id_pago, monto, faltante]
               )
             )
           );
         }
+
         const sqlInsertBooking = `
-  INSERT INTO bookings (
-    id_booking,
-    id_servicio,
-    check_in,
-    check_out,
-    total,
-    subtotal,
-    impuestos,
-    estado,
-    costo_total,
-    id_solicitud
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-`;
+          INSERT INTO bookings (
+            id_booking,
+            id_servicio,
+            check_in,
+            check_out,
+            total,
+            subtotal,
+            impuestos,
+            estado,
+            costo_total,
+            id_solicitud
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
         const paramsInsertBooking = [
           id_booking, // No es NULL, no tiene valor por defecto. Es parte de la clave primaria.
@@ -494,28 +390,27 @@ VALUES (?, ?, ?, ?)
         await connection.execute(sqlInsertBooking, paramsInsertBooking);
 
         const insertViajesAereosQuery = `
-  INSERT INTO viajes_aereos (
-    id_viaje_aereo,
-    id_booking,
-    id_servicio,
-    trip_type,
-    status,
-    payment_status,
-    total_passengers,
-    aeropuerto_origen,
-    ciudad_origen,
-    aeropuerto_destino,
-    ciudad_destino,
-    regreso_aeropuerto_origen,
-    regreso_ciudad_origen,
-    regreso_aeropuerto_destino,
-    regreso_ciudad_destino,
-    subtotal,
-    taxes,
-    total,
-    codigo_confirmacion
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-`;
+          INSERT INTO viajes_aereos (
+            id_viaje_aereo,
+            id_booking,
+            id_servicio,
+            trip_type,
+            status,
+            payment_status,
+            total_passengers,
+            aeropuerto_origen,
+            ciudad_origen,
+            aeropuerto_destino,
+            ciudad_destino,
+            regreso_aeropuerto_origen,
+            regreso_ciudad_origen,
+            regreso_aeropuerto_destino,
+            regreso_ciudad_destino,
+            subtotal,
+            taxes,
+            total,
+            codigo_confirmacion
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
         const viajesAereosParams = [
           viaje_aereo.id_viaje_aereo, // No es NULL, no tiene valor por defecto. Es la clave primaria.
@@ -539,21 +434,19 @@ VALUES (?, ?, ?, ?)
           viaje_aereo.codigo_confirmation, // Puede ser NULL.
         ];
 
-        // Ejemplo de uso:
         await connection.execute(insertViajesAereosQuery, viajesAereosParams);
 
         const insertItemsQuery = `
-  INSERT INTO items (
-    id_item,
-    total,
-    subtotal,
-    impuestos,
-    fecha_uso,
-    costo_total,
-    saldo,
-    id_viaje_aereo
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-`;
+          INSERT INTO items (
+            id_item,
+            total,
+            subtotal,
+            impuestos,
+            fecha_uso,
+            costo_total,
+            saldo,
+            id_viaje_aereo
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`;
 
         const id_item = `ite-${uuidv4()}`;
         //TODO: REVISAR EL ID_FACTURA, PORQUE SI EL SALDO YA FUE FACTURADO DEBE TENER ID_FACTURA PERO PUEDE QUE TENGA MUCHOS SALDOS Y MUCHAS FACTURAS Y ESO AUN NO SE PUEDE
@@ -565,18 +458,17 @@ VALUES (?, ?, ?, ?)
           vuelos[0].check_in, // No es NULL, no tiene valor por defecto.
           reserva.costo, // Puede ser NULL.
           faltante.toFixed(2), // Puede ser NULL. siempre va el faltante ya sea a credito o normal
-          id_viaje_aereo, // Puede ser NULL.
+          viaje_aereo.id_viaje_aereo, // Puede ser NULL.
         ];
 
         await connection.execute(insertItemsQuery, itemsParams);
 
         const insertItemsPagosQuery = `
-  INSERT INTO items_pagos (
-    id_item,
-    id_pago,
-    monto
-  ) VALUES (?, ?, ?);
-`;
+          INSERT INTO items_pagos (
+            id_item,
+            id_pago,
+            monto
+          ) VALUES (?, ?, ?);`;
         await Promise.all(
           pagos_to_item_pagos.map(({ id_pago, monto }) =>
             connection.execute(insertItemsPagosQuery, [id_item, id_pago, monto])
@@ -584,38 +476,37 @@ VALUES (?, ?, ?, ?)
         );
 
         const insertVuelosQuery = `
-  INSERT INTO vuelos (
-    id_viaje_aereo,
-    id_viajero,
-    flight_number,
-    airline,
-    airline_code,
-    departure_airport,
-    departure_airport_code,
-    departure_city,
-    departure_country,
-    departure_date,
-    departure_time,
-    arrival_airport,
-    arrival_airport_code,
-    arrival_city,
-    arrival_country,
-    arrival_date,
-    arrival_time,
-    has_stops,
-    stop_count,
-    stops,
-    seat_number,
-    seat_location,
-    id_usuario_creador,
-    rate_type,
-    comentarios,
-    fly_type
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-`;
+          INSERT INTO vuelos (
+            id_viaje_aereo,
+            id_viajero,
+            flight_number,
+            airline,
+            airline_code,
+            departure_airport,
+            departure_airport_code,
+            departure_city,
+            departure_country,
+            departure_date,
+            departure_time,
+            arrival_airport,
+            arrival_airport_code,
+            arrival_city,
+            arrival_country,
+            arrival_date,
+            arrival_time,
+            has_stops,
+            stop_count,
+            stops,
+            seat_number,
+            seat_location,
+            id_usuario_creador,
+            rate_type,
+            comentarios,
+            fly_type
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
         await Promise.all(
-          vuelosToCreate.map((vuelo) =>
+          vuelos.map((vuelo) =>
             connection.execute(insertVuelosQuery, [
               vuelo.id_viaje_aereo || null, // No es NULL, no tiene valor por defecto.
               vuelo.id_viajero || null, // No es NULL, no tiene valor por defecto.
@@ -671,7 +562,64 @@ VALUES (?, ?, ?, ?)
 
     res.status(200).json({
       message: "Reservación creada con exito",
-      data: { vuelos: vuelosToCreate, ...viaje_aereo },
+      data: { vuelos: vuelos, ...viaje_aereo },
+    });
+  } catch (error) {
+    console.log(error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message, data: null, error });
+  }
+};
+
+const editarVuelo = async (req, res) => {
+  try {
+    const { cambios, before, viaje_aereo } = req.body;
+
+    console.log(viaje_aereo);
+
+    const formaters = formateoViajeAereo(
+      req.body.faltante,
+      req.body.current,
+      req.body.saldos,
+      req.body.current.vuelos,
+      viaje_aereo
+    );
+
+    /**VALIDAR SALDOS */
+    /**VALIDAR QUE TENGA CREDITO */
+    /**HACER EL COBRO O RETORNO DE DINERO - tomar en cuenta que puede ser regresando un wallet no facurabe y ya, o tambien por credito*/
+    /**UPDATEAR LAS COSAS DEL VIAJE Y LOS PRECIOS SI SE EDITARON */
+
+    /*** Si se edita el precio ->
+     * - Se actualiza el servicio (agregando solo el nuevo precio, ya sea negativo o positivo)
+     * - Se actualiza el booking (Este entra con el nuevo precio)
+     * - Se actualiza el item (Con el nuevo precio)
+     * - Se actualiza el viaje aereo (Con el nuevo precio)
+     * - Se manejan los pagos (credito, wallet, pago directo, pagos_credito, items_pagos)
+     * - El que se revisa es lo de facturas y asi*/
+
+    /*** Si se edita el costo ->
+     * - Se edita el item
+     * - Se edita el viaje aereo*/
+
+    /*** Si se editan vuelos
+     * - Se eliminan  todos los vuelos
+     * - Se agregan los nuevos vuelos
+     * - Se edita el viaje aereo
+     * - Se edita tambien el booking por el checkin y eso*/
+
+    /*** Si se edita el codigo
+     * - Se edita el viaje aereo*/
+
+    /*** Si se edita el status
+     * - Se debe verificar y en caso de que este cancelada:
+     * - Se debe regresar el credito que no esta pagado, y se debe regresar los saldos que fueron pagados,
+     * - Se debe cancelar la reserva, cambiando el status en bookings (Verificar como esta escrito y el enum)*/
+
+    res.status(200).json({
+      message: "Reservación creada con exito",
+      data: formaters,
     });
   } catch (error) {
     console.log(error);
@@ -683,6 +631,7 @@ VALUES (?, ?, ?, ?)
 
 module.exports = {
   crearVuelo,
+  editarVuelo,
   getVuelos,
   getVueloById,
 };
