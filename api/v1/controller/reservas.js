@@ -358,7 +358,7 @@ const updateReserva2 = async (req, res) => {
 
     const result = await runTransaction(async (connection) => {
       // [Opcional] si vas a llamar SP, descomenta y ajusta:
-      // await connection.execute("CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", params);
+       await connection.execute("CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", params);
 
       let viajerosTx = { inserted: 0, deleted: 0, updated: 0, skipped: true };
 
