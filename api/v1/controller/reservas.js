@@ -255,48 +255,68 @@ console
 // const { v4: uuidv4 } = require('uuid');
 
 // const { v4: uuidv4 } = require('uuid');
+// const { v4: uuidv4 } = require('uuid');
+
+const hasKey = (obj, key) =>
+  obj && Object.prototype.hasOwnProperty.call(obj, key);
+
+const toMysqlDateTime = (val) => {
+  if (!val) return null;
+  if (typeof val === 'string' && val.length === 10) return `${val} 00:00:00`;
+  try {
+    return new Date(val).toISOString().slice(0, 19).replace('T', ' ');
+  } catch {
+    return null;
+  }
+};
 
 const updateReserva2 = async (req, res) => {
   console.log("Llegando al endpoint de updateReserva2");
   const { id } = req.query;
 
+  // Toma solo lo que venga; todo es opcional
   const {
-    viajero,
-    check_in,
-    check_out,
-    venta,
-    estado_reserva,
-    proveedor,
-    hotel,
-    codigo_reservacion_hotel,
-    habitacion,
-    noches,
-    comments,
-    items,
-    impuestos,
-    nuevo_incluye_desayuno,
-    acompanantes,
-    metadata
-  } = req.body;
+    viajero,                   // puede no venir
+    check_in,                  // puede no venir
+    check_out,                 // puede no venir
+    venta,                     // puede no venir
+    estado_reserva,            // puede no venir
+    proveedor,                 // puede no venir
+    hotel,                     // puede no venir
+    codigo_reservacion_hotel,  // puede no venir
+    habitacion,                // puede no venir
+    noches,                    // puede no venir
+    comments,                  // puede no venir
+    items,                     // puede no venir
+    impuestos,                 // puede no venir
+    nuevo_incluye_desayuno,    // puede no venir
+    acompanantes,              // puede no venir
+    metadata = {},             // suele venir, pero defensivo
+  } = req.body || {};
+
+  console.log("Revisando el body ⚠️⚠️⚠️⚠️", req.body);
 
   try {
-    // 1) Generar id_item para cada ítem nuevo
-    const itemsConIds = (items?.current || []).map((item) => ({
-      ...item,
-      id_item: item.id_item || `ite-${uuidv4()}`,
-    }));
+    // 1) Items: genera IDs solo si items.current viene
+    const itemsConIds = Array.isArray(items?.current)
+      ? items.current.map((item) => ({
+          ...item,
+          id_item: item.id_item || `ite-${uuidv4()}`,
+        }))
+      : [];
 
-    // 2) Serializar JSON
+    // 2) Serializar JSON (aunque vengan vacíos)
     const itemsJson = JSON.stringify(itemsConIds);
-    const impuestosJson = JSON.stringify(impuestos?.current || []);
+    const impuestosJson = JSON.stringify(Array.isArray(impuestos?.current) ? impuestos.current : []);
 
-    // 3) Array de **20** parámetros para el SP
+    // 3) Parámetros del SP (si lo vas a llamar). Coloca null si no viene.
+    //    Ajusta la firma real de tu SP si cambió.
     const params = [
       id,                                           // 1) p_id_booking
       viajero?.current?.id_viajero ?? null,         // 2) p_id_viajero
       check_in?.current ?? null,                    // 3) p_check_in
       check_out?.current ?? null,                   // 4) p_check_out
-      // venta?.current?.total ?? null,             // 5) p_total (si tu SP lo pide, descomenta 5-7 y ajusta placeholders)
+      // venta?.current?.total ?? null,             // 5) p_total (si aplica)
       // venta?.current?.subtotal ?? null,          // 6) p_subtotal
       // venta?.current?.impuestos ?? null,         // 7) p_impuestos
       estado_reserva?.current ?? null,              // 8) p_estado_reserva
@@ -311,97 +331,153 @@ const updateReserva2 = async (req, res) => {
       comments?.current ?? null,                    // 17) p_comments
       itemsJson,                                    // 18) p_items_json
       impuestosJson,                                // 19) p_impuestos_json
-      nuevo_incluye_desayuno ?? null                // 20) p_nuevo_incluye_desayuno
+      (hasKey(req.body,'nuevo_incluye_desayuno') ? nuevo_incluye_desayuno : null), // 20) p_nuevo_incluye_desayuno solo si llegó
     ];
 
-    // Prepara acompañantes
+    // 4) Viajeros/acompañantes:
+    //    Solo tocamos este bloque si el payload INCLUYE al menos una de estas llaves.
+    const includesViajeroKey = hasKey(req.body, 'viajero');
+    const includesAcompKey   = hasKey(req.body, 'acompanantes');
+
     const idHosp = metadata?.id_hospedaje;
     if (!idHosp) {
       return res.status(400).json({ error: "metadata.id_hospedaje es requerido" });
     }
+
+    // Fallback para principal si no mandan 'viajero'
     const idViajeroPrincipal =
       viajero?.current?.id_viajero ??
       metadata?.id_viajero_reserva ??
       null;
 
-    const acompList = Array.isArray(acompanantes) ? acompanantes : [];
-    const acompFiltrados = acompList
-      .map(a => a?.id_viajero)
-      .filter(idv => idv && idv !== idViajeroPrincipal);
+    // Normaliza acompañantes si vinieron; si no, no tocamos acompañantes
+    const acompList = includesAcompKey && Array.isArray(acompanantes) ? acompanantes : null;
 
-    // 4) Ejecuta TODO dentro de una sola transacción
+    // Construye lista final de viajeros solo si debemos actualizar viajeros
+    const shouldUpdateTravelers = includesViajeroKey || includesAcompKey;
+
     const result = await runTransaction(async (connection) => {
-      // 4.1 SP (ajusta los ? al número real de parámetros del SP)
-      await connection.execute(
-        "CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        params
-      );
+      // [Opcional] si vas a llamar SP, descomenta y ajusta:
+      // await connection.execute("CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", params);
 
-    const [viajerosActualesRows] = await connection.execute(
-    `SELECT id_viajero, is_principal FROM viajeros_hospedajes WHERE id_hospedaje = ?`,
-    [idHosp]
-  );
-  const viajerosActuales = viajerosActualesRows || [];
+      let viajerosTx = { inserted: 0, deleted: 0, updated: 0, skipped: true };
 
-  // 4.3 Construir lista de viajeros nuevos
-  const nuevosViajeros = [];
-  if (viajero?.current?.id_viajero) {
-    nuevosViajeros.push({ id_viajero: viajero.current.id_viajero, is_principal: 1 });
-  }
-  for (const idv of acompFiltrados) {
-    nuevosViajeros.push({ id_viajero: idv, is_principal: 0 });
-  }
+      if (shouldUpdateTravelers) {
+        // Leemos estado actual
+        const [viajerosActualesRows] = await connection.execute(
+          `SELECT id_viajero, is_principal FROM viajeros_hospedajes WHERE id_hospedaje = ?`,
+          [idHosp]
+        );
+        const viajerosActuales = Array.isArray(viajerosActualesRows) ? viajerosActualesRows : [];
 
-  // 4.4 Eliminar los que ya no estén
-  const nuevosIds = nuevosViajeros.map(v => v.id_viajero);
-  const idsAEliminar = (viajerosActuales || [])
-    .filter(v => !nuevosIds.includes(v.id_viajero))
-    .map(v => v.id_viajero);
+        // Construimos nuevosViajeros únicamente con lo que vino:
+        // - Si vino 'viajero', definimos/el reafirmamos el principal.
+        // - Si vino 'acompanantes', definimos el set de acompañantes actual.
+        const nuevosViajeros = [];
 
-  if (idsAEliminar.length > 0) {
-    await connection.execute(
-      `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND id_viajero IN (${idsAEliminar.map(() => '?').join(',')})`,
-      [idHosp, ...idsAEliminar]
-    );
-  }
+        if (includesViajeroKey && idViajeroPrincipal) {
+          nuevosViajeros.push({ id_viajero: idViajeroPrincipal, is_principal: 1 });
+        } else {
+          // Si NO vino 'viajero' pero sí queremos tocar viajeros (por acompañantes),
+          // mantenemos/el preservamos el principal actual si existía, o si no, el metadata.
+          const principalActual = viajerosActuales.find(v => v.is_principal === 1)?.id_viajero
+                                 ?? idViajeroPrincipal;
+          if (principalActual) {
+            nuevosViajeros.push({ id_viajero: principalActual, is_principal: 1 });
+          }
+        }
 
-  // 4.5 Insertar o actualizar los nuevos viajeros
-  for (const viajero of nuevosViajeros) {
-    const existe = viajerosActuales.find(v => v.id_viajero === viajero.id_viajero);
-    if (existe) {
-      await connection.execute(
-        `UPDATE viajeros_hospedajes SET is_principal = ? WHERE id_hospedaje = ? AND id_viajero = ?`,
-        [viajero.is_principal, idHosp, viajero.id_viajero]
-      );
-    } else {
-      await connection.execute(
-        `INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal) VALUES (?, ?, ?)`,
-        [viajero.id_viajero, idHosp, viajero.is_principal]
-      );
-    }
-  }
-      return { inserted: nuevosViajeros.length };
+        if (includesAcompKey) {
+          const acompIds = (acompList || [])
+            .map(a => a?.id_viajero)
+            .filter(Boolean);
+
+          // Quita al principal si por error viene en acompañantes
+          const principalId = nuevosViajeros.find(v => v.is_principal === 1)?.id_viajero;
+          const acompUnique = [...new Set(acompIds)].filter(idv => idv !== principalId);
+
+          for (const idv of acompUnique) {
+            nuevosViajeros.push({ id_viajero: idv, is_principal: 0 });
+          }
+        } else {
+          // No vinieron acompañantes en payload: preserva los acompañantes actuales
+          // (no tocar acompañantes en absoluto)
+          for (const v of viajerosActuales) {
+            if (v.is_principal === 0) {
+              nuevosViajeros.push({ id_viajero: v.id_viajero, is_principal: 0 });
+            }
+          }
+        }
+
+        // Calcula diffs
+        const nuevosIds = nuevosViajeros.map(v => v.id_viajero);
+        const actualesIds = viajerosActuales.map(v => v.id_viajero);
+
+        const idsAEliminar = actualesIds.filter(idv => !nuevosIds.includes(idv));
+        const idsAInsertar = nuevosIds.filter(idv => !actualesIds.includes(idv));
+        const idsAActualizar = nuevosIds.filter(idv => actualesIds.includes(idv));
+
+        // DELETE
+        if (idsAEliminar.length > 0) {
+          const placeholders = idsAEliminar.map(() => '?').join(',');
+          await connection.execute(
+            `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND id_viajero IN (${placeholders})`,
+            [idHosp, ...idsAEliminar]
+          );
+          viajerosTx.deleted = idsAEliminar.length;
+        }
+
+        // INSERT nuevos
+        for (const v of nuevosViajeros.filter(v => idsAInsertar.includes(v.id_viajero))) {
+          await connection.execute(
+            `INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal) VALUES (?, ?, ?)`,
+            [v.id_viajero, idHosp, v.is_principal]
+          );
+          viajerosTx.inserted += 1;
+        }
+
+        // UPDATE flags (principal/no principal) donde aplique
+        for (const v of nuevosViajeros.filter(v => idsAActualizar.includes(v.id_viajero))) {
+          const previo = viajerosActuales.find(x => x.id_viajero === v.id_viajero);
+          if (!previo || previo.is_principal !== v.is_principal) {
+            await connection.execute(
+              `UPDATE viajeros_hospedajes SET is_principal = ? WHERE id_hospedaje = ? AND id_viajero = ?`,
+              [v.is_principal, idHosp, v.id_viajero]
+            );
+            viajerosTx.updated += 1;
+          }
+        }
+
+        viajerosTx.skipped = false;
+      }
+
+      // Puedes añadir aquí más updates parciales (estado_reserva, fechas, etc.) usando solo lo que venga
+
+      return {
+        viajeros: viajerosTx,
+        // podrías regresar también lo que hiciste con items/impuestos si aplicó
+      };
     });
 
-    // 5) Responder
     return res.status(200).json({
-      ok: true,
       message: "Reserva actualizada correctamente",
       data: {
         id_booking: id,
-        items: itemsConIds,
-        impuestos: impuestos?.current || [],
-        tx: result
-      }
+        items: itemsConIds,                         // si no vinieron, []
+        impuestos: Array.isArray(impuestos?.current) ? impuestos.current : [],
+        viajeros_tx: result.viajeros,
+      },
     });
 
   } catch (error) {
     console.error("Error en updateReserva2:", error);
-    return res
-      .status(500)
-      .json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({
+      error: "Internal Server Error",
+      details: error?.message || String(error),
+    });
   }
 };
+
 
 
 // const updateReserva2 = async (req, res) => {
