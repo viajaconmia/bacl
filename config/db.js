@@ -113,12 +113,13 @@ async function runTransaction(callback) {
     if (error instanceof CustomError) {
       throw error;
     }
-    console.log(error);
     throw new CustomError(
-      error.message || "Error corriendo la transaction",
+      error.sqlMessage ||
+        error.message ||
+        "Ha ocurrido un error al hacer la petición",
       error.statusCode || 500,
-      error.errorCode || "ERROR_RUN TRANSACTION",
-      error.details || error
+      error.errorCode || "DATABASE_ERROR",
+      error
     );
   } finally {
     connection.release();

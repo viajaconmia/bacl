@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const { verificarSaldos } = require("../../../lib/utils/validates");
 const { calcularPrecios } = require("../../../lib/utils/calculates");
 const { formateoViajeAereo } = require("../../../lib/utils/formats");
+const servicio = require("../../../v2/servicios.model");
 
 const getVuelos = async (req, res) => {
   try {
@@ -576,7 +577,7 @@ const editarVuelo = async (req, res) => {
   try {
     const { cambios, before, viaje_aereo } = req.body;
 
-    console.log(viaje_aereo);
+    // console.log(viaje_aereo);
 
     const formaters = formateoViajeAereo(
       req.body.faltante,
@@ -585,6 +586,16 @@ const editarVuelo = async (req, res) => {
       req.body.current.vuelos,
       viaje_aereo
     );
+
+    await runTransaction(async (connection) => {
+      try {
+        await servicio.update(connection, {});
+        console.log("sigo entrando?");
+      } catch (error) {
+        console.log("\nruntransaction", error);
+        throw error;
+      }
+    });
 
     /**VALIDAR SALDOS */
     /**VALIDAR QUE TENGA CREDITO */
@@ -622,6 +633,7 @@ const editarVuelo = async (req, res) => {
       data: formaters,
     });
   } catch (error) {
+    console.log("this is the message", error.message);
     console.log(error);
     res
       .status(error.statusCode || 500)
