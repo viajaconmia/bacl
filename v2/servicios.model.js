@@ -1,34 +1,87 @@
-const servicio = {
-  id_servicio: "ser-00051f67-b62b-4ed6-9c31-8aaf4120a452",
-  total: "1177.40",
-  subtotal: "989.02",
-  impuestos: "188.38",
-  otros_impuestos: null,
-  is_credito: 1,
-  fecha_limite_pago: null,
-  created_at: "2025-08-19T22:00:44.000Z",
-  updated_at: "2025-08-19T22:00:44.000Z",
-  id_agente: "5a4a5999-57ca-449d-bfac-115f0862c502",
-  id_empresa: null,
-};
+const { calcularPrecios } = require("../lib/utils/calculates");
+const { Formato } = require("../lib/utils/formats");
+const {
+  excludeColumns,
+  hasAllRequiredColumn,
+} = require("../lib/utils/validates");
+
+const table = "servicios";
 
 const columnas = [
   "id_servicio",
   "total",
-  "subtotal",
-  "impuestos",
   "otros_impuestos",
   "is_credito",
   "fecha_limite_pago",
-  "created_at",
-  "updated_at",
-  // "id_agente",
+  "id_agente",
   "id_empresa",
 ];
 
-const update = async (connection, servicioPrueba) => {
-  excludeColumns(columnas, servicio);
-  throw new Error("lanzando error por cualquier cosa");
+const required = ["id_servicio", "total"];
+
+const create = async (connection, servicio) => {
+  hasAllRequiredColumn(table, required, servicio);
+  excludeColumns(table, columnas, servicio);
+
+  const precio = calcularPrecios(Formato.precio(servicio.total));
+
+  const query = `
+  INSERT INTO servicios (
+    id_servicio,
+    total,
+    subtotal,
+    impuestos,
+    otros_impuestos,
+    is_credito,
+    fecha_limite_pago,
+    id_agente,
+    id_empresa
+  )
+  VALUES (?,?,?,?,?,?,?,?,?);`;
+
+  const params = [
+    servicio.id_servicio,
+    precio.total,
+    precio.subtotal,
+    precio.impuestos,
+    servicio.otros_impuestos || null,
+    servicio.is_credito || null,
+    servicio.fecha_limite_pago || null,
+    servicio.id_agente || null,
+    servicio.id_empresa || null,
+  ];
+
+  return await connection.execute(query, params);
 };
 
-module.exports = { update };
+const update = async (connection, servicio) => {
+  excludeColumns(table, columnas, servicio);
+  if (servicio.total) {
+    const precio = calcularPrecios(Formato.precio(servicio.total));
+    console.log(precio);
+    servicio = {
+      ...servicio,
+      ...precio,
+    };
+  }
+
+  console.log(servicio);
+
+  const query = `
+  UPDATE servicios
+    SET
+      total = ?,
+      subtotal = ?,
+      impuestos = ?,
+      otros_impuestos = ?,
+      is_credito = ?,
+      fecha_limite_pago = ?,
+      id_agente = ?,
+      id_empresa = ?
+    WHERE id_servicio = ?;`;
+  throw new Error("por si acaso");
+
+  return await connection.execute(query, params);
+};
+
+module.exports = { update, create };

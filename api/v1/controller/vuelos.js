@@ -589,10 +589,9 @@ const editarVuelo = async (req, res) => {
 
     await runTransaction(async (connection) => {
       try {
-        await servicio.update(connection, {});
+        await servicio.update(connection, { total: "" });
         console.log("sigo entrando?");
       } catch (error) {
-        console.log("\nruntransaction", error);
         throw error;
       }
     });
