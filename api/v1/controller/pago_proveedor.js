@@ -23,8 +23,7 @@ const createSolicitud = async (req, res) => {
 
     let response;
     if (paymentType !== "credit") {
-      // Mapear paymentStatus a estado_pago según sea necesario
-      const estado_pago = paymentStatus; // O puedes transformarlo si es necesario
+      const estado_pago = paymentStatus; 
       
       if (paymentMethod === "transfer") {
         const parametros = [
@@ -55,7 +54,7 @@ const createSolicitud = async (req, res) => {
           date,
           estado_pago // Usamos el valor mapeado
         ];
-        
+        console.log("parametrossss",parametros)
         response = await executeSP(
           STORED_PROCEDURE.POST.SOLICITUD_PAGO_PROVEEDOR,
           parametros

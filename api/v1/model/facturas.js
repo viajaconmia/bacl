@@ -156,6 +156,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
 
         // 2. Generar ID local de factura
         const id_factura = `fac-${uuidv4()}`;
+        console.log("responses",info_user)
 
         // 3. Insertar factura principal
         const insertFacturaQuery = `
@@ -170,8 +171,9 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           id_facturama,
           rfc,
           id_empresa,
-          uuid_factura
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?);
+          uuid_factura,
+          fecha_vencimiento
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?);
           `;
         console.log(datos_empresa);
         const results = await conn.execute(insertFacturaQuery, [
@@ -186,6 +188,8 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           datos_empresa.rfc,
           datos_empresa.id_empresa,
           response_factura.data.Complement.TaxStamp.Uuid,
+          //fecha de vencimiento
+          info_user.fecha_vencimiento,
         ]);
 
         // 4. Actualizar solo los items seleccionados
@@ -264,7 +268,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
 };
 //--helpers
 function calcularTotalesDesdeItems(items = []) {
-  return items.reduce(
+  return items.reduce( 
     (acc, item) => {
       acc.total += Number(item?.Total ?? 0);
       acc.subtotal += Number(item?.Subtotal ?? 0);
@@ -726,11 +730,28 @@ ORDER BY facturas.created_at DESC;`;
   }
 };
 
+
+
 const getAllFacturasConsultas = async () => {
   try {
     const query = `select * from facturas f
 join agentes a on a.id_agente = f.usuario_creador
 order by fecha_emision desc;`;
+    let response = await executeQuery(query, []);
+
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+const getAllFacturasPagosPendientes = async () => {
+  try {
+    const query = `SELECT *
+FROM vw_facturas
+WHERE 
+  (pagos_asociados IS NULL OR COALESCE(JSON_LENGTH(pagos_asociados), 0) = 0 OR saldo <> 0)
+  AND fecha_vencimiento <= CURDATE();`;
     let response = await executeQuery(query, []);
 
     return response;
@@ -815,6 +836,7 @@ module.exports = {
   createFacturaCombinada,
   getFacturasConsultas,
   getAllFacturasConsultas,
+  getAllFacturasPagosPendientes,
   getDetailsFactura,
   isFacturada,
   crearFacturaEmi,

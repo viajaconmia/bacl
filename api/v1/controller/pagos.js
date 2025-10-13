@@ -1114,11 +1114,12 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
     });
 
     return res.status(200).json({
-      ok: true,
       message: "Cambio aplicado correctamente.",
-      ids_items_creados: idsItemsCreados,
-      ids_pagos_creados: idsPagos,
-      items_facturas: itemsFacturas,
+      data: {
+        ids_items_creados: idsItemsCreados,
+        ids_pagos_creados: idsPagos,
+        items_facturas: itemsFacturas,
+      }
     });
   } catch (error) {
     console.error(error);
@@ -1507,15 +1508,14 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
     }
 
     const refundSolicitado = round2(Math.max(0, -1 * Number(diferencia)));
-    const nightsDelta =
-      Number(hotel.noches.current) - Number(hotel.noches.before);
-    const checkInYMD = ymdFromInput(check_in); // <<< base para fecha_uso
+    const nightsDelta = Number(hotel.noches.current) - Number(hotel.noches.before);
+    const checkInYMD = ymdFromInput(check_in);
 
     const data = await runTransaction(async (conn) => {
       await conn.beginTransaction();
       const nowStr = new Date().toISOString().slice(0, 19).replace("T", " ");
 
-      // 0) Snapshot items activos (antes)
+      // 0) Items activos (antes)
       const [oldItems] = await conn.execute(
         `SELECT id_item, fecha_uso, total
            FROM items
@@ -1536,7 +1536,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
         oldItems.map((r) => [r.id_item, round2(+r.total || 0)])
       );
 
-      // 1) Mapa de aplicaciones por (pago,item) antes del cambio
+      // 1) Mapa de aplicaciones por (pago,item)
       let applied = [];
       if (oldItemIds.length) {
         const placeholders = oldItemIds.map(() => "?").join(",");
@@ -1584,17 +1584,11 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
         }
       }
 
-      // 2) Mutación de noches (crear/desactivar)
-      let itemsFinal = [
-        ...oldItems.map((o) => ({
-          id_item: o.id_item,
-          fecha_uso: o.fecha_uso,
-          total: 0,
-        })),
-      ];
+      // 2) Mutación de noches
+      let itemsFinal = [...oldItems.map(o => ({ id_item: o.id_item, fecha_uso: o.fecha_uso, total: 0 }))];
 
       if (nightsDelta > 0) {
-        // Crear N items nuevos con fecha_uso correcta = check_in + (oldItems.length + i)
+        // Crear N items nuevos con fecha_uso = check_in + (oldItems.length + i)
         for (let i = 0; i < nightsDelta; i++) {
           const id_item_new = "ite-" + uuidv4();
           const fechaUso = addDaysYMD(checkInYMD, oldItems.length + i);
@@ -1616,7 +1610,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
           });
         }
       } else if (nightsDelta < 0) {
-        // LIFO: desactivar las últimas |Δ| noches
+        // LIFO: desactivar últimas |Δ| noches
         const toDeactivate = Math.min(Math.abs(nightsDelta), itemsFinal.length);
         const orderedDesc = [...itemsFinal].sort((a, b) =>
           a.fecha_uso > b.fecha_uso ? -1 : 1
@@ -1639,20 +1633,18 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
         }
       }
 
-      // 3) Reasignar fechas de uso de TODOS los items activos, secuenciales desde check_in
-      itemsFinal.sort((a, b) =>
-        a.fecha_uso < b.fecha_uso ? -1 : a.fecha_uso > b.fecha_uso ? 1 : 0
-      );
+      // 3) Reasignar fechas de uso secuenciales desde check_in
+      itemsFinal.sort((a, b) => (a.fecha_uso < b.fecha_uso ? -1 : a.fecha_uso > b.fecha_uso ? 1 : 0));
       const nActivos = itemsFinal.length;
       const fechasUso = Array.from({ length: nActivos }, (_, i) =>
         addDaysYMD(checkInYMD, i)
       );
 
-      // 4) Redistribuir montos a precio_actualizado y actualizar items (incluye fecha_uso)
+      // 4) Redistribuir montos a precio_actualizado y actualizar items
       const montos = distributeUniform(nActivos, Number(precio_actualizado));
       for (let i = 0; i < nActivos; i++) {
         const id_item = itemsFinal[i].id_item;
-        const fecha_uso = fechasUso[i]; // <<< FECHA CORRECTA
+        const fecha_uso = fechasUso[i];
         const { total, subtotal, impuestos } = splitVenta(montos[i]);
         await conn.execute(
           `UPDATE items
@@ -1669,7 +1661,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
       );
       const activeNow = new Set(itemsFinal.map((r) => r.id_item));
 
-      // 5) Calcular delta por item y prorratear a pagos que financiaron ese item
+      // 5) Delta por item → prorrateo a pagos
       const refundByPago = {};
       for (const it of oldItems) {
         const oldT = T_old.get(it.id_item) || 0;
@@ -1710,7 +1702,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
         }
       }
 
-      // 6) Aplicar devolución por pago (wallet/directo)
+      // 6) Aplicar devolución por pago (wallet/directo) + registrar en wallet_devoluciones
       for (const pid of Object.keys(refundByPago)) {
         const delta = refundByPago[pid];
         if (delta <= 0) continue;
@@ -1745,7 +1737,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
           info.metodo_de_pago === "saldo_a_favor";
 
         if (isWallet) {
-          // 6.A) Regresar al mismo saldo_a_favor
+          // 6.A) Regreso a mismo saldo
           const sid = info.id_saldo_a_favor;
           if (sid != null) {
             const [[s]] = await conn.execute(
@@ -1753,7 +1745,8 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
               [sid]
             );
             if (s) {
-              const newSaldo = Math.min(+s.monto, round2(+s.saldo + delta));
+              const saldoAntes = round2(+s.saldo || 0);
+              const newSaldo = Math.min(+s.monto, round2(saldoAntes + delta));
               await conn.execute(
                 `UPDATE saldos_a_favor SET saldo = ?, activo = ? WHERE id_saldos = ?`,
                 [newSaldo, newSaldo > 0 ? 1 : 0, sid]
@@ -1868,9 +1861,9 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
 
     return res.status(200).json({
       ok: true,
-      message:
-        "Rebaja aplicada correctamente (wallet/directo) con fechas por noche desde check-in.",
-      data,
+      
+      message: "Rebaja aplicada correctamente (wallet/directo) con fechas por noche desde check-in.",
+      data
     });
   } catch (error) {
     console.error(error);
@@ -1882,7 +1875,6 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
     });
   }
 };
-
 const pagoPorSaldoAFavor = async (req, res) => {
   try {
     const { SaldoAFavor, items_seleccionados } = req.body;
