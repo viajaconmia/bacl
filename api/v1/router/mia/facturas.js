@@ -19,8 +19,9 @@ router.post(
   controller.createEmi
 );
 
-router.get("/getDetallesConexionesFactura",controller.getDetallesConexionesFactura);
+router.get("/detallesConexion",controller.getDetallesConexionesFactura);
 
+router.get("/getfulldetalles", controller.getFullDetalles);
 
 router.get(
   "/get_agente_facturas",

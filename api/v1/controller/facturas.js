@@ -1013,6 +1013,65 @@ const crearFacturaMultiplesPagos = async (req, res) => {
   }
 };
 
+// controllers/conexionFull.controller.js
+const getFullDetalles = async (req, res) => {
+  try {
+    console.log("📦📦📦📦📦📦📦📦📦📦📦📦recibido ambso")
+    const id_agente = (req.query.id_agente || req.body?.id_agente || '').trim();
+    const id_buscar = (req.query.id_buscar || req.body?.id_buscar || '').trim();
+
+    if (!id_agente || !id_buscar) {
+      return res.status(400).json({
+        message: 'Faltan parámetros',
+        required: ['id_agente', 'id_buscar'],
+      });
+    }
+
+    // Detectar tipo por prefijo
+    const pref = id_buscar.toLowerCase();
+    let tipo = 'pago';
+    if (pref.startsWith('hos')) tipo = 'reserva';
+    else if (pref.startsWith('fac')) tipo = 'factura';
+
+    // Llamada al SP
+    const sets = await executeSP2(
+      'sp_get_conexion_full',
+      [id_agente, tipo, id_buscar],
+      { allSets: true }
+    );
+
+    // Normalizar juegos de resultados:
+    const safe = (i) => (Array.isArray(sets?.[i]) ? sets[i] : []);
+
+    // Mapear según contrato del SP:
+    // - origen = 'reserva'  -> [facturas, pagos]
+    // - origen = 'pago'     -> [facturas, reservas]
+    // - origen = 'factura'  -> [pagos, reservas]
+    let payload = {};
+    if (tipo === 'reserva') {
+      payload = { facturas: safe(0), pagos: safe(1) };
+    } else if (tipo === 'pago') {
+      payload = { facturas: safe(0), reservas: safe(1) };
+    } else { // 'factura'
+      payload = { pagos: safe(0), reservas: safe(1) };
+    }
+
+    return res.status(200).json({
+      message: 'Consulta exitosa',
+      tipo_origen: tipo,
+      id_origen: id_buscar,
+      id_agente,
+      ...payload,
+    });
+  } catch (error) {
+    console.error('getFullDetalles error:', error);
+    return res.status(500).json({ message: 'Error en el servidor', details: error });
+  }
+};
+
+module.exports = { getFullDetalles };
+
+
 const getDetallesConexionesFactura = async (req, res) => {
   const { id_factura, id_agente } = req.query;
   try {
@@ -1055,6 +1114,7 @@ const asignarURLS_factura = async(req,res)=>{
 
 module.exports = {
   create,
+  getFullDetalles,
   get_agente_facturas,
   deleteFacturas,
   readAllFacturas,
