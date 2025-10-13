@@ -589,8 +589,14 @@ const editarVuelo = async (req, res) => {
 
     await runTransaction(async (connection) => {
       try {
-        await servicio.update(connection, { total: "" });
-        console.log("sigo entrando?");
+        const response = await servicio.create(connection, { total: "1682" });
+        // throw new Error(`erro`);
+
+        // const response = await servicio.update(connection, {
+        //   total: "168.20",
+        //   id_servicio: "ser-696caa39-c230-43ce-9e3e-47e250f585fd",
+        // });
+        console.log(response);
       } catch (error) {
         throw error;
       }
