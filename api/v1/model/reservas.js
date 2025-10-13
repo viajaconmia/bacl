@@ -2021,35 +2021,39 @@ const insertarReserva = async ({ reserva }) => {
           // 1. Verificar si es pago con wallet
           const [walletPagos] = await connection.execute(
             `SELECT p.id_pago, p.saldo_aplicado, p.total as monto_pago,
-                    s.monto as saldo_original, s.id_saldos
-             FROM pagos p 
-             INNER JOIN saldos_a_favor s ON p.id_saldo_a_favor = s.id_saldos
-             WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
-             ORDER BY p.fecha_pago ASC`,
+          s.monto as saldo_original, s.id_saldos
+   FROM pagos p 
+   INNER JOIN saldos_a_favor s ON p.id_saldo_a_favor = s.id_saldos
+   WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
+   ORDER BY p.fecha_pago ASC`,
             [solicitud.id_servicio]
           );
+
+          console.log("Wallet pagos obtenidos:", walletPagos);
 
           const esWalletPrepagado = walletPagos.length > 0;
 
           if (esWalletPrepagado && itemsConIdAnadido.length > 0) {
             console.log("Procesando pago con wallet prepagado");
+            console.log("Items a procesar:", itemsConIdAnadido);
 
             // 2. Calcular el total de la reserva y los montos disponibles
             const totalReserva = itemsConIdAnadido.reduce(
-              (sum, item) => sum + Number(item.venta.total),
+              (sum, item) => sum + Number(item.venta.total.toFixed(2)),
               0
             );
 
-            let saldoDisponible = walletPagos.reduce(
-              (sum, pago) => sum + Number(pago.saldo_aplicado),
-              0
+            let saldoDisponible = Number(
+              walletPagos
+                .reduce((sum, pago) => sum + Number(pago.saldo_aplicado), 0)
+                .toFixed(2)
             );
 
             console.log(
               `Total reserva: ${totalReserva}, Saldo disponible: ${saldoDisponible}`
             );
 
-            if (saldoDisponible < totalReserva) {
+            if (saldoDisponible.toFixed(2) < totalReserva.toFixed(2)) {
               throw new Error(
                 `Saldo insuficiente en wallet. Disponible: ${saldoDisponible}, Requerido: ${totalReserva}`
               );
@@ -2064,11 +2068,17 @@ const insertarReserva = async ({ reserva }) => {
 
             for (const item of itemsConIdAnadido) {
               let montoRestanteItem = Number(item.venta.total);
+              console.log(
+                `\nProcesando item ${item.id_item}, monto: ${montoRestanteItem}`
+              );
 
               while (montoRestanteItem > 0 && pagoIndex < walletPagos.length) {
                 const montoAsignar = Math.min(
                   montoRestanteItem,
                   saldoRestanteEnPago
+                );
+                console.log(
+                  `Asignando ${montoAsignar} del pago ${walletPagos[pagoIndex].id_pago}`
                 );
 
                 if (montoAsignar > 0) {
@@ -2078,8 +2088,11 @@ const insertarReserva = async ({ reserva }) => {
                     monto: montoAsignar,
                   });
 
-                  montoRestanteItem -= montoAsignar;
-                  saldoRestanteEnPago -= montoAsignar;
+                  montoRestanteItem -= Number(montoAsignar.toFixed(2));
+                  saldoRestanteEnPago -= Number(montoAsignar.toFixed(2));
+                  console.log(
+                    `Monto restante item: ${montoRestanteItem}, saldo restante pago: ${saldoRestanteEnPago}`
+                  );
                 }
 
                 // Si se agotó el saldo del pago actual, pasar al siguiente
@@ -2087,6 +2100,9 @@ const insertarReserva = async ({ reserva }) => {
                   pagoIndex++;
                   saldoRestanteEnPago = Number(
                     walletPagos[pagoIndex]?.saldo_aplicado || 0
+                  );
+                  console.log(
+                    `Cambiando a siguiente pago. Nuevo pagoIndex: ${pagoIndex}, saldoRestanteEnPago: ${saldoRestanteEnPago}`
                   );
                 }
               }
@@ -2097,6 +2113,8 @@ const insertarReserva = async ({ reserva }) => {
                 );
               }
             }
+
+            console.log("\nAsignaciones finales:", asignaciones);
 
             // 4. Insertar en items_pagos
             if (asignaciones.length > 0) {
