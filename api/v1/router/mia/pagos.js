@@ -4,7 +4,7 @@ const controller = require("../../controller/pagos");
 const { get_agente_facturas } = require("../../controller/facturas");
 const { isSignToken } = require("../../../../middleware/auth");
 
-router.post("/carrito/credito", isSignToken, controller.pagarCarritoConCredito);
+router.post("/carrito/credito", controller.pagarCarritoConCredito);
 router.post("/crearItemdeAjuste", controller.crearItemdeAjuste);
 // router.post("/crearItemdeAjuste", controller.aplicarCambioNochesOAjuste);
 router.post("/aplicarpagoPorSaldoAFavor", controller.pagoPorSaldoAFavor);
