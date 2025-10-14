@@ -1,9 +1,12 @@
 const { executeQuery, runTransaction } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 const { verificarSaldos } = require("../../../lib/utils/validates");
-const { calcularPrecios } = require("../../../lib/utils/calculates");
+const { calcularPrecios, Calculo } = require("../../../lib/utils/calculates");
 const { formateoViajeAereo } = require("../../../lib/utils/formats");
-const servicio = require("../../../v2/servicios.model");
+const ERROR = require("../../../lib/utils/messages");
+const Servicio = require("../../../v2/model/servicios.model");
+// const Booking = require("../../../v2/model/bookings.model");
+// const Item = require("../../../v2/model/model/item.model");
 
 const getVuelos = async (req, res) => {
   try {
@@ -577,8 +580,6 @@ const editarVuelo = async (req, res) => {
   try {
     const { cambios, before, viaje_aereo } = req.body;
 
-    // console.log(viaje_aereo);
-
     const formaters = formateoViajeAereo(
       req.body.faltante,
       req.body.current,
@@ -587,51 +588,68 @@ const editarVuelo = async (req, res) => {
       viaje_aereo
     );
 
-    await runTransaction(async (connection) => {
-      try {
-        const response = await servicio.create(connection, { total: "1682" });
-        // throw new Error(`erro`);
+    if (cambios.keys.length == 0) throw new Error(ERROR.CHANGES.EMPTY);
 
-        // const response = await servicio.update(connection, {
-        //   total: "168.20",
-        //   id_servicio: "ser-696caa39-c230-43ce-9e3e-47e250f585fd",
-        // });
-        console.log(response);
-      } catch (error) {
-        throw error;
-      }
-    });
-
+    let diferencia;
+    if (cambios.keys.includes("precio")) {
+      let cambio =
+        cambios.logs.precio.current - Number(cambios.logs.precio.before);
+      diferencia = cambio != 0 ? cambio : undefined;
+    }
     /**VALIDAR SALDOS */
     /**VALIDAR QUE TENGA CREDITO */
     /**HACER EL COBRO O RETORNO DE DINERO - tomar en cuenta que puede ser regresando un wallet no facurabe y ya, o tambien por credito*/
     /**UPDATEAR LAS COSAS DEL VIAJE Y LOS PRECIOS SI SE EDITARON */
 
     /*** Si se edita el precio ->
-     * - Se actualiza el servicio (agregando solo el nuevo precio, ya sea negativo o positivo)
-     * - Se actualiza el booking (Este entra con el nuevo precio)
-     * - Se actualiza el item (Con el nuevo precio)
-     * - Se actualiza el viaje aereo (Con el nuevo precio)
+     * - Se actualiza el servicio (agregando solo el nuevo precio, ya sea negativo o positivo)*
+     * - Se actualiza el booking (Este entra con el nuevo precio)                             *
+     * - Se actualiza el item (Con el nuevo precio)                                           *
+     * - Se actualiza el viaje aereo (Con el nuevo precio)                                    *
      * - Se manejan los pagos (credito, wallet, pago directo, pagos_credito, items_pagos)
-     * - El que se revisa es lo de facturas y asi*/
+     * - El que se revisa es lo de facturas y asi
+     * */
 
     /*** Si se edita el costo ->
-     * - Se edita el item
-     * - Se edita el viaje aereo*/
+     * - Se edita el item                                                                         *
+     * - Se edita el viaje aereo                                                                  *
+     * */
 
     /*** Si se editan vuelos
-     * - Se eliminan  todos los vuelos
-     * - Se agregan los nuevos vuelos
-     * - Se edita el viaje aereo
-     * - Se edita tambien el booking por el checkin y eso*/
+     * - Se eliminan  todos los vuelos                                                            *
+     * - Se agregan los nuevos vuelos                                                             *
+     * - Se edita el viaje aereo                                                                  *
+     * - Se edita tambien el booking por el checkin y eso                                         *
+     * */
 
     /*** Si se edita el codigo
-     * - Se edita el viaje aereo*/
+     * - Se edita el viaje aereo                                                                  *
+     * */
 
     /*** Si se edita el status
      * - Se debe verificar y en caso de que este cancelada:
      * - Se debe regresar el credito que no esta pagado, y se debe regresar los saldos que fueron pagados,
-     * - Se debe cancelar la reserva, cambiando el status en bookings (Verificar como esta escrito y el enum)*/
+     * - Se debe cancelar la reserva, cambiando el status en bookings (Verificar como esta escrito y el enum)         *
+     * */
+    const [servicio] = await executeQuery(
+      `SELECT * FROM servicios where id_servicio = ?`,
+      [viaje_aereo.id_servicio]
+    );
+
+    await runTransaction(async (connection) => {
+      try {
+        const updateService = Calculo.cleanEmpty({
+          total: diferencia ? Number(servicio.total) + diferencia : undefined,
+        });
+        await Servicio.update(connection, {
+          ...updateService,
+          id_servicio: viaje_aereo.id_servicio,
+        });
+        console.log(diferencia, updateService);
+      } catch (error) {
+        throw error;
+      }
+    });
 
     res.status(200).json({
       message: "Reservación creada con exito",

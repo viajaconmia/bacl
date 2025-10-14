@@ -1,5 +1,6 @@
 const mysql = require("mysql2/promise");
 const { CustomError } = require("../middleware/errorHandler");
+const ERROR = require("../lib/utils/messages");
 require("dotenv").config();
 
 const pool = mysql.createPool({
@@ -126,6 +127,30 @@ async function runTransaction(callback) {
   }
 }
 
+async function insert(connection, propiedades, table) {
+  const query = `INSERT INTO ${table} (${propiedades
+    .map((p) => p.key)
+    .join(",")}) VALUES (${propiedades.map((_) => "?").join(",")});`;
+
+  return await connection.execute(
+    query,
+    propiedades.map((p) => p.value)
+  );
+}
+
+async function update(connection, table, props, id, field) {
+  try {
+    if (props.length == 0) throw new Error(ERROR.PROPS.EMPTY);
+    const query = `UPDATE ${table} SET ${props
+      .map((p) => p.key)
+      .join(" = ?,")} = ? WHERE ${field} = ?`;
+
+    return await connection.execute(query, [...props.map((p) => p.value), id]);
+  } catch (error) {
+    throw error;
+  }
+}
+
 async function executeTransactionSP(procedure, params = []) {
   const connection = await pool.getConnection();
   try {
@@ -158,4 +183,6 @@ module.exports = {
   runTransaction,
   executeTransactionSP,
   executeSP2,
+  insert,
+  update,
 };
