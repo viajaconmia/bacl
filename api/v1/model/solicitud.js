@@ -32,6 +32,7 @@ const { v4: uuidv4 } = require("uuid");
 const createSolicitudes = async (body) => {
   try {
     const { solicitudes } = body;
+    console.log(solicitudes);
     const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales, id_agente, origen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
     const id_solicitud = `sol-${uuidv4()}`;
     const {
@@ -48,19 +49,19 @@ const createSolicitudes = async (body) => {
       viajeros_adicionales,
     } = solicitudes[0];
     const params_solicitud = [
-      id_solicitud,
-      id_agente,
-      confirmation_code,
-      id_viajero,
-      hotel,
-      check_in,
-      check_out,
-      room,
-      total,
-      status,
-      nombre_viajero,
+      id_solicitud || null,
+      id_agente || null,
+      confirmation_code || null,
+      id_viajero || null,
+      hotel || null,
+      check_in || null,
+      check_out || null,
+      room || null,
+      total || null,
+      status || null,
+      nombre_viajero || null,
       JSON.stringify(viajeros_adicionales) || [],
-      id_agente,
+      id_agente || null,
       "Cliente",
     ];
 
