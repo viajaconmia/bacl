@@ -270,7 +270,7 @@ const toMysqlDateTime = (val) => {
   }
 };
 
-const updateReserva2 = async (req, res) => {
+const updateReserva2 = async (req, res) => {x1
   console.log("Llegando al endpoint de updateReserva2");
   const { id } = req.query;
 
@@ -1243,6 +1243,8 @@ const createFromOperaciones = async (req, res) => {
 
     console.log("a ver esto,", checkInDate, checkOutDate);
     console.log(
+      
+      
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime()
     );

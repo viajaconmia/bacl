@@ -1,4 +1,4 @@
-const { executeQuery, executeTransaction } = require("../../../config/db");
+const { executeQuery, executeTransaction,executeSP2 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 const { sumarDias } = require("../../../lib/utils/calculates");
 
@@ -468,6 +468,57 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
   }
 };
 
+const asignarFacturasItems = async (req, res) => {
+  try {
+    const { id_saldo, items } = req.body || {};
+
+    if (!id_saldo) {
+      return res.status(400).json({ error: "Falta 'id_saldo'." });
+    }
+    if (!items || (Array.isArray(items) && items.length === 0)) {
+      return res.status(400).json({ error: "Falta 'items' o está vacío." });
+    }
+
+    // Normalizar/parsear
+    let arrItems = items;
+    if (typeof arrItems === "string") {
+      try { arrItems = JSON.parse(arrItems); }
+      catch (e) {
+        return res.status(400).json({ error: "items no es JSON válido", details: e.message });
+      }
+    }
+    if (!Array.isArray(arrItems)) arrItems = [arrItems];
+
+    // Log de entrada
+    console.log("🧩 sp_asignar_facturas_de_pagos_a_items INPUT:");
+    console.log("   id_saldo:", id_saldo);
+    console.table(arrItems.map(i => ({
+      id_item: i.id_item || i,
+      total: Number(i.total ?? i.monto ?? i.max ?? 0)
+    })));
+
+    // Llamada al SP (envía el array como JSON)
+    const result = await executeQuery(
+      "CALL sp_asignar_facturas_de_pagos_a_items(?, ?)",
+      [id_saldo, JSON.stringify(arrItems)]
+    );
+
+    // Log de salida
+    console.log("📦 SP RESULT:");
+    console.dir(result, { depth: null });
+
+    return res.status(200).json({
+      message: "SP ejecutado correctamente",
+      id_saldo,
+      items: arrItems,
+      resultado: result
+    });
+  } catch (error) {
+    console.error("❌ Error en asignarFacturasItems:", error);
+    return res.status(500).json({ error: "Error al ejecutar el SP", details: error?.message || String(error) });
+  }
+};
+
 const insertarReservaOperaciones = async (reserva, bandera) => {
   const { ejemplo_saldos } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
@@ -757,7 +808,8 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             await connection.execute(queryCredito, paramsCredito);
           } else if (bandera === 1) {
             console.log(
-              "Procesando bandera 1 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:"
+              "Procesando bandera 1 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:",
+              itemsConIdAnadido,"acabo"
             );
             // Wallet: validar saldos y generar pagos (SIN relación)
             // const ejemplo_saldos = [
@@ -912,6 +964,37 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             `UPDATE solicitudes SET status = "complete" WHERE id_solicitud = ?;`,
             [id_solicitud]
           );
+
+          /* ======== RELACIONAR FACTURAS ⇄ ITEMS por SALDO (SP) ======== */
+// Construir payload de items: { id_item, total } usando venta.total
+const itemsParaSP = (itemsConIdAnadido || []).map(it => ({
+  id_item: String(it.id_item),
+  total: Number(it?.venta?.total ?? 0),
+})).filter(x => x.id_item && Number.isFinite(x.total) && x.total > 0);
+
+console.log("🧾 Items para SP (tope por item):");
+console.table(itemsParaSP);
+
+// Llamar el SP por cada saldo usado en la reserva
+for (const saldo of ejemplo_saldos) {
+  const idSaldo = Number(saldo.id_saldo);
+  console.log(`🚀 CALL sp_asignar_facturas_de_pagos_a_items(${idSaldo}, items[])`);
+
+  try {
+    const spResult = await connection.execute(
+      "CALL sp_asignar_facturas_de_pagos_a_items(?, ?)",
+      [idSaldo, JSON.stringify(itemsParaSP)]
+    );
+
+    console.log("📦 Resultado del SP (primer set):");
+    console.dir(spResult?.[0], { depth: null });
+  } catch (e) {
+    console.error(`❌ Error al ejecutar SP para id_saldo=${idSaldo}:`, e.message);
+    throw e; // re-lanza para que la transacción haga rollback
+  }
+}
+/* ======== FIN RELACIONAR FACTURAS ⇄ ITEMS ======== */
+
 
           return {
             message: "Reserva procesada exitosamente",
