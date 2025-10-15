@@ -1,5 +1,6 @@
 const mysql = require("mysql2/promise");
 const { CustomError } = require("../middleware/errorHandler");
+const ERROR = require("../lib/utils/messages");
 require("dotenv").config();
 
 const pool = mysql.createPool({
@@ -114,13 +115,39 @@ async function runTransaction(callback) {
       throw error;
     }
     throw new CustomError(
-      error.message || "Error corriendo la transaction",
+      error.sqlMessage ||
+        error.message ||
+        "Ha ocurrido un error al hacer la petición",
       error.statusCode || 500,
-      error.errorCode || "ERROR_RUN TRANSACTION",
-      error.details || error
+      error.errorCode || "DATABASE_ERROR",
+      error
     );
   } finally {
     connection.release();
+  }
+}
+
+async function insert(connection, propiedades, table) {
+  const query = `INSERT INTO ${table} (${propiedades
+    .map((p) => p.key)
+    .join(",")}) VALUES (${propiedades.map((_) => "?").join(",")});`;
+
+  return await connection.execute(
+    query,
+    propiedades.map((p) => p.value)
+  );
+}
+
+async function update(connection, table, props, id, field) {
+  try {
+    if (props.length == 0) throw new Error(ERROR.PROPS.EMPTY);
+    const query = `UPDATE ${table} SET ${props
+      .map((p) => p.key)
+      .join(" = ?,")} = ? WHERE ${field} = ?`;
+
+    return await connection.execute(query, [...props.map((p) => p.value), id]);
+  } catch (error) {
+    throw error;
   }
 }
 
@@ -156,4 +183,6 @@ module.exports = {
   runTransaction,
   executeTransactionSP,
   executeSP2,
+  insert,
+  update,
 };
