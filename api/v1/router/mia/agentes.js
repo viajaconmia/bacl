@@ -1,33 +1,33 @@
-const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/agentes");
 const { executeQuery } = require("../../../../config/db");
 const router = require("express").Router();
 
-router.post("/", middleware.validateParams([]), controller.create);
+router.post("/",  controller.create);
 router.get(
   "/viajeros-con-empresas",
-  middleware.validateParams([]),
+  
   controller.read
 );
 router.get(
   "/empresas-con-agentes",
-  middleware.validateParams([]),
+  
   controller.readAgentesCompanies
 );
 router.get(
   "/empresas-con-datos-fiscales",
-  middleware.validateParams([]),
+  
   controller.readEmpresasDatosFiscales
 );
-router.get("/agentes", middleware.validateParams([]), controller.readAgentes);
+router.get("/agentes",  controller.readAgentes);
 router.get("/get-agente-id/", controller.getAgenteId);
 
 router.get("/empresas", async (req, res) => {
   try {
     const queryget = `
-select * from empresas as e
+select *,df.rfc from empresas as e
 INNER JOIN empresas_agentes as e_a ON e_a.id_empresa = e. id_empresa
-WHERE e_a.id_agente = ?;`;
+inner join datos_fiscales as df on df.id_empresa = e.id_empresa
+WHERE e_a.id_agente =?;`;
     const response = await executeQuery(queryget, [req.query.id]);
     res.status(200).json(response);
   } catch (error) {

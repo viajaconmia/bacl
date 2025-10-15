@@ -1,5 +1,6 @@
 const { executeQuery, executeTransaction } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+const { sumarDias } = require("../../../lib/utils/calculates");
 
 const editarReserva = async (edicionData, id_booking_a_editar) => {
   try {
@@ -516,8 +517,8 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           const query_solicitudes = `
             INSERT INTO solicitudes (
               id_solicitud, id_servicio, id_usuario_generador, confirmation_code,
-              id_viajero, hotel, check_in, check_out, room, total, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?);
+              id_viajero, hotel, check_in, check_out, room, total, status, origen
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
           `;
           const params_solicitud = [
             id_solicitud,
@@ -531,6 +532,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             reserva.habitacion,
             venta.total,
             reserva.estado_reserva,
+            "Operaciones",
           ];
           await connection.execute(query_solicitudes, params_solicitud);
 
@@ -616,9 +618,10 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           // Items
           const itemsConIdAnadido =
             items && items.length > 0
-              ? items.map((item) => ({
+              ? items.map((item, index) => ({
                   ...item,
                   id_item: `ite-${uuidv4()}`,
+                  fecha_uso: sumarDias(new Date(reserva.check_in), index + 1),
                 }))
               : [];
 
@@ -641,7 +644,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               it.venta.subtotal.toFixed(2),
               it.venta.impuestos.toFixed(2),
               null,
-              new Date().toISOString().split("T")[0],
+              it.fecha_uso,
               id_hospedaje,
               it.costo.total.toFixed(2),
               it.costo.subtotal.toFixed(2),
@@ -720,7 +723,6 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             "Procesando bandera 0 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:"
           );
           if (bandera === 0) {
-
             // Crédito: descuenta saldo del agente + inserta pagos_credito
             await connection.execute(
               `UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?;`,
@@ -814,19 +816,19 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               INSERT INTO pagos (
                 id_pago, id_servicio, id_saldo_a_favor, id_agente,
                 metodo_de_pago, fecha_pago, concepto, referencia,
-                currency, tipo_de_tarjeta, link_pago, last_digits, total
-              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+                currency, tipo_de_tarjeta, link_pago, last_digits, total,saldo_aplicado,transaccion,monto_transaccion
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
             `;
-            const query_update_saldo = `UPDATE saldos_a_favor
-SET
-  saldo = GREATEST(saldo - ?, 0),
-  activo = CASE WHEN saldo <= 0 THEN 0 ELSE 1 END
-WHERE id_saldos = ?;
-`;
+
+            const query_update_saldo = `
+              UPDATE saldos_a_favor SET saldo = saldo - ? WHERE id_saldos = ?;
+            `;
+            const transaccion = `tra-${uuidv4()}`;
 
             for (const saldo of ejemplo_saldos) {
               console.log("Procesando saldo:", saldo);
               const id_pago = `pag-${uuidv4()}`;
+
               console.log("Generando pago con ID:", id_pago);
               await connection.execute(query_pagos, [
                 id_pago,
@@ -842,6 +844,9 @@ WHERE id_saldos = ?;
                 saldo.link_pago,
                 saldo.last_digits,
                 venta.total, // (mantengo tu código tal cual)
+                saldo.aplicado,
+                transaccion,
+                venta.total,
               ]);
               await connection.execute(query_update_saldo, [
                 saldo.aplicado,
@@ -890,17 +895,16 @@ WHERE id_saldos = ?;
             }
 
             // --- update final: reflejar saldo_actual en saldos_a_favor ---
+            console.log("Pagos ordenados para update final:", pagosOrdenados);
             for (const pago of pagosOrdenados) {
-  await connection.execute(
-    `UPDATE saldos_a_favor
-     SET
-       saldo = ?,
-       activo = CASE WHEN ? <= 0 THEN 0 ELSE 1 END
-     WHERE id_saldos = ?;`,
-    [pago.saldo_actual, pago.saldo_actual, pago.id_saldo] // 3 params para 3 "?"
-  );
-}
-
+              await connection.execute(
+                `UPDATE saldos_a_favor 
+                SET saldo = ?,
+                activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END
+                WHERE id_saldos = ?`,
+                [pago.saldo_actual, pago.restante, pago.id_saldo]
+              );
+            }
           }
 
           // Completar solicitud
@@ -1107,7 +1111,7 @@ FROM vw_reservas_client rc
 LEFT JOIN agente_details ad ON ad.id_agente = rc.id_agente
 LEFT JOIN hospedajes h
        ON h.id_hospedaje = rc.id_hospedaje
-WHERE rc.status_reserva = 'Confirmada'
+WHERE rc.status_reserva = 'Confirmada' AND rc.id_credito is not null
 GROUP BY
   rc.id_hospedaje,
   rc.id_servicio,
@@ -1132,7 +1136,7 @@ GROUP BY
   ad.razon_social,
   ad.rfc,
   ad.tipo_persona
-ORDER BY rc.created_at_reserva DESC;`;
+ORDER BY rc.created_at_reserva DESC`;
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);
@@ -1871,9 +1875,10 @@ const insertarReserva = async ({ reserva }) => {
     // Preparar items con ID
     const itemsConIdAnadido =
       items && items.length > 0
-        ? items.map((item) => ({
+        ? items.map((item, index) => ({
             ...item,
             id_item: `ite-${uuidv4()}`,
+            fecha_uso: sumarDias(new Date(reserva.check_in), index + 1),
           }))
         : [];
 
@@ -1955,7 +1960,7 @@ const insertarReserva = async ({ reserva }) => {
                 itemConId.venta.subtotal.toFixed(2),
                 itemConId.venta.impuestos.toFixed(2),
                 null,
-                new Date().toISOString().split("T")[0],
+                itemConId.fecha_uso,
                 id_hospedaje,
                 itemConId.costo.total.toFixed(2),
                 itemConId.costo.subtotal.toFixed(2),
@@ -2016,35 +2021,39 @@ const insertarReserva = async ({ reserva }) => {
           // 1. Verificar si es pago con wallet
           const [walletPagos] = await connection.execute(
             `SELECT p.id_pago, p.saldo_aplicado, p.total as monto_pago,
-                    s.monto as saldo_original, s.id_saldos
-             FROM pagos p 
-             INNER JOIN saldos_a_favor s ON p.id_saldo_a_favor = s.id_saldos
-             WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
-             ORDER BY p.fecha_pago ASC`,
+          s.monto as saldo_original, s.id_saldos
+   FROM pagos p 
+   INNER JOIN saldos_a_favor s ON p.id_saldo_a_favor = s.id_saldos
+   WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
+   ORDER BY p.fecha_pago ASC`,
             [solicitud.id_servicio]
           );
+
+          console.log("Wallet pagos obtenidos:", walletPagos);
 
           const esWalletPrepagado = walletPagos.length > 0;
 
           if (esWalletPrepagado && itemsConIdAnadido.length > 0) {
             console.log("Procesando pago con wallet prepagado");
+            console.log("Items a procesar:", itemsConIdAnadido);
 
             // 2. Calcular el total de la reserva y los montos disponibles
             const totalReserva = itemsConIdAnadido.reduce(
-              (sum, item) => sum + Number(item.venta.total),
+              (sum, item) => sum + Number(item.venta.total.toFixed(2)),
               0
             );
 
-            let saldoDisponible = walletPagos.reduce(
-              (sum, pago) => sum + Number(pago.saldo_aplicado),
-              0
+            let saldoDisponible = Number(
+              walletPagos
+                .reduce((sum, pago) => sum + Number(pago.saldo_aplicado), 0)
+                .toFixed(2)
             );
 
             console.log(
               `Total reserva: ${totalReserva}, Saldo disponible: ${saldoDisponible}`
             );
 
-            if (saldoDisponible < totalReserva) {
+            if (saldoDisponible.toFixed(2) < totalReserva.toFixed(2)) {
               throw new Error(
                 `Saldo insuficiente en wallet. Disponible: ${saldoDisponible}, Requerido: ${totalReserva}`
               );
@@ -2059,11 +2068,17 @@ const insertarReserva = async ({ reserva }) => {
 
             for (const item of itemsConIdAnadido) {
               let montoRestanteItem = Number(item.venta.total);
+              console.log(
+                `\nProcesando item ${item.id_item}, monto: ${montoRestanteItem}`
+              );
 
               while (montoRestanteItem > 0 && pagoIndex < walletPagos.length) {
                 const montoAsignar = Math.min(
                   montoRestanteItem,
                   saldoRestanteEnPago
+                );
+                console.log(
+                  `Asignando ${montoAsignar} del pago ${walletPagos[pagoIndex].id_pago}`
                 );
 
                 if (montoAsignar > 0) {
@@ -2073,8 +2088,11 @@ const insertarReserva = async ({ reserva }) => {
                     monto: montoAsignar,
                   });
 
-                  montoRestanteItem -= montoAsignar;
-                  saldoRestanteEnPago -= montoAsignar;
+                  montoRestanteItem -= Number(montoAsignar.toFixed(2));
+                  saldoRestanteEnPago -= Number(montoAsignar.toFixed(2));
+                  console.log(
+                    `Monto restante item: ${montoRestanteItem}, saldo restante pago: ${saldoRestanteEnPago}`
+                  );
                 }
 
                 // Si se agotó el saldo del pago actual, pasar al siguiente
@@ -2082,6 +2100,9 @@ const insertarReserva = async ({ reserva }) => {
                   pagoIndex++;
                   saldoRestanteEnPago = Number(
                     walletPagos[pagoIndex]?.saldo_aplicado || 0
+                  );
+                  console.log(
+                    `Cambiando a siguiente pago. Nuevo pagoIndex: ${pagoIndex}, saldoRestanteEnPago: ${saldoRestanteEnPago}`
                   );
                 }
               }
@@ -2092,6 +2113,8 @@ const insertarReserva = async ({ reserva }) => {
                 );
               }
             }
+
+            console.log("\nAsignaciones finales:", asignaciones);
 
             // 4. Insertar en items_pagos
             if (asignaciones.length > 0) {

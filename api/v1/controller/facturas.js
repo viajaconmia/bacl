@@ -1,4 +1,4 @@
-const { executeSP, runTransaction,executeSP2 } = require("../../../config/db");
+const { executeSP, runTransaction, executeSP2, executeQuery } = require("../../../config/db");
 const model = require("../model/facturas");
 const { v4: uuidv4 } = require("uuid");
 const { get } = require("../router/mia/reservasClient");
@@ -14,8 +14,8 @@ const create = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({
-      error: "Error create from v1/mia/factura - GET",
-      details: error.response?.data || error.message || error,
+      error: error.message || "Error create from v1/mia/factura - GET",
+      details: error.response?.data || error.details.data || error,
     });
   }
 };
@@ -99,6 +99,16 @@ const readAllConsultas = async (req, res) => {
   }
 };
 
+const getfacturasPagoPendiente = async (req, res) => {
+  try {
+    let solicitudes = await model.getAllFacturasPagosPendientes();
+    res.status(200).json(solicitudes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error", details: error });
+  }
+};
+
 const readDetailsFactura = async (req, res) => {
   try {
     const { id_factura } = req.query;
@@ -152,7 +162,9 @@ const crearFacturaDesdeCarga = async (req, res) => {
     items,
   } = req.body;
   const id_factura = "fac-" + uuidv4();
+
   try {
+    console.log("😒😒😒😒😒", req.body);
     const response = await executeSP("sp_inserta_factura_desde_carga", [
       id_factura,
       fecha_emision,
@@ -171,6 +183,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
       url_xml,
       items,
     ]);
+
     if (!response) {
       req.context.logStep(
         "crearFacturaDesdeCarga:",
@@ -178,6 +191,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
       );
       throw new Error("No se pudo crear la factura desde carga");
     } else {
+      console.log(id_factura, response, items);
       res.status(201).json({
         message: "Factura creada correctamente desde carga",
         data: { id_factura, ...response },
@@ -197,20 +211,206 @@ const asignarFacturaItems = async (req, res) => {
   const { id_factura, items } = req.body;
   console.log("body", req.body);
 
+  // Asegura que items sea un array
+  let itemsArray = items;
+  if (typeof items === "string") {
+    try {
+      itemsArray = JSON.parse(items);
+    } catch (e) {
+      return res.status(400).json({
+        error: "El campo 'items' no es un JSON válido",
+        details: e.message,
+      });
+    }
+  }
+
   try {
-    const response = await executeSP("sp_asigna_facturas_items", [
-      id_factura,
-      items,
-    ]);
+    const updateitems = `UPDATE items
+    SET id_factura  = ?,
+        is_facturado = 1
+    WHERE id_item = ?;`;
+    const updateFactura = `  UPDATE facturas
+  SET saldo =  ?
+  WHERE id_factura = ?;`;
+  
+    const saldo_factura = await executeQuery(`select saldo from facturas where id_factura = ?;`,[id_factura]);
+    let suma_total_items = 0;
+    for (const item of itemsArray) {
+      // Asegura que item.total sea un número válido
+      const totalItem = Number(item.total) || 0;
+      suma_total_items += totalItem;
+      await executeQuery(updateitems, [id_factura, item.id_item]);
+    }
+    const nuevo_saldo = saldo_factura[0].saldo - suma_total_items;
+    if (nuevo_saldo < 0) {
+      throw new ShortError("El saldo de la factura no puede ser negativo", 400);
+    } else {
+      await executeQuery(updateFactura, [nuevo_saldo, id_factura]);
+    }
+  
     return res.status(200).json({
       message: "Items asignados correctamente a la factura",
-      data: response,
+      data: "Factura asociada: " + id_factura,
     });
   } catch (error) {
     return res.status(500).json({
       error: "Error al asignar items a la factura",
       details: error.message || error,
       otherDetails: error.response?.data || null,
+    });
+  }
+};
+
+const asignarFacturaPagos = async (req, res) => {
+  try {
+    const { id_factura: facturasRaw, ejemplo_saldos: saldosRaw } = req.body || {};
+    if (!facturasRaw || (Array.isArray(facturasRaw) && facturasRaw.length === 0)) {
+      return res.status(400).json({ error: "Debes enviar 'id_factura' con 1+ elementos (array o string)." });
+    }
+
+    // --- Normalizar arrays ---
+    const facturasOrden = Array.isArray(facturasRaw) ? facturasRaw : [facturasRaw];
+
+    let items = saldosRaw;
+    if (!items) {
+      return res.status(400).json({ error: "Falta 'ejemplo_saldos' en el payload." });
+    }
+    if (typeof items === 'string') {
+      try { items = JSON.parse(items); }
+      catch (e) { return res.status(400).json({ error: "El campo 'ejemplo_saldos' no es un JSON válido", details: e.message }); }
+    }
+    if (!Array.isArray(items)) items = [items];
+
+    // --- Traer saldos actuales de las facturas, conservando ORDEN ---
+    const facturas = [];
+    for (const idf of facturasOrden) {
+      const r = await executeQuery(
+        'SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;',
+        [idf]
+      );
+      if (!r?.length) {
+        return res.status(404).json({ error: `Factura no encontrada: ${idf}` });
+      }
+      facturas.push({ id_factura: r[0].id_factura, saldo: Number(r[0].saldo) || 0 });
+    }
+
+    // --- Consultar en bloque la vista para obtener saldo disponible por raw_id ---
+    const rawIds = [...new Set(items.map(it => String(it.id_saldo)))];
+    const placeholders = rawIds.map(() => '?').join(',');
+    const viewRows = rawIds.length
+      ? await executeQuery(
+          `SELECT raw_id, saldo FROM vw_pagos_prepago_facturables WHERE raw_id IN (${placeholders});`,
+          rawIds
+        )
+      : [];
+
+    const disponiblePorRawId = new Map();
+    for (const row of viewRows || []) {
+      const rid = String(row.raw_id);
+      const disp = Number(row.saldo);
+      if (Number.isFinite(disp)) disponiblePorRawId.set(rid, Math.max(0, disp));
+    }
+
+    // --- Construir "pagos" a aplicar, usando SIEMPRE el saldo de la vista como tope ---
+    // Si un id_saldo no aparece en la vista => disponible = 0 (se ignora)
+    const creditos = items.map(it => {
+      const raw = String(it.id_saldo);
+      const disponible = disponiblePorRawId.has(raw) ? Number(disponiblePorRawId.get(raw)) : 0;
+      const isSaldoFavor = /^\d+$/.test(raw); // num puro => saldo a favor
+      return { raw_id: raw, disponible, restante: disponible, isSaldoFavor };
+    }).filter(c => c.disponible > 0);
+
+    if (creditos.length === 0) {
+      return res.status(400).json({
+        error: 'No hay saldo disponible para aplicar (según la vista).',
+        detalle: {
+          solicitados: items.map(i => ({ id_saldo: i.id_saldo })),
+          encontrados_en_vista: viewRows.length
+        }
+      });
+    }
+
+    // --- Aplicación secuencial: consumir factura[0] hasta 0, luego factura[1], etc. ---
+    const appliedByFactura = new Map(); // id_factura -> suma aplicada
+    const appliedByCredito = new Map(); // raw_id     -> suma aplicada
+
+    let idxFactura = 0;
+
+    for (const cred of creditos) {
+      while (cred.restante > 0 && idxFactura < facturas.length) {
+        // Saltar facturas agotadas
+        while (idxFactura < facturas.length && facturas[idxFactura].saldo <= 0) {
+          idxFactura++;
+        }
+        if (idxFactura >= facturas.length) break;
+
+        const f = facturas[idxFactura];
+        const aplicar = Math.min(f.saldo, cred.restante);
+
+        if (aplicar <= 0) { idxFactura++; continue; }
+
+        // Insertar en tabla puente con columnas correctas
+        //   - isSaldoFavor => id_saldo_a_favor (= raw_id num), id_pago = NULL
+        //   - no saldo a favor => id_pago (= raw_id string), id_saldo_a_favor = NULL
+        const insertSQL = `
+          INSERT INTO facturas_pagos_y_saldos (id_pago, id_saldo_a_favor, id_factura, monto)
+          VALUES (?, ?, ?, ?);
+        `;
+        const id_pago = cred.isSaldoFavor ? null : cred.raw_id;
+        const id_saldo_a_favor = cred.isSaldoFavor ? cred.raw_id : null;
+
+        await executeQuery(insertSQL, [id_pago, id_saldo_a_favor, f.id_factura, aplicar]);
+
+        // Actualizar saldos en memoria
+        f.saldo -= aplicar;
+        cred.restante -= aplicar;
+
+        // Acumular totales para respuesta
+        appliedByFactura.set(f.id_factura, (appliedByFactura.get(f.id_factura) || 0) + aplicar);
+        appliedByCredito.set(cred.raw_id, (appliedByCredito.get(cred.raw_id) || 0) + aplicar);
+
+        if (f.saldo <= 0) idxFactura++;
+      }
+    }
+
+    // --- Persistir nuevos saldos de facturas ---
+    for (const f of facturas) {
+      await executeQuery(
+        'UPDATE facturas SET saldo = ? WHERE id_factura = ?;',
+        [f.saldo, f.id_factura]
+      );
+    }
+
+    // --- Preparar respuesta ---
+    const detalleFacturas = facturas.map(f => ({
+      id_factura: f.id_factura,
+      aplicado: appliedByFactura.get(f.id_factura) || 0,
+      saldo_final: f.saldo,
+    }));
+
+    const detalleCreditos = creditos.map(c => ({
+      raw_id: c.raw_id,
+      tipo: c.isSaldoFavor ? 'saldo_a_favor' : 'pago',
+      disponible: c.disponible,
+      aplicado: appliedByCredito.get(c.raw_id) || 0,
+      sin_aplicar: Math.max(0, c.disponible - (appliedByCredito.get(c.raw_id) || 0)),
+    }));
+
+    const totalSinAplicar = detalleCreditos.reduce((s, p) => s + p.sin_aplicar, 0);
+
+    return res.status(200).json({
+      message: 'Pagos/Saldos aplicados secuencialmente a las facturas usando saldo de la vista.',
+      orden_facturas: facturasOrden,
+      facturas: detalleFacturas,
+      creditos: detalleCreditos,
+      total_sin_aplicar: totalSinAplicar
+    });
+
+  } catch (error) {
+    console.error('Error en asignarFacturaPagos:', error);
+    return res.status(500).json({
+      error: 'Error al asignar pagos a las facturas',
+      details: error?.message || String(error),
     });
   }
 };
@@ -571,7 +771,7 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
 // Si no viene "factura" en el body, timbra con Facturama (model.crearFacturaEmi).
 const crearFacturaMultiplesPagos = async (req, res) => {
   const { factura: facturaBody, pagos_asociados } = req.body || {};
-  const { info_user } = req.body;
+  const { info_user, datos_empresa } = req.body;
 
   if (!Array.isArray(pagos_asociados) || pagos_asociados.length === 0) {
     return res.status(400).json({
@@ -627,11 +827,11 @@ const crearFacturaMultiplesPagos = async (req, res) => {
     const total = f.Total ?? totales.Total ?? 0;
     const subtotal = f.SubTotal ?? f.Subtotal ?? totales.SubTotal ?? 0;
     const impuestos = Number(total) - Number(subtotal);
-
+    console.log("datos factura 🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨",f)
     return {
       fecha_emision: f.Fecha || f.fecha || new Date(),
       estado: "Confirmada",
-      usuario_creador: fb.usuario_creador ?? info_user.id_agente,
+      usuario_creador:info_user.id_agente,
       id_agente: fb.id_agente ?? info_user.id_agente,
       total,
       subtotal,
@@ -679,6 +879,13 @@ const crearFacturaMultiplesPagos = async (req, res) => {
         });
       }
       rowFactura = mapFacturamaToFacturaRow(facturamaData);
+      // console.log("RECEIVER", resp.data.facturama.Receiver);
+      // console.log("ISSUER", resp.data.facturama.Issuer);
+      rowFactura.rfc_emisor = resp.data.facturama.Issuer.Rfc;
+      rowFactura.rfc = resp.data.facturama.Receiver.Rfc;
+      rowFactura.id_facturama = resp.data.facturama.Id;
+      rowFactura.id_empresa = datos_empresa.id_empresa;
+      rowFactura.uuid_factura = resp.data.facturama.Complement.TaxStamp.Uuid;
       source = "facturama";
     } else {
       const total = fb.total ?? 0;
@@ -724,66 +931,72 @@ const crearFacturaMultiplesPagos = async (req, res) => {
       INSERT INTO facturas (
         id_factura, fecha_emision, estado, usuario_creador, id_agente,
         total, subtotal, impuestos, saldo, rfc, id_empresa,
-        uuid_factura, rfc_emisor, url_pdf, url_xml
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        uuid_factura, rfc_emisor, url_pdf, url_xml, id_facturama
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
     `;
 
     await runTransaction(async (connection) => {
-      const [r1] = await connection.query(insertFacturaSQL, [
-        id_factura,
-        rowFactura.fecha_emision,
-        rowFactura.estado,
-        rowFactura.usuario_creador,
-        rowFactura.id_agente,
-        rowFactura.total,
-        rowFactura.subtotal,
-        rowFactura.impuestos,
-        rowFactura.saldo,
-        rowFactura.rfc,
-        rowFactura.id_empresa,
-        rowFactura.uuid_factura,
-        rowFactura.rfc_emisor,
-        rowFactura.url_pdf,
-        rowFactura.url_xml,
-      ]);
-      if (!r1?.affectedRows) throw new Error("No se pudo crear la factura");
+      try {
+        const [r1] = await connection.query(insertFacturaSQL, [
+          id_factura,
+          rowFactura.fecha_emision,
+          rowFactura.estado,
+          rowFactura.usuario_creador,
+          rowFactura.id_agente,
+          rowFactura.total,
+          rowFactura.subtotal,
+          rowFactura.impuestos,
+          rowFactura.saldo,
+          rowFactura.rfc,
+          rowFactura.id_empresa,
+          rowFactura.uuid_factura,
+          rowFactura.rfc_emisor,
+          rowFactura.url_pdf,
+          rowFactura.url_xml,
+          rowFactura.id_facturama || null,
+        ]);
+        if (!r1?.affectedRows) throw new Error("No se pudo crear la factura");
 
-      // Vincula cada pago/saldo
-      for (const { raw_id, monto } of pagos) {
-        const fk = getFk(raw_id);
-        const insertLinkSQL = `
+        // Vincula cada pago/saldo
+        for (const { raw_id, monto } of pagos) {
+          const fk = getFk(raw_id);
+          const insertLinkSQL = `
           INSERT INTO facturas_pagos_y_saldos (${fk}, id_factura, monto)
           VALUES (?, ?, ?)
         `;
-        const valorId = fk === "id_pago" ? String(raw_id) : Number(raw_id);
-        const [r2] = await connection.query(insertLinkSQL, [
-          valorId,
-          id_factura,
-          monto,
-        ]);
-        if (!r2?.affectedRows)
-          throw new Error("No se pudo vincular un pago/saldo a la factura");
-      }
+          const valorId = fk === "id_pago" ? String(raw_id) : Number(raw_id);
+          const [r2] = await connection.query(insertLinkSQL, [
+            valorId,
+            id_factura,
+            monto,
+          ]);
+          if (!r2?.affectedRows)
+            throw new Error("No se pudo vincular un pago/saldo a la factura");
+        }
 
-      return res.status(201).json({
-        ok: true,
-        message: "Factura creada y vinculada con pagos/saldos",
-        data: {
-          id_factura,
-          source,
-          total_factura: Number(rowFactura.total),
-          total_vinculado: sumPagosCents / 100,
-          diferencia: 0,
-          facturama:
-            source === "facturama"
-              ? {
-                  Id: facturamaData?.Id,
-                  Uuid: rowFactura.uuid_factura,
-                  links: { pdf: rowFactura.url_pdf, xml: rowFactura.url_xml },
-                }
-              : undefined,
-        },
-      });
+        return res.status(201).json({
+          ok: true,
+          message: "Factura creada y vinculada con pagos/saldos",
+          data: {
+            id_factura,
+            source,
+            total_factura: Number(rowFactura.total),
+            total_vinculado: sumPagosCents / 100,
+            diferencia: 0,
+            facturama:
+              source === "facturama"
+                ? {
+                    Id: facturamaData?.Id,
+                    Uuid: rowFactura.uuid_factura,
+                    links: { pdf: rowFactura.url_pdf, xml: rowFactura.url_xml },
+                  }
+                : undefined,
+          },
+        });
+      } catch (error) {
+        console.log(error);
+        throw error;
+      }
     });
   } catch (err) {
     const status = err?.response?.status || err?.statusCode || 500;
@@ -800,25 +1013,108 @@ const crearFacturaMultiplesPagos = async (req, res) => {
   }
 };
 
-const getDetallesConexionesFactura = async (req,res) => {
-  const {id_factura,id_agente} = req.query;
-  try{
-    const [pagos = [], reservas = []]= await executeSP2("sp_get_detalles_conexion_fcaturas", [ id_agente,id_factura], { allSets: true });
+// controllers/conexionFull.controller.js
+const getFullDetalles = async (req, res) => {
+  try {
+    console.log("📦📦📦📦📦📦📦📦📦📦📦📦recibido ambso")
+    const id_agente = (req.query.id_agente || req.body?.id_agente || '').trim();
+    const id_buscar = (req.query.id_buscar || req.body?.id_buscar || '').trim();
+
+    if (!id_agente || !id_buscar) {
+      return res.status(400).json({
+        message: 'Faltan parámetros',
+        required: ['id_agente', 'id_buscar'],
+      });
+    }
+
+    // Detectar tipo por prefijo
+    const pref = id_buscar.toLowerCase();
+    let tipo = 'pago';
+    if (pref.startsWith('hos')) tipo = 'reserva';
+    else if (pref.startsWith('fac')) tipo = 'factura';
+
+    // Llamada al SP
+    const sets = await executeSP2(
+      'sp_get_conexion_full',
+      [id_agente, tipo, id_buscar],
+      { allSets: true }
+    );
+
+    // Normalizar juegos de resultados:
+    const safe = (i) => (Array.isArray(sets?.[i]) ? sets[i] : []);
+
+    // Mapear según contrato del SP:
+    // - origen = 'reserva'  -> [facturas, pagos]
+    // - origen = 'pago'     -> [facturas, reservas]
+    // - origen = 'factura'  -> [pagos, reservas]
+    let payload = {};
+    if (tipo === 'reserva') {
+      payload = { facturas: safe(0), pagos: safe(1) };
+    } else if (tipo === 'pago') {
+      payload = { facturas: safe(0), reservas: safe(1) };
+    } else { // 'factura'
+      payload = { pagos: safe(0), reservas: safe(1) };
+    }
+
+    return res.status(200).json({
+      message: 'Consulta exitosa',
+      tipo_origen: tipo,
+      id_origen: id_buscar,
+      id_agente,
+      ...payload,
+    });
+  } catch (error) {
+    console.error('getFullDetalles error:', error);
+    return res.status(500).json({ message: 'Error en el servidor', details: error });
+  }
+};
+
+module.exports = { getFullDetalles };
+
+
+const getDetallesConexionesFactura = async (req, res) => {
+  const { id_factura, id_agente } = req.query;
+  try {
+    const [pagos = [], reservas = []] = await executeSP2(
+      "sp_get_detalles_conexion_fcaturas",
+      [id_agente, id_factura],
+      { allSets: true }
+    );
     res.status(200).json({
       message: "Consulta exitosa",
       pagos: pagos,
-      reservas: reservas
+      reservas: reservas,
     });
-  }catch(error){
+  } catch (error) {
     console.log(error);
-    res.status(500).json({message: "Error en el servidor", details: error});
+    res.status(500).json({ message: "Error en el servidor", details: error });
   }
-  
-}
+};
 
+const asignarURLS_factura = async(req,res)=>{
+  const {id_factura, url_pdf, url_xml} = req.query;
+ try {
+  const response = await executeSP("sp_asignar_urls_a_facturas",[id_factura,url_pdf,url_xml])
+  if (!response) {
+    throw new ShortError("No se pudo actualizar las URLs de la factura", 500);
+  }
+  res.status(200).json({
+    message: "URLs asignadas correctamente a la factura",
+    data: response,
+  });
+  
+ } catch (error) {
+  res.status(500).json({
+    error: "Error al asignar URLs a la factura",
+    details: error.message || error,
+    otherDetails: error.response?.data || null,
+  });
+ }
+}
 
 module.exports = {
   create,
+  getFullDetalles,
   get_agente_facturas,
   deleteFacturas,
   readAllFacturas,
@@ -833,8 +1129,10 @@ module.exports = {
   createEmi,
   crearFacturaDesdeCargaPagos,
   crearFacturaMultiplesPagos,
-  getDetallesConexionesFactura
-
+  getDetallesConexionesFactura,
+  asignarURLS_factura,
+  getfacturasPagoPendiente,
+  asignarFacturaPagos
 };
 
 //ya quedo "#$%&/()="

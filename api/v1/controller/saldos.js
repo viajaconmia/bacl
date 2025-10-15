@@ -1,6 +1,7 @@
 // const { response } = require("express");
 const { executeTransactionSP, executeQuery } = require("../../../config/db");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
+const { sumarHoras } = require("../../../lib/utils/calculates");
 const { CustomError } = require("../../../middleware/errorHandler");
 const model = require("../model/saldos");
 
@@ -32,13 +33,14 @@ const getStripeInfo = async (req, res) => {
   const { chargeId } = req.query;
   try {
     const charge = await stripe.charges.retrieve(chargeId);
+    console.log("this is the charge about stripe:", charge);
 
     const stripeInfo = {
       id: charge.id,
       monto: charge.amount / 100,
       currency: charge.currency.toUpperCase(),
       estado: charge.status,
-      fecha_pago: new Date(charge.created * 1000),
+      fecha_pago: sumarHoras(charge.created * 1000, -6),
       ultimos_4_digitos: charge.payment_method_details.card.last4,
       tipo_tarjeta: charge.payment_method_details.card.brand,
       funding: charge.payment_method_details.card.funding,
@@ -132,6 +134,10 @@ const saldosByType = async (req, res) => {
       );
     }
     const saldos = await executeQuery(
+      // `SELECT saf.*,fps.id_factura FROM saldos_a_favor saf
+      //   inner join facturas_pagos_y_saldos fps on fps.id_saldo_a_favor = saf.id_saldos
+      //   WHERE saf.metodo_pago = ?
+      //   AND saf.id_agente = ? AND saf.saldo > 0 AND saf.activo = 1;`,
       `SELECT * FROM saldos_a_favor WHERE metodo_pago = ? AND id_agente = ? AND saldo > 0 AND activo = 1;`,
       [type, id_agente]
     );
@@ -191,11 +197,14 @@ const readSaldoByAgente = async (req, res) => {
   sf.comprobante,
   sf.activo,
   sf.numero_autorizacion,
-  sf.banco_tarjeta
+  sf.banco_tarjeta,
+  COALESCE(v.monto_facturado, 0)     AS monto_facturado,
+  COALESCE(v.monto_por_facturar, 0)  AS monto_por_facturar
 FROM saldos_a_favor AS sf
 INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
-WHERE sf.id_agente = ? and sf.saldo <> 0;`,
+LEFT JOIN vw_pagos_prepago_facturables AS v
+  ON v.raw_id = sf.id_saldos;`,
       [id]
     );
     // console.log(saldo);
@@ -247,23 +256,23 @@ const createNewSaldo = async (req, res) => {
     }
     // Preparar valores para el stored procedure
     const values = [
-      data.id_cliente,
-      data.monto_pagado,
-      data.monto_pagado,
-      data.forma_pago.replaceAll(" ", "_"),
-      data.fecha_pago,
-      data.comentario || null,
-      data.referencia || null,
-      "MXN",
-      data.tipo_tarjeta || null,
-      data.comentario || null,
-      data.link_stripe || null,
-      data.is_facturable ?? false,
-      data.descuento_aplicable ?? false,
-      null,
-      data.ult_digits || null,
-      data.numero_autorizacion || null,
-      data.banco_tarjeta || null,
+      data.id_cliente, // p_id_agente
+      data.monto_pagado, // p_saldo
+      data.monto_pagado, // p_monto
+      data.forma_pago.replaceAll(" ", "_"), // p_metodo_pago
+      data.fecha_pago, // p_fecha_pago
+      null, // p_concepto
+      data.referencia || null, // p_referencia
+      "MXN", // p_currency
+      data.tipo_tarjeta || null, // p_tipo_tarjeta
+      data.comentario || null, // p_comentario
+      data.link_stripe || null, // p_link_stripe
+      data.is_facturable ?? false, // p_is_facturable
+      data.descuento_aplicable ?? false, // p_is_descuento
+      null, // p_comprobante
+      data.ult_digits || null, // p_ult_digits
+      data.numero_autorizacion || null, // p_numero_autorizacion
+      data.banco_tarjeta || null, // p_banco_tarjeta
     ];
     console.log("Valores para el stored procedure:", values);
     const response = await executeTransactionSP(
