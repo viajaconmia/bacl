@@ -32,7 +32,8 @@ const update = async (connection, booking) => {
     connection,
     schema.table,
     propiedades,
-    booking.id_booking
+    booking.id_booking,
+    "id_booking"
   );
 
   return [booking, response];

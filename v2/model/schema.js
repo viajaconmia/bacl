@@ -173,4 +173,37 @@ const VUELOS = {
   ],
 };
 
-module.exports = { VIAJES_AEREOS, SERVICIOS, BOOKINGS, ITEMS, VUELOS };
+// HOSPEDAJE
+const HOSPEDAJE = {
+  required: [
+    "id_hospedaje",
+    "id_booking",
+    "nombre_hotel",
+    "noches",
+  ],
+  table: "hospedajes",
+  columnas: [
+    "id_hospedaje",
+    "id_booking",
+    "id_hotel",
+    "nombre_hotel",
+    "cadena_hotel",
+    "codigo_reservacion_hotel",
+    "tipo_cuarto",
+    "noches",
+    "is_rembolsable",
+    "monto_penalizacion",
+    "conciliado",
+    "credito",
+    "created_at",
+    "updated_at",
+    "comments",
+    "nuevo_incluye_desayuno",
+    "is_facturado",
+    "tipo_desayuno",
+    "comentario_desayuno",
+    "precio_desayuno",
+  ],
+};
+
+module.exports = { VIAJES_AEREOS, SERVICIOS, BOOKINGS, ITEMS, VUELOS,HOSPEDAJE };
