@@ -9,17 +9,16 @@ const { CustomError } = require("../../../middleware/errorHandler");
 const Booking = require("../model/bookings.model");
 const Servicio = require("../model/servicios.model");
 const Hospedaje = require("../model/hospedajes.model"); 
-const { Calculo } = require("../../lib/utils/calculates");
+const { Calculo, calcularNoches } = require("../../lib/utils/calculates");
 
 async function get_payment_type(id_solicitud, id_servicio) {
   const query_credito = `select case when id_credito is not null then 1 else 0 end as is_credito 
     from vw_reservas_client where id_solicitud = ?;`;
 
   const query_pago_directo = `Select case when id_saldo_a_favor is null then 1 else 0 end as is_pago_directo
-    from servicios where id_servicio = ?`; // FIX: added missing FROM clause
-
+    from servicios where id_servicio = ?`; 
   const query_wallet = `Select case when id_saldo_a_favor is not null then 1 else 0 end as is_wallet
-    from servicios where id_servicio = ?`; // FIX: added missing FROM clause
+    from servicios where id_servicio = ?`; 
 
   let tipo_pago;
   const result_credito = await executeQuery(query_credito, [id_solicitud]);
@@ -34,11 +33,47 @@ async function get_payment_type(id_solicitud, id_servicio) {
   }
   return tipo_pago;
 }
-async function has_invoiced_payment(params) {
-  
+
+async function is_invoiced_reservation(id_servicio) {
+  const pagos_y_facturas = await executeSP('sp_get_facturas_pagos_by_id_servicio',[id_servicio]);
+  return pagos_y_facturas;
+}
+
+async function are_invoiced_payments({saldos}) {
+  // saldos: array de objetos que contienen id_saldos
+  if (!Array.isArray(saldos) || saldos.length === 0) return [];
+
+  const ids = saldos.map(s => s?.id_saldos).filter(Boolean);
+  if (ids.length === 0) return [];
+
+  const placeholders = ids.map(() => '?').join(',');
+  const query = `select is_facturado from saldos_a_favor where id_saldos in (${placeholders})`;
+  const result = await executeQuery(query, ids);
+  return result;
+}
+async function cambios_noches(noches) {
+  const cambian_noches = noches.curent-noches.before === 0 ? false : true;
+  const delta_noches = noches.curent - noches.before;
+  return {cambian_noches,delta_noches};
+}
+async function cambia_precio_de_venta(venta) {
+  const cambia_precio_de_venta = venta.curent.total - venta.before.total === 0 ? false : true;
+  const delta_precio_venta = venta.curent.total - venta.before.total;
+  return {cambia_precio_de_venta,delta_precio_venta};
 }
 
 async function agregar_items(check_in, check_out,id_hospedaje, total,is_ajuste){
+
+  Array(calcularNoches(check_in,check_out)).fill().map((_,index)=>{
+    const fecha_uso = new Date(check_in);
+    fecha_uso.setDate(fecha_uso.getDate()+index);
+    return {
+      id_hospedaje,
+      fecha_uso,
+      total: is_ajuste ? total : total/calcularNoches(check_in,check_out),
+      tipo: is_ajuste ? 'ajuste' : 'normal'
+    }
+  })
   // esta funcion va a retornar la lista de items a insertar, los calculos
   // deben hacerse a partir de check_in, check_out y total
   // uno de los campos que debemos retornar es fecha_uso que debe llevar cada item
@@ -50,13 +85,13 @@ async function desactivar_items(check_in, check_out,id_hospedaje, total,) {
   // luego a partir de check_in, check_out deben determianr cuales desactivar
 }
 
-async function asociar_factura_items(id_hospedaje,{facturas},{saldos}) {
+async function asociar_factura_items(id_hospedaje,{facturas,saldos}) {
 /*
   Esto funciona de la siguiente manera 
   Esto es al pagar un ajuste de precio de la reserva (ya sea incremento de 
   noches o ajuste por item de ajuste)
   si el ajuste se paga con un pago facturado, los nuevos items que se generen 
-  o el item de ajuste debe asociarse a la factura
+  o el item de ajuste debe asociarse a la factura (items_facturas)
 
   para eso debemos buscar el id que nos llegue en facturas_pagos_y_saldos
   agrupar el monto facturado para tener referencia de cuanto aplicar por item en 
@@ -64,6 +99,115 @@ async function asociar_factura_items(id_hospedaje,{facturas},{saldos}) {
 */
   
 }
+
+const payload_prueba = {
+  // --- Metadatos clave ---
+  "metadata": {
+    "id_agente": "a6cc4918-0ce0-416d-8ab6-ce157d9a708a",
+    "id_servicio": "ser-f5d92776-94ad-417d-862f-30461d719d9b",
+    "id_solicitud": "sol-339b5f0b-c591-43ef-adf7-5675c5763c40",
+    "id_hospedaje": "hos-3e1e3a36-7404-4563-bb16-ef098a7726a0",
+    "id_booking": "boo-9fb55fb6-c216-4047-9c07-19cdd1fe12b7",
+    "id_hotel_reserva": "ade78b3e-2a81-11f0-aba2-0a2c204555ab",
+    "id_viajero_reserva": "d80a7f6d-8891-4d0f-bf29-885204d34234",
+    // ... (resto de metadata no usada directamente por el controller)
+  },
+
+  // --- Deltas de Precio y Noches (Núcleo del Paso 2) ---
+  "venta": {
+    "before": {
+      "total": 3027.6,
+      "subtotal": 2543.18,
+      "impuestos": 484.41
+    },
+    "current": {
+      "total": 6055.2,
+      "subtotal": 5220,
+      "impuestos": 835.2
+    }
+  },
+  "noches": {
+    "before": 2,
+    "current": 4
+  },
+  "check_in": {
+    "before": "2025-10-21",
+    "current": "2025-10-21" // Check-in no cambió
+  },
+  "check_out": {
+    "before": "2025-10-23",
+    "current": "2025-10-25" // Check-out sí cambió
+  },
+
+  // --- Campos de Edición (Paso 1) ---
+  "estado_reserva": {
+    "before": null,
+    "current": "Confirmada"
+  },
+  "codigo_reservacion_hotel": {
+    "before": "CODIGO-VIEJO",
+    "current": "lala" // (Coincide con tu Imagen 1)
+  },
+  "comments": {
+    "before": "reserva de prueba",
+    "current": "A ver que onda" // (Coincide con tu Imagen 1)
+  },
+  "nuevo_incluye_desayuno": true, // (Coincide con tu Imagen 1)
+
+  // --- Sincronización de Viajeros (Paso 1) ---
+  "viajero": {
+    "before": {
+      "id_viajero": "d80a7f6d-8891-4d0f-bf29-885204d34234",
+      "nombre_completo": "Emiliano Ruiz oropeza"
+    },
+    "current": {
+      "id_viajero": "via-e31c5251-d313-40a2-8cbf-81002429b7ec",
+      "nombre_completo": "PATRICIA SILVA" // (Coincide con tu Imagen 1)
+    }
+  },
+  "acompanantes": [], // (Coincide con tu Imagen 1, no hay acompañantes)
+
+  // --- Info de Hotel/Habitación (Paso 1) ---
+  "hotel": {
+    "before": { "name": "BEST WESTERN TAXCO" },
+    "current": { "name": "ONE CHIHUAHUA FASHION MALL" }
+  },
+  "habitacion": {
+    "before": "DOBLE",
+    "current": "SENCILLO $1513.80"
+  },
+
+  // --- Parámetros de Cálculo ---
+  "impuestos": {
+    "iva": 16,
+    "ish": 3,
+    "otros_impuestos": 0
+  },
+  
+  // --- Simulación de Pago (Paso 2 - Imagen 2) ---
+  // (Estos son los saldos usados para pagar el 'delta_precio_venta')
+  "updatedSaldos": [
+    {
+      "id_saldos": 38,
+      "id_agente": "a6cc4918-0ce0-416d-8ab6-ce157d9a708a",
+      "saldo": "615476.90",
+      "monto": "900000.00",
+      "metodo_pago": "wallet",
+      "is_facturado": 1, // Importante: simula pago con wallet facturado
+      "monto_facturado": 900000.00,
+      "monto_cargado_al_item": "3027.60" // El monto exacto del ajuste
+    }
+  ],
+  
+  // (Opcional: puedes incluir el item de ajuste pre-calculado, aunque tu lógica
+  // 'generar_item_ajuste' ya lo hace, 'updatedItem' venía en tu payload)
+  "updatedItem": {
+    "total": "3027.60",
+    "subtotal": "2610.00",
+    "impuestos": "417.60",
+    "is_ajuste": 1
+  }
+};
 
 const hasKey = (obj, key) =>
   obj && Object.prototype.hasOwnProperty.call(obj, key);
@@ -211,16 +355,21 @@ const {metadata} = req.body;
   } = req.body || {};
   try {
     // 1) aplicamos caso base (Servicio, Booking, Hospedaje y Viajeros))
-    await caso_base(metadata.id_solicitud,metadata.id_servicio,metadata.id_hospedaje,metadata.id_booking,check_in,check_out,noches,estado_reserva,venta.current.total,id_viajero,acompanantes)
-   // 2) obtenemos nuestros estatus para evaluar los fujos
+    await caso_base(metadata.id_solicitud,metadata.id_servicio,metadata.id_hospedaje,metadata.id_booking,check_in,check_out,noches,estado_reserva,venta.current.total,viajero.current.id_viajero,acompanantes)
+   // 2) obtenemos nuestros estatus para evaluar los flujos
    /*
       tipo_pago (ya tenemos la funcion)
-      pago_facturado
       reserva_facturada
+      pagos_facturados => para cuando va a pagar ajustes y debemos propagar las facturas a los items nuevos
       cambian_noches
       cambia_precio_de_venta
    */
     const tipo_pago = await get_payment_type(metadata.id_solicitud, metadata.id_servicio);
+    const reserva_facturada = await is_invoiced_reservation(metadata.id_servicio);
+    const {cambian_noches,delta_noches} = await cambios_noches(noches);
+    const {cambia_precio_de_venta,delta_precio_venta} = await cambia_precio_de_venta(venta);
+
+
 
   } catch (error) {
     
