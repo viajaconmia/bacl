@@ -39,7 +39,6 @@ const VIAJES_AEREOS = {
     "codigo_confirmacion",
   ],
 };
-
 const SERVICIOS = {
   required: ["id_servicio", "total", "id_agente"],
   table: "servicios",
@@ -56,7 +55,6 @@ const SERVICIOS = {
     "id_empresa",
   ],
 };
-
 const ITEMS = {
   required: ["id_item", "total", "fecha_uso", "saldo", "costo_total"],
   table: "items",
@@ -81,7 +79,6 @@ const ITEMS = {
     "id_renta_carro",
   ],
 };
-
 const BOOKINGS = {
   required: [
     "id_servicio",
@@ -177,7 +174,6 @@ const VUELOS = {
     "fly_type",
   ],
 };
-
 const SALDOS_A_FAVOR = {
   required: ["id_agente", "monto", "metodo_pago", "fecha_pago"],
   table: "saldos_a_favor",
