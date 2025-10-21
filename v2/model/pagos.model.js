@@ -30,20 +30,13 @@ const getById = async (id) => {
 
 const isFacturado = async (id_pago) => {
   Validacion.uuid(id_pago);
-  const currentPago = model.PAGO.getById(id_pago);
+  const currentPago = await model.PAGO.getById(id_pago);
   const id = currentPago.id_saldo_a_favor ?? currentPago.id_pago;
-  const [factura] = db.executeQuery(QUERYS.PAGOS.GET_IS_FACTURADO, [id]);
-  return [factura.is_facturado, factura.monto_pago - factura.monto_facturado];
-
-  // const [pago] = await
-  /**
-   * Aqui entiendo que en saldo_a_favor se que es por el monto por facturar y asi, pero cuando es pago como verifico que este facturado?
-   *
-   *
-   * Segun mi idea es que se mete en saldos_pagos_y_facturas todo lo que se facturo de un pago por la factura
-   * Ese pago ya esta facturado, no importa lo demas, pero cuando estan los items entonces ya vemos como es que conecta, pero de la factura donde ponemos el monto por facturar a items, no necesitamos como tal lo que es solo meter un monto pequeño, o si?
-   */
-  return true;
+  const [pago_facturado] = await db.executeQuery(
+    QUERYS.PAGOS.GET_IS_FACTURADO,
+    [id]
+  );
+  return { pago: currentPago, ...pago_facturado };
 };
 
 module.exports = { update, create, getById, isFacturado };

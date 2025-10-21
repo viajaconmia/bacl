@@ -199,6 +199,31 @@ const HOSPEDAJE = {
     "precio_desayuno",
   ],
 };
+const FACTURAS = {
+  required: ["id_hospedaje", "id_booking", "nombre_hotel", "noches"],
+  table: "hospedajes",
+  id: "id_hospedaje",
+  columnas: [
+    "id_hospedaje",
+    "id_booking",
+    "id_hotel",
+    "nombre_hotel",
+    "cadena_hotel",
+    "codigo_reservacion_hotel",
+    "tipo_cuarto",
+    "noches",
+    "is_rembolsable",
+    "monto_penalizacion",
+    "conciliado",
+    "credito",
+    "comments",
+    "nuevo_incluye_desayuno",
+    "is_facturado",
+    "tipo_desayuno",
+    "comentario_desayuno",
+    "precio_desayuno",
+  ],
+};
 const SALDOS_A_FAVOR = {
   required: ["id_agente", "monto", "metodo_pago", "fecha_pago"],
   table: "saldos_a_favor",

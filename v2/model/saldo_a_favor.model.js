@@ -1,5 +1,5 @@
 const db = require("../../config/db");
-const { Calculo } = require("../../lib/utils/calculates");
+const { Calculo, now } = require("../../lib/utils/calculates");
 const { Formato } = require("../../lib/utils/formats");
 const ERROR = require("../../lib/utils/messages");
 const { Validacion } = require("../../lib/utils/validates");
@@ -32,69 +32,39 @@ const update = async (conn, saldo) => {
   return await db.update(conn, schema, saldo);
 };
 
-const return_to_wallet = async (conn, id, devolver) => {
-  const pago = await model.PAGO.getById(id);
-  const [isFacturado, monto_facturado] = await model.PAGO.isFacturado(
-    pago.id_pago
-  );
+const return_wallet = async (conn, id, devolver) => {
+  const isFacturada = await model.PAGO.isFacturado(id);
+  const { pago, monto_facturado, is_facturado } = isFacturada;
+  const isSaldo = !!pago.id_saldo_a_favor;
 
-  if (!pago.id_saldo_a_favor) {
-    // Aqui verificamos que sea un pago directo
-    Validacion.uuidfk(p.id_agente);
+  const [saldo, response] = await model.SALDO.create(conn, {
+    id_agente: p.id_agente,
+    fecha_creacion: isSaldo ? now() : p.created_at,
+    saldo: Formato.number(devolver),
+    monto: Formato.number(isSaldo ? devolver : p.total),
+    metodo_pago: (isSaldo ? "wallet" : p.metodo_de_pago || "").toLowerCase(),
+    fecha_pago: isSaldo ? now() : p.fecha_pago,
+    concepto: isSaldo
+      ? `Devolución de pago por reserva: ${p.id_servicio}`
+      : p.concepto,
+    referencia: isSaldo ? " " : p.referencia,
+    currency: isSaldo ? "mxn" : p.currency,
+    tipo_tarjeta: isSaldo ? null : Formato.tipo_tarjeta(p.tipo_de_tarjeta),
+    comentario: `Devolución de saldo, se realizo el dia: ${new Date().toISOString()}`,
+    link_stripe: isSaldo ? null : p.link_pago,
+    is_facturable: isSaldo ? false : !is_facturado,
+    ult_digits: isSaldo ? null : p.last_digits,
+    numero_autorizacion: isSaldo ? null : p.autorizacion_stripe,
+    banco_tarjeta: isSaldo ? null : p.banco,
+    is_facturado: isSaldo ? false : is_facturado,
+    monto_facturado: isSaldo ? 0 : monto_facturado || 0,
+    is_devolucion: true,
+  });
 
-    const [saldo] = await model.SALDO.create(conn, {
-      id_agente: p.id_agente,
-      fecha_creacion: p.created_at,
-      saldo: Formato.number(devolver),
-      monto: Formato.number(p.total),
-      metodo_pago: (p.metodo_de_pago || "").toLowerCase(),
-      fecha_pago: p.fecha_pago,
-      concepto: p.concepto,
-      referencia: p.referencia,
-      currency: p.currency,
-      tipo_tarjeta: Formato.tipo_tarjeta(p.tipo_de_tarjeta),
-      comentario: `Devolución de saldo, se realizo el dia: ${new Date().toISOString()}`,
-      link_stripe: p.link_pago,
-      is_facturable: !isFacturado,
-      ult_digits: p.last_digits,
-      numero_autorizacion: p.autorizacion_stripe,
-      banco_tarjeta: p.banco,
-      is_facturado: isFacturado,
-      monto_facturado,
-      is_devolucion: true,
-    });
-  }
-
-  /**
-   * Verificar poque creo que si fue pagado con wallet lo mejor es solo retornar un wallet no facturable, o no se
-   */
-
-  /**
-   * 1.- extraer el pago ✅
-   *
-   * 2.- extraer el saldo a regresar del saldo ✅
-   *
-   * 3.- Verificar que no este facturado ✅
-   *  3.1.- si esta facturado: facturable es false y is_facturado es true ✅
-   *  3.2.- si no esta totalmente facturado: facturable es true y is_facturado es false ✅
-   *
-   * 4.- monto facturado es el saldo
-   *
-   * 5.- is devolucion es true
-   *
-   * 6.- en facturas poner en saldo a aplicar a items el valor del saldo regresado
-   *
-   * 7.- en facturas saldos y pagos asignar al id del pago el id del saldo
-   *
-   * 8.- en una funcion voy a pedir el numero de items, para en items y pagos poder splitear por el numero de items, extraer los items del pago para verificar si son menos o son mas y si son menos crearlos y si son mas debo poner en 0 el monto y dejar los que son
-   *
-   * 9.- En items debo colocar el monto facturado
-   *
-   * 10.- en items_facturas lo mismo que en items_pagos, debo agregar lo del spliteo de monto
-   */
+  return [saldo, response, isFacturada];
 };
 
-module.exports = { update, create };
+module.exports = { update, create, return_wallet };
 
 /* Para cada caso se debera ver que afecta la facturación y si ya esta pagado y si son varios (menos en pago directo que solo hay uno)
 caso 1.- Pago directo
