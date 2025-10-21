@@ -2,16 +2,9 @@ const db = require("../../config/db");
 const { Calculo } = require("../../lib/utils/calculates");
 const { Validacion } = require("../../lib/utils/validates");
 const QUERYS = require("../constant/querys");
+const model = require("./db.model");
 const { PAGOS: schema } = require("./schema");
 
-/**
- * Crea un nuevo registro de pago en la base de datos.
- *
- * @async
- * @param {object} conn - Conexión activa a la base de datos.
- * @param {object} pago - Objeto de pago a registrar.
- * @returns {Promise<[object, any]>} Retorna una promesa que resuelve en un array con el objeto de pago formateado y la respuesta de la base de datos.
- */
 const create = async (conn, pago) => {
   Validacion.uuidfk(pago.id_servicio);
   pago = {
@@ -21,13 +14,6 @@ const create = async (conn, pago) => {
   return await db.insert(conn, schema, pago);
 };
 
-/**
- * Actualiza un registro de pago existente en la base de datos.
- * @async
- * @param {object} conn - Conexión activa a la base de datos.
- * @param {object} pago - Objeto de pago a actualizar.
- * @returns {Promise<[object, any]>} Retorna una promesa que resuelve en un array con el objeto de pago actualizado y la respuesta de la base de datos.
- * */
 const update = async (conn, pago) => {
   Validacion.uuid(pago[schema.id]);
   const { impuestos, ...rest } = Calculo.precio(pago);
@@ -36,28 +22,18 @@ const update = async (conn, pago) => {
   return await db.update(conn, schema, pago);
 };
 
-/**
- * Obtiene un pago por su identificador único.
- * @async
- * @param {string} id - Identificador único del pago.
- * @returns {Promise<object>} Retorna una promesa que resuelve en el objeto de pago encontrado.
- */
 const getById = async (id) => {
   Validacion.uuid(id);
   const [pago] = await db.getById(schema.table, schema.id, id);
   return pago;
 };
 
-/**
- * Verifica si un pago ha sido facturado.
- *
- * @async
- * @param {string} id - Identificador único del pago.
- * @returns {Promise<boolean>} Retorna una promesa que resuelve en true si el pago ha sido facturado, de lo contrario false.
- */
-const isFacturado = async (id) => {
-  Validacion.uuid(id);
-  const [pagos] = db.executeQuery(QUERYS.PAGOS.GET_IS_FACTURADO, [id]);
+const isFacturado = async (id_pago) => {
+  Validacion.uuid(id_pago);
+  const currentPago = model.PAGO.getById(id_pago);
+  const id = currentPago.id_saldo_a_favor ?? currentPago.id_pago;
+  const [factura] = db.executeQuery(QUERYS.PAGOS.GET_IS_FACTURADO, [id]);
+  return [factura.is_facturado, factura.monto_pago - factura.monto_facturado];
 
   // const [pago] = await
   /**

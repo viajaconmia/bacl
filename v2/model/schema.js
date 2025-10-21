@@ -174,11 +174,10 @@ const VUELOS = {
     "fly_type",
   ],
 };
-
-// HOSPEDAJE
 const HOSPEDAJE = {
   required: ["id_hospedaje", "id_booking", "nombre_hotel", "noches"],
   table: "hospedajes",
+  id: "id_hospedaje",
   columnas: [
     "id_hospedaje",
     "id_booking",
@@ -192,8 +191,6 @@ const HOSPEDAJE = {
     "monto_penalizacion",
     "conciliado",
     "credito",
-    "created_at",
-    "updated_at",
     "comments",
     "nuevo_incluye_desayuno",
     "is_facturado",
@@ -201,15 +198,6 @@ const HOSPEDAJE = {
     "comentario_desayuno",
     "precio_desayuno",
   ],
-};
-
-module.exports = {
-  VIAJES_AEREOS,
-  SERVICIOS,
-  BOOKINGS,
-  ITEMS,
-  VUELOS,
-  HOSPEDAJE,
 };
 const SALDOS_A_FAVOR = {
   required: ["id_agente", "monto", "metodo_pago", "fecha_pago"],
@@ -285,7 +273,6 @@ const PAGOS = {
     "monto_saldo",
   ],
 };
-
 module.exports = {
   VIAJES_AEREOS,
   SERVICIOS,
