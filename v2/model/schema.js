@@ -9,6 +9,7 @@ const VIAJES_AEREOS = {
     "payment_status",
     "total",
   ],
+  id: "id_viaje_aereo",
   columnas: [
     "id_viaje_aereo",
     "id_booking",
@@ -42,6 +43,7 @@ const VIAJES_AEREOS = {
 const SERVICIOS = {
   required: ["id_servicio", "total", "id_agente"],
   table: "servicios",
+  id: "id_servicio",
   columnas: [
     "id_servicio",
     "impuestos",
@@ -58,6 +60,7 @@ const SERVICIOS = {
 const ITEMS = {
   required: ["id_item", "total", "fecha_uso", "saldo", "costo_total"],
   table: "items",
+  id: "id_item",
   columnas: [
     "id_item",
     "id_catalogo_item",
@@ -89,6 +92,7 @@ const BOOKINGS = {
     "id_booking",
   ],
   table: "bookings",
+  id: "id_booking",
   columnas: [
     "id_booking",
     "id_servicio",
@@ -128,6 +132,7 @@ const VUELOS = {
     "seat_location",
   ],
   table: "vuelos",
+  id: "id_vuelo",
   columnas: [
     "id_vuelo",
     "id_viaje_aereo",
@@ -176,6 +181,7 @@ const VUELOS = {
 const SALDOS_A_FAVOR = {
   required: ["id_agente", "monto", "metodo_pago", "fecha_pago"],
   table: "saldos_a_favor",
+  id: "id_saldos",
   columnas: [
     "id_saldos",
     "id_agente",
