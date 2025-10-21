@@ -2017,161 +2017,143 @@ const insertarReserva = async ({ reserva }) => {
             }
           }
 
-          // ===== NUEVA LÓGICA PARA WALLET PREPAGADO =====
-          // 1. Verificar si es pago con wallet
-          const [walletPagos] = await connection.execute(
-            `SELECT p.id_pago, p.saldo_aplicado, p.total as monto_pago,
+const toCents = (n) => Math.round(Number(n) * 100);
+const fromCents = (c) => (c / 100);
+
+// 1. Verificar si es pago con wallet
+const [walletPagos] = await connection.execute(
+  `SELECT p.id_pago, p.saldo_aplicado, p.total as monto_pago,
           s.monto as saldo_original, s.id_saldos
    FROM pagos p 
    INNER JOIN saldos_a_favor s ON p.id_saldo_a_favor = s.id_saldos
    WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
-   ORDER BY p.fecha_pago ASC`,
-            [solicitud.id_servicio]
-          );
+   ORDER BY p.fecha_pago ASC, p.id_pago ASC`,
+  [solicitud.id_servicio]
+);
 
-          console.log("Wallet pagos obtenidos:", walletPagos);
+const esWalletPrepagado = walletPagos.length > 0;
 
-          const esWalletPrepagado = walletPagos.length > 0;
+if (esWalletPrepagado && itemsConIdAnadido.length > 0) {
+  console.log("Procesando pago con wallet prepagado");
+  // 2) Calcular total en CENTAVOS
+  const totalReservaCents = itemsConIdAnadido.reduce(
+    (sum, item) => sum + toCents(item.venta.total),
+    0
+  );
 
-          if (esWalletPrepagado && itemsConIdAnadido.length > 0) {
-            console.log("Procesando pago con wallet prepagado");
-            console.log("Items a procesar:", itemsConIdAnadido);
+  let saldoDisponibleCents = walletPagos.reduce(
+    (sum, p) => sum + toCents(p.saldo_aplicado || 0),
+    0
+  );
 
-            // 2. Calcular el total de la reserva y los montos disponibles
-            const totalReserva = itemsConIdAnadido.reduce(
-              (sum, item) => sum + Number(item.venta.total.toFixed(2)),
-              0
-            );
+  console.log(
+    `Total reserva: ${fromCents(totalReservaCents)}, Saldo disponible: ${fromCents(saldoDisponibleCents)}`
+  );
 
-            let saldoDisponible = Number(
-              walletPagos
-                .reduce((sum, pago) => sum + Number(pago.saldo_aplicado), 0)
-                .toFixed(2)
-            );
+  if (saldoDisponibleCents < totalReservaCents) {
+    throw new Error(
+      `Saldo insuficiente en wallet. Disponible: ${fromCents(saldoDisponibleCents).toFixed(2)}, Requerido: ${fromCents(totalReservaCents).toFixed(2)}`
+    );
+  }
 
-            console.log(
-              `Total reserva: ${totalReserva}, Saldo disponible: ${saldoDisponible}`
-            );
+  // 3) Distribuir en CENTAVOS
+  const asignaciones = [];
+  let pagoIndex = 0;
+  let saldoRestanteEnPagoCents = toCents(walletPagos[pagoIndex]?.saldo_aplicado || 0);
 
-            if (saldoDisponible.toFixed(2) < totalReserva.toFixed(2)) {
-              throw new Error(
-                `Saldo insuficiente en wallet. Disponible: ${saldoDisponible}, Requerido: ${totalReserva}`
-              );
-            }
+  for (const item of itemsConIdAnadido) {
+    let montoRestanteItemCents = toCents(item.venta.total);
+    console.log(`\nProcesando item ${item.id_item}, monto: ${fromCents(montoRestanteItemCents)}`);
 
-            // 3. Distribuir el pago entre items y pagos
-            const asignaciones = [];
-            let pagoIndex = 0;
-            let saldoRestanteEnPago = Number(
-              walletPagos[pagoIndex]?.saldo_aplicado || 0
-            );
+    // safety guard por si acaso (no debería dispararse)
+    let watchdog = 0;
 
-            for (const item of itemsConIdAnadido) {
-              let montoRestanteItem = Number(item.venta.total);
-              console.log(
-                `\nProcesando item ${item.id_item}, monto: ${montoRestanteItem}`
-              );
+    while (montoRestanteItemCents > 0 && pagoIndex < walletPagos.length) {
+      if (saldoRestanteEnPagoCents <= 0) {
+        pagoIndex++;
+        saldoRestanteEnPagoCents = toCents(walletPagos[pagoIndex]?.saldo_aplicado || 0);
+        console.log(`Cambiando a siguiente pago. pagoIndex=${pagoIndex}, saldoRestanteEnPago=${fromCents(saldoRestanteEnPagoCents)}`);
+        continue;
+      }
 
-              while (montoRestanteItem > 0 && pagoIndex < walletPagos.length) {
-                const montoAsignar = Math.min(
-                  montoRestanteItem,
-                  saldoRestanteEnPago
-                );
-                console.log(
-                  `Asignando ${montoAsignar} del pago ${walletPagos[pagoIndex].id_pago}`
-                );
+      const montoAsignarCents = Math.min(montoRestanteItemCents, saldoRestanteEnPagoCents);
 
-                if (montoAsignar > 0) {
-                  asignaciones.push({
-                    id_item: item.id_item,
-                    id_pago: walletPagos[pagoIndex].id_pago,
-                    monto: montoAsignar,
-                  });
+      asignaciones.push({
+        id_item: item.id_item,
+        id_pago: walletPagos[pagoIndex].id_pago,
+        monto_cents: montoAsignarCents,
+      });
 
-                  montoRestanteItem -= Number(montoAsignar.toFixed(2));
-                  saldoRestanteEnPago -= Number(montoAsignar.toFixed(2));
-                  console.log(
-                    `Monto restante item: ${montoRestanteItem}, saldo restante pago: ${saldoRestanteEnPago}`
-                  );
-                }
+      montoRestanteItemCents -= montoAsignarCents;
+      saldoRestanteEnPagoCents -= montoAsignarCents;
 
-                // Si se agotó el saldo del pago actual, pasar al siguiente
-                if (saldoRestanteEnPago <= 0) {
-                  pagoIndex++;
-                  saldoRestanteEnPago = Number(
-                    walletPagos[pagoIndex]?.saldo_aplicado || 0
-                  );
-                  console.log(
-                    `Cambiando a siguiente pago. Nuevo pagoIndex: ${pagoIndex}, saldoRestanteEnPago: ${saldoRestanteEnPago}`
-                  );
-                }
-              }
+      console.log(
+        `Asignado ${fromCents(montoAsignarCents)} del pago ${walletPagos[pagoIndex].id_pago} | ` +
+        `resto item: ${fromCents(montoRestanteItemCents)}, resto pago: ${fromCents(saldoRestanteEnPagoCents)}`
+      );
 
-              if (montoRestanteItem > 0) {
-                throw new Error(
-                  `No se pudo asignar completo el pago para el item ${item.id_item}`
-                );
-              }
-            }
+      // watchdog para evitar loops por cualquier bug
+      watchdog++;
+      if (watchdog > 10000) throw new Error("Watchdog: demasiadas iteraciones en distribución wallet.");
+    }
 
-            console.log("\nAsignaciones finales:", asignaciones);
+    if (montoRestanteItemCents > 0) {
+      throw new Error(`No se pudo asignar completo el pago para el item ${item.id_item}`);
+    }
+  }
 
-            // 4. Insertar en items_pagos
-            if (asignaciones.length > 0) {
-              const queryItemsPagos = `
-                INSERT INTO items_pagos (id_item, id_pago, monto)
-                VALUES ${asignaciones.map(() => "(?, ?, ?)").join(",")}
-              `;
+  console.log("\nAsignaciones finales:", asignaciones);
 
-              const paramsItemsPagos = asignaciones.flatMap((a) => [
-                a.id_item,
-                a.id_pago,
-                a.monto.toFixed(2),
-              ]);
+  // 4) Insertar en items_pagos (ya en pesos)
+  if (asignaciones.length > 0) {
+    const queryItemsPagos = `
+      INSERT INTO items_pagos (id_item, id_pago, monto)
+      VALUES ${asignaciones.map(() => "(?, ?, ?)").join(",")}
+    `;
 
-              await connection.execute(queryItemsPagos, paramsItemsPagos);
-              console.log(
-                `Insertados ${asignaciones.length} registros en items_pagos`
-              );
-            }
-          } else {
-            // ===== LÓGICA ORIGINAL PARA PAGO NORMAL =====
-            console.log("Procesando pago normal (contado/credito)");
+    const paramsItemsPagos = asignaciones.flatMap((a) => [
+      a.id_item,
+      a.id_pago,
+      fromCents(a.monto_cents).toFixed(2),
+    ]);
 
-            const [rowsContado] = await connection.execute(
-              `SELECT id_pago FROM pagos WHERE id_servicio = ? LIMIT 1`,
-              [solicitud.id_servicio]
-            );
+    await connection.execute(queryItemsPagos, paramsItemsPagos);
+    console.log(`Insertados ${asignaciones.length} registros en items_pagos`);
+  }
+} else {
+  // ===== LÓGICA ORIGINAL PARA PAGO NORMAL =====
+  console.log("Procesando pago normal (contado/credito)");
 
-            if (rowsContado.length > 0 && itemsConIdAnadido.length > 0) {
-              const id_pago = rowsContado[0].id_pago;
-              const query_items_pagos = `
-                INSERT INTO items_pagos (id_item, id_pago, monto)
-                VALUES ${itemsConIdAnadido.map(() => "(?, ?, ?)").join(",")};
-              `;
+  const [rowsContado] = await connection.execute(
+    `SELECT id_pago FROM pagos WHERE id_servicio = ? LIMIT 1`,
+    [solicitud.id_servicio]
+  );
 
-              const params_items_pagos = itemsConIdAnadido.flatMap(
-                (itemConId) => [
-                  itemConId.id_item,
-                  id_pago,
-                  itemConId.venta.total.toFixed(2),
-                ]
-              );
+  if (rowsContado.length > 0 && itemsConIdAnadido.length > 0) {
+    const id_pago = rowsContado[0].id_pago;
+    const query_items_pagos = `
+      INSERT INTO items_pagos (id_item, id_pago, monto)
+      VALUES ${itemsConIdAnadido.map(() => "(?, ?, ?)").join(",")};
+    `;
 
-              await connection.execute(query_items_pagos, params_items_pagos);
-            } else {
-              const [rowsCredito] = await connection.execute(
-                `SELECT id_credito FROM pagos_credito WHERE id_servicio = ? LIMIT 1`,
-                [solicitud.id_servicio]
-              );
+    const params_items_pagos = itemsConIdAnadido.flatMap((itemConId) => [
+      itemConId.id_item,
+      id_pago,
+      Number(itemConId.venta.total).toFixed(2),
+    ]);
 
-              if (rowsCredito.length === 0) {
-                throw new Error(
-                  `No se encontró pago para el servicio ${solicitud.id_servicio}`
-                );
-              }
-            }
-          }
+    await connection.execute(query_items_pagos, params_items_pagos);
+  } else {
+    const [rowsCredito] = await connection.execute(
+      `SELECT id_credito FROM pagos_credito WHERE id_servicio = ? LIMIT 1`,
+      [solicitud.id_servicio]
+    );
+
+    if (rowsCredito.length === 0) {
+      throw new Error(`No se encontró pago para el servicio ${solicitud.id_servicio}`);
+    }
+  }
+}
 
           // Actualizar estado de solicitud y servicio
           let estado =
