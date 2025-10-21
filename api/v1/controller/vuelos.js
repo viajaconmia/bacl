@@ -5,6 +5,7 @@ const { calcularPrecios, Calculo } = require("../../../lib/utils/calculates");
 const { formateoViajeAereo } = require("../../../lib/utils/formats");
 const ERROR = require("../../../lib/utils/messages");
 const Servicio = require("../../../v2/model/servicios.model");
+const ViajeAereo = require("../../../v2/model/viaje_aereo.model");
 // const Booking = require("../../../v2/model/bookings.model");
 // const Item = require("../../../v2/model/model/item.model");
 
@@ -636,15 +637,38 @@ const editarVuelo = async (req, res) => {
       [viaje_aereo.id_servicio]
     );
 
+    const [viaje] = await executeQuery(
+      `SELECT * FROM viajes_aereos WHERE id_viaje_aereo = ?`,
+      [viaje_aereo.id_viaje_aereo]
+    );
+
+    const BEFORE = {
+      servicio,
+      viaje_aereo: viaje,
+    };
+
     await runTransaction(async (connection) => {
       try {
         const updateService = Calculo.cleanEmpty({
-          total: diferencia ? Number(servicio.total) + diferencia : undefined,
+          total: diferencia
+            ? Number(BEFORE.servicio.total) + diferencia
+            : undefined,
         });
         await Servicio.update(connection, {
           ...updateService,
-          id_servicio: viaje_aereo.id_servicio,
+          id_servicio: BEFORE.viaje_aereo.id_servicio,
         });
+
+        const updateViajeAereo = Calculo.cleanEmpty({
+          total: diferencia
+            ? Number(BEFORE.viaje_aereo.total) + diferencia
+            : undefined,
+        });
+        await ViajeAereo.update(connection, {
+          ...updateViajeAereo,
+          id_viaje_aereo: BEFORE.viaje_aereo.id_viaje_aereo,
+        });
+
         console.log(diferencia, updateService);
       } catch (error) {
         throw error;

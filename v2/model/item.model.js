@@ -4,7 +4,7 @@ const { Validacion } = require("../../lib/utils/validates");
 const db = require("../../config/db");
 const { ITEMS: schema } = require("./schema");
 
-const create = async (connection, item) => {
+const create = async (conn, item) => {
   item = Calculo.uuid(item, "id_item", "ite-");
   item = Calculo.precio(item);
   const costo = Calculo.precio({ total: item.costo_total });
@@ -15,15 +15,10 @@ const create = async (connection, item) => {
     costo_subtotal: costo.subtotal,
     costo_iva: costo.impuestos,
   };
-
-  Validacion.requiredColumns(schema.required, item);
-  const propiedades = Formato.propiedades(schema.columnas, item);
-  const response = await db.insert(connection, propiedades, schema.table);
-
-  return [item, response];
+  return await db.insert(conn, schema, pago);
 };
 
-const update = async (connection, item) => {
+const update = async (conn, item) => {
   Validacion.uuid(servicio.id_item);
   item = Calculo.precio(item);
   if (item.costo_total) {
@@ -41,20 +36,16 @@ const update = async (connection, item) => {
       saldo: Formato.precio(item.saldo),
     };
   }
-
-  const props = Formato.propiedades(schema.columnas, item, "id_item");
-
-  const response = db.update(connection, schema.table, props, item.id_item);
-  return [item, response];
+  return await db.update(conn, schema, item);
 };
 
-const drop = async (connection, ...ids) => {
+const drop = async (conn, ...ids) => {
   ids.forEach((id) => Validacion.uuid(id));
 
   const query = `DELETE FROM ${table} WHERE id_item in (${ids
     .map((_) => "?")
     .join(",")})`;
-  return await connection.execute(query, ids);
+  return await conn.execute(query, ids);
 };
 
 module.exports = { update, create, drop };

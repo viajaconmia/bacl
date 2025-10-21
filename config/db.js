@@ -1,6 +1,8 @@
 const mysql = require("mysql2/promise");
 const { CustomError } = require("../middleware/errorHandler");
 const ERROR = require("../lib/utils/messages");
+const { Formato } = require("../lib/utils/formats");
+const { Validacion } = require("../lib/utils/validates");
 require("dotenv").config();
 
 const pool = mysql.createPool({
@@ -21,7 +23,7 @@ const pool = mysql.createPool({
       return JSON.parse(field.string());
     }
     return next();
-  }, 
+  },
 });
 
 pool.on("connection", (conn) => {
@@ -127,25 +129,43 @@ async function runTransaction(callback) {
   }
 }
 
-async function insert(connection, propiedades, table) {
-  const query = `INSERT INTO ${table} (${propiedades
+async function insert(connection, schema, obj) {
+  Validacion.requiredColumns(schema.required, obj);
+  const propiedades = Formato.propiedades(schema.columnas, obj);
+
+  const query = `INSERT INTO ${schema.table} (${propiedades
     .map((p) => p.key)
     .join(",")}) VALUES (${propiedades.map((_) => "?").join(",")});`;
-
-  return await connection.execute(
+  const response = await connection.execute(
     query,
     propiedades.map((p) => p.value)
   );
+  return [obj, response];
 }
 
-async function update(connection, table, props, id, field) {
+async function update(connection, schema, obj) {
   try {
+    const props = Formato.propiedades(schema.columnas, obj, schema.id);
     if (props.length == 0) throw new Error(ERROR.PROPS.EMPTY);
-    const query = `UPDATE ${table} SET ${props
+    const query = `UPDATE ${schema.table} SET ${props
       .map((p) => p.key)
-      .join(" = ?,")} = ? WHERE ${field} = ?`;
+      .join(" = ?,")} = ? WHERE ${schema.id} = ?`;
 
-    return await connection.execute(query, [...props.map((p) => p.value), id]);
+    const response = await connection.execute(query, [
+      ...props.map((p) => p.value),
+      obj[schema.id],
+    ]);
+    return [obj, response];
+  } catch (error) {
+    throw error;
+  }
+}
+
+async function getById(table, field, id) {
+  try {
+    return await executeQuery(`SELECT * FROM ${table} WHERE ${field} = ?`, [
+      id,
+    ]);
   } catch (error) {
     throw error;
   }
@@ -185,4 +205,5 @@ module.exports = {
   executeSP2,
   insert,
   update,
+  getById,
 };
