@@ -453,256 +453,256 @@ const crearItemdeAjuste = async (req, res) => {
     }
   };
 
-  try {
-    const response = await runTransaction(async (connection) => {
-      // Si tu runTransaction NO hace begin/commit/rollback por sí mismo,
-      // deja estas 3 líneas. Si ya lo hace, quítalas.
-      await connection.beginTransaction();
+  // try {
+  //   const response = await runTransaction(async (connection) => {
+  //     // Si tu runTransaction NO hace begin/commit/rollback por sí mismo,
+  //     // deja estas 3 líneas. Si ya lo hace, quítalas.
+  //     await connection.beginTransaction();
 
-      // 0) Preparar datos para item de ajuste
-      const id_item_ajuste = "ite-" + uuidv4();
-      const {
-        updatedItem = {},
-        updatedSaldos = [],  // <- lo tratamos como ARRAY siempre
-        diferencia = 0,
-        precioActualizado,
-        id_booking,
-        id_servicio,
-        hotel = {},
-        noches = {},
-      } = req.body;
+  //     // 0) Preparar datos para item de ajuste
+  //     const id_item_ajuste = "ite-" + uuidv4();
+  //     const {
+  //       updatedItem = {},
+  //       updatedSaldos = [],  // <- lo tratamos como ARRAY siempre
+  //       diferencia = 0,
+  //       precioActualizado,
+  //       id_booking,
+  //       id_servicio,
+  //       hotel = {},
+  //       noches = {},
+  //     } = req.body;
 
-      // Sanitiza/asegura flags clave
-      const _updatedSaldos = Array.isArray(updatedSaldos) ? updatedSaldos : [];
-      const precioUnitario = Number(hotel?.precio ?? 0);
+  //     // Sanitiza/asegura flags clave
+  //     const _updatedSaldos = Array.isArray(updatedSaldos) ? updatedSaldos : [];
+  //     const precioUnitario = Number(hotel?.precio ?? 0);
 
-      // item base a insertar cuando toque un solo ítem
-      const baseItem = {
-        ...updatedItem,
-        id_item: id_item_ajuste,
-        id_catalogo_item: updatedItem?.id_catalogo_item ?? null,
-        id_factura: updatedItem?.id_factura ?? null,
-        total: Number(updatedItem?.total ?? 0),
-        subtotal: Number(updatedItem?.subtotal ?? 0),
-        impuestos: Number(updatedItem?.impuestos ?? 0),
-        is_facturado: updatedItem?.is_facturado ?? 0,
-        fecha_uso: toMysqlDateTime(updatedItem?.fecha_uso),
-        id_hospedaje: updatedItem?.id_hospedaje ?? null,
-        created_at: toMysqlDateTime(updatedItem?.created_at) ?? toMysqlDateTime(new Date()),
-        updated_at: toMysqlDateTime(updatedItem?.updated_at) ?? toMysqlDateTime(new Date()),
-        costo_total: Number(updatedItem?.costo_total ?? 0),
-        costo_subtotal: Number(updatedItem?.costo_subtotal ?? 0),
-        costo_impuestos: Number(updatedItem?.costo_impuestos ?? 0),
-        saldo: Number(updatedItem?.saldo ?? 0),
-        costo_iva: Number(updatedItem?.costo_iva ?? 0),
-        is_ajuste: updatedItem?.is_ajuste ?? 1, // asegúralo como ajuste
-      };
+  //     // item base a insertar cuando toque un solo ítem
+  //     const baseItem = {
+  //       ...updatedItem,
+  //       id_item: id_item_ajuste,
+  //       id_catalogo_item: updatedItem?.id_catalogo_item ?? null,
+  //       id_factura: updatedItem?.id_factura ?? null,
+  //       total: Number(updatedItem?.total ?? 0),
+  //       subtotal: Number(updatedItem?.subtotal ?? 0),
+  //       impuestos: Number(updatedItem?.impuestos ?? 0),
+  //       is_facturado: updatedItem?.is_facturado ?? 0,
+  //       fecha_uso: toMysqlDateTime(updatedItem?.fecha_uso),
+  //       id_hospedaje: updatedItem?.id_hospedaje ?? null,
+  //       created_at: toMysqlDateTime(updatedItem?.created_at) ?? toMysqlDateTime(new Date()),
+  //       updated_at: toMysqlDateTime(updatedItem?.updated_at) ?? toMysqlDateTime(new Date()),
+  //       costo_total: Number(updatedItem?.costo_total ?? 0),
+  //       costo_subtotal: Number(updatedItem?.costo_subtotal ?? 0),
+  //       costo_impuestos: Number(updatedItem?.costo_impuestos ?? 0),
+  //       saldo: Number(updatedItem?.saldo ?? 0),
+  //       costo_iva: Number(updatedItem?.costo_iva ?? 0),
+  //       is_ajuste: updatedItem?.is_ajuste ?? 1, // asegúralo como ajuste
+  //     };
 
-      const query_insert_item = `
-        INSERT INTO items (
-          id_item, id_catalogo_item, id_factura,
-          total, subtotal, impuestos, is_facturado,
-          fecha_uso, id_hospedaje,
-          created_at, updated_at,
-          costo_total, costo_subtotal, costo_impuestos,
-          saldo, costo_iva, is_ajuste
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
+  //     const query_insert_item = `
+  //       INSERT INTO items (
+  //         id_item, id_catalogo_item, id_factura,
+  //         total, subtotal, impuestos, is_facturado,
+  //         fecha_uso, id_hospedaje,
+  //         created_at, updated_at,
+  //         costo_total, costo_subtotal, costo_impuestos,
+  //         saldo, costo_iva, is_ajuste
+  //       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  //     `;
 
-      // 🔴 IMPORTANTE: idsPagos debe existir en TODO el scope de la transacción
-      const idsPagos = [];
+  //     // 🔴 IMPORTANTE: idsPagos debe existir en TODO el scope de la transacción
+  //     const idsPagos = [];
 
-      // Si diferencia no es múltiplo del precio por noche => un solo ítem de ajuste (cambio de precio)
-      const esAjusteDePrecio =
-        !precioUnitario || (Number(diferencia) % precioUnitario !== 0);
+  //     // Si diferencia no es múltiplo del precio por noche => un solo ítem de ajuste (cambio de precio)
+  //     const esAjusteDePrecio =
+  //       !precioUnitario || (Number(diferencia) % precioUnitario !== 0);
 
-      if (esAjusteDePrecio) {
-        // 1) Insertar el item de ajuste (un único ítem)
-        await connection.query(
-          query_insert_item,
-          [
-            baseItem.id_item,
-            baseItem.id_catalogo_item,
-            baseItem.id_factura,
-            baseItem.total,
-            baseItem.subtotal,
-            baseItem.impuestos,
-            baseItem.is_facturado,
-            baseItem.fecha_uso,
-            baseItem.id_hospedaje,
-            baseItem.created_at,
-            baseItem.updated_at,
-            baseItem.costo_total,
-            baseItem.costo_subtotal,
-            baseItem.costo_impuestos,
-            baseItem.saldo,
-            baseItem.costo_iva,
-            baseItem.is_ajuste,
-          ]
-        );
+  //     if (esAjusteDePrecio) {
+  //       // 1) Insertar el item de ajuste (un único ítem)
+  //       await connection.query(
+  //         query_insert_item,
+  //         [
+  //           baseItem.id_item,
+  //           baseItem.id_catalogo_item,
+  //           baseItem.id_factura,
+  //           baseItem.total,
+  //           baseItem.subtotal,
+  //           baseItem.impuestos,
+  //           baseItem.is_facturado,
+  //           baseItem.fecha_uso,
+  //           baseItem.id_hospedaje,
+  //           baseItem.created_at,
+  //           baseItem.updated_at,
+  //           baseItem.costo_total,
+  //           baseItem.costo_subtotal,
+  //           baseItem.costo_impuestos,
+  //           baseItem.saldo,
+  //           baseItem.costo_iva,
+  //           baseItem.is_ajuste,
+  //         ]
+  //       );
 
-        // 2) Actualizar servicios
-        // Nota: En MySQL, las asignaciones en SET se evalúan izq->der;
-        // aquí usamos total actualizado para impuestos y subtotal.
-        await connection.query(
-          `
-          UPDATE servicios
-          SET total     = total + ?,
-              impuestos = (total) * 0.16,
-              subtotal  = (total) - ((total) * 0.16)
-          WHERE id_servicio = ?
-          `,
-          [Number(diferencia), id_servicio]
-        );
+  //       // 2) Actualizar servicios
+  //       // Nota: En MySQL, las asignaciones en SET se evalúan izq->der;
+  //       // aquí usamos total actualizado para impuestos y subtotal.
+  //       await connection.query(
+  //         `
+  //         UPDATE servicios
+  //         SET total     = total + ?,
+  //             impuestos = (total) * 0.16,
+  //             subtotal  = (total) - ((total) * 0.16)
+  //         WHERE id_servicio = ?
+  //         `,
+  //         [Number(diferencia), id_servicio]
+  //       );
 
-        // 3) Actualizar bookings al precioActualizado (si viene)
-        if (precioActualizado != null) {
-          const p = Number(precioActualizado);
-          await connection.query(
-            `
-            UPDATE bookings
-            SET total     = ?,
-                impuestos = ? * 0.16,
-                subtotal  = ? - (? * 0.16)
-            WHERE id_booking = ?
-            `,
-            [p, p, p, p, id_booking]
-          );
-        }
+  //       // 3) Actualizar bookings al precioActualizado (si viene)
+  //       if (precioActualizado != null) {
+  //         const p = Number(precioActualizado);
+  //         await connection.query(
+  //           `
+  //           UPDATE bookings
+  //           SET total     = ?,
+  //               impuestos = ? * 0.16,
+  //               subtotal  = ? - (? * 0.16)
+  //           WHERE id_booking = ?
+  //           `,
+  //           [p, p, p, p, id_booking]
+  //         );
+  //       }
 
-        // 4) Actualizar saldos a favor (array)
-        for (const saldoObj of _updatedSaldos) {
-          const fechaCreacion = toMysqlDateTime(saldoObj?.fecha_creacion);
-          const nuevoSaldo = Number(saldoObj?.saldo ?? 0);
-          const activo = nuevoSaldo <= 0 ? 0 : 1;
+  //       // 4) Actualizar saldos a favor (array)
+  //       for (const saldoObj of _updatedSaldos) {
+  //         const fechaCreacion = toMysqlDateTime(saldoObj?.fecha_creacion);
+  //         const nuevoSaldo = Number(saldoObj?.saldo ?? 0);
+  //         const activo = nuevoSaldo <= 0 ? 0 : 1;
 
-          await connection.query(
-            `
-            UPDATE saldos_a_favor
-            SET fecha_creacion = ?,
-                saldo          = ?,
-                activo         = ?
-            WHERE id_saldos = ?
-            `,
-            [fechaCreacion, nuevoSaldo, activo, saldoObj?.id_saldos]
-          );
-        }
+  //         await connection.query(
+  //           `
+  //           UPDATE saldos_a_favor
+  //           SET fecha_creacion = ?,
+  //               saldo          = ?,
+  //               activo         = ?
+  //           WHERE id_saldos = ?
+  //           `,
+  //           [fechaCreacion, nuevoSaldo, activo, saldoObj?.id_saldos]
+  //         );
+  //       }
 
-        // 5) Registrar pagos e items_pagos
-        for (const saldoObj of _updatedSaldos) {
-          const id_pago = "pag-" + uuidv4();
-          const transaccion = "tra-" + uuidv4();
-          idsPagos.push(id_pago);
+  //       // 5) Registrar pagos e items_pagos
+  //       for (const saldoObj of _updatedSaldos) {
+  //         const id_pago = "pag-" + uuidv4();
+  //         const transaccion = "tra-" + uuidv4();
+  //         idsPagos.push(id_pago);
 
-          const fechaPago = toMysqlDateTime(saldoObj?.fecha_pago);
-          const montoAsociado = Number(saldoObj?.monto_cargado_al_item ?? 0);
-          const totalVenta = Number(precioActualizado ?? baseItem.total ?? 0);
+  //         const fechaPago = toMysqlDateTime(saldoObj?.fecha_pago);
+  //         const montoAsociado = Number(saldoObj?.monto_cargado_al_item ?? 0);
+  //         const totalVenta = Number(precioActualizado ?? baseItem.total ?? 0);
 
-          await connection.query(
-            `
-            INSERT INTO pagos (
-              id_pago, id_servicio, id_saldo_a_favor, id_agente,
-              metodo_de_pago, fecha_pago, concepto, referencia,
-              currency, tipo_de_tarjeta, link_pago, last_digits, total,
-              saldo_aplicado, transaccion, monto_transaccion
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `,
-            [
-              id_pago,
-              id_servicio,
-              saldoObj?.id_saldos ?? null,
-              saldoObj?.id_agente ?? null,
-              saldoObj?.metodo_pago ?? null,
-              fechaPago,
-              saldoObj?.concepto ?? null,
-              saldoObj?.referencia ?? null,
-              saldoObj?.currency ?? null,
-              saldoObj?.tipo_tarjeta ?? null,
-              saldoObj?.link_stripe ?? null,
-              saldoObj?.ult_digits ?? null,
-              totalVenta,              // total del pago (venta actualizada)
-              montoAsociado,           // saldo aplicado a este item
-              transaccion,
-              montoAsociado,
-            ]
-          );
+  //         await connection.query(
+  //           `
+  //           INSERT INTO pagos (
+  //             id_pago, id_servicio, id_saldo_a_favor, id_agente,
+  //             metodo_de_pago, fecha_pago, concepto, referencia,
+  //             currency, tipo_de_tarjeta, link_pago, last_digits, total,
+  //             saldo_aplicado, transaccion, monto_transaccion
+  //           )
+  //           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  //           `,
+  //           [
+  //             id_pago,
+  //             id_servicio,
+  //             saldoObj?.id_saldos ?? null,
+  //             saldoObj?.id_agente ?? null,
+  //             saldoObj?.metodo_pago ?? null,
+  //             fechaPago,
+  //             saldoObj?.concepto ?? null,
+  //             saldoObj?.referencia ?? null,
+  //             saldoObj?.currency ?? null,
+  //             saldoObj?.tipo_tarjeta ?? null,
+  //             saldoObj?.link_stripe ?? null,
+  //             saldoObj?.ult_digits ?? null,
+  //             totalVenta,              // total del pago (venta actualizada)
+  //             montoAsociado,           // saldo aplicado a este item
+  //             transaccion,
+  //             montoAsociado,
+  //           ]
+  //         );
 
-          // Relación pago-item (ajuste)
-          await connection.query(
-            `INSERT INTO items_pagos (id_pago, id_item, monto) VALUES (?, ?, ?)`,
-            [id_pago, id_item_ajuste, montoAsociado]
-          );
-        }
-      } else {
-        // Es ajuste por número de noches (diferencia divisible) => varios ítems
-        const nochesActuales = Number(noches?.current ?? 0);
-        const nochesAntes = Number(noches?.before ?? 0);
-        const items_a_crear = Math.abs(nochesActuales - nochesAntes) || 0;
+  //         // Relación pago-item (ajuste)
+  //         await connection.query(
+  //           `INSERT INTO items_pagos (id_pago, id_item, monto) VALUES (?, ?, ?)`,
+  //           [id_pago, id_item_ajuste, montoAsociado]
+  //         );
+  //       }
+  //     } else {
+  //       // Es ajuste por número de noches (diferencia divisible) => varios ítems
+  //       const nochesActuales = Number(noches?.current ?? 0);
+  //       const nochesAntes = Number(noches?.before ?? 0);
+  //       const items_a_crear = Math.abs(nochesActuales - nochesAntes) || 0;
 
-        if (items_a_crear <= 0) {
-          // Nada que crear; pero mantenemos coherencia de retorno
-          await connection.commit();
-          return {
-            message: "No se crearon ítems (noches sin cambio).",
-            item_creado: null,
-            ids_pagos_creados: [],
-          };
-        }
+  //       if (items_a_crear <= 0) {
+  //         // Nada que crear; pero mantenemos coherencia de retorno
+  //         await connection.commit();
+  //         return {
+  //           message: "No se crearon ítems (noches sin cambio).",
+  //           item_creado: null,
+  //           ids_pagos_creados: [],
+  //         };
+  //       }
 
-        const total_por_item = Number(diferencia) / items_a_crear;
+  //       const total_por_item = Number(diferencia) / items_a_crear;
 
-        for (let i = 0; i < items_a_crear; i++) {
-          const id_item = "ite-" + uuidv4();
-          const subtotal = +(total_por_item / 1.16).toFixed(2);
-          const impuestos = +(total_por_item - subtotal).toFixed(2);
+  //       for (let i = 0; i < items_a_crear; i++) {
+  //         const id_item = "ite-" + uuidv4();
+  //         const subtotal = +(total_por_item / 1.16).toFixed(2);
+  //         const impuestos = +(total_por_item - subtotal).toFixed(2);
 
-          await connection.query(
-            query_insert_item,
-            [
-              id_item,
-              null,                       // id_catalogo_item
-              null,                       // id_factura (si necesitas ligar luego por facturas_items)
-              total_por_item,
-              subtotal,
-              impuestos,
-              null,                       // is_facturado -> lo manejará la facturación
-              baseItem.fecha_uso,         // TODO: distribuir fecha_uso por noche si aplica
-              baseItem.id_hospedaje,
-              baseItem.created_at,
-              baseItem.updated_at,
-              baseItem.costo_total,
-              baseItem.costo_subtotal,
-              baseItem.costo_impuestos,
-              0,                          // saldo: ya pagado
-              baseItem.costo_iva,
-              1,                          // is_ajuste
-            ]
-          );
-        }
-      }
+  //         await connection.query(
+  //           query_insert_item,
+  //           [
+  //             id_item,
+  //             null,                       // id_catalogo_item
+  //             null,                       // id_factura (si necesitas ligar luego por facturas_items)
+  //             total_por_item,
+  //             subtotal,
+  //             impuestos,
+  //             null,                       // is_facturado -> lo manejará la facturación
+  //             baseItem.fecha_uso,         // TODO: distribuir fecha_uso por noche si aplica
+  //             baseItem.id_hospedaje,
+  //             baseItem.created_at,
+  //             baseItem.updated_at,
+  //             baseItem.costo_total,
+  //             baseItem.costo_subtotal,
+  //             baseItem.costo_impuestos,
+  //             0,                          // saldo: ya pagado
+  //             baseItem.costo_iva,
+  //             1,                          // is_ajuste
+  //           ]
+  //         );
+  //       }
+  //     }
 
-      await connection.commit();
+  //     await connection.commit();
 
-      // Devolver IDs de pagos creados (si hubo)
-      return {
-        message: "Item(s) de ajuste creado(s) correctamente",
-        item_creado: id_item_ajuste,      // cuando fue un solo ítem
-        ids_pagos_creados: idsPagos,      // <- ya no "undefined"
-      };
-    });
+  //     // Devolver IDs de pagos creados (si hubo)
+  //     return {
+  //       message: "Item(s) de ajuste creado(s) correctamente",
+  //       item_creado: id_item_ajuste,      // cuando fue un solo ítem
+  //       ids_pagos_creados: idsPagos,      // <- ya no "undefined"
+  //     };
+  //   });
 
-    // 200 con body (no uses 204 si envías JSON)
-    return res.status(200).json({message: "Ajuste realizado correctamente", data: response });
+  //   // 200 con body (no uses 204 si envías JSON)
+  //   return res.status(200).json({message: "Ajuste realizado correctamente", data: response });
 
-  } catch (error) {
-    console.error(error);
-    return res.status(error?.statusCode || 500).json({
-      message: error?.message || "Error desconocido al actualizar precio de crédito",
-      error: error || "ERROR_BACK",
-      data: null,
-    });
-  }
+  // } catch (error) {
+  //   console.error(error);
+  //   return res.status(error?.statusCode || 500).json({
+  //     message: error?.message || "Error desconocido al actualizar precio de crédito",
+  //     error: error || "ERROR_BACK",
+  //     data: null,
+  //   });
+  // }
 };
 
 
