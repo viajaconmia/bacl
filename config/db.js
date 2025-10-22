@@ -6,17 +6,12 @@ const { Validacion } = require("../lib/utils/validates");
 require("dotenv").config();
 
 const pool = mysql.createPool({
-  // host: "localhost",
-  // user: "root",
-  // password: "admin",
-  // database: "mia",
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
   waitForConnections: true,
   connectionLimit: 15,
-  // timezone: "-06:00",
   multipleStatements: true,
   typeCast: function (field, next) {
     if (field.type === "JSON") {
@@ -150,7 +145,7 @@ async function update(connection, schema, obj) {
     const query = `UPDATE ${schema.table} SET ${props
       .map((p) => p.key)
       .join(" = ?,")} = ? WHERE ${schema.id} = ?`;
-
+    console.log(props);
     const response = await connection.execute(query, [
       ...props.map((p) => p.value),
       obj[schema.id],
@@ -161,11 +156,14 @@ async function update(connection, schema, obj) {
   }
 }
 
-async function getById(table, field, id) {
+async function getByIds(schema, ...id) {
   try {
-    return await executeQuery(`SELECT * FROM ${table} WHERE ${field} = ?`, [
-      id,
-    ]);
+    return await executeQuery(
+      `SELECT * FROM ${schema.table} WHERE ${schema.id} in (${id
+        .map((_) => "?")
+        .join(",")})`,
+      [...id]
+    );
   } catch (error) {
     throw error;
   }
@@ -205,5 +203,5 @@ module.exports = {
   executeSP2,
   insert,
   update,
-  getById,
+  getByIds,
 };

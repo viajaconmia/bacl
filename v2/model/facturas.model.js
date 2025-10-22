@@ -12,25 +12,15 @@ const create = async (conn, invoice) => {
 };
 
 const update = async (conn, invoice) => {
-  Validacion.uuid();
-  const precioFormat = {
-    invoice: Calculo.precio({ total: invoice.invoice }).total,
-    monto: Calculo.precio({ total: invoice.monto }).total,
-  };
-  invoice = {
-    ...invoice,
-    ...Object.entries(precioFormat)
-      .filter(([_, v]) => !!v)
-      .map(([k, v]) => ({ [k]: v }))
-      .reduce((p, c) => ({ ...p, ...c }), {}),
-  };
+  Validacion.uuid(invoice[schema.id]);
+  invoice = Calculo.precio(invoice);
   return await db.update(conn, schema, invoice);
 };
 
-module.exports = { update, create };
+const getById = async (...ids) => {
+  ids.forEach((id) => Validacion.uuid(id));
+  const facturas = await db.getByIds(schema, ...ids);
+  return facturas;
+};
 
-/* Para cada caso se debera ver que afecta la facturación y si ya esta pagado y si son varios (menos en pago directo que solo hay uno)
-caso 1.- Pago directo
-caso 2.- Pago con saldos (varios)
-caso 3.- Pago con credito
-caso 4.- Pago con credito ya pagado  */
+module.exports = { update, create, getById };

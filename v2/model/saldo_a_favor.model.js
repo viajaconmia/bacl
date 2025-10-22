@@ -3,13 +3,14 @@ const { Calculo, now } = require("../../lib/utils/calculates");
 const { Formato } = require("../../lib/utils/formats");
 const ERROR = require("../../lib/utils/messages");
 const { Validacion } = require("../../lib/utils/validates");
-const model = require("./db.model");
+const PAGOS = require("./pagos.model");
 const { SALDOS_A_FAVOR: schema } = require("./schema");
 
 const create = async (conn, saldo) => {
   Validacion.uuidfk(saldo.id_agente);
   if (saldo.saldo > saldo.monto) throw new Error(ERROR.SALDO.INVALID);
   saldo = {
+    ...saldo,
     saldo: Calculo.precio({ total: saldo.saldo }).total,
     monto: Calculo.precio({ total: saldo.monto }).total,
   };
@@ -34,26 +35,28 @@ const update = async (conn, saldo) => {
 
 /*Este solo ejecuta el regreso del wallet, aun falta manejar lo de facturas y items y eso jaja*/
 const return_wallet = async (conn, id, devolver) => {
-  const isFacturada = await model.PAGO.isFacturado(id);
-  const { pago, monto_facturado, is_facturado } = isFacturada;
-  const isSaldo = !!pago.id_saldo_a_favor;
-
-  const [saldo, response] = await model.SALDO.create(
+  devolver = Formato.number(devolver);
+  const isFacturada = await PAGOS.isFacturado(id);
+  const { pago: p, monto_facturado, is_facturado } = isFacturada;
+  const isSaldo = !!p.id_saldo_a_favor;
+  const [saldo, [response]] = await create(
     conn,
     Calculo.cleanEmpty({
-      id_agente: p.id_agente,
+      id_agente: p.id_agente ?? p.responsable_pago_agente,
       fecha_creacion: isSaldo ? now() : p.created_at,
       saldo: Formato.number(devolver),
       monto: Formato.number(isSaldo ? devolver : p.total),
       metodo_pago: (isSaldo ? "wallet" : p.metodo_de_pago || "").toLowerCase(),
-      fecha_pago: isSaldo ? now() : p.fecha_pago,
+      fecha_pago: isSaldo ? now() : p.fecha_pago ?? p.created_at,
       concepto: isSaldo
         ? `Devolución de pago por reserva: ${p.id_servicio}`
         : p.concepto,
       referencia: isSaldo ? " " : p.referencia,
       currency: isSaldo ? "mxn" : p.currency,
       tipo_tarjeta: isSaldo ? null : Formato.tipo_tarjeta(p.tipo_de_tarjeta),
-      comentario: `Devolución de saldo, se realizo el dia: ${new Date().toISOString()}`,
+      comentario: isSaldo
+        ? `Devolución realizada por un pago de wallet, el id del pago es: ${p.id_pago}`
+        : `Devolución de saldo, por reducción de pago en el servicio ${p.id_servicio}`,
       link_stripe: isSaldo ? null : p.link_pago,
       is_facturable: isSaldo ? false : !is_facturado,
       ult_digits: isSaldo ? null : p.last_digits,
@@ -64,7 +67,17 @@ const return_wallet = async (conn, id, devolver) => {
       is_devolucion: true,
     })
   );
-  return [saldo, response, isFacturada];
+  console.log(response);
+  const id_saldo = response.insertId;
+  if (!isSaldo) {
+    await PAGOS.update(conn, {
+      id_pago: p.id_pago,
+      saldo_aplicado: devolver,
+      id_saldo_a_favor: id_saldo,
+    });
+  }
+
+  return [{ ...saldo, id_saldo }, isFacturada];
 };
 
 module.exports = { update, create, return_wallet };

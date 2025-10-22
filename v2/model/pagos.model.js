@@ -22,21 +22,21 @@ const update = async (conn, pago) => {
   return await db.update(conn, schema, pago);
 };
 
-const getById = async (id) => {
-  Validacion.uuid(id);
-  const [pago] = await db.getById(schema.table, schema.id, id);
-  return pago;
+const getById = async (...ids) => {
+  ids.forEach((id) => Validacion.uuid(id));
+  const pagos = await db.getByIds(schema, ...ids);
+  return pagos;
 };
 
 const isFacturado = async (id_pago) => {
   Validacion.uuid(id_pago);
-  const currentPago = await model.PAGO.getById(id_pago);
-  const id = currentPago.id_saldo_a_favor ?? currentPago.id_pago;
+  const [pago] = await getById(id_pago);
+  const id = pago.id_saldo_a_favor ?? pago.id_pago;
   const [pago_facturado] = await db.executeQuery(
     QUERYS.PAGOS.GET_IS_FACTURADO,
     [id]
   );
-  return { pago: currentPago, ...pago_facturado };
+  return { pago, ...pago_facturado };
 };
 
 module.exports = { update, create, getById, isFacturado };
