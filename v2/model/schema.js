@@ -55,6 +55,32 @@ const SERVICIOS = {
     "id_empresa",
   ],
 };
+const FACTURAS = {
+  required: ["id_factura", "fecha_emision", "estado", "usuario_creador"],
+  table: "facturas",
+  id: "id_factura",
+  columnas: [
+    "id_factura",
+    "fecha_emision",
+    "estado",
+    "usuario_creador",
+    "total",
+    "subtotal",
+    "impuestos",
+    "saldo",
+    "id_facturama",
+    "rfc",
+    "id_empresa",
+    "uuid_factura",
+    "rfc_emisor",
+    "url_pdf",
+    "url_xml",
+    "id_agente",
+    "fecha_vencimiento",
+    "is_prepagada",
+    "saldo_x_aplicar_items",
+  ],
+};
 const ITEMS = {
   required: ["id_item", "total", "fecha_uso", "saldo", "costo_total"],
   table: "items",
@@ -199,31 +225,6 @@ const HOSPEDAJE = {
     "precio_desayuno",
   ],
 };
-const FACTURAS = {
-  required: ["id_hospedaje", "id_booking", "nombre_hotel", "noches"],
-  table: "hospedajes",
-  id: "id_hospedaje",
-  columnas: [
-    "id_hospedaje",
-    "id_booking",
-    "id_hotel",
-    "nombre_hotel",
-    "cadena_hotel",
-    "codigo_reservacion_hotel",
-    "tipo_cuarto",
-    "noches",
-    "is_rembolsable",
-    "monto_penalizacion",
-    "conciliado",
-    "credito",
-    "comments",
-    "nuevo_incluye_desayuno",
-    "is_facturado",
-    "tipo_desayuno",
-    "comentario_desayuno",
-    "precio_desayuno",
-  ],
-};
 const SALDOS_A_FAVOR = {
   required: ["id_agente", "monto", "metodo_pago", "fecha_pago"],
   table: "saldos_a_favor",
@@ -307,4 +308,5 @@ module.exports = {
   SALDOS_A_FAVOR,
   PAGOS,
   HOSPEDAJE,
+  FACTURAS,
 };

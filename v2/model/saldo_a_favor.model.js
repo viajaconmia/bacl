@@ -32,35 +32,38 @@ const update = async (conn, saldo) => {
   return await db.update(conn, schema, saldo);
 };
 
+/*Este solo ejecuta el regreso del wallet, aun falta manejar lo de facturas y items y eso jaja*/
 const return_wallet = async (conn, id, devolver) => {
   const isFacturada = await model.PAGO.isFacturado(id);
   const { pago, monto_facturado, is_facturado } = isFacturada;
   const isSaldo = !!pago.id_saldo_a_favor;
 
-  const [saldo, response] = await model.SALDO.create(conn, {
-    id_agente: p.id_agente,
-    fecha_creacion: isSaldo ? now() : p.created_at,
-    saldo: Formato.number(devolver),
-    monto: Formato.number(isSaldo ? devolver : p.total),
-    metodo_pago: (isSaldo ? "wallet" : p.metodo_de_pago || "").toLowerCase(),
-    fecha_pago: isSaldo ? now() : p.fecha_pago,
-    concepto: isSaldo
-      ? `Devolución de pago por reserva: ${p.id_servicio}`
-      : p.concepto,
-    referencia: isSaldo ? " " : p.referencia,
-    currency: isSaldo ? "mxn" : p.currency,
-    tipo_tarjeta: isSaldo ? null : Formato.tipo_tarjeta(p.tipo_de_tarjeta),
-    comentario: `Devolución de saldo, se realizo el dia: ${new Date().toISOString()}`,
-    link_stripe: isSaldo ? null : p.link_pago,
-    is_facturable: isSaldo ? false : !is_facturado,
-    ult_digits: isSaldo ? null : p.last_digits,
-    numero_autorizacion: isSaldo ? null : p.autorizacion_stripe,
-    banco_tarjeta: isSaldo ? null : p.banco,
-    is_facturado: isSaldo ? false : is_facturado,
-    monto_facturado: isSaldo ? 0 : monto_facturado || 0,
-    is_devolucion: true,
-  });
-
+  const [saldo, response] = await model.SALDO.create(
+    conn,
+    Calculo.cleanEmpty({
+      id_agente: p.id_agente,
+      fecha_creacion: isSaldo ? now() : p.created_at,
+      saldo: Formato.number(devolver),
+      monto: Formato.number(isSaldo ? devolver : p.total),
+      metodo_pago: (isSaldo ? "wallet" : p.metodo_de_pago || "").toLowerCase(),
+      fecha_pago: isSaldo ? now() : p.fecha_pago,
+      concepto: isSaldo
+        ? `Devolución de pago por reserva: ${p.id_servicio}`
+        : p.concepto,
+      referencia: isSaldo ? " " : p.referencia,
+      currency: isSaldo ? "mxn" : p.currency,
+      tipo_tarjeta: isSaldo ? null : Formato.tipo_tarjeta(p.tipo_de_tarjeta),
+      comentario: `Devolución de saldo, se realizo el dia: ${new Date().toISOString()}`,
+      link_stripe: isSaldo ? null : p.link_pago,
+      is_facturable: isSaldo ? false : !is_facturado,
+      ult_digits: isSaldo ? null : p.last_digits,
+      numero_autorizacion: isSaldo ? null : p.autorizacion_stripe,
+      banco_tarjeta: isSaldo ? null : p.banco,
+      is_facturado: isSaldo ? false : is_facturado,
+      monto_facturado: isSaldo ? 0 : monto_facturado || 0,
+      is_devolucion: true,
+    })
+  );
   return [saldo, response, isFacturada];
 };
 
