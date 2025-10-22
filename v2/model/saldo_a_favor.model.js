@@ -1,7 +1,7 @@
 const db = require("../../config/db");
 const { Calculo, now } = require("../../lib/utils/calculates");
 const { Formato } = require("../../lib/utils/formats");
-const ERROR = require("../../lib/utils/messages");
+const ERROR = require("../constant/messages");
 const { Validacion } = require("../../lib/utils/validates");
 const PAGOS = require("./pagos.model");
 const { SALDOS_A_FAVOR: schema } = require("./schema");
@@ -33,54 +33,80 @@ const update = async (conn, saldo) => {
   return await db.update(conn, schema, saldo);
 };
 
+const getById = async (...ids) => {
+  ids.forEach((id) => Validacion.numberid(id));
+  const saldos = await db.getByIds(schema, ...ids);
+  return saldos;
+};
+
 /*Este solo ejecuta el regreso del wallet, aun falta manejar lo de facturas y items y eso jaja*/
 const return_wallet = async (conn, id, devolver) => {
   devolver = Formato.number(devolver);
   const isFacturada = await PAGOS.isFacturado(id);
   const { pago: p, monto_facturado, is_facturado } = isFacturada;
   const isSaldo = !!p.id_saldo_a_favor;
-  const [saldo, [response]] = await create(
-    conn,
-    Calculo.cleanEmpty({
-      id_agente: p.id_agente ?? p.responsable_pago_agente,
-      fecha_creacion: isSaldo ? now() : p.created_at,
-      saldo: Formato.number(devolver),
-      monto: Formato.number(isSaldo ? devolver : p.total),
-      metodo_pago: (isSaldo ? "wallet" : p.metodo_de_pago || "").toLowerCase(),
-      fecha_pago: isSaldo ? now() : p.fecha_pago ?? p.created_at,
-      concepto: isSaldo
-        ? `Devolución de pago por reserva: ${p.id_servicio}`
-        : p.concepto,
-      referencia: isSaldo ? " " : p.referencia,
-      currency: isSaldo ? "mxn" : p.currency,
-      tipo_tarjeta: isSaldo ? null : Formato.tipo_tarjeta(p.tipo_de_tarjeta),
-      comentario: isSaldo
-        ? `Devolución realizada por un pago de wallet, el id del pago es: ${p.id_pago}`
-        : `Devolución de saldo, por reducción de pago en el servicio ${p.id_servicio}`,
-      link_stripe: isSaldo ? null : p.link_pago,
-      is_facturable: isSaldo ? false : !is_facturado,
-      ult_digits: isSaldo ? null : p.last_digits,
-      numero_autorizacion: isSaldo ? null : p.autorizacion_stripe,
-      banco_tarjeta: isSaldo ? null : p.banco,
-      is_facturado: isSaldo ? false : is_facturado,
-      monto_facturado: isSaldo ? 0 : monto_facturado || 0,
-      is_devolucion: true,
-    })
+  let saldo;
+  console.log(
+    devolver > Formato.number(p.total) - Formato.number(p.saldo_aplicado || 0)
   );
-  console.log(response);
-  const id_saldo = response.insertId;
+  console.log(Formato.number(p.saldo_aplicado || 0));
+  console.log(Formato.number(p.total));
+  console.log(devolver);
+  if (
+    devolver >
+    Formato.number(p.total) - Formato.number(p.saldo_aplicado || 0)
+  )
+    throw new Error(ERROR.SALDO.LIMITEXCEEDED);
+
   if (!isSaldo) {
-    await PAGOS.update(conn, {
-      id_pago: p.id_pago,
-      saldo_aplicado: devolver,
-      id_saldo_a_favor: id_saldo,
-    });
+    const [createSaldo, [response]] = await create(
+      conn,
+      Calculo.cleanEmpty({
+        id_agente: p.id_agente ?? p.responsable_pago_agente,
+        fecha_creacion: p.created_at,
+        saldo: Formato.number(devolver),
+        monto: Formato.number(p.total),
+        metodo_pago: (p.metodo_de_pago || "").toLowerCase(),
+        fecha_pago: p.fecha_pago ?? p.created_at,
+        concepto: p.concepto,
+        referencia: p.referencia,
+        currency: p.currency,
+        tipo_tarjeta: Formato.tipo_tarjeta(p.tipo_de_tarjeta),
+        comentario: `Devolución de saldo, por reducción de pago en el servicio ${p.id_servicio}`,
+        link_stripe: p.link_pago,
+        is_facturable: !Boolean(is_facturado),
+        ult_digits: p.last_digits,
+        numero_autorizacion: p.autorizacion_stripe,
+        banco_tarjeta: p.banco,
+        is_facturado: Boolean(is_facturado),
+        monto_facturado: monto_facturado || 0,
+        is_devolucion: true,
+      })
+    );
+    saldo = { ...createSaldo, id_saldos: response.insertId };
   }
 
-  return [{ ...saldo, id_saldo }, isFacturada];
+  if (isSaldo) {
+    const [csaldo] = await getById(p.id_saldo_a_favor);
+    await update(conn, {
+      id_saldos: csaldo.id_saldos,
+      saldo: Formato.number(csaldo.saldo) + devolver,
+    });
+    saldo = { ...csaldo };
+  }
+
+  await PAGOS.update(conn, {
+    id_pago: p.id_pago,
+    saldo_aplicado:
+      (isSaldo ? Formato.number(p.saldo_aplicado) : Formato.number(p.total)) -
+      devolver,
+    ...(isSaldo ? {} : { id_saldo_a_favor: saldo.id_saldos }),
+  });
+
+  return [saldo, isFacturada];
 };
 
-module.exports = { update, create, return_wallet };
+module.exports = { update, create, return_wallet, getById };
 
 /* Para cada caso se debera ver que afecta la facturación y si ya esta pagado y si son varios (menos en pago directo que solo hay uno)
 caso 1.- Pago directo

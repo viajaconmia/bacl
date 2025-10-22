@@ -73,7 +73,7 @@ const editarVuelo = async (req, res) => {
 
     await runTransaction(async (connection) => {
       try {
-        const pago = { id_pago: "pag-071304cb-df06-41f8-8911-6cd476bc2281" };
+        const pago = { id_pago: "pag-0258b672-9113-4eff-837a-271a1e06eb1b" };
         const response = await MODEL.SALDO.return_wallet(
           connection,
           pago.id_pago,

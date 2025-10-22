@@ -22,6 +22,7 @@ const ERROR = {
   },
   SALDO: {
     INVALID: "El saldo tiene un valor invalido",
+    LIMITEXCEEDED: "El saldo excede el limite de lo permitido",
   },
 };
 module.exports = ERROR;

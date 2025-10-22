@@ -1,6 +1,6 @@
 const mysql = require("mysql2/promise");
 const { CustomError } = require("../middleware/errorHandler");
-const ERROR = require("../lib/utils/messages");
+const ERROR = require("../v2/constant/messages");
 const { Formato } = require("../lib/utils/formats");
 const { Validacion } = require("../lib/utils/validates");
 require("dotenv").config();
