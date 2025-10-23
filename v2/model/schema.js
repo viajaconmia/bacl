@@ -299,6 +299,11 @@ const PAGOS = {
     "monto_saldo",
   ],
 };
+const FPS = {
+  required: ["id_factura", "monto"],
+  table: "facturas_pagos_y_saldos",
+  columnas: ["id_pago", "id_saldo_a_favor", "id_factura", "monto"],
+};
 module.exports = {
   VIAJES_AEREOS,
   SERVICIOS,
@@ -309,4 +314,5 @@ module.exports = {
   PAGOS,
   HOSPEDAJE,
   FACTURAS,
+  FPS,
 };

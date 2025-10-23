@@ -140,12 +140,14 @@ async function insert(connection, schema, obj) {
 
 async function update(connection, schema, obj) {
   try {
+    if (!schema.id) {
+      throw new Error(ERROR.ID.EMPTY);
+    }
     const props = Formato.propiedades(schema.columnas, obj, schema.id);
     if (props.length == 0) throw new Error(ERROR.PROPS.EMPTY);
     const query = `UPDATE ${schema.table} SET ${props
       .map((p) => p.key)
       .join(" = ?,")} = ? WHERE ${schema.id} = ?`;
-    console.log(props);
     const response = await connection.execute(query, [
       ...props.map((p) => p.value),
       obj[schema.id],

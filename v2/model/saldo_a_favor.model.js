@@ -1,10 +1,11 @@
 const db = require("../../config/db");
-const { Calculo, now } = require("../../lib/utils/calculates");
+const { Calculo } = require("../../lib/utils/calculates");
 const { Formato } = require("../../lib/utils/formats");
 const ERROR = require("../constant/messages");
 const { Validacion } = require("../../lib/utils/validates");
 const PAGOS = require("./pagos.model");
 const { SALDOS_A_FAVOR: schema } = require("./schema");
+const FPS = require("./facturas_pagos_saldos.model");
 
 const create = async (conn, saldo) => {
   Validacion.uuidfk(saldo.id_agente);
@@ -43,19 +44,11 @@ const getById = async (...ids) => {
 const return_wallet = async (conn, id, devolver) => {
   devolver = Formato.number(devolver);
   const isFacturada = await PAGOS.isFacturado(id);
-  const { pago: p, monto_facturado, is_facturado } = isFacturada;
+  const { pago: p, monto_facturado, is_facturado, total_monto } = isFacturada;
   const isSaldo = !!p.id_saldo_a_favor;
   let saldo;
-  console.log(
-    devolver > Formato.number(p.total) - Formato.number(p.saldo_aplicado || 0)
-  );
-  console.log(Formato.number(p.saldo_aplicado || 0));
-  console.log(Formato.number(p.total));
-  console.log(devolver);
-  if (
-    devolver >
-    Formato.number(p.total) - Formato.number(p.saldo_aplicado || 0)
-  )
+
+  if (Formato.number(p.saldo_aplicado ?? p.total) - devolver < 0)
     throw new Error(ERROR.SALDO.LIMITEXCEEDED);
 
   if (!isSaldo) {
@@ -84,6 +77,12 @@ const return_wallet = async (conn, id, devolver) => {
       })
     );
     saldo = { ...createSaldo, id_saldos: response.insertId };
+    if (Formato.number(monto_facturado) > 0) {
+      FPS.updateByPago(conn, {
+        id_pago: p.id_pago,
+        id_saldo_a_favor: saldo.id_saldos,
+      });
+    }
   }
 
   if (isSaldo) {

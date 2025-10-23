@@ -31,11 +31,12 @@ const getById = async (...ids) => {
 const isFacturado = async (id_pago) => {
   Validacion.uuid(id_pago);
   const [pago] = await getById(id_pago);
+  console.log(pago);
   const id = pago.id_saldo_a_favor ?? pago.id_pago;
-  const [pago_facturado] = await db.executeQuery(
-    QUERYS.PAGOS.GET_IS_FACTURADO,
-    [id]
-  );
+  console.log(id);
+  const response = await db.executeQuery(QUERYS.PAGOS.GET_IS_FACTURADO, [id]);
+  console.log("response: ", response);
+  const [pago_facturado] = response;
   return { pago, ...pago_facturado };
 };
 
