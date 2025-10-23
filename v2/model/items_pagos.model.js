@@ -1,6 +1,6 @@
 const db = require("../../config/db");
 const { Validacion } = require("../../lib/utils/validates");
-const { FACTURAS_PAGOS_Y_SALDOS: schema } = require("./schema");
+const { ITEMS_PAGOS: schema } = require("./schema");
 
 // const create = async (conn, pago) => {
 //   Validacion.uuidfk(pago.id_servicio);
