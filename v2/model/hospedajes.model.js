@@ -10,7 +10,7 @@ const create = async (conn, hospedaje) => {
 };
 
 const update = async (conn, hospedaje) => {
-  Validacion.uuid(hospedaje.id_booking);
+  Validacion.uuid(hospedaje[schema.id]);
   return await db.update(conn, schema, hospedaje);
 };
 
