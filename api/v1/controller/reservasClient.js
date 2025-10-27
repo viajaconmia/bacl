@@ -1,5 +1,5 @@
 const { error } = require("winston");
-const { executeSP } = require("../../../config/db");
+const { executeSP, executeQuery } = require("../../../config/db");
 const { CustomError } = require("../../../middleware/errorHandler");
 
 const get_reservasClient_by_id_agente = async (req, res) => {
@@ -20,7 +20,13 @@ const get_reservasClient_by_id_agente = async (req, res) => {
     let result = await executeSP("sp_get_reservasClient_by_id_cliente", [
       user_id,
     ]);
-    if (usuario_creador) {
+
+    const [{ restringido }] = await executeQuery(
+      `select restringido from agentes where id_agente = ?`,
+      [user_id]
+    );
+
+    if (Boolean(restringido) && usuario_creador) {
       result = result.filter((item) => item.usuario_creador == usuario_creador);
     }
 
