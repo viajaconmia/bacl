@@ -418,6 +418,7 @@ const asignarFacturaPagos = async (req, res) => {
 const filtrarFacturas = async (req, res) => {
   const { estatusFactura, id_factura } = req.body;
   try {
+    console.log(estatusFactura)
     const result = await executeSP("sp_filtrar_facturas", [
       estatusFactura,
       id_factura,
