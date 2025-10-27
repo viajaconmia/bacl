@@ -520,7 +520,8 @@ const asignarFacturasItems = async (req, res) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
-  const { ejemplo_saldos } = reserva;
+  const { ejemplo_saldos = [] } = reserva;
+  console.log("REVISANDO 1️⃣1️⃣1️⃣ ", ejemplo_saldos,bandera);
   console.log("Ejemplo de saldos recibidos:", reserva);
   const agentes = await executeQuery(
     `SELECT * FROM agentes WHERE id_agente = ?`,
