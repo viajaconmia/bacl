@@ -469,7 +469,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
-  const { ejemplo_saldos, usuarioCreador = null } = reserva;
+  const { ejemplo_saldos, usuarioCreador } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
   const agentes = await executeQuery(
     `SELECT * FROM agentes WHERE id_agente = ?`,
@@ -505,7 +505,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
       null,
       null,
       reserva.solicitud.id_agente,
-      usuarioCreador.id_viajero,
+      usuarioCreador?.id_viajero || null,
     ];
 
     const response = await executeTransaction(
