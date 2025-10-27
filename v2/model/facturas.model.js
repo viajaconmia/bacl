@@ -32,10 +32,6 @@ caso 3.- Pago con credito
 caso 4.- Pago con credito ya pagado  */
 
 /* Caso 1.- 
-Duplicar un wallet con su valor
-agregar al wallet la diferencia que se regreso que es el saldo restante
-Verificar si esta facturado y al saldo agregarle si es facturable y si esta facturado
-Cambiar el valor del pago agregando saldo usado y el id_saldo
 
 Cambiar los items conectados a ese pago disminuyendo y spliteando el valor actual del pago y quitando el valor de los que se dejaron de usar updateando a 0
 editar los items que se quedaron en 0 y desactivarlos
@@ -44,4 +40,5 @@ editar los items que estan bien y updatear su nuevo total y el is_facturado si e
 Verificar si esta facturado el pago 
 si esta facturado regresar a la factura la diferencia en saldo x aplicar items
 en items_facturas borrar los no ocupados con monto 0, actualizar valor de facturación al nuevo, tomando como limite el monto de la factura menos el saldo por aplicar o algo asi, verificar logica
-guardar en facturas pagos y saldos el id saldo  */
+guardar en facturas pagos y saldos el id saldo  
+checar los items_pagos*/
