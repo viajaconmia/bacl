@@ -730,6 +730,8 @@ ORDER BY facturas.created_at DESC;`;
   }
 };
 
+
+
 const getAllFacturasConsultas = async () => {
   try {
     const query = `select * from facturas f
@@ -745,8 +747,11 @@ order by fecha_emision desc;`;
 
 const getAllFacturasPagosPendientes = async () => {
   try {
-    const query = `SELECT * from vw_facturas where pagos_asociados is  null or COALESCE(JSON_LENGTH(pagos_asociados), 0) = 0
-or saldo <> 0 ;`;
+    const query = `SELECT *
+FROM vw_facturas
+WHERE 
+  (pagos_asociados IS NULL OR COALESCE(JSON_LENGTH(pagos_asociados), 0) = 0 OR saldo <> 0)
+  AND fecha_vencimiento <= CURDATE();`;
     let response = await executeQuery(query, []);
 
     return response;
@@ -774,6 +779,7 @@ const getAllFacturas = async () => {
   try {
     const query = `SELECT 
   id_factura,
+  is_prepagada,
   id_facturama,
   fecha_emision,
   estado_factura,

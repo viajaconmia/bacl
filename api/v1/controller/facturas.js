@@ -418,6 +418,7 @@ const asignarFacturaPagos = async (req, res) => {
 const filtrarFacturas = async (req, res) => {
   const { estatusFactura, id_factura } = req.body;
   try {
+    console.log(estatusFactura)
     const result = await executeSP("sp_filtrar_facturas", [
       estatusFactura,
       id_factura,
@@ -1013,6 +1014,110 @@ const crearFacturaMultiplesPagos = async (req, res) => {
   }
 };
 
+// controllers/conexionFull.controller.js
+const getFullDetalles = async (req, res) => {
+  try {
+    console.log("📦 recibido getFullDetalles (normalizando id_buscar a JSON array)");
+
+    const rawAgente = req.query.id_agente ?? req.body?.id_agente ?? "";
+    const rawBuscar = req.query.id_buscar ?? req.body?.id_buscar ?? "";
+
+    const id_agente = String(rawAgente).trim();
+
+    // --- Normalizar id_buscar a JSON array de strings ---
+    const toJsonArrayString = (input) => {
+      // Si ya viene como array (e.g., body JSON)
+      if (Array.isArray(input)) {
+        const arr = input
+          .map(v => (v == null ? "" : String(v).trim()))
+          .filter(Boolean);
+        return JSON.stringify(arr);
+      }
+
+      // Si viene como string
+      const s = String(input).trim();
+      if (!s) return "[]";
+
+      // ¿Es un string que ya representa JSON?
+      try {
+        const parsed = JSON.parse(s);
+        if (Array.isArray(parsed)) {
+          const arr = parsed
+            .map(v => (v == null ? "" : String(v).trim()))
+            .filter(Boolean);
+          return JSON.stringify(arr);
+        }
+        // Si es escalar JSON (número o string), lo envolvemos en array
+        return JSON.stringify([String(parsed)]);
+      } catch {
+        // No es JSON: soportar CSV o escalar simple
+        if (s.includes(",")) {
+          const arr = s
+            .split(",")
+            .map(x => x.trim())
+            .filter(Boolean);
+          return JSON.stringify(arr);
+        }
+        return JSON.stringify([s]); // escalar -> array con 1
+      }
+    };
+
+    const id_buscar_json = toJsonArrayString(rawBuscar);
+    const ids = JSON.parse(id_buscar_json); // arreglo de strings
+
+    if (!id_agente || ids.length === 0) {
+      return res.status(400).json({
+        message: "Faltan parámetros",
+        required: ["id_agente", "id_buscar (≥1 id)"],
+      });
+    }
+
+    // Detectar tipo por prefijo usando el primer id
+    const first = ids[0].toLowerCase();
+    let tipo = "pago";
+    if (first.startsWith("hos")) tipo = "reserva";
+    else if (first.startsWith("fac")) tipo = "factura";
+
+    // Llamada al SP: SIEMPRE JSON (array)
+    const sets = await executeSP2(
+      "sp_get_conexion_full",
+      [id_agente, tipo, id_buscar_json], // <— JSON array
+      { allSets: true }
+    );
+
+    // Normalizar juegos de resultados
+    const safe = (i) => (Array.isArray(sets?.[i]) ? sets[i] : []);
+
+    // Mapeo según contrato
+    // - origen = 'reserva'  -> [facturas, pagos]
+    // - origen = 'pago'     -> [facturas, reservas]
+    // - origen = 'factura'  -> [pagos, reservas]
+    let payload = {};
+    if (tipo === "reserva") {
+      payload = { facturas: safe(0), pagos: safe(1) };
+    } else if (tipo === "pago") {
+      payload = { facturas: safe(0), reservas: safe(1) };
+    } else {
+      payload = { pagos: safe(0), reservas: safe(1) };
+    }
+
+    return res.status(200).json({
+      message: "Consulta exitosa",
+      tipo_origen: tipo,
+      id_origen: ids,     // devolvemos los IDs ya normalizados
+      id_agente,
+      ...payload,
+    });
+  } catch (error) {
+    console.error("getFullDetalles error:", error);
+    return res.status(500).json({ message: "Error en el servidor", details: error });
+  }
+};
+
+module.exports = { getFullDetalles };
+
+
+
 const getDetallesConexionesFactura = async (req, res) => {
   const { id_factura, id_agente } = req.query;
   try {
@@ -1055,6 +1160,7 @@ const asignarURLS_factura = async(req,res)=>{
 
 module.exports = {
   create,
+  getFullDetalles,
   get_agente_facturas,
   deleteFacturas,
   readAllFacturas,

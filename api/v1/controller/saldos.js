@@ -1,6 +1,7 @@
 // const { response } = require("express");
 const { executeTransactionSP, executeQuery } = require("../../../config/db");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
+const { sumarHoras } = require("../../../lib/utils/calculates");
 const { CustomError } = require("../../../middleware/errorHandler");
 const model = require("../model/saldos");
 
@@ -32,13 +33,14 @@ const getStripeInfo = async (req, res) => {
   const { chargeId } = req.query;
   try {
     const charge = await stripe.charges.retrieve(chargeId);
+    console.log("this is the charge about stripe:", charge);
 
     const stripeInfo = {
       id: charge.id,
       monto: charge.amount / 100,
       currency: charge.currency.toUpperCase(),
       estado: charge.status,
-      fecha_pago: new Date(charge.created * 1000),
+      fecha_pago: sumarHoras(charge.created * 1000, -6),
       ultimos_4_digitos: charge.payment_method_details.card.last4,
       tipo_tarjeta: charge.payment_method_details.card.brand,
       funding: charge.payment_method_details.card.funding,
@@ -203,7 +205,8 @@ INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
 LEFT JOIN vw_pagos_prepago_facturables AS v
   ON v.raw_id = sf.id_saldos
-WHERE sf.id_agente = ?;`,
+  where sf.id_agente = ? 
+  ;`,
       [id]
     );
     // console.log(saldo);

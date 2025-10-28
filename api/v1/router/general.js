@@ -18,7 +18,7 @@ router.get("/:id", async (req, res) => {
   try {
     const jti = uuidv4();
     const token = jwt.sign({ jti }, SECRET_KEY, {
-      expiresIn: "15s",
+      expiresIn: "10s",
     });
     console.log("creado");
     await executeQuery(`INSERT INTO sign_jwt (jti) VALUES (?)`, [jti]);

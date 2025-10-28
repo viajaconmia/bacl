@@ -56,31 +56,29 @@ ORDER BY s.check_in DESC;
 };
 const getStatsPerMonth = async (year, id_user, mes) => {
   try {
-    let query = `SELECT 
-    DATE_FORMAT(b.check_in, '%Y-%m') AS mes,
-    COUNT(*) AS visitas,
-    ROUND(SUM(b.total),2) AS total_gastado,
-    h.nombre_hotel as hotel
-FROM solicitudes as so
-INNER JOIN bookings as b ON b.id_solicitud = so.id_solicitud
-INNER JOIN hospedajes as h ON h.id_booking = b.id_booking
-INNER JOIN viajeros_hospedajes as vh ON vh.id_hospedaje = h.id_hospedaje
-INNER JOIN agentes_viajeros as av ON av.id_viajero = vh.id_viajero
-WHERE 
-   av.id_agente = ?
-  AND YEAR(b.check_in) = ?
-    AND MONTH(b.check_in) = ?
-  AND b.estado = "Confirmada"
-GROUP BY 
-    mes, hotel
-ORDER BY 
-    mes DESC, b.total DESC;
-;
-`;
-    let params = [id_user, year, mes];
-    let response = await executeQuery(query, params);
+    const query = `
+      SELECT 
+          DATE_FORMAT(check_in, '%Y-%m') AS mes,
+          COUNT(*) AS visitas,
+          ROUND(SUM(total), 2) AS total_gastado,
+          nombre_hotel AS hotel
+      FROM mia3.vw_reservas_client
+      WHERE 
+          id_agente = ?
+          AND YEAR(check_in) = ?
+          AND MONTH(check_in) = ?
+      GROUP BY 
+          mes, hotel
+      ORDER BY 
+          mes DESC, total DESC;
+    `;
+
+    const params = [id_user, year, mes];
+    const response = await executeQuery(query, params);
+    console.log(response,"enviado de response")
     return response;
   } catch (error) {
+    console.error("Error en getStatsPerMonth:", error);
     throw error;
   }
 };

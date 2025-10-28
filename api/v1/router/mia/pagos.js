@@ -2,6 +2,7 @@ const router = require("express").Router();
 const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/pagos");
 const { get_agente_facturas } = require("../../controller/facturas");
+const { isSignToken } = require("../../../../middleware/auth");
 
 router.post("/carrito/credito", controller.pagarCarritoConCredito);
 router.post("/crearItemdeAjuste", controller.crearItemdeAjuste);
@@ -59,5 +60,5 @@ router.post(
   ]),
   controller.pagoPorCredito
 );
-router.get("/getDetallesConexion", controller.getDetallesConexionesPagos);
+router.get("/detallesConexion", controller.getDetallesConexionesPagos);
 module.exports = router;
