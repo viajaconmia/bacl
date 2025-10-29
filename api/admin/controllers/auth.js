@@ -42,7 +42,7 @@ const signUp = async (req, res) => {
         console.log(user);
         await conn.execute(
           `INSERT INTO user_roles (user_id, role_id) VALUES (?,?)`,
-          [user[0].id, role.id]
+          [user[0].id, role.role_id]
         );
       } catch (error) {
         throw new CustomError(
@@ -78,7 +78,7 @@ const logIn = async (req, res) => {
     Validation.email(email);
 
     const [user_completo] = await executeQuery(
-      `SELECT * FROM users_admin WHERE email = ?`,
+      `SELECT * FROM users_admin WHERE email = ? AND active = 1`,
       [email]
     );
     if (!user_completo) throw new Error("No existe ese usuario");
@@ -92,19 +92,21 @@ const logIn = async (req, res) => {
     const permisos_obj = await executeQuery(
       `
       select p.name from user_roles ur 
-        left join role_permissions rp on rp.role_id = ur.role_id 
-        left join user_permissions up on up.user_id = ur.user_id
-        left join permissions p on p.id = rp.permission_id OR p.id = up.permission_id
+      left join role_permissions rp on rp.role_id = ur.role_id 
+      left join user_permissions up on up.user_id = ur.user_id
+      left join permissions p on p.id = rp.permission_id OR p.id = up.permission_id
       where ur.user_id = ?;`,
       [user.id]
     );
 
     const permisos = permisos_obj.map((permiso) => permiso.name);
+    let { password: contrasena, ...usuario } = user;
 
-    const token = jwt.sign({ ...user, permisos }, SECRET_KEY, {
-      expiresIn: "1d",
+    const token = jwt.sign({ ...usuario, permisos }, SECRET_KEY, {
+      expiresIn: "7d",
     });
 
+    console.log(token);
     res
       .cookie("access-token", token, {
         httpOnly: true,
@@ -144,6 +146,16 @@ const logOut = async (req, res) => {
 const verifySession = async (req, res) => {
   try {
     const { user } = req.session;
+    const [usuario] = await executeQuery(
+      `SELECT * FROM users_admin WHERE email = ? AND active = 1`,
+      [user.email]
+    );
+    console.log(user);
+    console.log(usuario);
+    if (!usuario) {
+      res.clearCookie("access-token").status(204).json({ message: "session" });
+    }
+
     res.status(200).json({ message: "Comprobando verificación", data: user });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
