@@ -12,6 +12,7 @@ router.get("/clients/id", controller.obtenerClientePorId);
 
 // Obtener facturas de un cliente
 router.get("/invoices", controller.obtenerFacturasCliente);
+router.get("/invoices-by-date", controller.obtenerCfdiByFechas);
 
 // Crear un nuevo cliente
 router.post("/clients", controller.crearCliente);

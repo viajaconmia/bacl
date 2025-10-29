@@ -170,6 +170,8 @@ const facturama = () => {
       Cancel: (params) => deleteSyncWithParam("cfdi", params),
       Download: (format, type, id) => retrieve(`cfdi/${format}/${type}`, id),
       List: (rfc) => listWithParam("cfdi", `type=issued&keyword=${rfc}`),
+      ListByDates: (dateStart, dateEnd) =>
+        listWithParam("cfdi", `dateStart=${dateStart}&dateEnd=${dateEnd}`),
     },
   };
 };

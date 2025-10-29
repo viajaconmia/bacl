@@ -262,36 +262,37 @@ const hasKey = (obj, key) =>
 
 const toMysqlDateTime = (val) => {
   if (!val) return null;
-  if (typeof val === 'string' && val.length === 10) return `${val} 00:00:00`;
+  if (typeof val === "string" && val.length === 10) return `${val} 00:00:00`;
   try {
-    return new Date(val).toISOString().slice(0, 19).replace('T', ' ');
+    return new Date(val).toISOString().slice(0, 19).replace("T", " ");
   } catch {
     return null;
   }
 };
 
-const updateReserva2 = async (req, res) => {x1
+const updateReserva2 = async (req, res) => {
+  x1;
   console.log("Llegando al endpoint de updateReserva2");
   const { id } = req.query;
 
   // Toma solo lo que venga; todo es opcional
   const {
-    viajero,                   // puede no venir
-    check_in,                  // puede no venir
-    check_out,                 // puede no venir
-    venta,                     // puede no venir
-    estado_reserva,            // puede no venir
-    proveedor,                 // puede no venir
-    hotel,                     // puede no venir
-    codigo_reservacion_hotel,  // puede no venir
-    habitacion,                // puede no venir
-    noches,                    // puede no venir
-    comments,                  // puede no venir
-    items,                     // puede no venir
-    impuestos,                 // puede no venir
-    nuevo_incluye_desayuno,    // puede no venir
-    acompanantes,              // puede no venir
-    metadata = {},             // suele venir, pero defensivo
+    viajero, // puede no venir
+    check_in, // puede no venir
+    check_out, // puede no venir
+    venta, // puede no venir
+    estado_reserva, // puede no venir
+    proveedor, // puede no venir
+    hotel, // puede no venir
+    codigo_reservacion_hotel, // puede no venir
+    habitacion, // puede no venir
+    noches, // puede no venir
+    comments, // puede no venir
+    items, // puede no venir
+    impuestos, // puede no venir
+    nuevo_incluye_desayuno, // puede no venir
+    acompanantes, // puede no venir
+    metadata = {}, // suele venir, pero defensivo
   } = req.body || {};
 
   console.log("Revisando el body ⚠️⚠️⚠️⚠️", req.body);
@@ -478,11 +479,9 @@ const updateReserva2 = async (req, res) => {x1
   // }
 };
 
-
-
 // const updateReserva2 = async (req, res) => {
 //   console.log("Llegando al endpoint de updateReserva2, viendo el body",req.body);
-  
+
 //   const { id } = req.query;
 //   const { metadata } = req.body;
 
@@ -682,7 +681,11 @@ const updateReserva2 = async (req, res) => {x1
 //   }
 // };
 
-const actualizarViajerosHospedaje = async (id_hospedaje, viajeroPrincipal, acompanantes = []) => {
+const actualizarViajerosHospedaje = async (
+  id_hospedaje,
+  viajeroPrincipal,
+  acompanantes = []
+) => {
   // 1. Obtener viajeros actuales
   const viajerosActuales = await executeQuery(
     `SELECT id_viajero, is_principal FROM viajeros_hospedajes WHERE id_hospedaje = ?`,
@@ -692,18 +695,20 @@ const actualizarViajerosHospedaje = async (id_hospedaje, viajeroPrincipal, acomp
   // 2. Construir lista de viajeros nuevos
   const nuevosViajeros = [
     { ...viajeroPrincipal, is_principal: 1 },
-    ...acompanantes.map(a => ({ ...a, is_principal: 0 })),
+    ...acompanantes.map((a) => ({ ...a, is_principal: 0 })),
   ];
 
   // 3. Eliminar los que ya no estén
-  const nuevosIds = nuevosViajeros.map(v => v.id_viajero);
+  const nuevosIds = nuevosViajeros.map((v) => v.id_viajero);
   const idsAEliminar = viajerosActuales
-    .filter(v => !nuevosIds.includes(v.id_viajero))
-    .map(v => v.id_viajero);
+    .filter((v) => !nuevosIds.includes(v.id_viajero))
+    .map((v) => v.id_viajero);
 
   if (idsAEliminar.length > 0) {
     await executeQuery(
-      `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND id_viajero IN (${idsAEliminar.map(() => '?').join(',')})`,
+      `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND id_viajero IN (${idsAEliminar
+        .map(() => "?")
+        .join(",")})`,
       [id_hospedaje, ...idsAEliminar]
     );
   }
@@ -711,7 +716,9 @@ const actualizarViajerosHospedaje = async (id_hospedaje, viajeroPrincipal, acomp
   // 4. Insertar o actualizar los nuevos viajeros
   for (const viajero of nuevosViajeros) {
     // Si ya existe, actualiza is_principal, si no, inserta
-    const existe = viajerosActuales.find(v => v.id_viajero === viajero.id_viajero);
+    const existe = viajerosActuales.find(
+      (v) => v.id_viajero === viajero.id_viajero
+    );
     if (existe) {
       await executeQuery(
         `UPDATE viajeros_hospedajes SET is_principal = ? WHERE id_hospedaje = ? AND id_viajero = ?`,
@@ -743,7 +750,6 @@ const actualizarViajerosHospedaje = async (id_hospedaje, viajeroPrincipal, acomp
 // - Solo agrego/apago la diferencia de noches respecto a lo que YA hay en DB
 // - Bandera: 1=wallet, 2=crédito, 3=guardar sin alterar precio (no crea ajuste)
 
-
 async function updateReserva3(req, res) {
   const body = req.body;
   const { id } = req.query; // id_booking opcional por query
@@ -757,10 +763,19 @@ async function updateReserva3(req, res) {
   };
 
   // ===== Helpers =====
-  const r2 = (n) => Number.parseFloat((Math.round((Number(n) + Number.EPSILON) * 100) / 100).toFixed(2));
+  const r2 = (n) =>
+    Number.parseFloat(
+      (Math.round((Number(n) + Number.EPSILON) * 100) / 100).toFixed(2)
+    );
   const get = (obj, path, dflt) => {
     if (!obj) return dflt;
-    const v = path.split(".").reduce((o, k) => (o && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined), obj);
+    const v = path
+      .split(".")
+      .reduce(
+        (o, k) =>
+          o && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined,
+        obj
+      );
     return v === undefined || v === null ? dflt : v;
   };
   const toDateOnly = (isoOrDateStr) => {
@@ -785,7 +800,10 @@ async function updateReserva3(req, res) {
     for (let i = 0; i < nights; i++) out.push(addDays(startYmd, i)); // INCLUSIVO
     return out;
   };
-  const breakdownByRates = (delta, { ivaPct = 0, ishPct = 0, otrosPct = 0, otrosMonto = 0 }) => {
+  const breakdownByRates = (
+    delta,
+    { ivaPct = 0, ishPct = 0, otrosPct = 0, otrosMonto = 0 }
+  ) => {
     const sumPct = Number(ivaPct) + Number(ishPct) + Number(otrosPct);
     if (sumPct <= 0) return { sub: r2(delta * 0.86), imp: r2(delta * 0.14) }; // fallback si no hay tasas
     const sub = (Number(delta) - Number(otrosMonto || 0)) / (1 + sumPct / 100);
@@ -803,13 +821,15 @@ async function updateReserva3(req, res) {
      ORDER BY fecha_uso ASC, id_item ASC
   `.trim();
 
-  const SQL_UPDATE_HOSPEDAJES = (fields) => `
+  const SQL_UPDATE_HOSPEDAJES = (fields) =>
+    `
     UPDATE hospedajes
        SET ${fields.join(", ")}, updated_at = NOW()
      WHERE id_hospedaje = ?
   `.trim();
 
-  const SQL_UPDATE_BOOKINGS = (fields) => `
+  const SQL_UPDATE_BOOKINGS = (fields) =>
+    `
     UPDATE bookings
        SET ${fields.join(", ")}, updated_at = NOW()
      WHERE id_booking = ?
@@ -824,7 +844,8 @@ async function updateReserva3(req, res) {
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, NOW(), NOW())
   `.trim();
 
-  const SQL_DEACTIVATE_BY_IDS = (placeholders) => `
+  const SQL_DEACTIVATE_BY_IDS = (placeholders) =>
+    `
     UPDATE items
        SET estado = 0, updated_at = NOW()
      WHERE id_hospedaje = ? AND id_item IN (${placeholders})
@@ -857,28 +878,54 @@ async function updateReserva3(req, res) {
   const src = body.form || body.updatedItem || body;
 
   // IDs
-  const id_booking = id || get(src, "solicitud.id_booking") || get(body, "id_booking");
-  const id_hospedaje = get(src, "solicitud.id_hospedaje") || get(body, "metadata.id_hospedaje");
-  const id_servicio = get(src, "solicitud.id_servicio") || get(body, "id_servicio");
-  const bandera = Number(get(body, "bandera") ?? get(body, "updatedItem.bandera") ?? get(body, "form.bandera") ?? 0);
+  const id_booking =
+    id || get(src, "solicitud.id_booking") || get(body, "id_booking");
+  const id_hospedaje =
+    get(src, "solicitud.id_hospedaje") || get(body, "metadata.id_hospedaje");
+  const id_servicio =
+    get(src, "solicitud.id_servicio") || get(body, "id_servicio");
+  const bandera = Number(
+    get(body, "bandera") ??
+      get(body, "updatedItem.bandera") ??
+      get(body, "form.bandera") ??
+      0
+  );
 
   if (!id_booking || !id_hospedaje) {
-    return res.status(400).json({ ok: false, message: "Faltan id_booking o id_hospedaje en el payload." });
+    return res
+      .status(400)
+      .json({
+        ok: false,
+        message: "Faltan id_booking o id_hospedaje en el payload.",
+      });
   }
 
   // Datos de negocio
-  const estadoTarget = get(src, "estado_reserva", get(body, "estado_reserva.current", "Confirmada"));
-  const checkInYmd  = toDateOnly(get(src, "check_in")  || get(src, "solicitud.check_in")  || get(body, "metadata.check_in"));
-  const checkOutYmd = toDateOnly(get(src, "check_out") || get(src, "solicitud.check_out") || get(body, "metadata.check_out"));
+  const estadoTarget = get(
+    src,
+    "estado_reserva",
+    get(body, "estado_reserva.current", "Confirmada")
+  );
+  const checkInYmd = toDateOnly(
+    get(src, "check_in") ||
+      get(src, "solicitud.check_in") ||
+      get(body, "metadata.check_in")
+  );
+  const checkOutYmd = toDateOnly(
+    get(src, "check_out") ||
+      get(src, "solicitud.check_out") ||
+      get(body, "metadata.check_out")
+  );
   const nochesTarget = Number(get(src, "noches")) || 0;
 
   const ventaTotalTarget = Number(get(src, "venta.total"));
 
   // Tasas para desglose
-  const tasasObj   = get(src, "impuestos") || get(body, "updatedItem.impuestos") || {};
-  const ivaPct     = Number(tasasObj.iva || 0);
-  const ishPct     = Number(tasasObj.ish || 0);
-  const otrosPct   = Number(tasasObj.otros_impuestos_porcentaje || 0);
+  const tasasObj =
+    get(src, "impuestos") || get(body, "updatedItem.impuestos") || {};
+  const ivaPct = Number(tasasObj.iva || 0);
+  const ishPct = Number(tasasObj.ish || 0);
+  const otrosPct = Number(tasasObj.otros_impuestos_porcentaje || 0);
   const otrosMonto = Number(tasasObj.otros_impuestos || 0);
 
   // Catálogo hotel -> plantilla
@@ -886,12 +933,17 @@ async function updateReserva3(req, res) {
   const habitacion = get(src, "habitacion");
   const pickMoldeFromHotel = () => {
     const tipos = get(hotel, "content.tipos_cuartos", []);
-    const match = tipos.find((t) => (t.nombre_tipo_cuarto || "").toUpperCase() === String(habitacion || "").toUpperCase());
+    const match = tipos.find(
+      (t) =>
+        (t.nombre_tipo_cuarto || "").toUpperCase() ===
+        String(habitacion || "").toUpperCase()
+    );
     if (!match) return null;
     const vTotal = Number(match.precio || 0);
     const cTotal = Number(match.costo || 0);
     const sumPct = ivaPct + ishPct + otrosPct;
-    let vSub = vTotal, vImp = 0;
+    let vSub = vTotal,
+      vImp = 0;
     if (sumPct > 0) {
       vSub = vTotal / (1 + sumPct / 100);
       vImp = vTotal - vSub;
@@ -904,7 +956,8 @@ async function updateReserva3(req, res) {
   const moldePreferido = pickMoldeFromHotel();
 
   // Viajeros
-  const viajeroPrincipal = get(src, "viajero") || get(body, "viajero.current") || null;
+  const viajeroPrincipal =
+    get(src, "viajero") || get(body, "viajero.current") || null;
   const acompanantes =
     get(src, "acompanantes") ||
     get(body, "acompanantes") ||
@@ -923,7 +976,11 @@ async function updateReserva3(req, res) {
       };
 
       // === Viajeros TX ===
-      const actualizarViajerosHospedajeTx = async (id_hospedaje, viajeroPrincipal, acompanantes = []) => {
+      const actualizarViajerosHospedajeTx = async (
+        id_hospedaje,
+        viajeroPrincipal,
+        acompanantes = []
+      ) => {
         const [viajerosActuales] = await exec(
           "VH: select actuales",
           `SELECT id_viajero, is_principal FROM viajeros_hospedajes WHERE id_hospedaje = ?`,
@@ -946,13 +1003,17 @@ async function updateReserva3(req, res) {
         if (idsAEliminar.length > 0) {
           await exec(
             "VH: eliminar removidos",
-            `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND id_viajero IN (${idsAEliminar.map(() => "?").join(",")})`,
+            `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND id_viajero IN (${idsAEliminar
+              .map(() => "?")
+              .join(",")})`,
             [id_hospedaje, ...idsAEliminar]
           );
         }
 
         for (const v of nuevosViajeros) {
-          const existe = (viajerosActuales || []).find((x) => x.id_viajero === v.id_viajero);
+          const existe = (viajerosActuales || []).find(
+            (x) => x.id_viajero === v.id_viajero
+          );
           if (existe) {
             await exec(
               "VH: update is_principal",
@@ -970,20 +1031,47 @@ async function updateReserva3(req, res) {
       };
 
       const fetchItemsAsc = async () => {
-        const [rows] = await exec("SELECT items ASC", SQL_SELECT_ITEMS_ASC, [id_hospedaje]);
+        const [rows] = await exec("SELECT items ASC", SQL_SELECT_ITEMS_ASC, [
+          id_hospedaje,
+        ]);
         return rows || [];
       };
       const anyFacturado = (rows) =>
-        (rows || []).some((it) => Number(it.is_facturado) === 1 && Number(it.is_ajuste) === 0 && Number(it.estado) === 1);
+        (rows || []).some(
+          (it) =>
+            Number(it.is_facturado) === 1 &&
+            Number(it.is_ajuste) === 0 &&
+            Number(it.estado) === 1
+        );
       const countNochesVigentes = (rows) =>
-        (rows || []).filter((it) => Number(it.estado) === 1 && Number(it.is_ajuste) === 0).length;
+        (rows || []).filter(
+          (it) => Number(it.estado) === 1 && Number(it.is_ajuste) === 0
+        ).length;
 
       const sumActivos = async () => {
-        const [rows] = await exec("SUM items activos", SQL_SUM_ITEMS_ACTIVOS, [id_hospedaje]);
-        return rows?.[0] || { total: 0, subtotal: 0, impuestos: 0, c_total: 0, c_subtotal: 0, c_impuestos: 0 };
+        const [rows] = await exec("SUM items activos", SQL_SUM_ITEMS_ACTIVOS, [
+          id_hospedaje,
+        ]);
+        return (
+          rows?.[0] || {
+            total: 0,
+            subtotal: 0,
+            impuestos: 0,
+            c_total: 0,
+            c_subtotal: 0,
+            c_impuestos: 0,
+          }
+        );
       };
 
-      const insertItem = async ({ id_item, fecha_uso, venta, costo, is_ajuste, saldoOverride }) => {
+      const insertItem = async ({
+        id_item,
+        fecha_uso,
+        venta,
+        costo,
+        is_ajuste,
+        saldoOverride,
+      }) => {
         const paramsInsert = [
           id_item,
           r2(venta.total),
@@ -1006,11 +1094,16 @@ async function updateReserva3(req, res) {
       const deactivateLastK = async (k) => {
         const rows = await fetchItemsAsc();
         const candidatos = (rows || []).filter(
-          (it) => Number(it.estado) === 1 && Number(it.is_ajuste) === 0 && Number(it.is_facturado) === 0
+          (it) =>
+            Number(it.estado) === 1 &&
+            Number(it.is_ajuste) === 0 &&
+            Number(it.is_facturado) === 0
         );
         if (candidatos.length < k) {
           throw Object.assign(
-            new Error(`No hay suficientes items no facturados para apagar (${candidatos.length} < ${k}).`),
+            new Error(
+              `No hay suficientes items no facturados para apagar (${candidatos.length} < ${k}).`
+            ),
             { http: 400 }
           );
         }
@@ -1021,14 +1114,20 @@ async function updateReserva3(req, res) {
         const ids = toDeactivate.map((r) => r.id_item);
         if (ids.length) {
           const placeholders = ids.map(() => "?").join(",");
-          await exec("DEACTIVATE items", SQL_DEACTIVATE_BY_IDS(placeholders), [id_hospedaje, ...ids]);
+          await exec("DEACTIVATE items", SQL_DEACTIVATE_BY_IDS(placeholders), [
+            id_hospedaje,
+            ...ids,
+          ]);
         }
       };
 
       // ===== 0) Bloqueo por facturados =====
       const itemsActuales = await fetchItemsAsc();
       if (anyFacturado(itemsActuales)) {
-        throw Object.assign(new Error("Edición no permitida: existen items facturados."), { http: 409 });
+        throw Object.assign(
+          new Error("Edición no permitida: existen items facturados."),
+          { http: 409 }
+        );
       }
 
       // ===== 1) Parches HOSPEDAJES / BOOKINGS =====
@@ -1042,33 +1141,63 @@ async function updateReserva3(req, res) {
           comments: get(src, "comments"),
           nuevo_incluye_desayuno: get(src, "nuevo_incluye_desayuno"),
         };
-        const pairs = Object.entries(patchHosp).filter(([, v]) => v !== undefined && v !== null);
+        const pairs = Object.entries(patchHosp).filter(
+          ([, v]) => v !== undefined && v !== null
+        );
         if (pairs.length) {
           const fields = pairs.map(([k]) => `${k} = ?`);
           const vals = pairs.map(([, v]) => v);
-          await exec("UPDATE hospedajes", SQL_UPDATE_HOSPEDAJES(fields), [...vals, id_hospedaje]);
+          await exec("UPDATE hospedajes", SQL_UPDATE_HOSPEDAJES(fields), [
+            ...vals,
+            id_hospedaje,
+          ]);
         }
       }
       {
         const setBk = [];
         const valsBk = [];
-        if (checkInYmd)  { setBk.push("check_in = ?");  valsBk.push(`${checkInYmd} 00:00:00`); }
-        if (checkOutYmd) { setBk.push("check_out = ?"); valsBk.push(`${checkOutYmd} 00:00:00`); }
-        if (estadoTarget){ setBk.push("estado = ?");    valsBk.push(estadoTarget); }
-        if (setBk.length) await exec("UPDATE bookings", SQL_UPDATE_BOOKINGS(setBk), [...valsBk, id_booking]);
+        if (checkInYmd) {
+          setBk.push("check_in = ?");
+          valsBk.push(`${checkInYmd} 00:00:00`);
+        }
+        if (checkOutYmd) {
+          setBk.push("check_out = ?");
+          valsBk.push(`${checkOutYmd} 00:00:00`);
+        }
+        if (estadoTarget) {
+          setBk.push("estado = ?");
+          valsBk.push(estadoTarget);
+        }
+        if (setBk.length)
+          await exec("UPDATE bookings", SQL_UPDATE_BOOKINGS(setBk), [
+            ...valsBk,
+            id_booking,
+          ]);
       }
 
       // ===== 2) Viajeros =====
-      await actualizarViajerosHospedajeTx(id_hospedaje, viajeroPrincipal, acompanantes);
+      await actualizarViajerosHospedajeTx(
+        id_hospedaje,
+        viajeroPrincipal,
+        acompanantes
+      );
 
       // ===== 3) Diferencia de noches (DB vs target) =====
-      const nochesExistentes = countNochesVigentes(itemsActuales);           // lo que YA hay (estado=1, no ajuste)
-      const nightsChanged    = Number.isFinite(nochesTarget) && nochesTarget > 0 && (nochesTarget !== nochesExistentes);
+      const nochesExistentes = countNochesVigentes(itemsActuales); // lo que YA hay (estado=1, no ajuste)
+      const nightsChanged =
+        Number.isFinite(nochesTarget) &&
+        nochesTarget > 0 &&
+        nochesTarget !== nochesExistentes;
 
       // ===== 4) Calendario =====
       if (nightsChanged) {
         if (!checkInYmd) {
-          throw Object.assign(new Error("Para cambiar noches se requiere check_in en el payload."), { http: 400 });
+          throw Object.assign(
+            new Error(
+              "Para cambiar noches se requiere check_in en el payload."
+            ),
+            { http: 400 }
+          );
         }
 
         if (nochesTarget < nochesExistentes) {
@@ -1082,23 +1211,40 @@ async function updateReserva3(req, res) {
           // Plantilla desde catálogo hotel o primer item activo existente
           let plantilla = moldePreferido;
           if (!plantilla) {
-            const base = itemsActuales.find((it) => Number(it.estado) === 1 && Number(it.is_ajuste) === 0);
+            const base = itemsActuales.find(
+              (it) => Number(it.estado) === 1 && Number(it.is_ajuste) === 0
+            );
             plantilla = base
               ? {
-                  venta: { total: Number(base.total), subtotal: Number(base.subtotal), impuestos: Number(base.impuestos) },
-                  costo: { total: Number(base.costo_total), subtotal: Number(base.costo_subtotal), impuestos: Number(base.costo_impuestos) },
+                  venta: {
+                    total: Number(base.total),
+                    subtotal: Number(base.subtotal),
+                    impuestos: Number(base.impuestos),
+                  },
+                  costo: {
+                    total: Number(base.costo_total),
+                    subtotal: Number(base.costo_subtotal),
+                    impuestos: Number(base.costo_impuestos),
+                  },
                 }
-              : { venta: { total: 0, subtotal: 0, impuestos: 0 }, costo: { total: 0, subtotal: 0, impuestos: 0 } };
+              : {
+                  venta: { total: 0, subtotal: 0, impuestos: 0 },
+                  costo: { total: 0, subtotal: 0, impuestos: 0 },
+                };
           }
 
           // Fechas objetivo completas y filtrar las que faltan en DB
           const fechasFull = buildInclusiveDates(checkInYmd, nochesTarget);
           const existentesActivas = new Set(
             itemsActuales
-              .filter((it) => Number(it.estado) === 1 && Number(it.is_ajuste) === 0)
+              .filter(
+                (it) => Number(it.estado) === 1 && Number(it.is_ajuste) === 0
+              )
               .map((it) => toDateOnly(it.fecha_uso))
           );
-          const fechasQueFaltan = fechasFull.filter((f) => !existentesActivas.has(f));
+          const fechasQueFaltan = fechasFull.filter(
+            (f) => !existentesActivas.has(f)
+          );
           const fechasNuevas = fechasQueFaltan.slice(-k); // solo la diferencia
 
           for (const f of fechasNuevas) {
@@ -1120,17 +1266,23 @@ async function updateReserva3(req, res) {
         const sums = await sumActivos(); // tras calendario
         const delta = r2(ventaTotalTarget - Number(sums.total || 0));
 
-        const shouldCreatePositive = delta > 0.01 && (bandera === 1 || bandera === 2);
+        const shouldCreatePositive =
+          delta > 0.01 && (bandera === 1 || bandera === 2);
         const shouldCreateNegative = delta < -0.01 && bandera !== 3;
 
         if (shouldCreatePositive || shouldCreateNegative) {
           const { sub: adjSub, imp: adjImp } = breakdownByRates(delta, {
-            ivaPct, ishPct, otrosPct, otrosMonto,
+            ivaPct,
+            ishPct,
+            otrosPct,
+            otrosMonto,
           });
 
           const fechaAjuste =
             checkOutYmd ||
-            (checkInYmd ? addDays(checkInYmd, Math.max((nochesTarget || 1) - 1, 0)) : toDateOnly(new Date().toISOString()));
+            (checkInYmd
+              ? addDays(checkInYmd, Math.max((nochesTarget || 1) - 1, 0))
+              : toDateOnly(new Date().toISOString()));
 
           // Para crédito (bandera=2) y delta>0 => saldo=delta en el item
           const saldoOverride = bandera === 2 && delta > 0 ? delta : 0;
@@ -1147,12 +1299,17 @@ async function updateReserva3(req, res) {
 
           // Wallet (bandera=1) y delta>0: descargar saldos y vincular pago->item
           if (bandera === 1 && delta > 0.01) {
-            const updatedSaldos = Array.isArray(body.updatedSaldos) ? body.updatedSaldos : [];
+            const updatedSaldos = Array.isArray(body.updatedSaldos)
+              ? body.updatedSaldos
+              : [];
             for (const s of updatedSaldos) {
               const monto = Number(s.monto_cargado_al_item || 0);
               const id_saldos = s.id_saldos;
               if (id_saldos && monto > 0) {
-                await exec("WALLET: update saldo", SQL_UPDATE_SALDO_WALLET, [r2(monto), id_saldos]);
+                await exec("WALLET: update saldo", SQL_UPDATE_SALDO_WALLET, [
+                  r2(monto),
+                  id_saldos,
+                ]);
               }
             }
             const id_pago_vinculo =
@@ -1194,7 +1351,10 @@ async function updateReserva3(req, res) {
           r2(sumsFinal.c_impuestos || 0),
           estadoTarget || "Confirmada",
         ];
-        await exec("UPDATE bookings(totales)", SQL_UPDATE_BOOKINGS(fields), [...params, id_booking]);
+        await exec("UPDATE bookings(totales)", SQL_UPDATE_BOOKINGS(fields), [
+          ...params,
+          id_booking,
+        ]);
       }
 
       // servicios (si consolidas)
@@ -1206,7 +1366,12 @@ async function updateReserva3(req, res) {
              SET total = ?, subtotal = ?, impuestos = ?, updated_at = NOW()
            WHERE id_servicio = ?
         `.trim(),
-          [r2(sumsFinal.total || 0), r2(sumsFinal.subtotal || 0), r2(sumsFinal.impuestos || 0), id_servicio]
+          [
+            r2(sumsFinal.total || 0),
+            r2(sumsFinal.subtotal || 0),
+            r2(sumsFinal.impuestos || 0),
+            id_servicio,
+          ]
         );
       }
     });
@@ -1221,7 +1386,10 @@ async function updateReserva3(req, res) {
     const http = err?.http || 500;
     return res.status(http).json({
       ok: false,
-      message: http === 409 ? "Edición no permitida: existen items facturados." : "Error al editar la reserva",
+      message:
+        http === 409
+          ? "Edición no permitida: existen items facturados."
+          : "Error al editar la reserva",
       detail: err?.message || String(err),
     });
   }
@@ -1243,8 +1411,6 @@ const createFromOperaciones = async (req, res) => {
 
     console.log("a ver esto,", checkInDate, checkOutDate);
     console.log(
-      
-      
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime()
     );
@@ -1264,11 +1430,20 @@ const createFromOperaciones = async (req, res) => {
       req.body,
       req.body.bandera
     );
+    let response = await model.insertarReservaOperaciones(
+      req.body,
+      req.body.bandera
+    );
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });
   } catch (error) {
     console.error(error);
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: error.message,
+      data: null,
+    });
     res.status(500).json({
       error: "Internal Server Error",
       message: error.message,
@@ -1397,6 +1572,9 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
     const reservas = await executeSP("sp_reservas_con_items_by_id_agente", [
       id_agente,
     ]);
+    const reservas = await executeSP("sp_reservas_con_items_by_id_agente", [
+      id_agente,
+    ]);
     if (!reservas) {
       return res.status(404).json({ message: "No se encontraron reservas" });
     } else {
@@ -1434,27 +1612,43 @@ const getReservasWithItemsSinPagarByAgente = async (req, res) => {
 
 const getDetallesConexionReservas = async (req, res) => {
   const { id_agente, id_hospedaje } = req.query;
-  try {
-    const [facturas = [], pagos = []] = await executeSP2(
-      "sp_get_detalles_conexion_reservas",
-      [id_agente, id_hospedaje],
-      { allSets: true }
-    );
-    // console.log(detalles);
-    // if (!detalles || detalles.length === 0) {
-    //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
-    // }
-    return res.status(200).json({
-      message: "Detalles de conexión encontrados",
-      data: {
-        facturas: facturas,
-        pagos: pagos,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Error en el servidor", details: error });
-    console.error(error);
-  }
+  const getDetallesConexionReservas = async (req, res) => {
+    const { id_agente, id_hospedaje } = req.query;
+    try {
+      const [facturas = [], pagos = []] = await executeSP2(
+        "sp_get_detalles_conexion_reservas",
+        [id_agente, id_hospedaje],
+        { allSets: true }
+      );
+      const [facturas = [], pagos = []] = await executeSP2(
+        "sp_get_detalles_conexion_reservas",
+        [id_agente, id_hospedaje],
+        { allSets: true }
+      );
+      // console.log(detalles);
+      // if (!detalles || detalles.length === 0) {
+      //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
+      // }
+      return res.status(200).json({
+        message: "Detalles de conexión encontrados",
+        data: {
+          facturas: facturas,
+          pagos: pagos,
+        },
+      });
+      // }
+      return res.status(200).json({
+        message: "Detalles de conexión encontrados",
+        data: {
+          facturas: facturas,
+          pagos: pagos,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Error en el servidor", details: error });
+      console.error(error);
+    }
+  };
 };
 
 module.exports = {
@@ -1472,5 +1666,6 @@ module.exports = {
   actualizarPrecioVenta,
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
+  getDetallesConexionReservas,
   getDetallesConexionReservas,
 };
