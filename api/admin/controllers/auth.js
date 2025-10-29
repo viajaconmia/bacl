@@ -224,6 +224,22 @@ LEFT JOIN vw_permisos_by_user vw
   }
 };
 
+const createRole = async (req, res) => {
+  try {
+    const { name } = req.body;
+    await executeQuery(`INSERT INTO roles (name) VALUES (?)`, [name || ""]);
+
+    res.status(204).json({ message: "Creado con exito", data: null });
+  } catch (error) {
+    console.error(error.message || "Error al crear usuario");
+    res.status(error.statusCode || error.status || 500).json({
+      message: error.message || "Error al registrar el usuario",
+      data: null,
+      error,
+    });
+  }
+};
+
 module.exports = {
   signUp,
   logIn,
@@ -231,4 +247,5 @@ module.exports = {
   verifySession,
   getUsuariosAdmin,
   getPermisos,
+  createRole,
 };

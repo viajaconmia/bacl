@@ -44,6 +44,7 @@ router.get("/permisos", controller.getPermisos);
 router.post(
   "/signup",
   validacion.validateParams(["username", "password", "email"]),
+  verificarPermiso("vista(admin):creacion(usuarios)"),
   controller.signUp
 );
 router.post(
@@ -52,5 +53,10 @@ router.post(
   controller.logIn
 );
 router.post("/logout", controller.logOut);
+router.post(
+  "/role",
+  verificarPermiso("vista(admin):creacion(roles)"),
+  controller.createRole
+);
 
 module.exports = router;
