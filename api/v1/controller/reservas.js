@@ -892,12 +892,10 @@ async function updateReserva3(req, res) {
   );
 
   if (!id_booking || !id_hospedaje) {
-    return res
-      .status(400)
-      .json({
-        ok: false,
-        message: "Faltan id_booking o id_hospedaje en el payload.",
-      });
+    return res.status(400).json({
+      ok: false,
+      message: "Faltan id_booking o id_hospedaje en el payload.",
+    });
   }
 
   // Datos de negocio
@@ -1430,10 +1428,6 @@ const createFromOperaciones = async (req, res) => {
       req.body,
       req.body.bandera
     );
-    let response = await model.insertarReservaOperaciones(
-      req.body,
-      req.body.bandera
-    );
     res
       .status(201)
       .json({ message: "Solicitud created successfully", data: response });
@@ -1572,9 +1566,7 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
     const reservas = await executeSP("sp_reservas_con_items_by_id_agente", [
       id_agente,
     ]);
-    const reservas = await executeSP("sp_reservas_con_items_by_id_agente", [
-      id_agente,
-    ]);
+
     if (!reservas) {
       return res.status(404).json({ message: "No se encontraron reservas" });
     } else {
@@ -1620,11 +1612,7 @@ const getDetallesConexionReservas = async (req, res) => {
         [id_agente, id_hospedaje],
         { allSets: true }
       );
-      const [facturas = [], pagos = []] = await executeSP2(
-        "sp_get_detalles_conexion_reservas",
-        [id_agente, id_hospedaje],
-        { allSets: true }
-      );
+
       // console.log(detalles);
       // if (!detalles || detalles.length === 0) {
       //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
