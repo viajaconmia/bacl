@@ -204,7 +204,8 @@ FROM saldos_a_favor AS sf
 INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
 LEFT JOIN vw_pagos_prepago_facturables AS v
-  ON v.raw_id = sf.id_saldos;`,
+  ON v.raw_id = sf.id_saldos
+  WHERE sf.id_agente = ?`,
       [id]
     );
     // console.log(saldo);

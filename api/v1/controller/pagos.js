@@ -1958,6 +1958,40 @@ const getAllPagosPrepago = async (req, res) => {
   }
 };
 
+const getPagoPrepago = async (req, res) => {
+  try {
+    // 1) Obtiene el parámetro (por ejemplo desde la URL o query)
+    const { raw_id } = req.query; // o req.query según tu ruta
+
+    if (!raw_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Falta el parámetro raw_id",
+      });
+    }
+
+    // 2) Ejecuta la consulta con parámetro seguro
+    const pago = await executeQuery(
+      `SELECT * FROM vw_pagos_prepago_facturables WHERE raw_id = ?`,
+      [raw_id]
+    );
+
+    // 4) Envía la respuesta
+    res.status(200).json({
+      success: true,
+      message: "Pago obtenido correctamente",
+      data: pago,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener los pagos de prepago",
+      error: error.message || "Error desconocido",
+    });
+  }
+};
+
+
 const getDetallesConexionesPagos = async (req, res) => {
   const { id_agente, id_raw } = req.query;
   try {
@@ -2044,4 +2078,5 @@ module.exports = {
   pagarCarritoConCredito,
   getDetallesConexionesPagos,
   aplicarCambioNochesOAjuste,
+  getPagoPrepago
 };

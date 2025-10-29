@@ -270,7 +270,7 @@ const toMysqlDateTime = (val) => {
   }
 };
 
-const updateReserva2 = async (req, res) => {x1
+const updateReserva2 = async (req, res) => {
   console.log("Llegando al endpoint de updateReserva2");
   const { id } = req.query;
 

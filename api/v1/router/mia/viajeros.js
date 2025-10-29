@@ -10,6 +10,7 @@ router.post(
     "primer_nombre",
     "apellido_paterno",
   ]),
+
   controller.create
 );
 router.get("/", controller.read);
