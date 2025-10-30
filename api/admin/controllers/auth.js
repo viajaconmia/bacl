@@ -4,12 +4,11 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { ShortError, CustomError } = require("../../../middleware/errorHandler");
 const Validation = require("../validations");
+const { getUser } = require("../services/user");
 
 const signUp = async (req, res) => {
   try {
     let { username, password, email, role } = req.body;
-
-    console.log("entrando");
 
     Validation.password(password);
     Validation.username(username);
@@ -81,32 +80,19 @@ const logIn = async (req, res) => {
       `SELECT * FROM users_admin WHERE email = ? AND active = 1`,
       [email]
     );
-    if (!user_completo) throw new Error("No existe ese usuario");
+    if (!user_completo) throw new Error("Credenciales incorrectas");
 
     const isValid = await bcrypt.compare(password, user_completo.password);
 
-    if (!isValid) throw new Error("Contraseña incorrecta");
+    if (!isValid) throw new Error("Credenciales incorrectas");
 
-    const { password: _, ...user } = user_completo;
+    const user = await getUser(email);
 
-    const permisos_obj = await executeQuery(
-      `
-      select p.name from user_roles ur 
-      left join role_permissions rp on rp.role_id = ur.role_id 
-      left join user_permissions up on up.user_id = ur.user_id
-      left join permissions p on p.id = rp.permission_id OR p.id = up.permission_id
-      where ur.user_id = ?;`,
-      [user.id]
-    );
-
-    const permisos = permisos_obj.map((permiso) => permiso.name);
-    let { password: contrasena, ...usuario } = user;
-
-    const token = jwt.sign({ ...usuario, permisos }, SECRET_KEY, {
+    console.log(user);
+    const token = jwt.sign(user, SECRET_KEY, {
       expiresIn: "7d",
     });
 
-    console.log(token);
     res
       .cookie("access-token", token, {
         httpOnly: true,
@@ -117,7 +103,7 @@ const logIn = async (req, res) => {
       .status(200)
       .json({
         message: "Accediendo con exito",
-        data: { id: user.id, name: user.name, token, permisos },
+        data: user,
       });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
@@ -146,12 +132,7 @@ const logOut = async (req, res) => {
 const verifySession = async (req, res) => {
   try {
     const { user } = req.session;
-    const [usuario] = await executeQuery(
-      `SELECT * FROM users_admin WHERE email = ? AND active = 1`,
-      [user.email]
-    );
-    console.log(user);
-    console.log(usuario);
+    const usuario = await getUser(user.email);
     if (!usuario) {
       res.clearCookie("access-token").status(204).json({ message: "session" });
     }
@@ -159,11 +140,14 @@ const verifySession = async (req, res) => {
     res.status(200).json({ message: "Comprobando verificación", data: user });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
-    res.status(error.statusCode || error.status || 500).json({
-      message: error.message || "Error al registrar el usuario",
-      data: null,
-      error,
-    });
+    res
+      .clearCookie("access-token")
+      .status(error.statusCode || error.status || 500)
+      .json({
+        message: error.message || "Error al registrar el usuario",
+        data: null,
+        error,
+      });
   }
 };
 
@@ -200,6 +184,8 @@ const getPermisos = async (req, res) => {
     p.id,
     p.name,
     p.description,
+    p.categoria,
+    vw.origen,
     CASE 
         WHEN vw.permission_id IS NOT NULL THEN 1
         ELSE 0
@@ -239,8 +225,63 @@ const createRole = async (req, res) => {
     });
   }
 };
+const updatePermissionRole = async (req, res) => {
+  try {
+    const { id_permission, id_role, value } = req.body;
+    if (value) {
+      await executeQuery(
+        `INSERT INTO role_permissions (role_id, permission_id) VALUES (?,?)`,
+        [id_role, id_permission]
+      );
+    } else {
+      await executeQuery(
+        `DELETE from role_permissions where role_id = ? AND permission_id = ?`,
+        [id_role, id_permission]
+      );
+    }
+
+    res.status(204).json({ message: "Actualizado con exito", data: null });
+  } catch (error) {
+    const message = error.message || "Error al actualizar el permiso";
+    res.status(error.statusCode || error.status || 500).json({
+      message,
+      data: null,
+      error,
+    });
+  }
+};
+
+const getPermissionByRole = async (req, res) => {
+  try {
+    const { id } = req.query;
+    const permisos = await executeQuery(
+      `SELECT 
+	p.*,
+	(CASE 
+    WHEN (rp.role_id is null) THEN 0
+    ELSE 1
+	END) as active 
+FROM permissions as p
+LEFT JOIN role_permissions as rp on rp.permission_id = p.id AND rp.role_id = ?;`,
+      [id]
+    );
+    console.log(id);
+    console.log(permisos);
+
+    res.status(200).json({ message: "Actualizado con exito", data: permisos });
+  } catch (error) {
+    const message = error.message || "Error al obtener los permisos";
+    res.status(error.statusCode || error.status || 500).json({
+      message,
+      data: null,
+      error,
+    });
+  }
+};
 
 module.exports = {
+  getPermissionByRole,
+  updatePermissionRole,
   signUp,
   logIn,
   logOut,
