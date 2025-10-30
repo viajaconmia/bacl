@@ -28,6 +28,7 @@ router.post(
 
 // Descargar facturas por CFDI ID
 router.post("/download", controller.descargarFacturas);
+router.post("/descarga", controller.newDescargarFacturas);
 
 router.post("/downloadXML", controller.descargarFacturasXML);
 
@@ -36,5 +37,7 @@ router.post("/send-email", controller.mandarCorreo);
 
 //Cancelar un cfdi
 router.delete("/cfdi", controller.cancelarCfdi);
+
+router.get("/cfdi", controller.getCdfi);
 
 module.exports = router;

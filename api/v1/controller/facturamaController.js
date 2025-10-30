@@ -1,12 +1,13 @@
+const { executeQuery } = require("../../../config/db");
 let model = require("../model/facturamaModel");
 
 const obtenerClientePorRfc = async (req, res) => {
   try {
-    const { clientRfc } = req.query;
+    const { rfc } = req.query;
 
     let listClient = await model.listaClientes();
     const filtrado = listClient.find(
-      ({ Rfc }) => Rfc.toUpperCase() === clientRfc.toUpperCase()
+      ({ Rfc }) => Rfc.toUpperCase() === rfc.toUpperCase()
     );
 
     if (!filtrado) {
@@ -16,6 +17,28 @@ const obtenerClientePorRfc = async (req, res) => {
     }
 
     res.status(200).json(filtrado);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.response.data });
+  }
+};
+
+const obtenerListaCfdis = async (req, res) => {
+  try {
+    let listClient = await model.listaClientes();
+    // const filtrado = listClient.find(
+    //   ({ Rfc }) => Rfc.toUpperCase() === rfc.toUpperCase()
+    // );
+
+    // if (!filtrado) {
+    //   return res
+    //     .status(404)
+    //     .json({ error: `No client found with the RFC: ${clientRfc}` });
+    // }
+
+    res.status(200).json(listClient);
   } catch (error) {
     console.error(error);
     res
@@ -62,8 +85,24 @@ const obtenerFacturasCliente = async (req, res) => {
   try {
     const { rfc } = req.query;
     const listFacturas = await model.listaCfdis(rfc); // Asegúrate de que esta función devuelva una promesa
+    const empresa = await executeQuery(
+      `select e.id_empresa from empresas as e inner join datos_fiscales as d on d.id_empresa = e.id_empresa where d.rfc = ?;`,
+      [rfc]
+    );
+    console.log(empresa);
+    const id_empresa = empresa[0] ? empresa[0].id_empresa : null;
+    const lista = listFacturas
+      .map((factura) => {
+        // return {
+        //   id: factura.Id,
+        //   uuid: factura.Uuid,
+        // };
+        return [factura.Id, factura.Uuid, rfc, id_empresa].join(",");
+      })
+      .join("\n");
 
-    res.status(200).json(listFacturas);
+    console.log(lista);
+    res.status(200).json({ csv: lista, listFacturas });
   } catch (error) {
     console.error(error);
     res
@@ -83,6 +122,23 @@ const descargarFacturas = async (req, res) => {
     res
       .status(500)
       .json({ error: "Internal Server Error", details: error.response.data });
+  }
+};
+const newDescargarFacturas = async (req, res) => {
+  try {
+    const { id, type } = req.body;
+    const dataDownload = await model.descargaCfdi(id, type); // Asegúrate de que esta función también devuelva una promesa
+
+    res
+      .status(200)
+      .json({ message: "cfdi obtenido con exito", data: dataDownload });
+  } catch (error) {
+    console.error(error);
+    res.status(error.statusCode || error.status).json({
+      message: error.message || "error al obtener la factura",
+      data: null,
+      error: error.response.data || {},
+    });
   }
 };
 
@@ -159,16 +215,34 @@ const cancelarCfdi = async (req, res) => {
       .json({ error: "Internal Server Error", details: error.response.data });
   }
 };
+const getCdfi = async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    if (!id) throw new Error("Falta el id del CFDI");
+
+    const response = await model.getCfdi(id);
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.response.data });
+  }
+};
 
 module.exports = {
   obtenerClientes,
   crearCfdi,
   crearCliente,
   descargarFacturas,
+  newDescargarFacturas,
   mandarCorreo,
   obtenerClientePorId,
   obtenerClientePorRfc,
   obtenerFacturasCliente,
   cancelarCfdi,
   descargarFacturasXML,
+  getCdfi,
 };

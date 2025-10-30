@@ -17,6 +17,9 @@ const getHotelesWithCuartos = async () => {
     h.otros_impuestos_porcentaje,
     tc.id_tipo_cuarto,
     tc.nombre AS nombre_tipo_cuarto,
+    t.tipo_desayuno,
+    t.comentario_desayuno,
+    t.precio_desayuno,
     t.id_tarifa,
     t.costo,
     t.precio,
@@ -35,6 +38,9 @@ const getHotelesWithCuartos = async () => {
 
       const tipoCuarto = {
         id_tipo_cuarto: item.id_tipo_cuarto,
+        tipo_desayuno: item.tipo_desayuno,
+        comentario_desayuno: item.comentario_desayuno,
+        precio_desayuno: item.precio_desayuno,
         nombre_tipo_cuarto: item.nombre_tipo_cuarto,
         id_tarifa: item.id_tarifa,
         precio: item.precio,
@@ -69,10 +75,6 @@ const getHotelesWithCuartos = async () => {
         hotel.tipos_cuartos.push(tipoCuarto);
       }
     });
-
-    console.log(agrupado);
-
-    console.log(agrupado);
     return agrupado;
   } catch (error) {
     throw error;

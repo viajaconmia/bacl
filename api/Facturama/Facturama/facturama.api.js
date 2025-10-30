@@ -61,7 +61,7 @@ const facturama = () => {
     req.context.logStep("▶️ postSyncWithData args:");
 
     try {
-      console.log(`${settings.url}${path}`);
+      // console.log(`${settings.url}${path}`);
       // 1) Ejecutamos la llamada y nos quedamos con todo el response
       //
 
@@ -75,15 +75,16 @@ const facturama = () => {
       });
 
       // 2) Opcional: sanity log de headers enviados
-      req.context.logStep(
-        "➡️ Facturama request headers:",
-        response.config.headers
-      );
+      // req.context.logStep(
+      //   "➡️ Facturama request headers:",
+      //   response.config.headers
+      // );
 
       // 3) Retornamos el objeto completo (status + data + headers, etc.)
       return response;
     } catch (error) {
       if (error.response) {
+        console.error(error.response.data);
         // 4a) Si es un fallo HTTP, mostramos TODO el payload de error
         console.error("❌ Facturama error status:", error.response.status);
         // console.error(
@@ -155,13 +156,6 @@ const facturama = () => {
       Create: (data) => postSyncWithData("client", data),
       Remove: (id) => deleteSyncWithParam("client", id),
       Update: (id, data) => putSyncWithData(`client/${id}`, data),
-    },
-    Products: {
-      Get: (id) => retrieve("product", id),
-      List: () => list("product"),
-      Create: (data) => postSyncWithData("product", data),
-      Remove: (id) => deleteSyncWithParam("product", id),
-      Update: (id, data) => putSyncWithData(`product/${id}`, data),
     },
     BranchOffice: {
       Get: (id) => retrieve("branchOffice", id),

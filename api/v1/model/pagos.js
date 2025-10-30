@@ -1,6 +1,9 @@
 const { executeQuery, executeTransaction } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+const { ShortError } = require("../../../middleware/errorHandler");
+const { calcularPrecios } = require("../../../lib/utils/calculates");
 
+//Este endpoint maybe ya se podra eliminar sin problemas
 const createPagos = async (datosPago) => {
   try {
     const id_pago = `pag-${uuidv4()}`;
@@ -257,7 +260,7 @@ const pagoConCredito = async (body) => {
   }
 };
 
-const getPagosConsultas = async (user_id) => {
+const getPagosConsultas = async (user_id) => {/*PARECE SER QUE YA NO SE OCUPA*/ 
   try {
     let query = `
 SELECT
@@ -361,6 +364,8 @@ ORDER BY pagos.created_at DESC;`;
     throw error;
   }
 };
+
+//ESTE ES PARA MANEJAR LOS PAGOS DE LOS ITEMS DEL CARRITO
 
 module.exports = {
   createPagos,

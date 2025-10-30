@@ -4,7 +4,7 @@ const { createClient } = require("@supabase/supabase-js");
 const API_KEY = process.env.APIKEY;
 const API_STRIPE = process.env.API_STRIPE;
 const valuesFacturama = {
-  token: process.env.TOKEN_FACTURAMA || "cHJ1ZWJhbm9rdG9zOnBydWViYXMubm9rdG9z",
+  token: process.env.TOKEN_FACTURAMA || btoa("pruebanoktos:pruebasnoktos"),
   useragent: process.env.USERAGENT_FACTURAMA,
   url: process.env.URL_FACTURAMA || "https://apisandbox.facturama.mx/",
 };
@@ -15,7 +15,7 @@ const API_SENDGRID = process.env.API_SENDGRID;
 const SERVICE_ROLE_KEY_SPB = process.env.SERVICE_ROLE_KEY_SPB;
 
 const supabase = createClient(
-  "https://iqicycjdypiypfxwaapj.supabase.co",
+  process.env.SUPABASE_URL,
   SERVICE_ROLE_KEY_SPB // 👈 aquí va la Service Role Key
 );
 

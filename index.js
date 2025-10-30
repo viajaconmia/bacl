@@ -2,6 +2,47 @@
 const express = require("express");
 const app = express();
 const PORT = process.env.PORT || 3001;
+/**de aqui para abajo */
+const Stripe = require("stripe");
+require("dotenv").config();
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
+  apiVersion: "2024-04-10",
+});
+
+app.post("/disputa", express.raw({ type: "application/json" }), (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET_TEST;
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error("❌ Error verificando la firma del webhook:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // ✅ Manejo del evento de disputa
+  if (event.type === "charge.dispute.created") {
+    const dispute = event.data.object;
+    console.log("\n\n\n\n\n🚨 Disputa recibida:", {
+      id: dispute.id,
+      amount: dispute.amount / 100,
+      currency: dispute.currency,
+      reason: dispute.reason,
+    });
+
+    // Aquí puedes guardar en base de datos, notificar a alguien, etc.
+  } else {
+    console.log(`📦 Evento recibido no manejado: ${event.type}`);
+  }
+
+  res.status(200).json({ received: true });
+});
+/** aqui*/
+
+const { errorHandler } = require("./middleware/errorHandler");
 
 const { checkApiKey } = require("./middleware/auth");
 const v1Router = require("./api/v1/router/general");
@@ -24,6 +65,8 @@ const corsOptions = {
     "https://mia-gray.vercel.app",
     "https://www.viajaconmia.com",
     "https://admin.viajaconmia.com",
+    "https://mia-git-pruebasmia-mias-projects-f396ca8b.vercel.app",
+    "https://admin-mia-git-pruebasadmin-mias-projects-f396ca8b.vercel.app"
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: [
@@ -79,13 +122,7 @@ app.get("/", (req, res) =>
 );
 
 // 7. Manejador de errores global (solo formatea respuesta; no llama a logger.error)
-app.use((err, req, res, next) => {
-  res.status(err.status || 500).json({
-    error: true,
-    mensaje: err.message || "Ocurrió un error interno en el servidor",
-    data: err || null,
-  });
-});
+app.use(errorHandler);
 
 // 8. Inicio del servidor
 app.listen(PORT, () => {

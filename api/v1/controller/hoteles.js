@@ -2,10 +2,10 @@ const { executeSP, executeQuery } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 const model = require("../model/hoteles");
 const { generatePresignedUploadUrl } = require("../utils/subir-imagen");
+const { ShortError } = require("../../../middleware/errorHandler");
 
 const AgregarHotel = async (req, res) => {
-  console.log("Llegó al endpoint de agregar hotel");
-  console.log("Body recibido:", JSON.stringify(req.body, null, 2)); // Log completo del body
+  req.context.logStep("Llegó al endpoint de agregar hotel");
 
   try {
     // Extraer datos del cuerpo de la solicitud con valores por defecto
@@ -81,6 +81,7 @@ const AgregarHotel = async (req, res) => {
       score_operaciones,
       score_sistemas,
     } = req.body;
+    req.context.logStep("Body recibido:", JSON.stringify(req.body, null, 2));
     const { preferenciales } = tarifas;
     // Función para asegurar valores numéricos
     const safeNumber = (value) => {
@@ -134,7 +135,7 @@ const AgregarHotel = async (req, res) => {
           },
         };
 
-        console.log(
+        req.context.logStep(
           "Tarifa preferencial procesada:",
           JSON.stringify(tarifaPreferencial, null, 2)
         );
@@ -144,7 +145,10 @@ const AgregarHotel = async (req, res) => {
 
     const tarifasPreferenciales = processTarifasPreferenciales();
     const tarifas_preferenciales_json = JSON.stringify(tarifasPreferenciales);
-    console.log("Tarifas preferenciales finales:", tarifas_preferenciales_json);
+    req.context.logStep(
+      "Tarifas preferenciales finales:",
+      tarifas_preferenciales_json
+    );
 
     // Formatear fecha de vigencia del convenio si existe
     const formatVigenciaConvenio = (dateString) => {
@@ -177,7 +181,7 @@ const AgregarHotel = async (req, res) => {
     }
 
     // Llamada al stored procedure (descomentar cuando esté listo)
-
+    req.context.logStep("Ejecutando stored procedure sp_inserta_hotel3");
     const result = await executeSP(
       "sp_inserta_hotel3",
       [
@@ -248,7 +252,7 @@ const AgregarHotel = async (req, res) => {
       ],
       false
     );
-
+    req.context.logStep("Resultado del stored procedure:", result);
     res.status(200).json({
       success: true,
       data: {
@@ -257,6 +261,7 @@ const AgregarHotel = async (req, res) => {
       },
     });
   } catch (error) {
+    req.context.logStep("Error al agregar hotel:", error.message);
     console.error("Error en AgregarHotel:", error);
     res.status(500).json({
       success: false,
@@ -416,12 +421,10 @@ const getTarifasByIdHotel = async (req, res) => {
         .status(404)
         .json({ message: "No se encontraron tarifas asociadas a este hotel" });
     } else {
-      res
-        .status(200)
-        .json({
-          message: "Tarifas recuperadas exitosamente",
-          tarifas: tarifas,
-        });
+      res.status(200).json({
+        message: "Tarifas recuperadas exitosamente",
+        tarifas: tarifas,
+      });
     }
   } catch (error) {
     res.status(500).json({ message: "Error en el servidor", error: error });
@@ -431,12 +434,10 @@ const eliminaHotelLogico = async (req, res) => {
   const { id_hotel } = req.body;
   try {
     const borrado = await executeSP("elimina_hotel_logico", [id_hotel], false);
-    res
-      .status(200)
-      .json({
-        message: "Eliminacion exitosa del hotel ",
-        data_borrada: borrado,
-      });
+    res.status(200).json({
+      message: "Eliminacion exitosa del hotel ",
+      data_borrada: borrado,
+    });
   } catch (error) {
     res
       .status(500)
@@ -462,16 +463,14 @@ const consultaPrecioSencilla = async (req, res) => {
     //console.log(result)
     const precio_sencilla = result?.[0]?.precio_sencilla;
     if (precio_sencilla === undefined) {
-      return res
-        .status(404)
-        .json({
-          message: "No se encontró el precio de la habitación sencilla",
-        });
+      return res.status(404).json({
+        message: "No se encontró el precio de la habitación sencilla",
+      });
     }
 
     res
       .status(200)
-      .json({ message: "Precio encontrado", precio: precio_sencilla });
+      .json({ message: "Precio encontrado", precio: precio_sencilla, result });
   } catch (error) {
     console.error("Error ejecutando SP:", error);
     res.status(500).json({ message: "Error interno del servidor" });
@@ -519,12 +518,10 @@ const filtra_hoteles = async (req, res) => {
   if (opc == 1) {
     try {
       const hoteles_activos = await executeSP("sp_hoteles_activos", [], false);
-      res
-        .status(200)
-        .json({
-          message: "Hoteles activos recuperados",
-          data: hoteles_activos,
-        });
+      res.status(200).json({
+        message: "Hoteles activos recuperados",
+        data: hoteles_activos,
+      });
     } catch (error) {
       res
         .status(500)
@@ -537,12 +534,10 @@ const filtra_hoteles = async (req, res) => {
         [],
         false
       );
-      res
-        .status(200)
-        .json({
-          message: "Hoteles inactivos recuperados",
-          data: hoteles_inactivos,
-        });
+      res.status(200).json({
+        message: "Hoteles inactivos recuperados",
+        data: hoteles_inactivos,
+      });
     } catch (error) {
       res
         .status(500)
@@ -557,11 +552,9 @@ const paginacion = async (req, res) => {
   try {
     const result = await executeSP("SP_Hoteles_Paginacion", [pagina], true);
     if (!result[0]) {
-      res
-        .status(404)
-        .json({
-          message: "No se encontraron hoteles para la pagina solicitada",
-        });
+      res.status(404).json({
+        message: "No se encontraron hoteles para la pagina solicitada",
+      });
     } else {
       const hoteles = result;
       const paginationRows = result[1] ?? [];
@@ -570,13 +563,11 @@ const paginacion = async (req, res) => {
         total_paginas: 0,
         total_registros: 0,
       };
-      res
-        .status(200)
-        .json({
-          message: "Hoteles recuerados con exito",
-          hoteles: hoteles,
-          info: info_paginacion,
-        });
+      res.status(200).json({
+        message: "Hoteles recuerados con exito",
+        hoteles: hoteles,
+        info: info_paginacion,
+      });
     }
   } catch (error) {
     res.status(500).json({ message: "Error interno del servidor" });
@@ -592,12 +583,10 @@ const BuscaHotelesPorTermino = async (req, res) => {
         .status(404)
         .json({ message: "No se encontraron hoteles con esa busqueda" });
     } else {
-      res
-        .status(200)
-        .json({
-          message: "Mostrando los hoteles coincidentes",
-          hoteles: result,
-        });
+      res.status(200).json({
+        message: "Mostrando los hoteles coincidentes",
+        hoteles: result,
+      });
     }
   } catch (error) {
     res
@@ -726,6 +715,26 @@ const readHotelesWithTarifaClient = async (req, res) => {
   }
 };
 
+const readHotelesTarifasById = async (req, res) => {
+  try {
+    const { id } = req.query;
+    if (!id) throw new ShortError("No se encontro ningun hotel", 404);
+    const query = `select * from vw_hoteles_tarifas_completa where Activo = 1 AND id_hotel = ?;`;
+    const response = await executeQuery(query, [id]);
+    res
+      .status(200)
+      .json({ message: "Hoteles obtenidos con exito", data: response[0] });
+  } catch (error) {
+    console.log(error);
+    res.status(error.statusCode || 500).json({
+      message:
+        error.message || "Error desconocido al actualizar precio de credito",
+      error: error || "ERROR_BACK",
+      data: null,
+    });
+  }
+};
+
 const actualizarTarifa = async (req, res) => {
   try {
     const {
@@ -801,6 +810,8 @@ const eliminarLogicaTarifa = async (req, res) => {
 };
 
 const filtroAvanzado = async (req, res) => {
+  console.log("PRUEBA PARA BACKEND HACIA PRUEBAS 😒✌️✌️");
+  req.context.logStep("Llegó al endpoint de filtro avanzado");
   const {
     desayuno,
     activo,
@@ -825,12 +836,14 @@ const filtroAvanzado = async (req, res) => {
     tiene_transportacion,
     pais,
   } = req.body;
+  req.context.logStep("Datos recibidos:", JSON.stringify(req.body, null, 2));
 
   // Utilidad para convertir a mayúsculas si es string
   const toUpperOrNull = (val) =>
     typeof val === "string" ? val.toUpperCase() : val ?? null;
 
   try {
+    req.context.logStep("Ejecutando stored procedure filtro_completo");
     const result = await executeSP(
       "filtro_completo",
       [
@@ -859,8 +872,9 @@ const filtroAvanzado = async (req, res) => {
       ],
       true
     );
-
+    req.context.logStep("Resultado del stored procedure:", result);
     if (!result) {
+      req.context.logStep("No se encontraron hoteles con esa búsqueda");
       res
         .status(404)
         .json({ message: "No se encontraron hoteles con esa búsqueda" });
@@ -870,17 +884,20 @@ const filtroAvanzado = async (req, res) => {
         .json({ message: "Hoteles recuperados con éxito", data: result });
     }
   } catch (error) {
+    req.context.logStep("Error al ejecutar filtro_completo:", error.message);
     console.error("Error al ejecutar filtro_completo:", error);
     res.status(500).json({ message: "Error interno del servidor" });
   }
 };
 
 const cargaImagen = async (req, res) => {
- try {
+  try {
     const { filename, filetype } = req.query;
 
     if (!filename || !filetype) {
-      return res.status(400).json({ success: false, message: "Faltan parámetros" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Faltan parámetros" });
     }
 
     const key = `hoteles/${Date.now()}_${filename}`;
@@ -911,5 +928,6 @@ module.exports = {
   eliminarLogicaTarifa,
   filtroAvanzado,
   readHotelesWithTarifaClient,
-  cargaImagen
+  cargaImagen,
+  readHotelesTarifasById,
 };
