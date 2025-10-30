@@ -58,5 +58,7 @@ router.post(
   verificarPermiso("vista(admin):creacion(roles)"),
   controller.createRole
 );
+router.patch("/role", controller.updatePermissionRole);
+router.get("/role", controller.getPermissionByRole);
 
 module.exports = router;

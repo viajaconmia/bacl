@@ -9,8 +9,6 @@ const signUp = async (req, res) => {
   try {
     let { username, password, email, role } = req.body;
 
-    console.log("entrando");
-
     Validation.password(password);
     Validation.username(username);
     Validation.email(email);
@@ -239,8 +237,63 @@ const createRole = async (req, res) => {
     });
   }
 };
+const updatePermissionRole = async (req, res) => {
+  try {
+    const { id_permission, id_role, value } = req.body;
+    if (value) {
+      await executeQuery(
+        `INSERT INTO role_permissions (role_id, permission_id) VALUES (?,?)`,
+        [id_role, id_permission]
+      );
+    } else {
+      await executeQuery(
+        `DELETE from role_permissions where role_id = ? AND permission_id = ?`,
+        [id_role, id_permission]
+      );
+    }
+
+    res.status(204).json({ message: "Actualizado con exito", data: null });
+  } catch (error) {
+    const message = error.message || "Error al actualizar el permiso";
+    res.status(error.statusCode || error.status || 500).json({
+      message,
+      data: null,
+      error,
+    });
+  }
+};
+
+const getPermissionByRole = async (req, res) => {
+  try {
+    const { id } = req.query;
+    const permisos = await executeQuery(
+      `SELECT 
+	p.*,
+	(CASE 
+    WHEN (rp.role_id is null) THEN 0
+    ELSE 1
+	END) as active 
+FROM permissions as p
+LEFT JOIN role_permissions as rp on rp.permission_id = p.id AND rp.role_id = ?;`,
+      [id]
+    );
+    console.log(id);
+    console.log(permisos);
+
+    res.status(200).json({ message: "Actualizado con exito", data: permisos });
+  } catch (error) {
+    const message = error.message || "Error al obtener los permisos";
+    res.status(error.statusCode || error.status || 500).json({
+      message,
+      data: null,
+      error,
+    });
+  }
+};
 
 module.exports = {
+  getPermissionByRole,
+  updatePermissionRole,
   signUp,
   logIn,
   logOut,
