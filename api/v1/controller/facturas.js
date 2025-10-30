@@ -46,7 +46,8 @@ const createCombinada = async (req, res) => {
     console.log(resp);
     return res.status(201).json(resp.data.data);
   } catch (error) {
-    console.log(error?.response?.data || error);
+    console.log("ERROR MANEJADO")
+    console.log(error.response);
     res.status(500).json({
       error: "Error en el servidor",
       details: error.message || error,
