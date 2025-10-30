@@ -1938,7 +1938,9 @@ const pagoPorSaldoAFavor = async (req, res) => {
 const getAllPagosPrepago = async (req, res) => {
   try {
     const pagos = await executeQuery(
-      `select * from vw_pagos_prepago where estado_pago<>'wallet_inactivo' and estado_pago<>'Cancelado';`
+      `SELECT *
+FROM vw_pagos_prepago
+WHERE estado_pago NOT IN ('wallet inactivo', 'Cancelado');`
     );
     const balance = await executeQuery(
       `SELECT * FROM vw_balance_pagos_facturas;`
