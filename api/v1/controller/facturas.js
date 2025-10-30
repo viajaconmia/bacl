@@ -55,7 +55,7 @@ const createCombinada = async (req, res) => {
     console.log(resp);
     return res.status(201).json(resp.data.data);
   } catch (error) {
-    console.log(error.response);
+    console.log("ERROR GLOBAL", error);
     res.status(500).json({
       error: "Error en el servidor",
       details: error.message || error,
@@ -277,11 +277,9 @@ const asignarFacturaPagos = async (req, res) => {
       !facturasRaw ||
       (Array.isArray(facturasRaw) && facturasRaw.length === 0)
     ) {
-      return res
-        .status(400)
-        .json({
-          error: "Debes enviar 'id_factura' con 1+ elementos (array o string).",
-        });
+      return res.status(400).json({
+        error: "Debes enviar 'id_factura' con 1+ elementos (array o string).",
+      });
     }
 
     // --- Normalizar arrays ---
@@ -299,12 +297,10 @@ const asignarFacturaPagos = async (req, res) => {
       try {
         items = JSON.parse(items);
       } catch (e) {
-        return res
-          .status(400)
-          .json({
-            error: "El campo 'ejemplo_saldos' no es un JSON válido",
-            details: e.message,
-          });
+        return res.status(400).json({
+          error: "El campo 'ejemplo_saldos' no es un JSON válido",
+          details: e.message,
+        });
       }
     }
     if (!Array.isArray(items)) items = [items];

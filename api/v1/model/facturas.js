@@ -156,7 +156,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
 
         // 2. Generar ID local de factura
         const id_factura = `fac-${uuidv4()}`;
-        console.log("responses",info_user)
+        console.log("responses", info_user);
 
         // 3. Insertar factura principal
         const insertFacturaQuery = `
@@ -254,6 +254,8 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           ...response_factura,
         };
       } catch (error) {
+        console.log(error.response);
+        console.log(error);
         throw error;
       }
     });
@@ -268,7 +270,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
 };
 //--helpers
 function calcularTotalesDesdeItems(items = []) {
-  return items.reduce( 
+  return items.reduce(
     (acc, item) => {
       acc.total += Number(item?.Total ?? 0);
       acc.subtotal += Number(item?.Subtotal ?? 0);
@@ -729,8 +731,6 @@ ORDER BY facturas.created_at DESC;`;
     throw error;
   }
 };
-
-
 
 const getAllFacturasConsultas = async () => {
   try {
