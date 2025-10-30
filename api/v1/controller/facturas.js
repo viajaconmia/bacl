@@ -1,4 +1,9 @@
-const { executeSP, runTransaction, executeSP2, executeQuery } = require("../../../config/db");
+const {
+  executeSP,
+  runTransaction,
+  executeSP2,
+  executeQuery,
+} = require("../../../config/db");
 const model = require("../model/facturas");
 const { v4: uuidv4 } = require("uuid");
 const { get } = require("../router/mia/reservasClient");
@@ -50,7 +55,7 @@ const createCombinada = async (req, res) => {
     console.log(resp);
     return res.status(201).json(resp.data.data);
   } catch (error) {
-    console.log(error?.response?.data || error);
+    console.log(error.response);
     res.status(500).json({
       error: "Error en el servidor",
       details: error.message || error,
@@ -232,8 +237,11 @@ const asignarFacturaItems = async (req, res) => {
     const updateFactura = `  UPDATE facturas
   SET saldo =  ?
   WHERE id_factura = ?;`;
-  
-    const saldo_factura = await executeQuery(`select saldo from facturas where id_factura = ?;`,[id_factura]);
+
+    const saldo_factura = await executeQuery(
+      `select saldo from facturas where id_factura = ?;`,
+      [id_factura]
+    );
     let suma_total_items = 0;
     for (const item of itemsArray) {
       // Asegura que item.total sea un número válido
@@ -247,7 +255,7 @@ const asignarFacturaItems = async (req, res) => {
     } else {
       await executeQuery(updateFactura, [nuevo_saldo, id_factura]);
     }
-  
+
     return res.status(200).json({
       message: "Items asignados correctamente a la factura",
       data: "Factura asociada: " + id_factura,
@@ -263,21 +271,41 @@ const asignarFacturaItems = async (req, res) => {
 
 const asignarFacturaPagos = async (req, res) => {
   try {
-    const { id_factura: facturasRaw, ejemplo_saldos: saldosRaw } = req.body || {};
-    if (!facturasRaw || (Array.isArray(facturasRaw) && facturasRaw.length === 0)) {
-      return res.status(400).json({ error: "Debes enviar 'id_factura' con 1+ elementos (array o string)." });
+    const { id_factura: facturasRaw, ejemplo_saldos: saldosRaw } =
+      req.body || {};
+    if (
+      !facturasRaw ||
+      (Array.isArray(facturasRaw) && facturasRaw.length === 0)
+    ) {
+      return res
+        .status(400)
+        .json({
+          error: "Debes enviar 'id_factura' con 1+ elementos (array o string).",
+        });
     }
 
     // --- Normalizar arrays ---
-    const facturasOrden = Array.isArray(facturasRaw) ? facturasRaw : [facturasRaw];
+    const facturasOrden = Array.isArray(facturasRaw)
+      ? facturasRaw
+      : [facturasRaw];
 
     let items = saldosRaw;
     if (!items) {
-      return res.status(400).json({ error: "Falta 'ejemplo_saldos' en el payload." });
+      return res
+        .status(400)
+        .json({ error: "Falta 'ejemplo_saldos' en el payload." });
     }
-    if (typeof items === 'string') {
-      try { items = JSON.parse(items); }
-      catch (e) { return res.status(400).json({ error: "El campo 'ejemplo_saldos' no es un JSON válido", details: e.message }); }
+    if (typeof items === "string") {
+      try {
+        items = JSON.parse(items);
+      } catch (e) {
+        return res
+          .status(400)
+          .json({
+            error: "El campo 'ejemplo_saldos' no es un JSON válido",
+            details: e.message,
+          });
+      }
     }
     if (!Array.isArray(items)) items = [items];
 
@@ -285,18 +313,21 @@ const asignarFacturaPagos = async (req, res) => {
     const facturas = [];
     for (const idf of facturasOrden) {
       const r = await executeQuery(
-        'SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;',
+        "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;",
         [idf]
       );
       if (!r?.length) {
         return res.status(404).json({ error: `Factura no encontrada: ${idf}` });
       }
-      facturas.push({ id_factura: r[0].id_factura, saldo: Number(r[0].saldo) || 0 });
+      facturas.push({
+        id_factura: r[0].id_factura,
+        saldo: Number(r[0].saldo) || 0,
+      });
     }
 
     // --- Consultar en bloque la vista para obtener saldo disponible por raw_id ---
-    const rawIds = [...new Set(items.map(it => String(it.id_saldo)))];
-    const placeholders = rawIds.map(() => '?').join(',');
+    const rawIds = [...new Set(items.map((it) => String(it.id_saldo)))];
+    const placeholders = rawIds.map(() => "?").join(",");
     const viewRows = rawIds.length
       ? await executeQuery(
           `SELECT raw_id, saldo FROM vw_pagos_prepago_facturables WHERE raw_id IN (${placeholders});`,
@@ -313,20 +344,24 @@ const asignarFacturaPagos = async (req, res) => {
 
     // --- Construir "pagos" a aplicar, usando SIEMPRE el saldo de la vista como tope ---
     // Si un id_saldo no aparece en la vista => disponible = 0 (se ignora)
-    const creditos = items.map(it => {
-      const raw = String(it.id_saldo);
-      const disponible = disponiblePorRawId.has(raw) ? Number(disponiblePorRawId.get(raw)) : 0;
-      const isSaldoFavor = /^\d+$/.test(raw); // num puro => saldo a favor
-      return { raw_id: raw, disponible, restante: disponible, isSaldoFavor };
-    }).filter(c => c.disponible > 0);
+    const creditos = items
+      .map((it) => {
+        const raw = String(it.id_saldo);
+        const disponible = disponiblePorRawId.has(raw)
+          ? Number(disponiblePorRawId.get(raw))
+          : 0;
+        const isSaldoFavor = /^\d+$/.test(raw); // num puro => saldo a favor
+        return { raw_id: raw, disponible, restante: disponible, isSaldoFavor };
+      })
+      .filter((c) => c.disponible > 0);
 
     if (creditos.length === 0) {
       return res.status(400).json({
-        error: 'No hay saldo disponible para aplicar (según la vista).',
+        error: "No hay saldo disponible para aplicar (según la vista).",
         detalle: {
-          solicitados: items.map(i => ({ id_saldo: i.id_saldo })),
-          encontrados_en_vista: viewRows.length
-        }
+          solicitados: items.map((i) => ({ id_saldo: i.id_saldo })),
+          encontrados_en_vista: viewRows.length,
+        },
       });
     }
 
@@ -339,7 +374,10 @@ const asignarFacturaPagos = async (req, res) => {
     for (const cred of creditos) {
       while (cred.restante > 0 && idxFactura < facturas.length) {
         // Saltar facturas agotadas
-        while (idxFactura < facturas.length && facturas[idxFactura].saldo <= 0) {
+        while (
+          idxFactura < facturas.length &&
+          facturas[idxFactura].saldo <= 0
+        ) {
           idxFactura++;
         }
         if (idxFactura >= facturas.length) break;
@@ -347,7 +385,10 @@ const asignarFacturaPagos = async (req, res) => {
         const f = facturas[idxFactura];
         const aplicar = Math.min(f.saldo, cred.restante);
 
-        if (aplicar <= 0) { idxFactura++; continue; }
+        if (aplicar <= 0) {
+          idxFactura++;
+          continue;
+        }
 
         // Insertar en tabla puente con columnas correctas
         //   - isSaldoFavor => id_saldo_a_favor (= raw_id num), id_pago = NULL
@@ -359,15 +400,26 @@ const asignarFacturaPagos = async (req, res) => {
         const id_pago = cred.isSaldoFavor ? null : cred.raw_id;
         const id_saldo_a_favor = cred.isSaldoFavor ? cred.raw_id : null;
 
-        await executeQuery(insertSQL, [id_pago, id_saldo_a_favor, f.id_factura, aplicar]);
+        await executeQuery(insertSQL, [
+          id_pago,
+          id_saldo_a_favor,
+          f.id_factura,
+          aplicar,
+        ]);
 
         // Actualizar saldos en memoria
         f.saldo -= aplicar;
         cred.restante -= aplicar;
 
         // Acumular totales para respuesta
-        appliedByFactura.set(f.id_factura, (appliedByFactura.get(f.id_factura) || 0) + aplicar);
-        appliedByCredito.set(cred.raw_id, (appliedByCredito.get(cred.raw_id) || 0) + aplicar);
+        appliedByFactura.set(
+          f.id_factura,
+          (appliedByFactura.get(f.id_factura) || 0) + aplicar
+        );
+        appliedByCredito.set(
+          cred.raw_id,
+          (appliedByCredito.get(cred.raw_id) || 0) + aplicar
+        );
 
         if (f.saldo <= 0) idxFactura++;
       }
@@ -376,40 +428,46 @@ const asignarFacturaPagos = async (req, res) => {
     // --- Persistir nuevos saldos de facturas ---
     for (const f of facturas) {
       await executeQuery(
-        'UPDATE facturas SET saldo = ? WHERE id_factura = ?;',
+        "UPDATE facturas SET saldo = ? WHERE id_factura = ?;",
         [f.saldo, f.id_factura]
       );
     }
 
     // --- Preparar respuesta ---
-    const detalleFacturas = facturas.map(f => ({
+    const detalleFacturas = facturas.map((f) => ({
       id_factura: f.id_factura,
       aplicado: appliedByFactura.get(f.id_factura) || 0,
       saldo_final: f.saldo,
     }));
 
-    const detalleCreditos = creditos.map(c => ({
+    const detalleCreditos = creditos.map((c) => ({
       raw_id: c.raw_id,
-      tipo: c.isSaldoFavor ? 'saldo_a_favor' : 'pago',
+      tipo: c.isSaldoFavor ? "saldo_a_favor" : "pago",
       disponible: c.disponible,
       aplicado: appliedByCredito.get(c.raw_id) || 0,
-      sin_aplicar: Math.max(0, c.disponible - (appliedByCredito.get(c.raw_id) || 0)),
+      sin_aplicar: Math.max(
+        0,
+        c.disponible - (appliedByCredito.get(c.raw_id) || 0)
+      ),
     }));
 
-    const totalSinAplicar = detalleCreditos.reduce((s, p) => s + p.sin_aplicar, 0);
+    const totalSinAplicar = detalleCreditos.reduce(
+      (s, p) => s + p.sin_aplicar,
+      0
+    );
 
     return res.status(200).json({
-      message: 'Pagos/Saldos aplicados secuencialmente a las facturas usando saldo de la vista.',
+      message:
+        "Pagos/Saldos aplicados secuencialmente a las facturas usando saldo de la vista.",
       orden_facturas: facturasOrden,
       facturas: detalleFacturas,
       creditos: detalleCreditos,
-      total_sin_aplicar: totalSinAplicar
+      total_sin_aplicar: totalSinAplicar,
     });
-
   } catch (error) {
-    console.error('Error en asignarFacturaPagos:', error);
+    console.error("Error en asignarFacturaPagos:", error);
     return res.status(500).json({
-      error: 'Error al asignar pagos a las facturas',
+      error: "Error al asignar pagos a las facturas",
       details: error?.message || String(error),
     });
   }
@@ -827,11 +885,11 @@ const crearFacturaMultiplesPagos = async (req, res) => {
     const total = f.Total ?? totales.Total ?? 0;
     const subtotal = f.SubTotal ?? f.Subtotal ?? totales.SubTotal ?? 0;
     const impuestos = Number(total) - Number(subtotal);
-    console.log("datos factura 🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨",f)
+    console.log("datos factura 🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨🐨", f);
     return {
       fecha_emision: f.Fecha || f.fecha || new Date(),
       estado: "Confirmada",
-      usuario_creador:info_user.id_agente,
+      usuario_creador: info_user.id_agente,
       id_agente: fb.id_agente ?? info_user.id_agente,
       total,
       subtotal,
@@ -1016,7 +1074,9 @@ const crearFacturaMultiplesPagos = async (req, res) => {
 // controllers/conexionFull.controller.js
 const getFullDetalles = async (req, res) => {
   try {
-    console.log("📦 recibido getFullDetalles (normalizando id_buscar a JSON array)");
+    console.log(
+      "📦 recibido getFullDetalles (normalizando id_buscar a JSON array)"
+    );
 
     const rawAgente = req.query.id_agente ?? req.body?.id_agente ?? "";
     const rawBuscar = req.query.id_buscar ?? req.body?.id_buscar ?? "";
@@ -1028,7 +1088,7 @@ const getFullDetalles = async (req, res) => {
       // Si ya viene como array (e.g., body JSON)
       if (Array.isArray(input)) {
         const arr = input
-          .map(v => (v == null ? "" : String(v).trim()))
+          .map((v) => (v == null ? "" : String(v).trim()))
           .filter(Boolean);
         return JSON.stringify(arr);
       }
@@ -1042,7 +1102,7 @@ const getFullDetalles = async (req, res) => {
         const parsed = JSON.parse(s);
         if (Array.isArray(parsed)) {
           const arr = parsed
-            .map(v => (v == null ? "" : String(v).trim()))
+            .map((v) => (v == null ? "" : String(v).trim()))
             .filter(Boolean);
           return JSON.stringify(arr);
         }
@@ -1053,7 +1113,7 @@ const getFullDetalles = async (req, res) => {
         if (s.includes(",")) {
           const arr = s
             .split(",")
-            .map(x => x.trim())
+            .map((x) => x.trim())
             .filter(Boolean);
           return JSON.stringify(arr);
         }
@@ -1103,19 +1163,19 @@ const getFullDetalles = async (req, res) => {
     return res.status(200).json({
       message: "Consulta exitosa",
       tipo_origen: tipo,
-      id_origen: ids,     // devolvemos los IDs ya normalizados
+      id_origen: ids, // devolvemos los IDs ya normalizados
       id_agente,
       ...payload,
     });
   } catch (error) {
     console.error("getFullDetalles error:", error);
-    return res.status(500).json({ message: "Error en el servidor", details: error });
+    return res
+      .status(500)
+      .json({ message: "Error en el servidor", details: error });
   }
 };
 
 module.exports = { getFullDetalles };
-
-
 
 const getDetallesConexionesFactura = async (req, res) => {
   const { id_factura, id_agente } = req.query;
@@ -1136,26 +1196,29 @@ const getDetallesConexionesFactura = async (req, res) => {
   }
 };
 
-const asignarURLS_factura = async(req,res)=>{
-  const {id_factura, url_pdf, url_xml} = req.query;
- try {
-  const response = await executeSP("sp_asignar_urls_a_facturas",[id_factura,url_pdf,url_xml])
-  if (!response) {
-    throw new ShortError("No se pudo actualizar las URLs de la factura", 500);
+const asignarURLS_factura = async (req, res) => {
+  const { id_factura, url_pdf, url_xml } = req.query;
+  try {
+    const response = await executeSP("sp_asignar_urls_a_facturas", [
+      id_factura,
+      url_pdf,
+      url_xml,
+    ]);
+    if (!response) {
+      throw new ShortError("No se pudo actualizar las URLs de la factura", 500);
+    }
+    res.status(200).json({
+      message: "URLs asignadas correctamente a la factura",
+      data: response,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Error al asignar URLs a la factura",
+      details: error.message || error,
+      otherDetails: error.response?.data || null,
+    });
   }
-  res.status(200).json({
-    message: "URLs asignadas correctamente a la factura",
-    data: response,
-  });
-  
- } catch (error) {
-  res.status(500).json({
-    error: "Error al asignar URLs a la factura",
-    details: error.message || error,
-    otherDetails: error.response?.data || null,
-  });
- }
-}
+};
 
 module.exports = {
   create,
@@ -1177,7 +1240,7 @@ module.exports = {
   getDetallesConexionesFactura,
   asignarURLS_factura,
   getfacturasPagoPendiente,
-  asignarFacturaPagos
+  asignarFacturaPagos,
 };
 
 //ya quedo "#$%&/()="
