@@ -84,6 +84,7 @@ const facturama = () => {
       return response;
     } catch (error) {
       if (error.response) {
+        console.error(error.response.data);
         // 4a) Si es un fallo HTTP, mostramos TODO el payload de error
         console.error("❌ Facturama error status:", error.response.status);
         // console.error(
