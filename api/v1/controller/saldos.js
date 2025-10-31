@@ -205,7 +205,7 @@ INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
 LEFT JOIN vw_pagos_prepago_facturables AS v
   ON v.raw_id = sf.id_saldos
-  where sf.id_agente = ? 
+  where sf.id_agente = ? and sf.is_cancelado =0
   ;`,
       [id]
     );
@@ -311,6 +311,7 @@ const update_saldo_by_id = async (req, res) => {
     ult_digits,
     numero_autorizacion,
     banco_tarjeta,
+    is_cancelado
   } = req.body;
   console.log("Datos recibidos para actualizar saldo a favor:", req.body);
   try {
@@ -336,6 +337,7 @@ const update_saldo_by_id = async (req, res) => {
         ult_digits,
         numero_autorizacion,
         banco_tarjeta,
+        is_cancelado
       ]
     );
     console.log("Resultado de la actualización:", result);
