@@ -66,7 +66,7 @@ const updateUserPermission = async (req, res) => {
 const updateUserRole = async (req, res) => {
   try {
     const { id_role, id_user } = req.body;
-    await executeQuery(`UPDATE user_role SET role_id = ? WHERE user_id = ?`, [
+    await executeQuery(`UPDATE user_roles SET role_id = ? WHERE user_id = ?`, [
       id_role,
       id_user,
     ]);

@@ -133,11 +133,14 @@ const verifySession = async (req, res) => {
   try {
     const { user } = req.session;
     const usuario = await getUser(user.email);
+    console.log(usuario);
     if (!usuario) {
       res.clearCookie("access-token").status(204).json({ message: "session" });
     }
 
-    res.status(200).json({ message: "Comprobando verificación", data: user });
+    res
+      .status(200)
+      .json({ message: "Comprobando verificación", data: usuario });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
     res

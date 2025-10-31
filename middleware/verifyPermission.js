@@ -6,7 +6,7 @@ const verificarPermiso = (permiso) => {
       const { user } = req.session;
       if (!user) throw new Error("No se encontro el usuario");
       const [acceso] = await executeQuery(
-        `SELECT * FROM mia4.vw_permisos_by_user WHERE user_id = ? AND name = ?;`,
+        `SELECT * FROM vw_permisos_by_user WHERE user_id = ? AND name = ?;`,
         [user.id, permiso]
       );
       if (!acceso) throw new Error("No tienes acceso a este recurso");
