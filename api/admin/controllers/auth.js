@@ -119,7 +119,15 @@ const logOut = async (req, res) => {
     const { user } = req.session;
     if (!user) throw new Error("No hay cuenta activa");
 
-    res.clearCookie("access-token").status(204).json({ message: "session" });
+    res
+      .clearCookie("access-token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        path: "/",
+      })
+      .status(200)
+      .json({ message: "session" });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
     res.status(error.statusCode || error.status || 500).json({
