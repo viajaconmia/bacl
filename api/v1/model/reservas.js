@@ -1,5 +1,6 @@
 const { executeQuery, executeTransaction } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+const { sumarDias } = require("../../../lib/utils/calculates");
 
 const editarReserva = async (edicionData, id_booking_a_editar) => {
   try {
@@ -468,7 +469,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
-  const { ejemplo_saldos } = reserva;
+  const { ejemplo_saldos, usuarioCreador } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
   const agentes = await executeQuery(
     `SELECT * FROM agentes WHERE id_agente = ?`,
@@ -492,8 +493,8 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
 
     const query_servicio = `
       INSERT INTO servicios (
-        id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago, id_agente
-      ) VALUES (?,?,?,?,?,?,?,?);
+        id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago, id_agente, id_user_creador
+      ) VALUES (?,?,?,?,?,?,?,?,?);
     `;
     const params_servicio = [
       id_servicio,
@@ -504,6 +505,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
       null,
       null,
       reserva.solicitud.id_agente,
+      usuarioCreador?.id_viajero || null,
     ];
 
     const response = await executeTransaction(
@@ -516,8 +518,8 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           const query_solicitudes = `
             INSERT INTO solicitudes (
               id_solicitud, id_servicio, id_usuario_generador, confirmation_code,
-              id_viajero, hotel, check_in, check_out, room, total, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?);
+              id_viajero, hotel, check_in, check_out, room, total, status, origen
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
           `;
           const params_solicitud = [
             id_solicitud,
@@ -531,6 +533,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             reserva.habitacion,
             venta.total,
             reserva.estado_reserva,
+            "Operaciones",
           ];
           await connection.execute(query_solicitudes, params_solicitud);
 
@@ -616,9 +619,10 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           // Items
           const itemsConIdAnadido =
             items && items.length > 0
-              ? items.map((item) => ({
+              ? items.map((item, index) => ({
                   ...item,
                   id_item: `ite-${uuidv4()}`,
+                  fecha_uso: sumarDias(new Date(reserva.check_in), index + 1),
                 }))
               : [];
 
@@ -641,7 +645,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               it.venta.subtotal.toFixed(2),
               it.venta.impuestos.toFixed(2),
               null,
-              new Date().toISOString().split("T")[0],
+              it.fecha_uso,
               id_hospedaje,
               it.costo.total.toFixed(2),
               it.costo.subtotal.toFixed(2),
@@ -720,7 +724,6 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             "Procesando bandera 0 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:"
           );
           if (bandera === 0) {
-
             // Crédito: descuenta saldo del agente + inserta pagos_credito
             await connection.execute(
               `UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?;`,
@@ -814,19 +817,19 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               INSERT INTO pagos (
                 id_pago, id_servicio, id_saldo_a_favor, id_agente,
                 metodo_de_pago, fecha_pago, concepto, referencia,
-                currency, tipo_de_tarjeta, link_pago, last_digits, total
-              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?);
+                currency, tipo_de_tarjeta, link_pago, last_digits, total,saldo_aplicado,transaccion,monto_transaccion
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
             `;
-            const query_update_saldo = `UPDATE saldos_a_favor
-SET
-  saldo = GREATEST(saldo - ?, 0),
-  activo = CASE WHEN saldo <= 0 THEN 0 ELSE 1 END
-WHERE id_saldos = ?;
-`;
+
+            const query_update_saldo = `
+              UPDATE saldos_a_favor SET saldo = saldo - ? WHERE id_saldos = ?;
+            `;
+            const transaccion = `tra-${uuidv4()}`;
 
             for (const saldo of ejemplo_saldos) {
               console.log("Procesando saldo:", saldo);
               const id_pago = `pag-${uuidv4()}`;
+
               console.log("Generando pago con ID:", id_pago);
               await connection.execute(query_pagos, [
                 id_pago,
@@ -842,6 +845,9 @@ WHERE id_saldos = ?;
                 saldo.link_pago,
                 saldo.last_digits,
                 venta.total, // (mantengo tu código tal cual)
+                saldo.aplicado,
+                transaccion,
+                venta.total,
               ]);
               await connection.execute(query_update_saldo, [
                 saldo.aplicado,
@@ -890,17 +896,16 @@ WHERE id_saldos = ?;
             }
 
             // --- update final: reflejar saldo_actual en saldos_a_favor ---
+            console.log("Pagos ordenados para update final:", pagosOrdenados);
             for (const pago of pagosOrdenados) {
-  await connection.execute(
-    `UPDATE saldos_a_favor
-     SET
-       saldo = ?,
-       activo = CASE WHEN ? <= 0 THEN 0 ELSE 1 END
-     WHERE id_saldos = ?;`,
-    [pago.saldo_actual, pago.saldo_actual, pago.id_saldo] // 3 params para 3 "?"
-  );
-}
-
+              await connection.execute(
+                `UPDATE saldos_a_favor 
+                SET saldo = ?,
+                activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END
+                WHERE id_saldos = ?`,
+                [pago.saldo_actual, pago.restante, pago.id_saldo]
+              );
+            }
           }
 
           // Completar solicitud
@@ -1107,7 +1112,7 @@ FROM vw_reservas_client rc
 LEFT JOIN agente_details ad ON ad.id_agente = rc.id_agente
 LEFT JOIN hospedajes h
        ON h.id_hospedaje = rc.id_hospedaje
-WHERE rc.status_reserva = 'Confirmada'
+WHERE rc.status_reserva = 'Confirmada' AND rc.id_credito is not null
 GROUP BY
   rc.id_hospedaje,
   rc.id_servicio,
@@ -1132,7 +1137,7 @@ GROUP BY
   ad.razon_social,
   ad.rfc,
   ad.tipo_persona
-ORDER BY rc.created_at_reserva DESC;`;
+ORDER BY rc.created_at_reserva DESC`;
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);
@@ -1871,9 +1876,10 @@ const insertarReserva = async ({ reserva }) => {
     // Preparar items con ID
     const itemsConIdAnadido =
       items && items.length > 0
-        ? items.map((item) => ({
+        ? items.map((item, index) => ({
             ...item,
             id_item: `ite-${uuidv4()}`,
+            fecha_uso: sumarDias(new Date(reserva.check_in), index + 1),
           }))
         : [];
 
@@ -1955,7 +1961,7 @@ const insertarReserva = async ({ reserva }) => {
                 itemConId.venta.subtotal.toFixed(2),
                 itemConId.venta.impuestos.toFixed(2),
                 null,
-                new Date().toISOString().split("T")[0],
+                itemConId.fecha_uso,
                 id_hospedaje,
                 itemConId.costo.total.toFixed(2),
                 itemConId.costo.subtotal.toFixed(2),
@@ -2012,15 +2018,17 @@ const insertarReserva = async ({ reserva }) => {
             }
           }
 
-          // ===== NUEVA LÓGICA PARA WALLET PREPAGADO =====
+          const toCents = (n) => Math.round(Number(n) * 100);
+          const fromCents = (c) => c / 100;
+
           // 1. Verificar si es pago con wallet
           const [walletPagos] = await connection.execute(
             `SELECT p.id_pago, p.saldo_aplicado, p.total as monto_pago,
-                    s.monto as saldo_original, s.id_saldos
-             FROM pagos p 
-             INNER JOIN saldos_a_favor s ON p.id_saldo_a_favor = s.id_saldos
-             WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
-             ORDER BY p.fecha_pago ASC`,
+          s.monto as saldo_original, s.id_saldos
+   FROM pagos p 
+   INNER JOIN saldos_a_favor s ON p.id_saldo_a_favor = s.id_saldos
+   WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
+   ORDER BY p.fecha_pago ASC, p.id_pago ASC`,
             [solicitud.id_servicio]
           );
 
@@ -2028,82 +2036,119 @@ const insertarReserva = async ({ reserva }) => {
 
           if (esWalletPrepagado && itemsConIdAnadido.length > 0) {
             console.log("Procesando pago con wallet prepagado");
-
-            // 2. Calcular el total de la reserva y los montos disponibles
-            const totalReserva = itemsConIdAnadido.reduce(
-              (sum, item) => sum + Number(item.venta.total),
+            // 2) Calcular total en CENTAVOS
+            const totalReservaCents = itemsConIdAnadido.reduce(
+              (sum, item) => sum + toCents(item.venta.total),
               0
             );
 
-            let saldoDisponible = walletPagos.reduce(
-              (sum, pago) => sum + Number(pago.saldo_aplicado),
+            let saldoDisponibleCents = walletPagos.reduce(
+              (sum, p) => sum + toCents(p.saldo_aplicado || 0),
               0
             );
 
             console.log(
-              `Total reserva: ${totalReserva}, Saldo disponible: ${saldoDisponible}`
+              `Total reserva: ${fromCents(
+                totalReservaCents
+              )}, Saldo disponible: ${fromCents(saldoDisponibleCents)}`
             );
 
-            if (saldoDisponible < totalReserva) {
+            if (saldoDisponibleCents < totalReservaCents) {
               throw new Error(
-                `Saldo insuficiente en wallet. Disponible: ${saldoDisponible}, Requerido: ${totalReserva}`
+                `Saldo insuficiente en wallet. Disponible: ${fromCents(
+                  saldoDisponibleCents
+                ).toFixed(2)}, Requerido: ${fromCents(
+                  totalReservaCents
+                ).toFixed(2)}`
               );
             }
 
-            // 3. Distribuir el pago entre items y pagos
+            // 3) Distribuir en CENTAVOS
             const asignaciones = [];
             let pagoIndex = 0;
-            let saldoRestanteEnPago = Number(
+            let saldoRestanteEnPagoCents = toCents(
               walletPagos[pagoIndex]?.saldo_aplicado || 0
             );
 
             for (const item of itemsConIdAnadido) {
-              let montoRestanteItem = Number(item.venta.total);
+              let montoRestanteItemCents = toCents(item.venta.total);
+              console.log(
+                `\nProcesando item ${item.id_item}, monto: ${fromCents(
+                  montoRestanteItemCents
+                )}`
+              );
 
-              while (montoRestanteItem > 0 && pagoIndex < walletPagos.length) {
-                const montoAsignar = Math.min(
-                  montoRestanteItem,
-                  saldoRestanteEnPago
-                );
+              // safety guard por si acaso (no debería dispararse)
+              let watchdog = 0;
 
-                if (montoAsignar > 0) {
-                  asignaciones.push({
-                    id_item: item.id_item,
-                    id_pago: walletPagos[pagoIndex].id_pago,
-                    monto: montoAsignar,
-                  });
-
-                  montoRestanteItem -= montoAsignar;
-                  saldoRestanteEnPago -= montoAsignar;
-                }
-
-                // Si se agotó el saldo del pago actual, pasar al siguiente
-                if (saldoRestanteEnPago <= 0) {
+              while (
+                montoRestanteItemCents > 0 &&
+                pagoIndex < walletPagos.length
+              ) {
+                if (saldoRestanteEnPagoCents <= 0) {
                   pagoIndex++;
-                  saldoRestanteEnPago = Number(
+                  saldoRestanteEnPagoCents = toCents(
                     walletPagos[pagoIndex]?.saldo_aplicado || 0
                   );
+                  console.log(
+                    `Cambiando a siguiente pago. pagoIndex=${pagoIndex}, saldoRestanteEnPago=${fromCents(
+                      saldoRestanteEnPagoCents
+                    )}`
+                  );
+                  continue;
                 }
+
+                const montoAsignarCents = Math.min(
+                  montoRestanteItemCents,
+                  saldoRestanteEnPagoCents
+                );
+
+                asignaciones.push({
+                  id_item: item.id_item,
+                  id_pago: walletPagos[pagoIndex].id_pago,
+                  monto_cents: montoAsignarCents,
+                });
+
+                montoRestanteItemCents -= montoAsignarCents;
+                saldoRestanteEnPagoCents -= montoAsignarCents;
+
+                console.log(
+                  `Asignado ${fromCents(montoAsignarCents)} del pago ${
+                    walletPagos[pagoIndex].id_pago
+                  } | ` +
+                    `resto item: ${fromCents(
+                      montoRestanteItemCents
+                    )}, resto pago: ${fromCents(saldoRestanteEnPagoCents)}`
+                );
+
+                // watchdog para evitar loops por cualquier bug
+                watchdog++;
+                if (watchdog > 10000)
+                  throw new Error(
+                    "Watchdog: demasiadas iteraciones en distribución wallet."
+                  );
               }
 
-              if (montoRestanteItem > 0) {
+              if (montoRestanteItemCents > 0) {
                 throw new Error(
                   `No se pudo asignar completo el pago para el item ${item.id_item}`
                 );
               }
             }
 
-            // 4. Insertar en items_pagos
+            console.log("\nAsignaciones finales:", asignaciones);
+
+            // 4) Insertar en items_pagos (ya en pesos)
             if (asignaciones.length > 0) {
               const queryItemsPagos = `
-                INSERT INTO items_pagos (id_item, id_pago, monto)
-                VALUES ${asignaciones.map(() => "(?, ?, ?)").join(",")}
-              `;
+      INSERT INTO items_pagos (id_item, id_pago, monto)
+      VALUES ${asignaciones.map(() => "(?, ?, ?)").join(",")}
+    `;
 
               const paramsItemsPagos = asignaciones.flatMap((a) => [
                 a.id_item,
                 a.id_pago,
-                a.monto.toFixed(2),
+                fromCents(a.monto_cents).toFixed(2),
               ]);
 
               await connection.execute(queryItemsPagos, paramsItemsPagos);
@@ -2123,15 +2168,15 @@ const insertarReserva = async ({ reserva }) => {
             if (rowsContado.length > 0 && itemsConIdAnadido.length > 0) {
               const id_pago = rowsContado[0].id_pago;
               const query_items_pagos = `
-                INSERT INTO items_pagos (id_item, id_pago, monto)
-                VALUES ${itemsConIdAnadido.map(() => "(?, ?, ?)").join(",")};
-              `;
+      INSERT INTO items_pagos (id_item, id_pago, monto)
+      VALUES ${itemsConIdAnadido.map(() => "(?, ?, ?)").join(",")};
+    `;
 
               const params_items_pagos = itemsConIdAnadido.flatMap(
                 (itemConId) => [
                   itemConId.id_item,
                   id_pago,
-                  itemConId.venta.total.toFixed(2),
+                  Number(itemConId.venta.total).toFixed(2),
                 ]
               );
 

@@ -22,7 +22,7 @@ const createAgente = async (data) => {
 
 const getAgente = async (id_agente) => {
   try {
-    const query = `select va.id_agente,va.id_viajero, v.*,vca.empresas
+    const query = `select va.id_agente,va.id_viajero, v.*,vca.empresas, vca.rol
 from agentes_viajeros va
 inner join viajeros v on v.id_viajero = va.id_viajero
 inner join viajeros_con_empresas_con_agentes vca on vca.id_viajero = v.id_viajero
@@ -51,6 +51,7 @@ const getAgenteEmpresa = async (id_agente) => {
 };
 
 const getEmpresasDatosFiscales = async (id_agente) => {
+  console.log("ENTRANDO AL MODELO");
   try {
     const query = `SELECT 
 vw.*, 

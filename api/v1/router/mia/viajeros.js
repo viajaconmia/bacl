@@ -56,7 +56,14 @@ router.get("/agente", async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: "Error server", details: error });
+    console.log(error);
+    res.status(error.statusCode || error.status || 500).json({
+      message: error.message || "Error al extraer los viajeros",
+      error,
+      data: null,
+    });
   }
 });
 
 module.exports = router;
+});

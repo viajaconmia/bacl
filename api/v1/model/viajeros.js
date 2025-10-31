@@ -130,7 +130,8 @@ const readViajero = async () => {
 };
 const readViajeroById = async (id) => {
   try {
-    const query = `select CONCAT_WS(' ', primer_nombre, segundo_nombre, apellido_paterno, apellido_materno) AS nombre_completo , id_viajero, correo, genero, fecha_nacimiento, telefono, nacionalidad, numero_pasaporte, numero_empleado
+    const query = `select CONCAT_WS(' ', primer_nombre, segundo_nombre, apellido_paterno, apellido_materno) AS nombre_completo , id_viajero, correo, genero, fecha_nacimiento, telefono, nacionalidad, numero_pasaporte, numero_empleado,
+    is_user
 from viajeros_con_empresas_con_agentes where id_agente = ?;`;
     const response = executeQuery(query, [id]);
     return response;
@@ -154,13 +155,14 @@ const deleteViajero = async (id_viajero) => {
 
 const readAllViajeros = async () => {
   try {
-    const query = "select vea.*, a.nombre as nombre_agente from viajeros_con_empresas_con_agentes as vea join agentes as a on vea.id_agente = a.id_agente;";
+    const query =
+      "select vea.*, a.nombre as nombre_agente from viajeros_con_empresas_con_agentes as vea join agentes as a on vea.id_agente = a.id_agente;";
     const response = executeQuery(query);
     return response;
   } catch (error) {
     throw error;
   }
-}
+};
 
 module.exports = {
   readViajero,

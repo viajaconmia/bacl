@@ -32,7 +32,8 @@ const { v4: uuidv4 } = require("uuid");
 const createSolicitudes = async (body) => {
   try {
     const { solicitudes } = body;
-    const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales, id_agente) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+    console.log(solicitudes);
+    const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales, id_agente, origen, usuario_creador) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
     const id_solicitud = `sol-${uuidv4()}`;
     const {
       confirmation_code,
@@ -46,21 +47,24 @@ const createSolicitudes = async (body) => {
       id_viajero,
       nombre_viajero,
       viajeros_adicionales,
+      usuario_creador,
     } = solicitudes[0];
     const params_solicitud = [
-      id_solicitud,
-      id_agente,
-      confirmation_code,
-      id_viajero,
-      hotel,
-      check_in,
-      check_out,
-      room,
-      total,
-      status,
-      nombre_viajero,
+      id_solicitud || null,
+      id_agente || null,
+      confirmation_code || null,
+      id_viajero || null,
+      hotel || null,
+      check_in || null,
+      check_out || null,
+      room || null,
+      total || null,
+      status || null,
+      nombre_viajero || null,
       JSON.stringify(viajeros_adicionales) || [],
-      id_agente,
+      id_agente || null,
+      "Cliente",
+      usuario_creador || null,
     ];
 
     const response = await executeQuery(query_solicitudes, params_solicitud);
@@ -234,7 +238,8 @@ ORDER BY s.created_at DESC;`;
   }
 };
 
-const getSolicitudById = async (id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
+const getSolicitudById = async (id) => {
+  /*PARECE SER QUE YA NO SE OCUPA*/
   try {
     let query = `
 SELECT 
@@ -288,7 +293,8 @@ ORDER BY s.created_at DESC;`;
   }
 };
 
-const getSolicitudesClientWithViajero = async (id) => {/*PARECE SER QUE YA NO SE OCUPA*/ 
+const getSolicitudesClientWithViajero = async (id) => {
+  /*PARECE SER QUE YA NO SE OCUPA*/
   try {
     const query = `SELECT 
   p_c.id_credito,
@@ -341,7 +347,8 @@ ORDER BY a.id_agente, a.created_at`;
     throw error;
   }
 };
-const readForClient = async (id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
+const readForClient = async (id) => {
+  /*PARECE SER QUE YA NO SE OCUPA*/
   try {
     const query = `
 SELECT
@@ -393,7 +400,8 @@ order by se.created_at desc;`;
   }
 };
 
-const getSolicitudesClient = async (user_id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
+const getSolicitudesClient = async (user_id) => {
+  /*PARECE SER QUE YA NO SE OCUPA*/
   try {
     let query = `
 SELECT
@@ -453,7 +461,8 @@ const getViajeroAgenteSolicitud = async (id_agente) => {
   }
 };
 
-const getSolicitudesConsultas = async (user_id) => { /*PARECE SER QUE YA NO SE OCUPA*/ 
+const getSolicitudesConsultas = async (user_id) => {
+  /*PARECE SER QUE YA NO SE OCUPA*/
   try {
     let query = `
 SELECT
