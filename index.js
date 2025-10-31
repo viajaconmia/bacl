@@ -1,6 +1,8 @@
 // src/index.js
 const express = require("express");
 const app = express();
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 const PORT = process.env.PORT || 3001;
 /**de aqui para abajo */
 const Stripe = require("stripe");
@@ -52,6 +54,7 @@ const morgan = require("morgan");
 // Logger y trazabilidad
 const logger = require("./api/v1/utils/logger");
 const requestContext = require("./middleware/requestContext");
+const { SECRET_KEY } = require("./lib/constant");
 
 // Control de CORS
 const corsOptions = {
@@ -66,7 +69,7 @@ const corsOptions = {
     "https://www.viajaconmia.com",
     "https://admin.viajaconmia.com",
     "https://mia-git-pruebasmia-mias-projects-f396ca8b.vercel.app",
-    "https://admin-mia-git-pruebasadmin-mias-projects-f396ca8b.vercel.app"
+    "https://admin-mia-git-pruebasadmin-mias-projects-f396ca8b.vercel.app",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: [
@@ -78,6 +81,7 @@ const corsOptions = {
     "Expires",
     "x-amz-tagging",
   ],
+  credentials: true,
 };
 
 // 1. Trazabilidad de la petición (genera req.context)
@@ -92,6 +96,7 @@ app.use(cors(corsOptions));
 // 4. Archivos estáticos y parsers de body
 app.use(express.static("public"));
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
 // 5. Evitar caché en todas las respuestas
