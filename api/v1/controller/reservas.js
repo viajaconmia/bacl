@@ -306,148 +306,184 @@ const updateReserva2 = async (req, res) => {
   //       }))
   //     : [];
 
-  //   // 2) Serializar JSON (aunque vengan vacíos)
-  //   const itemsJson = JSON.stringify(itemsConIds);
-  //   const impuestosJson = JSON.stringify(Array.isArray(impuestos?.current) ? impuestos.current : []);
+    // 2) Serializar JSON (aunque vengan vacíos)
+    const itemsJson = JSON.stringify(itemsConIds);
+    const impuestosJson = JSON.stringify(
+      Array.isArray(impuestos?.current) ? impuestos.current : []
+    );
 
-  //   // 3) Parámetros del SP (si lo vas a llamar). Coloca null si no viene.
-  //   //    Ajusta la firma real de tu SP si cambió.
-  //   const params = [
-  //     id,                                           // 1) p_id_booking
-  //     viajero?.current?.id_viajero ?? null,         // 2) p_id_viajero
-  //     check_in?.current ?? null,                    // 3) p_check_in
-  //     check_out?.current ?? null,                   // 4) p_check_out
-  //     // venta?.current?.total ?? null,             // 5) p_total (si aplica)
-  //     // venta?.current?.subtotal ?? null,          // 6) p_subtotal
-  //     // venta?.current?.impuestos ?? null,         // 7) p_impuestos
-  //     estado_reserva?.current ?? null,              // 8) p_estado_reserva
-  //     proveedor?.current?.total ?? null,            // 9) p_costo_total
-  //     proveedor?.current?.subtotal ?? null,         // 10) p_costo_subtotal
-  //     proveedor?.current?.impuestos ?? null,        // 11) p_costo_impuestos
-  //     hotel?.current?.content?.nombre_hotel ?? null,// 12) p_nombre_hotel
-  //     hotel?.current?.content?.id_hotel ?? null,    // 13) p_id_hotel
-  //     codigo_reservacion_hotel?.current ?? null,    // 14) p_codigo_reservacion_hotel
-  //     habitacion?.current ?? null,                  // 15) p_tipo_cuarto
-  //     noches?.current ?? null,                      // 16) p_noches
-  //     comments?.current ?? null,                    // 17) p_comments
-  //     itemsJson,                                    // 18) p_items_json
-  //     impuestosJson,                                // 19) p_impuestos_json
-  //     (hasKey(req.body,'nuevo_incluye_desayuno') ? nuevo_incluye_desayuno : null), // 20) p_nuevo_incluye_desayuno solo si llegó
-  //   ];
+    // 3) Parámetros del SP (si lo vas a llamar). Coloca null si no viene.
+    //    Ajusta la firma real de tu SP si cambió.
+    const params = [
+      id, // 1) p_id_booking
+      viajero?.current?.id_viajero ?? null, // 2) p_id_viajero
+      check_in?.current ?? null, // 3) p_check_in
+      check_out?.current ?? null, // 4) p_check_out
+      // venta?.current?.total ?? null,             // 5) p_total (si aplica)
+      // venta?.current?.subtotal ?? null,          // 6) p_subtotal
+      // venta?.current?.impuestos ?? null,         // 7) p_impuestos
+      estado_reserva?.current ?? null, // 8) p_estado_reserva
+      proveedor?.current?.total ?? null, // 9) p_costo_total
+      proveedor?.current?.subtotal ?? null, // 10) p_costo_subtotal
+      proveedor?.current?.impuestos ?? null, // 11) p_costo_impuestos
+      hotel?.current?.content?.nombre_hotel ?? null, // 12) p_nombre_hotel
+      hotel?.current?.content?.id_hotel ?? null, // 13) p_id_hotel
+      codigo_reservacion_hotel?.current ?? null, // 14) p_codigo_reservacion_hotel
+      habitacion?.current ?? null, // 15) p_tipo_cuarto
+      noches?.current ?? null, // 16) p_noches
+      comments?.current ?? null, // 17) p_comments
+      itemsJson, // 18) p_items_json
+      impuestosJson, // 19) p_impuestos_json
+      hasKey(req.body, "nuevo_incluye_desayuno")
+        ? nuevo_incluye_desayuno
+        : null, // 20) p_nuevo_incluye_desayuno solo si llegó
+    ];
 
-  //   // 4) Viajeros/acompañantes:
-  //   //    Solo tocamos este bloque si el payload INCLUYE al menos una de estas llaves.
-  //   const includesViajeroKey = hasKey(req.body, 'viajero');
-  //   const includesAcompKey   = hasKey(req.body, 'acompanantes');
+    // 4) Viajeros/acompañantes:
+    //    Solo tocamos este bloque si el payload INCLUYE al menos una de estas llaves.
+    const includesViajeroKey = hasKey(req.body, "viajero");
+    const includesAcompKey = hasKey(req.body, "acompanantes");
 
-  //   const idHosp = metadata?.id_hospedaje;
-  //   if (!idHosp) {
-  //     return res.status(400).json({ error: "metadata.id_hospedaje es requerido" });
-  //   }
+    const idHosp = metadata?.id_hospedaje;
+    if (!idHosp) {
+      return res
+        .status(400)
+        .json({ error: "metadata.id_hospedaje es requerido" });
+    }
 
-  //   // Fallback para principal si no mandan 'viajero'
-  //   const idViajeroPrincipal =
-  //     viajero?.current?.id_viajero ??
-  //     metadata?.id_viajero_reserva ??
-  //     null;
+    // Fallback para principal si no mandan 'viajero'
+    const idViajeroPrincipal =
+      viajero?.current?.id_viajero ?? metadata?.id_viajero_reserva ?? null;
 
-  //   // Normaliza acompañantes si vinieron; si no, no tocamos acompañantes
-  //   const acompList = includesAcompKey && Array.isArray(acompanantes) ? acompanantes : null;
+    // Normaliza acompañantes si vinieron; si no, no tocamos acompañantes
+    const acompList =
+      includesAcompKey && Array.isArray(acompanantes) ? acompanantes : null;
 
   //   // Construye lista final de viajeros solo si debemos actualizar viajeros
   //   const shouldUpdateTravelers = includesViajeroKey || includesAcompKey;
 
-  //   const result = await runTransaction(async (connection) => {
-  //     // [Opcional] si vas a llamar SP, descomenta y ajusta:
-  //      await connection.execute("CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", params);
+    const result = await runTransaction(async (connection) => {
+      // [Opcional] si vas a llamar SP, descomenta y ajusta:
+      await connection.execute(
+        "CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        params
+      );
 
   //     let viajerosTx = { inserted: 0, deleted: 0, updated: 0, skipped: true };
 
-  //     if (shouldUpdateTravelers) {
-  //       // Leemos estado actual
-  //       const [viajerosActualesRows] = await connection.execute(
-  //         `SELECT id_viajero, is_principal FROM viajeros_hospedajes WHERE id_hospedaje = ?`,
-  //         [idHosp]
-  //       );
-  //       const viajerosActuales = Array.isArray(viajerosActualesRows) ? viajerosActualesRows : [];
+      if (shouldUpdateTravelers) {
+        // Leemos estado actual
+        const [viajerosActualesRows] = await connection.execute(
+          `SELECT id_viajero, is_principal FROM viajeros_hospedajes WHERE id_hospedaje = ?`,
+          [idHosp]
+        );
+        const viajerosActuales = Array.isArray(viajerosActualesRows)
+          ? viajerosActualesRows
+          : [];
 
   //       // Construimos nuevosViajeros únicamente con lo que vino:
   //       // - Si vino 'viajero', definimos/el reafirmamos el principal.
   //       // - Si vino 'acompanantes', definimos el set de acompañantes actual.
   //       const nuevosViajeros = [];
 
-  //       if (includesViajeroKey && idViajeroPrincipal) {
-  //         nuevosViajeros.push({ id_viajero: idViajeroPrincipal, is_principal: 1 });
-  //       } else {
-  //         // Si NO vino 'viajero' pero sí queremos tocar viajeros (por acompañantes),
-  //         // mantenemos/el preservamos el principal actual si existía, o si no, el metadata.
-  //         const principalActual = viajerosActuales.find(v => v.is_principal === 1)?.id_viajero
-  //                                ?? idViajeroPrincipal;
-  //         if (principalActual) {
-  //           nuevosViajeros.push({ id_viajero: principalActual, is_principal: 1 });
-  //         }
-  //       }
+        if (includesViajeroKey && idViajeroPrincipal) {
+          nuevosViajeros.push({
+            id_viajero: idViajeroPrincipal,
+            is_principal: 1,
+          });
+        } else {
+          // Si NO vino 'viajero' pero sí queremos tocar viajeros (por acompañantes),
+          // mantenemos/el preservamos el principal actual si existía, o si no, el metadata.
+          const principalActual =
+            viajerosActuales.find((v) => v.is_principal === 1)?.id_viajero ??
+            idViajeroPrincipal;
+          if (principalActual) {
+            nuevosViajeros.push({
+              id_viajero: principalActual,
+              is_principal: 1,
+            });
+          }
+        }
 
-  //       if (includesAcompKey) {
-  //         const acompIds = (acompList || [])
-  //           .map(a => a?.id_viajero)
-  //           .filter(Boolean);
+        if (includesAcompKey) {
+          const acompIds = (acompList || [])
+            .map((a) => a?.id_viajero)
+            .filter(Boolean);
 
-  //         // Quita al principal si por error viene en acompañantes
-  //         const principalId = nuevosViajeros.find(v => v.is_principal === 1)?.id_viajero;
-  //         const acompUnique = [...new Set(acompIds)].filter(idv => idv !== principalId);
+          // Quita al principal si por error viene en acompañantes
+          const principalId = nuevosViajeros.find(
+            (v) => v.is_principal === 1
+          )?.id_viajero;
+          const acompUnique = [...new Set(acompIds)].filter(
+            (idv) => idv !== principalId
+          );
 
-  //         for (const idv of acompUnique) {
-  //           nuevosViajeros.push({ id_viajero: idv, is_principal: 0 });
-  //         }
-  //       } else {
-  //         // No vinieron acompañantes en payload: preserva los acompañantes actuales
-  //         // (no tocar acompañantes en absoluto)
-  //         for (const v of viajerosActuales) {
-  //           if (v.is_principal === 0) {
-  //             nuevosViajeros.push({ id_viajero: v.id_viajero, is_principal: 0 });
-  //           }
-  //         }
-  //       }
+          for (const idv of acompUnique) {
+            nuevosViajeros.push({ id_viajero: idv, is_principal: 0 });
+          }
+        } else {
+          // No vinieron acompañantes en payload: preserva los acompañantes actuales
+          // (no tocar acompañantes en absoluto)
+          for (const v of viajerosActuales) {
+            if (v.is_principal === 0) {
+              nuevosViajeros.push({
+                id_viajero: v.id_viajero,
+                is_principal: 0,
+              });
+            }
+          }
+        }
 
-  //       // Calcula diffs
-  //       const nuevosIds = nuevosViajeros.map(v => v.id_viajero);
-  //       const actualesIds = viajerosActuales.map(v => v.id_viajero);
+        // Calcula diffs
+        const nuevosIds = nuevosViajeros.map((v) => v.id_viajero);
+        const actualesIds = viajerosActuales.map((v) => v.id_viajero);
 
-  //       const idsAEliminar = actualesIds.filter(idv => !nuevosIds.includes(idv));
-  //       const idsAInsertar = nuevosIds.filter(idv => !actualesIds.includes(idv));
-  //       const idsAActualizar = nuevosIds.filter(idv => actualesIds.includes(idv));
+        const idsAEliminar = actualesIds.filter(
+          (idv) => !nuevosIds.includes(idv)
+        );
+        const idsAInsertar = nuevosIds.filter(
+          (idv) => !actualesIds.includes(idv)
+        );
+        const idsAActualizar = nuevosIds.filter((idv) =>
+          actualesIds.includes(idv)
+        );
 
-  //       // DELETE
-  //       if (idsAEliminar.length > 0) {
-  //         const placeholders = idsAEliminar.map(() => '?').join(',');
-  //         await connection.execute(
-  //           `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND id_viajero IN (${placeholders})`,
-  //           [idHosp, ...idsAEliminar]
-  //         );
-  //         viajerosTx.deleted = idsAEliminar.length;
-  //       }
+        // DELETE
+        if (idsAEliminar.length > 0) {
+          const placeholders = idsAEliminar.map(() => "?").join(",");
+          await connection.execute(
+            `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND id_viajero IN (${placeholders})`,
+            [idHosp, ...idsAEliminar]
+          );
+          viajerosTx.deleted = idsAEliminar.length;
+        }
 
-  //       // INSERT nuevos
-  //       for (const v of nuevosViajeros.filter(v => idsAInsertar.includes(v.id_viajero))) {
-  //         await connection.execute(
-  //           `INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal) VALUES (?, ?, ?)`,
-  //           [v.id_viajero, idHosp, v.is_principal]
-  //         );
-  //         viajerosTx.inserted += 1;
-  //       }
+        // INSERT nuevos
+        for (const v of nuevosViajeros.filter((v) =>
+          idsAInsertar.includes(v.id_viajero)
+        )) {
+          await connection.execute(
+            `INSERT INTO viajeros_hospedajes (id_viajero, id_hospedaje, is_principal) VALUES (?, ?, ?)`,
+            [v.id_viajero, idHosp, v.is_principal]
+          );
+          viajerosTx.inserted += 1;
+        }
 
-  //       // UPDATE flags (principal/no principal) donde aplique
-  //       for (const v of nuevosViajeros.filter(v => idsAActualizar.includes(v.id_viajero))) {
-  //         const previo = viajerosActuales.find(x => x.id_viajero === v.id_viajero);
-  //         if (!previo || previo.is_principal !== v.is_principal) {
-  //           await connection.execute(
-  //             `UPDATE viajeros_hospedajes SET is_principal = ? WHERE id_hospedaje = ? AND id_viajero = ?`,
-  //             [v.is_principal, idHosp, v.id_viajero]
-  //           );
-  //           viajerosTx.updated += 1;
-  //         }
-  //       }
+        // UPDATE flags (principal/no principal) donde aplique
+        for (const v of nuevosViajeros.filter((v) =>
+          idsAActualizar.includes(v.id_viajero)
+        )) {
+          const previo = viajerosActuales.find(
+            (x) => x.id_viajero === v.id_viajero
+          );
+          if (!previo || previo.is_principal !== v.is_principal) {
+            await connection.execute(
+              `UPDATE viajeros_hospedajes SET is_principal = ? WHERE id_hospedaje = ? AND id_viajero = ?`,
+              [v.is_principal, idHosp, v.id_viajero]
+            );
+            viajerosTx.updated += 1;
+          }
+        }
 
   //       viajerosTx.skipped = false;
   //     }
@@ -460,23 +496,22 @@ const updateReserva2 = async (req, res) => {
   //     };
   //   });
 
-  //   return res.status(200).json({
-  //     message: "Reserva actualizada correctamente",
-  //     data: {
-  //       id_booking: id,
-  //       items: itemsConIds,                         // si no vinieron, []
-  //       impuestos: Array.isArray(impuestos?.current) ? impuestos.current : [],
-  //       viajeros_tx: result.viajeros,
-  //     },
-  //   });
-
-  // } catch (error) {
-  //   console.error("Error en updateReserva2:", error);
-  //   return res.status(500).json({
-  //     error: "Internal Server Error",
-  //     details: error?.message || String(error),
-  //   });
-  // }
+    return res.status(200).json({
+      message: "Reserva actualizada correctamente",
+      data: {
+        id_booking: id,
+        items: itemsConIds, // si no vinieron, []
+        impuestos: Array.isArray(impuestos?.current) ? impuestos.current : [],
+        viajeros_tx: result.viajeros,
+      },
+    });
+  } catch (error) {
+    console.error("Error en updateReserva2:", error);
+    return res.status(500).json({
+      error: "Internal Server Error",
+      details: error?.message || String(error),
+    });
+  }
 };
 
 // const updateReserva2 = async (req, res) => {
