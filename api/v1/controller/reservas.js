@@ -271,39 +271,40 @@ const toMysqlDateTime = (val) => {
 };
 
 const updateReserva2 = async (req, res) => {
-  try {
-    console.log("Llegando al endpoint de updateReserva2");
-    const { id } = req.query;
+  x1;
+  console.log("Llegando al endpoint de updateReserva2");
+  const { id } = req.query;
 
-    // Toma solo lo que venga; todo es opcional
-    const {
-      viajero, // puede no venir
-      check_in, // puede no venir
-      check_out, // puede no venir
-      venta, // puede no venir
-      estado_reserva, // puede no venir
-      proveedor, // puede no venir
-      hotel, // puede no venir
-      codigo_reservacion_hotel, // puede no venir
-      habitacion, // puede no venir
-      noches, // puede no venir
-      comments, // puede no venir
-      items, // puede no venir
-      impuestos, // puede no venir
-      nuevo_incluye_desayuno, // puede no venir
-      acompanantes, // puede no venir
-      metadata = {}, // suele venir, pero defensivo
-    } = req.body || {};
+  // Toma solo lo que venga; todo es opcional
+  const {
+    viajero, // puede no venir
+    check_in, // puede no venir
+    check_out, // puede no venir
+    venta, // puede no venir
+    estado_reserva, // puede no venir
+    proveedor, // puede no venir
+    hotel, // puede no venir
+    codigo_reservacion_hotel, // puede no venir
+    habitacion, // puede no venir
+    noches, // puede no venir
+    comments, // puede no venir
+    items, // puede no venir
+    impuestos, // puede no venir
+    nuevo_incluye_desayuno, // puede no venir
+    acompanantes, // puede no venir
+    metadata = {}, // suele venir, pero defensivo
+  } = req.body || {};
 
-    console.log("Revisando el body ⚠️⚠️⚠️⚠️", req.body);
+  console.log("Revisando el body ⚠️⚠️⚠️⚠️", req.body);
 
-    // 1) Items: genera IDs solo si items.current viene
-    const itemsConIds = Array.isArray(items?.current)
-      ? items.current.map((item) => ({
-          ...item,
-          id_item: item.id_item || `ite-${uuidv4()}`,
-        }))
-      : [];
+  // try {
+  //   // 1) Items: genera IDs solo si items.current viene
+  //   const itemsConIds = Array.isArray(items?.current)
+  //     ? items.current.map((item) => ({
+  //         ...item,
+  //         id_item: item.id_item || `ite-${uuidv4()}`,
+  //       }))
+  //     : [];
 
     // 2) Serializar JSON (aunque vengan vacíos)
     const itemsJson = JSON.stringify(itemsConIds);
@@ -1427,8 +1428,6 @@ const createFromOperaciones = async (req, res) => {
 
     console.log("a ver esto,", checkInDate, checkOutDate);
     console.log(
-      
-      
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime()
     );
@@ -1453,6 +1452,11 @@ const createFromOperaciones = async (req, res) => {
       .json({ message: "Solicitud created successfully", data: response });
   } catch (error) {
     console.error(error);
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: error.message,
+      data: null,
+    });
     res.status(500).json({
       error: "Internal Server Error",
       message: error.message,
@@ -1581,6 +1585,7 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
     const reservas = await executeSP("sp_reservas_con_items_by_id_agente", [
       id_agente,
     ]);
+
     if (!reservas) {
       return res.status(404).json({ message: "No se encontraron reservas" });
     } else {
@@ -1618,27 +1623,39 @@ const getReservasWithItemsSinPagarByAgente = async (req, res) => {
 
 const getDetallesConexionReservas = async (req, res) => {
   const { id_agente, id_hospedaje } = req.query;
-  try {
-    const [facturas = [], pagos = []] = await executeSP2(
-      "sp_get_detalles_conexion_reservas",
-      [id_agente, id_hospedaje],
-      { allSets: true }
-    );
-    // console.log(detalles);
-    // if (!detalles || detalles.length === 0) {
-    //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
-    // }
-    return res.status(200).json({
-      message: "Detalles de conexión encontrados",
-      data: {
-        facturas: facturas,
-        pagos: pagos,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Error en el servidor", details: error });
-    console.error(error);
-  }
+  const getDetallesConexionReservas = async (req, res) => {
+    const { id_agente, id_hospedaje } = req.query;
+    try {
+      const [facturas = [], pagos = []] = await executeSP2(
+        "sp_get_detalles_conexion_reservas",
+        [id_agente, id_hospedaje],
+        { allSets: true }
+      );
+
+      // console.log(detalles);
+      // if (!detalles || detalles.length === 0) {
+      //   return res.status(404).json({ message: "No se encontraron detalles de conexión" });
+      // }
+      return res.status(200).json({
+        message: "Detalles de conexión encontrados",
+        data: {
+          facturas: facturas,
+          pagos: pagos,
+        },
+      });
+      // }
+      return res.status(200).json({
+        message: "Detalles de conexión encontrados",
+        data: {
+          facturas: facturas,
+          pagos: pagos,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Error en el servidor", details: error });
+      console.error(error);
+    }
+  };
 };
 
 module.exports = {
@@ -1656,5 +1673,6 @@ module.exports = {
   actualizarPrecioVenta,
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
+  getDetallesConexionReservas,
   getDetallesConexionReservas,
 };

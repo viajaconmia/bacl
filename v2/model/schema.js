@@ -103,7 +103,7 @@ const ITEMS = {
     "is_ajuste",
     "id_viaje_aereo",
     "id_renta_carro",
-    "estado"
+    "estado",
   ],
 };
 const BOOKINGS = {
@@ -310,6 +310,11 @@ const ITEMS_PAGOS = {
   table: "items_pagos",
   columnas: ["id_item", "id_pago", "monto", "id_relacion"],
 };
+const ITEMS_FACTURAS = {
+  required: ["id_item", "id_factura", "monto"],
+  table: "items_facturas",
+  columnas: ["id_item", "id_factura", "monto", "id_relacion"],
+};
 module.exports = {
   VIAJES_AEREOS,
   SERVICIOS,
@@ -321,5 +326,6 @@ module.exports = {
   HOSPEDAJE,
   FACTURAS,
   FACTURAS_PAGOS_Y_SALDOS,
+  ITEMS_FACTURAS,
   ITEMS_PAGOS,
 };

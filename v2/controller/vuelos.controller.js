@@ -1,5 +1,6 @@
 const { runTransaction } = require("../../config/db");
 const MODEL = require("../model/db.model");
+const SERVICE = require("../services/services");
 
 const editarVuelo = async (req, res) => {
   try {
@@ -71,15 +72,20 @@ const editarVuelo = async (req, res) => {
     //   viaje_aereo: viaje,
     // };
 
-    await runTransaction(async (connection) => {
+    const response = await runTransaction(async (connection) => {
       try {
-        const pago = { id_pago: "pag-060a864c-b739-4518-811f-d46ca54f85cb" };
-        const response = await MODEL.SALDO.return_wallet(
-          connection,
-          pago.id_pago,
-          100
+        const response = await SERVICE.ITEMS.ajustar_items_facturados(
+          // "hos-04807f7d-5cf2-4482-92bd-1590ce9dd6d0" //Reserva con una sola factura y 4 items
+          "hos-04807f7d-5cf2-4482-92bd-1590ce9dd6d0" //Reserva con 4 facturas y pocos items
         );
-        console.log(response);
+        // const pago = { id_pago: "pag-060a864c-b739-4518-811f-d46ca54f85cb" };
+        // const response = await MODEL.SALDO.return_wallet(
+        //   connection,
+        //   pago.id_pago,
+        //   10
+        // );
+        // console.log(response);
+
         // const updateService = Calculo.cleanEmpty({
         //   total: diferencia
         //     ? Number(BEFORE.servicio.total) + diferencia
@@ -102,6 +108,7 @@ const editarVuelo = async (req, res) => {
 
         // console.log(diferencia, updateService);
         // throw new Error("por si acaso");
+        return response;
       } catch (error) {
         throw error;
       }
@@ -109,7 +116,7 @@ const editarVuelo = async (req, res) => {
 
     res.status(200).json({
       message: "Reservación creada con exito",
-      data: [],
+      data: response,
     });
   } catch (error) {
     console.log("this is the message", error.message);
