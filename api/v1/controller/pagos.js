@@ -1938,7 +1938,8 @@ const pagoPorSaldoAFavor = async (req, res) => {
 const getAllPagosPrepago = async (req, res) => {
   try {
     const pagos = await executeQuery(
-      `SELECT * FROM vw_pagos_prepago_facturables;`
+      `SELECT *
+FROM vw_pagos_prepago_facturables;`
     );
     const balance = await executeQuery(
       `SELECT * FROM vw_balance_pagos_facturas;`

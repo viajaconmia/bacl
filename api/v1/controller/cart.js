@@ -5,7 +5,7 @@ const { CustomError } = require("../../../middleware/errorHandler");
 /****************+ GET ********************* */
 const getCartItemsById = async (req, res) => {
   try {
-    const { id_agente, id_viajero } = req.query;
+    const { id_agente, id_viajero, usuario_creador } = req.query;
     if (!id_agente && !id_viajero)
       throw new CustomError(
         "Faltan el id del usuario",
@@ -29,8 +29,12 @@ const getCartItemsById = async (req, res) => {
   from cart c 
 left join solicitudes s on s.id_solicitud = c.id_solicitud
 left join viajeros v on s.id_viajero = v.id_viajero
-where (c.id_agente = ? OR c.usuario_generador = ?) AND c.active = 1;`,
-      [id_agente || "", id_viajero || ""]
+where (c.id_agente = ? OR c.usuario_generador = ?) AND c.active = 1 ${
+        usuario_creador ? "AND s.usuario_creador = ?" : ""
+      };`,
+      usuario_creador
+        ? [id_agente || "", id_viajero || "", usuario_creador || ""]
+        : [id_agente || "", id_viajero || ""]
     );
 
     const carItems = cartItemsSolicitudes.map(

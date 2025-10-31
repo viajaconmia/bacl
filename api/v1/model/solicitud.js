@@ -33,7 +33,7 @@ const createSolicitudes = async (body) => {
   try {
     const { solicitudes } = body;
     console.log(solicitudes);
-    const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales, id_agente, origen) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+    const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales, id_agente, origen, usuario_creador) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
     const id_solicitud = `sol-${uuidv4()}`;
     const {
       confirmation_code,
@@ -47,6 +47,7 @@ const createSolicitudes = async (body) => {
       id_viajero,
       nombre_viajero,
       viajeros_adicionales,
+      usuario_creador,
     } = solicitudes[0];
     const params_solicitud = [
       id_solicitud || null,
@@ -63,6 +64,7 @@ const createSolicitudes = async (body) => {
       JSON.stringify(viajeros_adicionales) || [],
       id_agente || null,
       "Cliente",
+      usuario_creador || null,
     ];
 
     const response = await executeQuery(query_solicitudes, params_solicitud);
