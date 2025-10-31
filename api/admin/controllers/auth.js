@@ -126,7 +126,7 @@ const logOut = async (req, res) => {
         sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
         path: "/",
       })
-      .status(200)
+      .status(204)
       .json({ message: "session" });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
