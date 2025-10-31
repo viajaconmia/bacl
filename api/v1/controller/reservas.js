@@ -297,14 +297,14 @@ const updateReserva2 = async (req, res) => {
 
   console.log("Revisando el body ⚠️⚠️⚠️⚠️", req.body);
 
-  // try {
-  //   // 1) Items: genera IDs solo si items.current viene
-  //   const itemsConIds = Array.isArray(items?.current)
-  //     ? items.current.map((item) => ({
-  //         ...item,
-  //         id_item: item.id_item || `ite-${uuidv4()}`,
-  //       }))
-  //     : [];
+  try {
+    // 1) Items: genera IDs solo si items.current viene
+    const itemsConIds = Array.isArray(items?.current)
+      ? items.current.map((item) => ({
+          ...item,
+          id_item: item.id_item || `ite-${uuidv4()}`,
+        }))
+      : [];
 
     // 2) Serializar JSON (aunque vengan vacíos)
     const itemsJson = JSON.stringify(itemsConIds);
