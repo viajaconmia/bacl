@@ -313,15 +313,11 @@ const updateReserva2 = async (req, res) => {
     );
 
     // 3) Parámetros del SP (si lo vas a llamar). Coloca null si no viene.
-    //    Ajusta la firma real de tu SP si cambió.
     const params = [
       id, // 1) p_id_booking
       viajero?.current?.id_viajero ?? null, // 2) p_id_viajero
       check_in?.current ?? null, // 3) p_check_in
       check_out?.current ?? null, // 4) p_check_out
-      // venta?.current?.total ?? null,             // 5) p_total (si aplica)
-      // venta?.current?.subtotal ?? null,          // 6) p_subtotal
-      // venta?.current?.impuestos ?? null,         // 7) p_impuestos
       estado_reserva?.current ?? null, // 8) p_estado_reserva
       proveedor?.current?.total ?? null, // 9) p_costo_total
       proveedor?.current?.subtotal ?? null, // 10) p_costo_subtotal
@@ -340,9 +336,9 @@ const updateReserva2 = async (req, res) => {
     ];
 
     // 4) Viajeros/acompañantes:
-    //    Solo tocamos este bloque si el payload INCLUYE al menos una de estas llaves.
     const includesViajeroKey = hasKey(req.body, "viajero");
     const includesAcompKey = hasKey(req.body, "acompanantes");
+    const shouldUpdateTravelers = includesViajeroKey || includesAcompKey;
 
     const idHosp = metadata?.id_hospedaje;
     if (!idHosp) {
@@ -359,17 +355,15 @@ const updateReserva2 = async (req, res) => {
     const acompList =
       includesAcompKey && Array.isArray(acompanantes) ? acompanantes : null;
 
-  //   // Construye lista final de viajeros solo si debemos actualizar viajeros
-  //   const shouldUpdateTravelers = includesViajeroKey || includesAcompKey;
-
     const result = await runTransaction(async (connection) => {
-      // [Opcional] si vas a llamar SP, descomenta y ajusta:
+      // Llamada al SP (si aplica)
       await connection.execute(
         "CALL sp_editar_reserva_procesada(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         params
       );
 
-  //     let viajerosTx = { inserted: 0, deleted: 0, updated: 0, skipped: true };
+      // Transacción de viajeros
+      const viajerosTx = { inserted: 0, deleted: 0, updated: 0, skipped: true };
 
       if (shouldUpdateTravelers) {
         // Leemos estado actual
@@ -381,10 +375,7 @@ const updateReserva2 = async (req, res) => {
           ? viajerosActualesRows
           : [];
 
-  //       // Construimos nuevosViajeros únicamente con lo que vino:
-  //       // - Si vino 'viajero', definimos/el reafirmamos el principal.
-  //       // - Si vino 'acompanantes', definimos el set de acompañantes actual.
-  //       const nuevosViajeros = [];
+        const nuevosViajeros = [];
 
         if (includesViajeroKey && idViajeroPrincipal) {
           nuevosViajeros.push({
@@ -392,8 +383,6 @@ const updateReserva2 = async (req, res) => {
             is_principal: 1,
           });
         } else {
-          // Si NO vino 'viajero' pero sí queremos tocar viajeros (por acompañantes),
-          // mantenemos/el preservamos el principal actual si existía, o si no, el metadata.
           const principalActual =
             viajerosActuales.find((v) => v.is_principal === 1)?.id_viajero ??
             idViajeroPrincipal;
@@ -410,7 +399,6 @@ const updateReserva2 = async (req, res) => {
             .map((a) => a?.id_viajero)
             .filter(Boolean);
 
-          // Quita al principal si por error viene en acompañantes
           const principalId = nuevosViajeros.find(
             (v) => v.is_principal === 1
           )?.id_viajero;
@@ -422,8 +410,6 @@ const updateReserva2 = async (req, res) => {
             nuevosViajeros.push({ id_viajero: idv, is_principal: 0 });
           }
         } else {
-          // No vinieron acompañantes en payload: preserva los acompañantes actuales
-          // (no tocar acompañantes en absoluto)
           for (const v of viajerosActuales) {
             if (v.is_principal === 0) {
               nuevosViajeros.push({
@@ -485,32 +471,30 @@ const updateReserva2 = async (req, res) => {
           }
         }
 
-  //       viajerosTx.skipped = false;
-  //     }
+        viajerosTx.skipped = false;
+      }
 
-  //     // Puedes añadir aquí más updates parciales (estado_reserva, fechas, etc.) usando solo lo que venga
-
-  //     return {
-  //       viajeros: viajerosTx,
-  //       // podrías regresar también lo que hiciste con items/impuestos si aplicó
-  //     };
-  //   });
+      // devuelve resumen de la tx
+      return { viajeros: viajerosTx };
+    });
 
     return res.status(200).json({
       message: "Reserva actualizada correctamente",
       data: {
         id_booking: id,
-        items: itemsConIds, // si no vinieron, []
+        items: itemsConIds,
         impuestos: Array.isArray(impuestos?.current) ? impuestos.current : [],
         viajeros_tx: result.viajeros,
       },
     });
   } catch (error) {
     console.error("Error en updateReserva2:", error);
-    return res.status(500).json({
-      error: "Internal Server Error",
-      details: error?.message || String(error),
-    });
+    return res
+      .status(500)
+      .json({
+        error: "Internal Server Error",
+        details: error?.message || String(error),
+      });
   }
 };
 
