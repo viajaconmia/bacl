@@ -580,6 +580,7 @@ async function caso_base_tolerante({
       ...(hotel?.current?.name ? { nombre_hotel: hotel.current.name } : {}),
       ...(habitacion?.current ? { tipo_cuarto: habitacion.current } : {}),
       ...(typeof nuevo_incluye_desayuno !== "undefined" ? { nuevo_incluye_desayuno } : {}),
+      ...(hotel?.current?.content?.id_hotel ? { id_hotel: hotel.current.content.id_hotel } : {}),
     });
 
     if (Object.keys(updatesHosp).length > 1) {
