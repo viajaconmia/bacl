@@ -176,38 +176,40 @@ const readSaldoByAgente = async (req, res) => {
   const { id } = req.params;
   try {
     const saldo = await executeQuery(
-      `SELECT
-  sf.id_agente,
-  a.nombre,
-  sf.id_saldos,
-  sf.fecha_creacion,
-  sf.saldo,
-  sf.monto,
-  sf.metodo_pago,
-  sf.fecha_pago,
-  sf.concepto,
-  sf.referencia,
-  sf.currency,
-  sf.tipo_tarjeta,
-  sf.ult_digits,
-  sf.comentario,
-  sf.link_stripe,
-  sf.is_facturable,
-  sf.is_descuento,
-  sf.comprobante,
-  sf.activo,
-  sf.numero_autorizacion,
-  sf.banco_tarjeta,
-  COALESCE(v.monto_facturado, 0)     AS monto_facturado,
-  COALESCE(v.monto_por_facturar, 0)  AS monto_por_facturar
-FROM saldos_a_favor AS sf
-INNER JOIN agente_details AS a
-  ON a.id_agente = sf.id_agente
-LEFT JOIN vw_pagos_prepago_facturables AS v
-  ON v.raw_id = sf.id_saldos
-WHERE sf.id_agente = ?;`,
-      [id]
-    );
+  `SELECT
+    sf.id_agente,
+    a.nombre,
+    sf.id_saldos,
+    sf.fecha_creacion,
+    sf.saldo,
+    sf.monto,
+    sf.metodo_pago,
+    sf.fecha_pago,
+    sf.concepto,
+    sf.referencia,
+    sf.currency,
+    sf.tipo_tarjeta,
+    sf.ult_digits,
+    sf.comentario,
+    sf.link_stripe,
+    sf.is_facturable,
+    sf.is_descuento,
+    sf.comprobante,
+    sf.activo,
+    sf.numero_autorizacion,
+    sf.banco_tarjeta,
+    COALESCE(v.monto_facturado, 0)     AS monto_facturado,
+    COALESCE(v.monto_por_facturar, 0)  AS monto_por_facturar
+  FROM saldos_a_favor AS sf
+  INNER JOIN agente_details AS a
+    ON a.id_agente = sf.id_agente
+  LEFT JOIN vw_pagos_prepago_facturables AS v
+    ON v.raw_id = sf.id_saldos
+  WHERE sf.id_agente = ?
+  ORDER BY sf.fecha_creacion ASC;`,
+  [id]
+);
+
     // console.log(saldo);
     res
       .status(200)
