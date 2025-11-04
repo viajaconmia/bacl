@@ -1939,7 +1939,7 @@ const getAllPagosPrepago = async (req, res) => {
   try {
     const pagos = await executeQuery(
       `SELECT *
-FROM vw_pagos_prepago_facturables;`
+FROM vw_pagos_prepago_facturables where is_facturado = 1;`
     );
     const balance = await executeQuery(
       `SELECT * FROM vw_balance_pagos_facturas;`
@@ -1958,6 +1958,64 @@ FROM vw_pagos_prepago_facturables;`
     });
   }
 };
+
+const getAllPagosPrepagoFacturasPendientes = async (req, res) => {
+  try {
+    const pagos = await executeQuery(
+      `SELECT *
+FROM vw_pagos_prepago_facturables WHERE is_facturado = 0;;`
+    );
+    const balance = await executeQuery(
+      `SELECT * FROM vw_balance_pagos_facturas;`
+    );
+
+    res.status(200).json({
+      message: "Pagos de prepago obtenidos correctamente",
+      data: pagos,
+      balance: balance,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener los pagos de prepago",
+      error: error.message || "Error desconocido",
+    });
+  }
+};
+
+const getPagoPrepago = async (req, res) => {
+  try {
+    // 1) Obtiene el parámetro (por ejemplo desde la URL o query)
+    const { raw_id } = req.query; // o req.query según tu ruta
+
+    if (!raw_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Falta el parámetro raw_id",
+      });
+    }
+
+    // 2) Ejecuta la consulta con parámetro seguro
+    const pago = await executeQuery(
+      `SELECT * FROM vw_pagos_prepago_facturables WHERE raw_id = ?`,
+      [raw_id]
+    );
+
+    // 4) Envía la respuesta
+    res.status(200).json({
+      success: true,
+      message: "Pago obtenido correctamente",
+      data: pago,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener los pagos de prepago",
+      error: error.message || "Error desconocido",
+    });
+  }
+};
+
 
 const getDetallesConexionesPagos = async (req, res) => {
   const { id_agente, id_raw } = req.query;
@@ -2045,4 +2103,6 @@ module.exports = {
   pagarCarritoConCredito,
   getDetallesConexionesPagos,
   aplicarCambioNochesOAjuste,
+  getPagoPrepago,
+  getAllPagosPrepagoFacturasPendientes
 };

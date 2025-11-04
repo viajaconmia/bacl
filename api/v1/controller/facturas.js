@@ -473,6 +473,7 @@ const asignarFacturaPagos = async (req, res) => {
 const filtrarFacturas = async (req, res) => {
   const { estatusFactura, id_factura } = req.body;
   try {
+    console.log(estatusFactura)
     const result = await executeSP("sp_filtrar_facturas", [
       estatusFactura,
       id_factura,
@@ -866,6 +867,8 @@ const crearFacturaMultiplesPagos = async (req, res) => {
 
   // ¿La factura ya viene completa en el body?
   const fb = facturaBody || {};
+  console.log("😁😁😁😁😁😁😁😁😁😁🤣🤣🤣🤣🤣", )
+
   const bodyTieneFactura =
     Boolean(fb.fecha_emision) &&
     (Boolean(fb.uuid_factura) || Boolean(fb.url_xml)) &&
@@ -886,7 +889,7 @@ const crearFacturaMultiplesPagos = async (req, res) => {
     return {
       fecha_emision: f.Fecha || f.fecha || new Date(),
       estado: "Confirmada",
-      usuario_creador: info_user.id_agente,
+      usuario_creador: info_user.usuario_creador,
       id_agente: fb.id_agente ?? info_user.id_agente,
       total,
       subtotal,
@@ -986,17 +989,26 @@ const crearFacturaMultiplesPagos = async (req, res) => {
       INSERT INTO facturas (
         id_factura, fecha_emision, estado, usuario_creador, id_agente,
         total, subtotal, impuestos, saldo, rfc, id_empresa,
-        uuid_factura, rfc_emisor, url_pdf, url_xml, id_facturama
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)
+        uuid_factura, rfc_emisor, url_pdf, url_xml, id_facturama,origen
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)
     `;
 
     await runTransaction(async (connection) => {
       try {
+        let generador = rowFactura.usuario_creador
+        let origen = 0
+        if (!rowFactura.usuario_creador) {
+          generador = rowFactura.id_agente
+          origen = 1
+        }
+        
+                console.log("😁😁😁😁😁😁😁😁😁😁🤣🤣🤣🤣🤣", rowFactura)
+        console.log("😁😁😁😁😁😁😁😁😁😁🤣🤣🤣🤣🤣, generados", generador)
         const [r1] = await connection.query(insertFacturaSQL, [
           id_factura,
           rowFactura.fecha_emision,
           rowFactura.estado,
-          rowFactura.usuario_creador,
+          generador,
           rowFactura.id_agente,
           rowFactura.total,
           rowFactura.subtotal,
@@ -1009,6 +1021,7 @@ const crearFacturaMultiplesPagos = async (req, res) => {
           rowFactura.url_pdf,
           rowFactura.url_xml,
           rowFactura.id_facturama || null,
+          origen,
         ]);
         if (!r1?.affectedRows) throw new Error("No se pudo crear la factura");
 
