@@ -779,6 +779,7 @@ const getAllFacturas = async () => {
   try {
     const query = `SELECT 
   id_factura,
+  is_prepagada,
   id_facturama,
   fecha_emision,
   estado_factura,

@@ -2,6 +2,7 @@ const {
   executeSP,
   executeQuery,
   executeTransaction,
+  executeSP2,
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 let model = require("../model/solicitud");
@@ -31,6 +32,23 @@ const read = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error", details: error });
   }
 };
+
+const getUbicacionHotel = async (req, res) => {
+  const { id } =req.query;
+  try {
+    console.log(id)
+    let ubicacion = await executeSP2("getUbicacionHotel", [id]);
+      res
+        .status(200)
+        .json({ message: "Ubicacion obtenida correctamente", res:ubicacion });
+    
+  }catch (error) {
+    console.error(error);
+    req.context.logStep("Error en la ejecucion del SP", error);
+    res.status(500).json({ error: "Internal Server Error", details: error });
+  }
+}
+
 const readClient = async (req, res) => {
   const { user_id } = req.query;
   req.context.logStep(
@@ -426,6 +444,7 @@ module.exports = {
   readSolicitudByIdWithViajero,
   getViajeroFromSolicitud,
   getViajeroAgenteFromSolicitud,
+  getUbicacionHotel,
   readConsultas,
   getItemsSolicitud,
   readForClient,

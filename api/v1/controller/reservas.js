@@ -1443,6 +1443,8 @@ const createFromOperaciones = async (req, res) => {
 
     console.log("a ver esto,", checkInDate, checkOutDate);
     console.log(
+      
+      
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime()
     );
