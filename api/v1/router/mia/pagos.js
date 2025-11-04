@@ -9,6 +9,7 @@ router.post("/crearItemdeAjuste", controller.crearItemdeAjuste);
 // router.post("/crearItemdeAjuste", controller.aplicarCambioNochesOAjuste);
 router.post("/aplicarpagoPorSaldoAFavor", controller.pagoPorSaldoAFavor);
 router.get("/getAllPagosPrepago", controller.getAllPagosPrepago);
+router.get("/FacturasPendientesPrepago",controller.getAllPagosPrepagoFacturasPendientes)
 router.get("/getPagoPrepago", controller.getPagoPrepago);
 router.post("/", controller.create);
 router.get("/", controller.read);

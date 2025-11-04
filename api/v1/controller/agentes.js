@@ -1,4 +1,8 @@
-const { executeSP, executeTransactionSP } = require("../../../config/db");
+const {
+  executeSP,
+  executeTransactionSP,
+  executeQuery,
+} = require("../../../config/db");
 const model = require("../model/agentes");
 const { API_STRIPE_TEST } = require("../../../config/auth");
 const stripeTest = require("stripe")(API_STRIPE_TEST);
@@ -6,7 +10,7 @@ const stripeTest = require("stripe")(API_STRIPE_TEST);
 const create = async (req, res) => {
   try {
     const response = await model.createAgente(req.body);
- 
+
     res
       .status(201)
       .json({ message: "Agente creado correctamente", data: response });
@@ -20,7 +24,6 @@ const read = async (req, res) => {
   try {
     const { id_agente } = req.query;
     const agentes = await model.getAgente(id_agente);
-    
 
     res.status(200).json({ data: agentes });
   } catch (error) {
@@ -42,7 +45,7 @@ const readAgentesCompanies = async (req, res) => {
 };
 
 const readEmpresasDatosFiscales = async (req, res) => {
-  console.log("Entrando al controller")
+  console.log("Entrando al controller");
   try {
     const { id_agente } = req.query;
     const agentes = await model.getEmpresasDatosFiscales(id_agente);
@@ -90,6 +93,40 @@ const readAgentes = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Error en el servidor", details: error });
+  }
+};
+const updateRestricted = async (req, res) => {
+  try {
+    const { id, value } = req.body;
+    await executeQuery(
+      `UPDATE agentes SET restringido = ? WHERE id_agente = ?`,
+      [value, id]
+    );
+
+    res.status(200).json({ data: value, message: "actualizado con exito" });
+  } catch (error) {
+    res.status(error.status || error.statusCode || 500).json({
+      message: error.message || "Error al extraer el restringido",
+      data: null,
+      error,
+    });
+  }
+};
+const getRestricted = async (req, res) => {
+  try {
+    const { id } = req.query;
+    const [{ restringido }] = await executeQuery(
+      `select restringido from agentes where id_agente = ?`,
+      [id]
+    );
+
+    res.status(200).json({ message: "", data: Boolean(restringido) });
+  } catch (error) {
+    res.status(error.status || error.statusCode || 500).json({
+      message: error.message || "Error al extraer el restringido",
+      data: null,
+      error,
+    });
   }
 };
 
@@ -208,4 +245,6 @@ module.exports = {
   getAgenteId,
   readAgentes,
   get_agente_with_viajeros_details,
+  getRestricted,
+  updateRestricted,
 };

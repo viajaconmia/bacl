@@ -520,7 +520,7 @@ const asignarFacturasItems = async (req, res) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
-  const { ejemplo_saldos } = reserva;
+  const { ejemplo_saldos, usuarioCreador } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
   const agentes = await executeQuery(
     `SELECT * FROM agentes WHERE id_agente = ?`,
@@ -544,8 +544,8 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
 
     const query_servicio = `
       INSERT INTO servicios (
-        id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago, id_agente
-      ) VALUES (?,?,?,?,?,?,?,?);
+        id_servicio, total, subtotal, impuestos, is_credito, otros_impuestos, fecha_limite_pago, id_agente, id_user_creador
+      ) VALUES (?,?,?,?,?,?,?,?,?);
     `;
     const params_servicio = [
       id_servicio,
@@ -556,6 +556,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
       null,
       null,
       reserva.solicitud.id_agente,
+      usuarioCreador?.id_viajero || null,
     ];
 
     const response = await executeTransaction(
@@ -2100,105 +2101,138 @@ const insertarReserva = async ({ reserva }) => {
             }
           }
 
-const toCents = (n) => Math.round(Number(n) * 100);
-const fromCents = (c) => (c / 100);
+          const toCents = (n) => Math.round(Number(n) * 100);
+          const fromCents = (c) => c / 100;
 
-// 1. Verificar si es pago con wallet
-const [walletPagos] = await connection.execute(
-  `SELECT p.id_pago, p.saldo_aplicado, p.total as monto_pago,
+          // 1. Verificar si es pago con wallet
+          const [walletPagos] = await connection.execute(
+            `SELECT p.id_pago, p.saldo_aplicado, p.total as monto_pago,
           s.monto as saldo_original, s.id_saldos
    FROM pagos p 
    INNER JOIN saldos_a_favor s ON p.id_saldo_a_favor = s.id_saldos
    WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
    ORDER BY p.fecha_pago ASC, p.id_pago ASC`,
-  [solicitud.id_servicio]
-);
+            [solicitud.id_servicio]
+          );
 
 const esWalletPrepagado = walletPagos.length > 0;
 
-if (esWalletPrepagado && itemsConIdAnadido.length > 0) {
-  console.log("Procesando pago con wallet prepagado");
-  // 2) Calcular total en CENTAVOS
-  const totalReservaCents = itemsConIdAnadido.reduce(
-    (sum, item) => sum + toCents(item.venta.total),
-    0
-  );
+          if (esWalletPrepagado && itemsConIdAnadido.length > 0) {
+            console.log("Procesando pago con wallet prepagado");
+            // 2) Calcular total en CENTAVOS
+            const totalReservaCents = itemsConIdAnadido.reduce(
+              (sum, item) => sum + toCents(item.venta.total),
+              0
+            );
 
-  let saldoDisponibleCents = walletPagos.reduce(
-    (sum, p) => sum + toCents(p.saldo_aplicado || 0),
-    0
-  );
+            let saldoDisponibleCents = walletPagos.reduce(
+              (sum, p) => sum + toCents(p.saldo_aplicado || 0),
+              0
+            );
 
-  console.log(
-    `Total reserva: ${fromCents(totalReservaCents)}, Saldo disponible: ${fromCents(saldoDisponibleCents)}`
-  );
+            console.log(
+              `Total reserva: ${fromCents(
+                totalReservaCents
+              )}, Saldo disponible: ${fromCents(saldoDisponibleCents)}`
+            );
 
-  if (saldoDisponibleCents < totalReservaCents) {
-    throw new Error(
-      `Saldo insuficiente en wallet. Disponible: ${fromCents(saldoDisponibleCents).toFixed(2)}, Requerido: ${fromCents(totalReservaCents).toFixed(2)}`
-    );
-  }
+            if (saldoDisponibleCents < totalReservaCents) {
+              throw new Error(
+                `Saldo insuficiente en wallet. Disponible: ${fromCents(
+                  saldoDisponibleCents
+                ).toFixed(2)}, Requerido: ${fromCents(
+                  totalReservaCents
+                ).toFixed(2)}`
+              );
+            }
 
-  // 3) Distribuir en CENTAVOS
-  const asignaciones = [];
-  let pagoIndex = 0;
-  let saldoRestanteEnPagoCents = toCents(walletPagos[pagoIndex]?.saldo_aplicado || 0);
+            // 3) Distribuir en CENTAVOS
+            const asignaciones = [];
+            let pagoIndex = 0;
+            let saldoRestanteEnPagoCents = toCents(
+              walletPagos[pagoIndex]?.saldo_aplicado || 0
+            );
 
-  for (const item of itemsConIdAnadido) {
-    let montoRestanteItemCents = toCents(item.venta.total);
-    console.log(`\nProcesando item ${item.id_item}, monto: ${fromCents(montoRestanteItemCents)}`);
+            for (const item of itemsConIdAnadido) {
+              let montoRestanteItemCents = toCents(item.venta.total);
+              console.log(
+                `\nProcesando item ${item.id_item}, monto: ${fromCents(
+                  montoRestanteItemCents
+                )}`
+              );
 
-    // safety guard por si acaso (no debería dispararse)
-    let watchdog = 0;
+              // safety guard por si acaso (no debería dispararse)
+              let watchdog = 0;
 
-    while (montoRestanteItemCents > 0 && pagoIndex < walletPagos.length) {
-      if (saldoRestanteEnPagoCents <= 0) {
-        pagoIndex++;
-        saldoRestanteEnPagoCents = toCents(walletPagos[pagoIndex]?.saldo_aplicado || 0);
-        console.log(`Cambiando a siguiente pago. pagoIndex=${pagoIndex}, saldoRestanteEnPago=${fromCents(saldoRestanteEnPagoCents)}`);
-        continue;
-      }
+              while (
+                montoRestanteItemCents > 0 &&
+                pagoIndex < walletPagos.length
+              ) {
+                if (saldoRestanteEnPagoCents <= 0) {
+                  pagoIndex++;
+                  saldoRestanteEnPagoCents = toCents(
+                    walletPagos[pagoIndex]?.saldo_aplicado || 0
+                  );
+                  console.log(
+                    `Cambiando a siguiente pago. pagoIndex=${pagoIndex}, saldoRestanteEnPago=${fromCents(
+                      saldoRestanteEnPagoCents
+                    )}`
+                  );
+                  continue;
+                }
 
-      const montoAsignarCents = Math.min(montoRestanteItemCents, saldoRestanteEnPagoCents);
+                const montoAsignarCents = Math.min(
+                  montoRestanteItemCents,
+                  saldoRestanteEnPagoCents
+                );
 
-      asignaciones.push({
-        id_item: item.id_item,
-        id_pago: walletPagos[pagoIndex].id_pago,
-        monto_cents: montoAsignarCents,
-      });
+                asignaciones.push({
+                  id_item: item.id_item,
+                  id_pago: walletPagos[pagoIndex].id_pago,
+                  monto_cents: montoAsignarCents,
+                });
 
-      montoRestanteItemCents -= montoAsignarCents;
-      saldoRestanteEnPagoCents -= montoAsignarCents;
+                montoRestanteItemCents -= montoAsignarCents;
+                saldoRestanteEnPagoCents -= montoAsignarCents;
 
-      console.log(
-        `Asignado ${fromCents(montoAsignarCents)} del pago ${walletPagos[pagoIndex].id_pago} | ` +
-        `resto item: ${fromCents(montoRestanteItemCents)}, resto pago: ${fromCents(saldoRestanteEnPagoCents)}`
-      );
+                console.log(
+                  `Asignado ${fromCents(montoAsignarCents)} del pago ${
+                    walletPagos[pagoIndex].id_pago
+                  } | ` +
+                    `resto item: ${fromCents(
+                      montoRestanteItemCents
+                    )}, resto pago: ${fromCents(saldoRestanteEnPagoCents)}`
+                );
 
-      // watchdog para evitar loops por cualquier bug
-      watchdog++;
-      if (watchdog > 10000) throw new Error("Watchdog: demasiadas iteraciones en distribución wallet.");
-    }
+                // watchdog para evitar loops por cualquier bug
+                watchdog++;
+                if (watchdog > 10000)
+                  throw new Error(
+                    "Watchdog: demasiadas iteraciones en distribución wallet."
+                  );
+              }
 
-    if (montoRestanteItemCents > 0) {
-      throw new Error(`No se pudo asignar completo el pago para el item ${item.id_item}`);
-    }
-  }
+              if (montoRestanteItemCents > 0) {
+                throw new Error(
+                  `No se pudo asignar completo el pago para el item ${item.id_item}`
+                );
+              }
+            }
 
   console.log("\nAsignaciones finales:", asignaciones);
 
-  // 4) Insertar en items_pagos (ya en pesos)
-  if (asignaciones.length > 0) {
-    const queryItemsPagos = `
+            // 4) Insertar en items_pagos (ya en pesos)
+            if (asignaciones.length > 0) {
+              const queryItemsPagos = `
       INSERT INTO items_pagos (id_item, id_pago, monto)
       VALUES ${asignaciones.map(() => "(?, ?, ?)").join(",")}
     `;
 
-    const paramsItemsPagos = asignaciones.flatMap((a) => [
-      a.id_item,
-      a.id_pago,
-      fromCents(a.monto_cents).toFixed(2),
-    ]);
+              const paramsItemsPagos = asignaciones.flatMap((a) => [
+                a.id_item,
+                a.id_pago,
+                fromCents(a.monto_cents).toFixed(2),
+              ]);
 
     await connection.execute(queryItemsPagos, paramsItemsPagos);
     console.log(`Insertados ${asignaciones.length} registros en items_pagos`);
@@ -2212,18 +2246,20 @@ if (esWalletPrepagado && itemsConIdAnadido.length > 0) {
     [solicitud.id_servicio]
   );
 
-  if (rowsContado.length > 0 && itemsConIdAnadido.length > 0) {
-    const id_pago = rowsContado[0].id_pago;
-    const query_items_pagos = `
+            if (rowsContado.length > 0 && itemsConIdAnadido.length > 0) {
+              const id_pago = rowsContado[0].id_pago;
+              const query_items_pagos = `
       INSERT INTO items_pagos (id_item, id_pago, monto)
       VALUES ${itemsConIdAnadido.map(() => "(?, ?, ?)").join(",")};
     `;
 
-    const params_items_pagos = itemsConIdAnadido.flatMap((itemConId) => [
-      itemConId.id_item,
-      id_pago,
-      Number(itemConId.venta.total).toFixed(2),
-    ]);
+              const params_items_pagos = itemsConIdAnadido.flatMap(
+                (itemConId) => [
+                  itemConId.id_item,
+                  id_pago,
+                  Number(itemConId.venta.total).toFixed(2),
+                ]
+              );
 
     await connection.execute(query_items_pagos, params_items_pagos);
   } else {

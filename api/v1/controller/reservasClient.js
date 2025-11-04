@@ -1,5 +1,5 @@
 const { error } = require("winston");
-const { executeSP } = require("../../../config/db");
+const { executeSP, executeQuery } = require("../../../config/db");
 const { CustomError } = require("../../../middleware/errorHandler");
 
 const get_reservasClient_by_id_agente = async (req, res) => {
@@ -7,7 +7,7 @@ const get_reservasClient_by_id_agente = async (req, res) => {
     req.context.logStep(
       "Llegando al endpoint de get_reservasClient_by_id_agente"
     );
-    const { user_id } = req.query;
+    const { user_id, usuario_creador } = req.query;
     console.log("user_id recibido:", user_id);
     if (!user_id) {
       throw new CustomError(
@@ -17,9 +17,19 @@ const get_reservasClient_by_id_agente = async (req, res) => {
         null
       );
     }
-    const result = await executeSP("sp_get_reservasClient_by_id_cliente", [
+    let result = await executeSP("sp_get_reservasClient_by_id_cliente", [
       user_id,
     ]);
+
+    const [{ restringido }] = await executeQuery(
+      `select restringido from agentes where id_agente = ?`,
+      [user_id]
+    );
+
+    if (Boolean(restringido) && usuario_creador) {
+      result = result.filter((item) => item.usuario_creador == usuario_creador);
+    }
+
     res.status(200).json({
       message: "Reservas obtenidas correctamente",
       data: result,

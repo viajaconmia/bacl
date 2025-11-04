@@ -27,17 +27,7 @@ router.get("/id", controller.readById);
 router.put("/", controller.update);
 router.delete("/", controller.deleteViajeroById);
 
-router.get("/agente", async (req, res) => {
-  try {
-    const query = `select * from viajeros_con_empresas_con_agentes WHERE id_agente = ?;`;
-    const response = await executeQuery(query, [req.query.id]);
-    res.status(200).json(response);
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ message: "Error server", details: error });
-  }
-});
-
+/* ESTE ES EL NUEVO QUE FUNCIONA EN ADMIN EN EL SERVICE DE VIAJEROS*/
 router.get("/by-agente", async (req, res) => {
   try {
     const { id } = req.query;
@@ -50,6 +40,23 @@ router.get("/by-agente", async (req, res) => {
 
     res.status(200).json({ message: "obtenidos con exito", data: response });
   } catch (error) {
+    console.log(error);
+    res.status(error.statusCode || error.status || 500).json({
+      message: error.message || "Error al extraer los viajeros",
+      error,
+      data: null,
+    });
+  }
+});
+
+router.get("/agente", async (req, res) => {
+  try {
+    const query = `select * from viajeros_con_empresas_con_agentes WHERE id_agente = ?;`;
+    const response = await executeQuery(query, [req.query.id]);
+    res.status(200).json(response);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Error server", details: error });
     console.log(error);
     res.status(error.statusCode || error.status || 500).json({
       message: error.message || "Error al extraer los viajeros",

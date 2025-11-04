@@ -2,23 +2,25 @@ const controller = require("../../controller/agentes");
 const { executeQuery } = require("../../../../config/db");
 const router = require("express").Router();
 
-router.post("/",  controller.create);
+router.post("/", controller.create);
 router.get(
   "/viajeros-con-empresas",
-  
+
   controller.read
 );
 router.get(
   "/empresas-con-agentes",
-  
+
   controller.readAgentesCompanies
 );
+router.get("/restricted", controller.getRestricted);
+router.patch("/restricted", controller.updateRestricted);
 router.get(
   "/empresas-con-datos-fiscales",
-  
+
   controller.readEmpresasDatosFiscales
 );
-router.get("/agentes",  controller.readAgentes);
+router.get("/agentes", controller.readAgentes);
 router.get("/get-agente-id/", controller.getAgenteId);
 
 router.get("/empresas", async (req, res) => {
@@ -166,7 +168,9 @@ router.get("/all-with-active-facturable-saldos", async (req, res) => {
       values.push(`%${query.correo.toString().split(" ").join("%")}%`);
     }
     if (query.client) {
-      conditions.push(`(a.nombre_agente_completo LIKE ? OR a.id_agente LIKE ?)`);
+      conditions.push(
+        `(a.nombre_agente_completo LIKE ? OR a.id_agente LIKE ?)`
+      );
       values.push(`%${query.client.split(" ").join("%")}%`);
       values.push(`%${query.client.split("").join("%")}%`);
     }
@@ -211,52 +215,52 @@ router.get("/all-with-active-facturable-saldos", async (req, res) => {
         ORDER BY a.created_at DESC
       `,
       values: values,
-      typeCast: function(field, next) {
-        if (field.type === 'JSON') {
+      typeCast: function (field, next) {
+        if (field.type === "JSON") {
           return field.string(); // Devuelve el JSON como string
         }
         return next();
-      }
+      },
     };
 
     console.log("Ejecutando query:", config.sql);
     console.log("Con valores:", config.values);
 
     const agentes = await executeQuery(config);
-    
+
     // Procesar los resultados
-    const agentesConSaldos = agentes.map(agente => {
+    const agentesConSaldos = agentes.map((agente) => {
       try {
         let saldos = [];
-        
+
         // Verificar si saldos_facturables es un string (necesita parseo) o ya es un objeto
         if (agente.saldos_facturables) {
-          if (typeof agente.saldos_facturables === 'string') {
+          if (typeof agente.saldos_facturables === "string") {
             saldos = JSON.parse(agente.saldos_facturables);
           } else if (Array.isArray(agente.saldos_facturables)) {
             saldos = agente.saldos_facturables;
           }
-          
+
           // Asegurar que los booleanos sean correctos
-          saldos = saldos.map(saldo => ({
+          saldos = saldos.map((saldo) => ({
             ...saldo,
             is_facturable: Boolean(saldo.is_facturable),
             is_descuento: Boolean(saldo.is_descuento),
-            activo: Boolean(saldo.activo)
+            activo: Boolean(saldo.activo),
           }));
         }
-        
+
         return {
           ...agente,
           tiene_credito_consolidado: Boolean(agente.tiene_credito_consolidado),
-          saldos_facturables: saldos
+          saldos_facturables: saldos,
         };
       } catch (error) {
         console.error("Error procesando agente", agente.id_agente, error);
         return {
           ...agente,
           tiene_credito_consolidado: Boolean(agente.tiene_credito_consolidado),
-          saldos_facturables: []
+          saldos_facturables: [],
         };
       }
     });
@@ -264,10 +268,10 @@ router.get("/all-with-active-facturable-saldos", async (req, res) => {
     res.status(200).json(agentesConSaldos);
   } catch (error) {
     console.error("Error en /all-with-active-facturable-saldos:", error);
-    res.status(500).json({ 
-      message: "Error en el servidor", 
+    res.status(500).json({
+      message: "Error en el servidor",
       details: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 });
@@ -283,7 +287,7 @@ from agentes
 JOIN vw_details_agente ON vw_details_agente.id_agente = agentes.id_agente 
 join agente_details ad on ad.id_agente = agentes.id_agente
 WHERE vw_details_agente.id_agente = ?;`;
-    
+
     const response = await executeQuery(query, [req.query.id]);
     res.status(200).json(response);
   } catch (error) {

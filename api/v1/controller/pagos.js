@@ -1938,7 +1938,32 @@ const pagoPorSaldoAFavor = async (req, res) => {
 const getAllPagosPrepago = async (req, res) => {
   try {
     const pagos = await executeQuery(
-      `SELECT * FROM vw_pagos_prepago_facturables;`
+      `SELECT *
+FROM vw_pagos_prepago_facturables where is_facturado = 1;`
+    );
+    const balance = await executeQuery(
+      `SELECT * FROM vw_balance_pagos_facturas;`
+    );
+
+    res.status(200).json({
+      message: "Pagos de prepago obtenidos correctamente",
+      data: pagos,
+      balance: balance,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener los pagos de prepago",
+      error: error.message || "Error desconocido",
+    });
+  }
+};
+
+const getAllPagosPrepagoFacturasPendientes = async (req, res) => {
+  try {
+    const pagos = await executeQuery(
+      `SELECT *
+FROM vw_pagos_prepago_facturables WHERE is_facturado = 0;;`
     );
     const balance = await executeQuery(
       `SELECT * FROM vw_balance_pagos_facturas;`
@@ -2078,5 +2103,6 @@ module.exports = {
   pagarCarritoConCredito,
   getDetallesConexionesPagos,
   aplicarCambioNochesOAjuste,
-  getPagoPrepago
+  getPagoPrepago,
+  getAllPagosPrepagoFacturasPendientes
 };

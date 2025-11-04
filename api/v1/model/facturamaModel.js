@@ -2,6 +2,8 @@ const facturama = require("../../Facturama/Facturama/facturama.api");
 
 const listaClientes = () => facturama.Clients.List();
 
+const listaByFechas = (start, end) => facturama.Cfdi.ListByDates(start, end);
+
 const listaCfdis = (rfc) => facturama.Cfdi.List(rfc);
 
 const descargaCfdi = (idCfdi, type = "pdf") =>
@@ -35,4 +37,5 @@ module.exports = {
   cancelarCfdi,
   getCfdi,
   descargaCfdiXML,
+  listaByFechas,
 };

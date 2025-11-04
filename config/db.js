@@ -27,7 +27,7 @@ const pool = mysql.createPool({
 });
 
 pool.on("connection", (conn) => {
-  conn.query("SET time_zone = '-06:00'");
+  conn.query("SET time_zone = 'America/Mexico_City'");
 });
 
 async function executeQuery(query, params = []) {

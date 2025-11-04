@@ -84,6 +84,7 @@ const facturama = () => {
       return response;
     } catch (error) {
       if (error.response) {
+        console.error(error.response.data);
         // 4a) Si es un fallo HTTP, mostramos TODO el payload de error
         console.error("❌ Facturama error status:", error.response.status);
         // console.error(
@@ -170,6 +171,8 @@ const facturama = () => {
       Cancel: (params) => deleteSyncWithParam("cfdi", params),
       Download: (format, type, id) => retrieve(`cfdi/${format}/${type}`, id),
       List: (rfc) => listWithParam("cfdi", `type=issued&keyword=${rfc}`),
+      ListByDates: (dateStart, dateEnd) =>
+        listWithParam("cfdi", `dateStart=${dateStart}&dateEnd=${dateEnd}`),
     },
   };
 };
