@@ -785,7 +785,11 @@ const editar_reserva_definitivo = async (req, res) => {
       const delta_noches_seguro =
   (Number.isFinite(noches?.current) ? noches.current : toNumber(noches?.current, NaN)) -
   (Number.isFinite(noches?.before) ? noches.before : toNumber(noches?.before, NaN));
-      let { cambia_precio_de_venta, delta_precio_venta } = Calculo.cambia_precio_de_venta(venta);
+
+      let { cambia_precio_de_venta } = Calculo.cambia_precio_de_venta(venta);
+      let delta_precio_venta =
+  (Number.isFinite(venta?.current?.total) ? venta.current.total : toNumber(venta?.current?.total, 0)) -
+  (Number.isFinite(venta?.before?.total) ? venta.before.total : toNumber(venta?.before?.total, 0));
       delta_precio_venta = toNumber(delta_precio_venta, 0);
 
       console.log("🔔 [MONETARIO] Cambia precio de venta:", {
@@ -1063,7 +1067,7 @@ const editar_reserva_definitivo = async (req, res) => {
 
         // 2.3 Devoluciones por ajuste negativo (restante < 0)
         console.log("🔄 [DEVOLUCION] Checando devolución por ajuste negativo...", { cambia_precio_de_venta, delta_precio_venta, restanteNum });
-        if (cambia_precio_de_venta && delta_precio_venta < 0 && Number.isFinite(restanteNum) && restanteNum < 0) {
+        if (cambia_precio_de_venta && delta_precio_venta < 0 && Number.isFinite(restanteNum) && restanteNum <= 0) {
           const monto_devolucion = Math.abs(restanteNum);
           const concepto = `Devolucion por ajuste de reserva en ${metadata.id_hotel ?? ''}`;
           if (!metadata?.id_agente) {
