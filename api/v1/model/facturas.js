@@ -193,16 +193,28 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         ]);
 
         // 4. Actualizar solo los items seleccionados
-        const updateItemsSql = `
-        UPDATE items
-        SET id_factura = ?,
-        is_facturado = 1
-        WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
-        `;
-        const resultados_items = await conn.execute(updateItemsSql, [
-          id_factura,
-          ...itemsArray,
-        ]);
+        // const updateItemsSql = `
+        // UPDATE items
+        // SET id_factura = ?,
+        // is_facturado = 1
+        // WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
+        // `;
+        // const resultados_items = await conn.execute(updateItemsSql, [
+        //   id_factura,
+        //   ...itemsArray,
+        // ]);
+        // 4 NUEVO: Insertar en items factura
+        const numberOfItems = itemsArray.length;
+        const insertItemsFacturasQuery = `
+        insert into items_facturas (id_factura,id_relacion,id_item,monto) values(?,?,?,?);`;
+        for (let i = 0; i < numberOfItems; i++) {
+          await conn.execute(insertItemsFacturasQuery, [
+            id_factura,
+            itemsArray[i].id_hospedaje,
+            itemsArray[i].id_item,
+            total / numberOfItems,
+          ]);
+        }
 
         // 5. Insertar registros en facturas_pagos
         /* const resultados_pagos = await conn.execute( LO COMENTO POR SI ACASO
