@@ -471,12 +471,13 @@ const asignarFacturaPagos = async (req, res) => {
 };
 
 const filtrarFacturas = async (req, res) => {
-  const { estatusFactura, id_factura } = req.body;
+  const { estatusFactura, id_factura,id_cliente } = req.body;
   try {
     console.log(estatusFactura)
     const result = await executeSP("sp_filtrar_facturas", [
-      estatusFactura,
-      id_factura,
+      estatusFactura || null,
+      id_factura || null,
+      id_cliente||null
     ]);
     if (!result) {
       return res.status(404).json({
