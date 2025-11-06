@@ -747,11 +747,26 @@ order by fecha_emision desc;`;
 
 const getAllFacturasPagosPendientes = async () => {
   try {
-    const query = `SELECT *
-FROM vw_facturas
-WHERE 
-  (pagos_asociados IS NULL OR COALESCE(JSON_LENGTH(pagos_asociados), 0) = 0 OR saldo <> 0)
-  AND fecha_vencimiento <= CURDATE();`;
+    const query = `SELECT vf.*
+FROM vw_facturas AS vf
+JOIN (
+  SELECT 
+    uuid_factura,
+    fecha_emision,
+    total,
+    subtotal,
+    impuestos,
+    rfc
+  FROM vw_facturas
+  GROUP BY
+    uuid_factura, fecha_emision, total, subtotal, impuestos, rfc
+  HAVING
+    SUM(COALESCE(JSON_LENGTH(pagos_asociados), 0)) = 0
+) AS g
+USING (uuid_factura, fecha_emision, total, subtotal, impuestos, rfc)
+-- (Opcional) si además quieres limitar a saldo = 0 o NULL:
+-- WHERE vf.saldo = 0 OR vf.saldo IS NULL
+ORDER BY vf.uuid_factura, vf.fecha_emision;`;
     let response = await executeQuery(query, []);
 
     return response;
