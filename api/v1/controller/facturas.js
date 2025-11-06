@@ -166,6 +166,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
     url_pdf,
     url_xml,
     items,
+    fecha_vencimiento
   } = req.body;
   const id_factura = "fac-" + uuidv4();
 
@@ -188,6 +189,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
       url_pdf,
       url_xml,
       items,
+      fecha_vencimiento
     ]);
 
     if (!response) {
@@ -471,13 +473,16 @@ const asignarFacturaPagos = async (req, res) => {
 };
 
 const filtrarFacturas = async (req, res) => {
-  const { estatusFactura, id_factura,id_cliente } = req.body;
+  const { estatusFactura, id_factura,id_cliente,cliente,uuid,rfc} = req.body;
   try {
     console.log(estatusFactura)
     const result = await executeSP("sp_filtrar_facturas", [
       estatusFactura || null,
       id_factura || null,
-      id_cliente||null
+      id_cliente || null,
+      cliente || null,
+      uuid || null,
+      rfc || null
     ]);
     if (!result) {
       return res.status(404).json({
