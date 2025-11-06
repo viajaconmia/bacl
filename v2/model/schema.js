@@ -103,6 +103,7 @@ const ITEMS = {
     "is_ajuste",
     "id_viaje_aereo",
     "id_renta_carro",
+    "estado",
   ],
 };
 const BOOKINGS = {
