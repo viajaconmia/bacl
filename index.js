@@ -12,36 +12,36 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
   apiVersion: "2024-04-10",
 });
 
-app.post("/disputa", express.raw({ type: "application/json" }), (req, res) => {
-  const sig = req.headers["stripe-signature"];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET_TEST;
+// app.post("/disputa", express.raw({ type: "application/json" }), (req, res) => {
+//   const sig = req.headers["stripe-signature"];
+//   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET_TEST;
 
-  let event;
+//   let event;
 
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-  } catch (err) {
-    console.error("❌ Error verificando la firma del webhook:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+//   try {
+//     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+//   } catch (err) {
+//     console.error("❌ Error verificando la firma del webhook:", err.message);
+//     return res.status(400).send(`Webhook Error: ${err.message}`);
+//   }
 
-  // ✅ Manejo del evento de disputa
-  if (event.type === "charge.dispute.created") {
-    const dispute = event.data.object;
-    console.log("\n\n\n\n\n🚨 Disputa recibida:", {
-      id: dispute.id,
-      amount: dispute.amount / 100,
-      currency: dispute.currency,
-      reason: dispute.reason,
-    });
+//   // ✅ Manejo del evento de disputa
+//   if (event.type === "charge.dispute.created") {
+//     const dispute = event.data.object;
+//     console.log("\n\n\n\n\n🚨 Disputa recibida:", {
+//       id: dispute.id,
+//       amount: dispute.amount / 100,
+//       currency: dispute.currency,
+//       reason: dispute.reason,
+//     });
 
-    // Aquí puedes guardar en base de datos, notificar a alguien, etc.
-  } else {
-    console.log(`📦 Evento recibido no manejado: ${event.type}`);
-  }
+//     // Aquí puedes guardar en base de datos, notificar a alguien, etc.
+//   } else {
+//     console.log(`📦 Evento recibido no manejado: ${event.type}`);
+//   }
 
-  res.status(200).json({ received: true });
-});
+//   res.status(200).json({ received: true });
+// });
 /** aqui*/
 
 const { errorHandler } = require("./middleware/errorHandler");
@@ -125,6 +125,29 @@ app.get("/", (req, res) =>
       "Bienvenido a la API. Por favor, autentícate para acceder a más datos.",
   })
 );
+
+const { GoogleGenAI } = require("@google/genai");
+
+class Assistant {
+  constructor(model) {
+    this.ai = new GoogleGenAI({});
+    this.model = model;
+  }
+}
+
+app.post("/message", async (req, res) => {
+  try {
+    const { message } = req.body;
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: message,
+    });
+    console.log(response.text);
+    res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+  }
+});
 
 // 7. Manejador de errores global (solo formatea respuesta; no llama a logger.error)
 app.use(errorHandler);
