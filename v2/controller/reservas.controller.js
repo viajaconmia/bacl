@@ -38,12 +38,97 @@ function hasNochesChange(noches) {
 function makeInPlaceholders(n) {
   return Array.from({ length: n }, () => "?").join(",");
 }
+async function liberar_items_facturados(connection, items_desactivados) {
+  if (!Array.isArray(items_desactivados) || items_desactivados.length === 0) return;
 
+  const ids = items_desactivados
+    .map(x => x?.id_item)
+    .filter(Boolean)
+    .map(String);
+
+  if (ids.length === 0) return;
+
+  const ph = ids.map(() => "?").join(",");
+
+  // 1) Trae los vínculos actuales (y bloquea filas)
+  const [rows] = await connection.execute(
+    `
+    SELECT id_item, id_factura, monto
+    FROM items_facturas
+    WHERE id_item IN (${ph}) AND monto > 0
+    FOR UPDATE
+    `,
+    ids
+  );
+
+  if (!rows || rows.length === 0) return;
+
+  // 2) Agrupa monto liberado por factura
+  const porFactura = new Map(); // id_factura -> monto_total
+  for (const r of rows) {
+    const f = String(r.id_factura);
+    const m = Number(r.monto || 0);
+    porFactura.set(f, Number(((porFactura.get(f) || 0) + m).toFixed(2)));
+  }
+
+  // 3) Pone en cero los montos de los items desactivados
+  await connection.execute(
+    `UPDATE items_facturas SET monto = 0 WHERE id_item IN (${ph}) AND monto > 0`,
+    ids
+  );
+
+  // 4) Devuelve el monto liberado al saldo de cada factura (sin rebasar el total)
+  for (const [id_factura, monto_liberado] of porFactura.entries()) {
+    await connection.execute(
+      `
+      UPDATE facturas
+      SET saldo_x_aplicar_items =
+        CASE
+          WHEN saldo_x_aplicar_items IS NULL
+            THEN LEAST(total, total + ?)
+          ELSE LEAST(saldo_x_aplicar_items + ?, total)
+        END
+      WHERE id_factura = ?
+      `,
+      [monto_liberado, monto_liberado, id_factura]
+    );
+    console.log(`🧾 [FISCAL] Liberado ${monto_liberado} a saldo_x_aplicar_items en factura ${id_factura}`);
+  }
+}
+
+/**
+ * Inserta (id_item, id_factura, monto, id_relacion) en items_facturas
+ * y aplica la regla de saldo_x_aplicar_items en la factura (NULL => total).
+ * Garantiza no dejar saldo negativo.
+ */
+async function insertar_items_facturas_y_descuento(connection, { id_item, id_factura, monto, id_relacion }) {
+  const m = Number(monto || 0);
+  if (m <= 0.009) return;
+
+  // Insert vínculo
+  await connection.execute(
+    `INSERT INTO items_facturas (id_item, id_factura, monto, id_relacion) VALUES (?, ?, ?, ?)`,
+    [id_item, id_factura, m, id_relacion]
+  );
+
+  // Descuenta saldo fiscal disponible (capado a >= 0; NULL => total)
+  await connection.execute(
+    `
+    UPDATE facturas
+    SET saldo_x_aplicar_items = CASE
+      WHEN saldo_x_aplicar_items IS NULL THEN GREATEST(total - ?, 0)
+      ELSE GREATEST(saldo_x_aplicar_items - ?, 0)
+    END
+    WHERE id_factura = ?
+    `,
+    [m, m, id_factura]
+  );
+}
 /* =========================
  * PAGOS
  * ========================= */
 
-async function crear_pago_desde_wallet(connection, id_servicio, saldos_aplicados) {
+async function crear_pago_desde_wallet(connection, id_servicio,id_agente,saldos_aplicados) {
   console.log("💳 [WALLET] Iniciando crear_pago_desde_wallet");
 
   if (!Array.isArray(saldos_aplicados) || saldos_aplicados.length === 0) {
@@ -63,7 +148,7 @@ async function crear_pago_desde_wallet(connection, id_servicio, saldos_aplicados
 
   const primer = saldos_aplicados[0] || {};
   const id_saldo_principal = primer.id_saldos || null;
-  const id_agente = primer.id_agente || null;
+ //  const id_agente = primer.id_agente || null;
   const id_pago = `pag-${uuidv4()}`;
   const transaccion = id_pago;
 
@@ -154,27 +239,68 @@ async function get_payment_type(id_solicitud, id_servicio) {
  * Obtiene el estado fiscal de la reserva (SP existente).
  * Si tu SP trae `saldo_x_aplicar_items` y `total`, se normaliza a `saldo_interpretado_para_items`.
  */
-async function is_invoiced_reservation(id_servicio) {
-  const data = await executeSP("sp_get_facturas_pagos_by_id_servicio", [id_servicio]);
-  console.log("🧾 [FISCAL] Estado fiscal obtenido (sp_get_facturas_pagos_by_id_servicio).");
+async function is_invoiced_reservation(connection, id_servicio) {
+  console.log(`🧾 [FISCAL] Consultando estado fiscal para servicio ${id_servicio}...`);
 
-  // Normaliza facturas -> saldo_interpretado_para_items si viene la info
-  const facturas = Array.isArray(data?.facturas_detalle) ? data.facturas_detalle : [];
-  const normalizadas = facturas.map(f => {
-    const saldo = (f.saldo_x_aplicar_items == null || typeof f.saldo_x_aplicar_items === "undefined")
-      ? (Number(f.total || 0))
-      : Number(f.saldo_x_aplicar_items || 0);
-    return {
-      ...f,
-      saldo_interpretado_para_items: saldo
-    };
+  // mysql2 devuelve [rows, fields]; y rows para CALL es una matrioshka
+  const [rows/*, fields*/] = await connection.query(
+    "CALL sp_get_facturas_pagos_by_id_servicio(?)",
+    [id_servicio]
+  );
+
+  // ---- 1) Desanidar de forma tolerante
+  // Formas típicas observadas:
+  // A) rows = [ [ [rowObj], ResultSetHeader ], [ [schema...], undefined ] ]
+  // B) rows = [ [rowObj], ResultSetHeader ]
+  // C) rows = [rowObj]
+  let head = {};
+  if (Array.isArray(rows?.[0]?.[0]?.[0])) {            // muy raro, pero por si acaso
+    head = rows[0][0][0];
+  } else if (Array.isArray(rows?.[0]?.[0])) {          // caso A
+    head = rows[0][0][0] || {};
+  } else if (Array.isArray(rows?.[0])) {               // caso B
+    head = rows[0][0] || {};
+  } else if (rows && typeof rows === "object") {       // caso C
+    head = rows;
+  } else {
+    head = {};
+  }
+
+  // ---- 2) Asegurar/parsear JSON (puede venir como Buffer)
+  const toJsonArray = (val) => {
+    if (Buffer.isBuffer(val)) {
+      val = val.toString("utf8");
+    }
+    if (typeof val === "string") {
+      try { return JSON.parse(val || "[]"); } catch { return []; }
+    }
+    return Array.isArray(val) ? val : [];
+  };
+
+  let facturas_detalle = toJsonArray(head?.facturas_detalle);
+  // (si tu SP ya retorna objetos JS y no string/buffer, igual cae en el return Array.isArray)
+
+  // ---- 3) Normalizar facturas → saldo_interpretado_para_items
+  const facturas = facturas_detalle.map(f => {
+    const tieneXAplicar = f.saldo_x_aplicar_items != null && typeof f.saldo_x_aplicar_items !== "undefined";
+    const saldo = tieneXAplicar ? Number(f.saldo_x_aplicar_items || 0) : Number(f.total || 0);
+    return { ...f, saldo_interpretado_para_items: saldo };
   });
 
-  return {
-    ...data,
-    facturas: normalizadas,
-    es_facturada: Boolean(data?.is_facturado)
+  // ---- 4) Normalizar flag is_facturado (1 / '1' / true)
+  const isFact = (v) => v === 1 || v === "1" || v === true;
+  const resultado = {
+    ...head,
+    facturas,
+    es_facturada: isFact(head?.is_facturado)
   };
+
+  console.log("🧾 [FISCAL] Parse SP OK →", {
+    es_facturada: resultado.es_facturada,
+    totalFacturas: facturas.length
+  });
+
+  return resultado;
 }
 
 /**
@@ -310,22 +436,13 @@ async function asociar_factura_items_logica(connection, id_hospedaje, items_a_vi
 
       const asignar = Math.min(pendiente, disponible);
 
-      // Inserta vínculo items_facturas
-      await connection.execute(
-        `INSERT INTO items_facturas (id_item, id_factura, monto, id_relacion) VALUES (?, ?, ?, ?)`,
-        [item.id_item, f.id_factura, asignar, id_hospedaje]
-      );
+      await insertar_items_facturas_y_descuento(connection, {
+        id_item: item.id_item,
+        id_factura: f.id_factura,
+        monto: asignar,
+        id_relacion: id_hospedaje
+      });
 
-      // Actualiza la factura con la REGLA en BD (capado a >= 0)
-      await connection.execute(
-        `UPDATE facturas
-           SET saldo_x_aplicar_items = CASE
-             WHEN saldo_x_aplicar_items IS NULL THEN GREATEST(total - ?, 0)
-             ELSE GREATEST(saldo_x_aplicar_items - ?, 0)
-           END
-         WHERE id_factura = ?`,
-        [asignar, asignar, f.id_factura]
-      );
 
       // Actualiza saldos en memoria
       f.saldo = Number((disponible - asignar).toFixed(2));
@@ -343,40 +460,14 @@ async function asociar_factura_items_logica(connection, id_hospedaje, items_a_vi
   console.log("🧾 [FISCAL] Herencia fiscal completada.");
 }
 
-async function manejar_desactivacion_fiscal(connection, items_desactivados, facturas_reserva) {
-  console.log("🧾 [FISCAL] Manejando desactivación fiscal (Regla Morada)...");
+async function manejar_desactivacion_fiscal(connection, items_desactivados/*, facturas_reserva*/) {
+  console.log("🧾 [FISCAL] Manejando desactivación fiscal (Regla Morada, multi-factura)...");
   if (!Array.isArray(items_desactivados) || items_desactivados.length === 0) return;
-  if (!Array.isArray(facturas_reserva) || facturas_reserva.length === 0) return;
-
-  const factura_principal = facturas_reserva[0];
-  let monto_liberado_total = 0;
-  const ids_desactivados = [];
-
-  for (const item of items_desactivados) {
-    const monto_facturado = parseFloat(item.monto_facturado_previo || 0);
-    if (monto_facturado > 0) {
-      monto_liberado_total += monto_facturado;
-      ids_desactivados.push(item.id_item);
-    }
-  }
-
-  if (monto_liberado_total > 0) {
-    const placeholders = ids_desactivados.map(() => "?").join(",");
-    await connection.execute(
-      `UPDATE items_facturas SET monto = 0 WHERE id_item IN (${placeholders}) AND id_factura = ?`,
-      [...ids_desactivados, factura_principal.id_factura]
-    );
-
-    await connection.execute(
-      "UPDATE facturas SET saldo_x_aplicar_items = saldo_x_aplicar_items + ? WHERE id_factura = ?",
-      [monto_liberado_total, factura_principal.id_factura]
-    );
-
-    console.log(`🧾 [FISCAL] Liberado ${monto_liberado_total} a saldo_x_aplicar_items en factura ${factura_principal.id_factura}`);
-  }
+  // Leemos la relación real desde items_facturas; no necesitamos 'facturas_reserva' aquí.
+  await liberar_items_facturados(connection, items_desactivados);
 }
 
-async function manejar_reduccion_fiscal(connection, items_activos_post_split, facturas_reserva) {
+async function manejar_reduccion_fiscal(connection, items_activos_post_split, facturas_reserva,id_agente) {
   console.log("🧾 [FISCAL] Manejando reducción fiscal (Down-scale)...");
   if (!Array.isArray(facturas_reserva) || facturas_reserva.length === 0) return;
 
@@ -390,7 +481,7 @@ async function manejar_reduccion_fiscal(connection, items_activos_post_split, fa
   if (!rows || rows.length === 0) return;
 
   let monto_liberado_reasignable = parseFloat(rows[0]?.saldo_x_aplicar_items || 0);
-  const id_agente = rows[0]?.id_agente;
+  // const id_agente = rows[0]?.id_agente;
   const total_factura = parseFloat(rows[0]?.total || 0);
 
   if (monto_liberado_reasignable < 0 || monto_liberado_reasignable > total_factura) {
@@ -665,75 +756,99 @@ async function caso_base_tolerante({
  * ========================= */
 
 const editar_reserva_definitivo = async (req, res) => {
-  console.log("🚀 [EDITAR_RESERVA] Iniciando editar_reserva_definitivo. 🧱 caso_base safe");
-
-  const {
-    metadata,
-    venta,
-    noches,
-    check_in,
-    check_out,
-    estado_reserva,
-    viajero,
-    acompanantes,
-    codigo_reservacion_hotel,
-    comments,
-    hotel,
-    habitacion,
-    nuevo_incluye_desayuno,
-    impuestos,
-    saldos,
-    restante,
-  } = req.body;
-
   try {
-    // IDs mínimos
-    if (!metadata?.id_servicio || !metadata?.id_hospedaje || !metadata?.id_booking) {
-      console.warn("⚠️ [EDITAR_RESERVA] Faltan IDs clave:", {
-        hasServicio: !!metadata?.id_servicio,
-        hasHospedaje: !!metadata?.id_hospedaje,
-        hasBooking: !!metadata?.id_booking,
+    return await runTransaction(async (connection) => {
+      console.log("🚀 [EDITAR_RESERVA] Iniciando editar_reserva_definitivo");
+
+      const {
+        metadata,
+        venta,
+        noches,
+        check_in,
+        check_out,
+        estado_reserva,
+        viajero,
+        acompanantes,
+        codigo_reservacion_hotel,
+        comments,
+        hotel,
+        habitacion,
+        nuevo_incluye_desayuno,
+        impuestos,
+        saldos,
+        restante,
+      } = req.body;
+
+      // Validation and initial checks
+      if (!metadata?.id_servicio || !metadata?.id_hospedaje || !metadata?.id_booking) {
+        return res.status(400).json({ 
+          error: "Faltan IDs clave (id_servicio, id_hospedaje, id_booking)." 
+        });
+      }
+
+      const hayCambioPrecio = hasPrecioChange(venta);
+      const hayCambioNoches = hasNochesChange(noches);
+      const haySaldos = Array.isArray(saldos) && saldos.length > 0;
+      const restanteNum = toNumber(restante, NaN);
+
+      const debeProcesarMonetario = (
+        hayCambioPrecio || hayCambioNoches || haySaldos || Number.isFinite(restanteNum)
+      );
+
+      console.log("🔎 [EDITAR_RESERVA] Flags:", {
+        hayCambioPrecio,
+        hayCambioNoches,
+        haySaldos,
+        restanteNum,
+        debeProcesarMonetario
       });
-      return res
-        .status(400)
-        .json({ error: "Faltan IDs clave (id_servicio, id_hospedaje, id_booking)." });
-    }
 
-    const hayCambioPrecio = hasPrecioChange(venta);
-    const hayCambioNoches = hasNochesChange(noches);
-    const haySaldos = Array.isArray(saldos) && saldos.length > 0;
-    const restanteNum = toNumber(restante, NaN);
+      if (hayCambioPrecio && !Number.isFinite(venta?.current?.total)) {
+        return res
+          .status(400)
+          .json({ error: "Cambio de precio detectado, pero falta venta.current.total." });
+      }
+      if (hayCambioNoches && !Number.isFinite(noches?.current)) {
+        return res
+          .status(400)
+          .json({ error: "Cambio de noches detectado, pero falta noches.current." });
+      }
 
-    const debeProcesarMonetario = (
-      hayCambioPrecio || hayCambioNoches || haySaldos || Number.isFinite(restanteNum)
-    );
+      // Solo caso base
+      if (!debeProcesarMonetario) {
+        const respBase = await caso_base_tolerante({
+          id_servicio: metadata.id_servicio,
+          id_hospedaje: metadata.id_hospedaje,
+          id_booking: metadata.id_booking,
+          total: undefined,
+          estado: estado_reserva?.current,
+          check_in,
+          check_out,
+          noches,
+          id_viajero_principal: viajero?.current?.id_viajero,
+          acompanantes,
+          codigo_reservacion_hotel,
+          comments,
+          hotel,
+          habitacion,
+          nuevo_incluye_desayuno,
+        });
 
-    console.log("🔎 [EDITAR_RESERVA] Flags:", {
-      hayCambioPrecio,
-      hayCambioNoches,
-      haySaldos,
-      restanteNum,
-      debeProcesarMonetario
-    });
+        console.log("✅ [EDITAR_RESERVA] Caso base aplicado sin cambios monetarios.");
+        return res.status(200).json({
+          message: "Caso base aplicado sin cambios monetarios",
+          resultado_paso_1: respBase,
+          modo: "caso_base_only",
+        });
+      }
 
-    if (hayCambioPrecio && !Number.isFinite(venta?.current?.total)) {
-      return res
-        .status(400)
-        .json({ error: "Cambio de precio detectado, pero falta venta.current.total." });
-    }
-    if (hayCambioNoches && !Number.isFinite(noches?.current)) {
-      return res
-        .status(400)
-        .json({ error: "Cambio de noches detectado, pero falta noches.current." });
-    }
-
-    // Solo caso base
-    if (!debeProcesarMonetario) {
+      // PASO 1: Caso base (refleja total si hay cambios monetarios)
+      const totalNuevo = Number.isFinite(venta?.current?.total) ? venta.current.total : undefined;
       const respBase = await caso_base_tolerante({
         id_servicio: metadata.id_servicio,
         id_hospedaje: metadata.id_hospedaje,
         id_booking: metadata.id_booking,
-        total: undefined,
+        total: totalNuevo,
         estado: estado_reserva?.current,
         check_in,
         check_out,
@@ -747,82 +862,54 @@ const editar_reserva_definitivo = async (req, res) => {
         nuevo_incluye_desayuno,
       });
 
-      console.log("✅ [EDITAR_RESERVA] Caso base aplicado sin cambios monetarios.");
-      return res.status(200).json({
-        message: "Caso base aplicado sin cambios monetarios",
-        resultado_paso_1: respBase,
-        modo: "caso_base_only",
-      });
-    }
+      console.log("🧱 [EDITAR_RESERVA] Caso base aplicado (con/para cambios monetarios).");
 
-    // PASO 1: Caso base (refleja total si hay cambios monetarios)
-    const totalNuevo = Number.isFinite(venta?.current?.total) ? venta.current.total : undefined;
-    const respBase = await caso_base_tolerante({
-      id_servicio: metadata.id_servicio,
-      id_hospedaje: metadata.id_hospedaje,
-      id_booking: metadata.id_booking,
-      total: totalNuevo,
-      estado: estado_reserva?.current,
-      check_in,
-      check_out,
-      noches,
-      id_viajero_principal: viajero?.current?.id_viajero,
-      acompanantes,
-      codigo_reservacion_hotel,
-      comments,
-      hotel,
-      habitacion,
-      nuevo_incluye_desayuno,
-    });
+      // PASO 2: Monetario
+      if (debeProcesarMonetario) {
+        const TASA_IVA_DECIMAL = (impuestos?.iva / 100.0) || 0.16;
 
-    console.log("🧱 [EDITAR_RESERVA] Caso base aplicado (con/para cambios monetarios).");
-
-    // PASO 2: Monetario
-    if (debeProcesarMonetario) {
-      const TASA_IVA_DECIMAL = (impuestos?.iva / 100.0) || 0.16;
-
-      const { cambian_noches, delta_noches } = Calculo.cambian_noches(noches);
-      const delta_noches_seguro =
+        const { cambian_noches, delta_noches } = Calculo.cambian_noches(noches);
+        const delta_noches_seguro =
   (Number.isFinite(noches?.current) ? noches.current : toNumber(noches?.current, NaN)) -
   (Number.isFinite(noches?.before) ? noches.before : toNumber(noches?.before, NaN));
 
-      let { cambia_precio_de_venta } = Calculo.cambia_precio_de_venta(venta);
-      let delta_precio_venta =
+        let { cambia_precio_de_venta } = Calculo.cambia_precio_de_venta(venta);
+        let delta_precio_venta =
   (Number.isFinite(venta?.current?.total) ? venta.current.total : toNumber(venta?.current?.total, 0)) -
   (Number.isFinite(venta?.before?.total) ? venta.before.total : toNumber(venta?.before?.total, 0));
-      delta_precio_venta = toNumber(delta_precio_venta, 0);
+        delta_precio_venta = toNumber(delta_precio_venta, 0);
 
-      console.log("🔔 [MONETARIO] Cambia precio de venta:", {
-        cambia_precio_de_venta,
-        delta_precio_venta,
-        cambian_noches,
-        delta_noches_seguro,
-        TASA_IVA_DECIMAL
-      });
+        console.log("🔔 [MONETARIO] Cambia precio de venta:", {
+          cambia_precio_de_venta,
+          delta_precio_venta,
+          cambian_noches,
+          delta_noches_seguro,
+          TASA_IVA_DECIMAL
+        });
 
 
-      const tipo_pago_original = await get_payment_type(
-        metadata.id_solicitud,
-        metadata.id_servicio
-      );
+        const tipo_pago_original = await get_payment_type(
+          metadata.id_solicitud,
+          metadata.id_servicio
+        );
 
-      const estado_fiscal = await is_invoiced_reservation(metadata.id_servicio);
+        const estado_fiscal = await is_invoiced_reservation(connection,metadata.id_servicio);
 
-      const saldos_aplicados = Array.isArray(saldos)
-        ? saldos.filter((s) => s.usado === true && parseFloat(s.saldo_usado || 0) > 0)
-        : [];
+        const saldos_aplicados = Array.isArray(saldos)
+          ? saldos.filter((s) => s.usado === true && parseFloat(s.saldo_usado || 0) > 0)
+          : [];
 
-      // <<<< REDEFINICIÓN USADA >>>>
-      const { saldos_filtrados, facturas_wallet } = await are_invoiced_payments({ saldos: saldos_aplicados });
+        // <<<< REDEFINICIÓN USADA >>>>
+        const { saldos_filtrados, facturas_wallet } = await are_invoiced_payments({ saldos: saldos_aplicados });
 
-      const monto_restante_a_credito = Number.isFinite(restanteNum) ? Math.max(restanteNum, 0) : 0;
-      console.log("💰 [MONETARIO] saldos_aplicados:", saldos_aplicados.length, 
-                  "saldos_facturados_usados:", saldos_filtrados.length,
-                  "restanteNum:", restanteNum, 
-                  "monto_restante_a_credito:", monto_restante_a_credito);
+        const monto_restante_a_credito = Number.isFinite(restanteNum) ? Math.max(restanteNum, 0) : 0;
+        console.log("💰 [MONETARIO] saldos_aplicados:", saldos_aplicados.length, 
+                    "saldos_facturados_usados:", saldos_filtrados.length,
+                    "restanteNum:", restanteNum, 
+                    "monto_restante_a_credito:", monto_restante_a_credito);
 
-      await runTransaction(async (connection) => {
-        console.log("🧾 [TX] Iniciando transacción monetaria...");
+        // Move all the transaction logic here at this level
+        // Keep everything inside this single transaction
 
         let items_activos_originales = await Item.findActivos(
           connection,
@@ -913,7 +1000,8 @@ const editar_reserva_definitivo = async (req, res) => {
               await manejar_reduccion_fiscal(
                 connection,
                 items_activos_actuales,
-                estado_fiscal.facturas
+                estado_fiscal.facturas,
+                metadata.id_agente
               );
             }
           } else if (delta_precio_venta === 0 && cambian_noches) {
@@ -1027,6 +1115,7 @@ const editar_reserva_definitivo = async (req, res) => {
               const id_pago_wallet = await crear_pago_desde_wallet(
                 connection,
                 metadata.id_servicio,
+                metadata.id_agente,
                 saldos_aplicados
               );
               if (id_pago_wallet) {
@@ -1083,22 +1172,27 @@ const editar_reserva_definitivo = async (req, res) => {
         }
 
         console.log("🧾 [TX] --- FIN PASO 2: TRANSACCION MONETARIA COMPLETA (COMMIT) ---");
-      });
-    }
+      }
 
-    console.log("✅ [EDITAR_RESERVA] Reserva actualizada exitosamente.");
-    return res.status(200).json({
-      message: "Reserva actualizada exitosamente",
-      resultado_paso_1: respBase,
+      console.log("✅ [EDITAR_RESERVA] Reserva actualizada exitosamente.");
+      return res.status(200).json({
+        message: "Reserva actualizada exitosamente",
+        resultado_paso_1: respBase,
+      });
+
     });
   } catch (error) {
     console.error("💥 [EDITAR_RESERVA][ERROR] Capturado en el controlador:", error);
+    
+    // Manejo específico de errores
     if (error?.message === "(revisar la data con finanzas)") {
-      return res.status(409).json({
+      return res.status(400).json({
         error: "Conflicto de integridad de datos.",
         detalle: error.message,
       });
     }
+    
+    // Error general
     return res.status(500).json({
       error: "Ocurrió un error al procesar la edición.",
       detalle: error?.message,
