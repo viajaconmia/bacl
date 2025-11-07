@@ -930,14 +930,7 @@ const editar_reserva_definitivo = async (req, res) => {
         debeProcesarMonetario,
       });
 
-      if (hayCambioPrecio && !Number.isFinite(venta?.current?.total)) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Cambio de precio detectado, pero falta venta.current.total.",
-          });
-      }
+
       if (hayCambioNoches && !Number.isFinite(noches?.current)) {
         return res
           .status(400)
@@ -1067,8 +1060,6 @@ const editar_reserva_definitivo = async (req, res) => {
           monto_restante_a_credito
         );
 
-        // Move all the transaction logic here at this level
-        // Keep everything inside this single transaction
 
         let items_activos_originales = await Item.findActivos(
           connection,
@@ -1441,12 +1432,30 @@ const editar_reserva_definitivo = async (req, res) => {
               "🔄 [DEVOLUCION] No hay id_agente en metadata; no se inserta saldo_a_favor de devolución."
             );
           } else {
+            // Obtener el pago original
+            const [rows_pago] = await connection.execute(
+              `SELECT id_pago, total FROM pagos WHERE id_servicio = ? ORDER BY fecha_creacion ASC LIMIT 1`,
+              [metadata.id_servicio]
+            );
+
+            if (!rows_pago || rows_pago.length === 0) {
+              console.warn("🔄 [DEVOLUCION] No se encontró el pago original para el servicio:", metadata.id_servicio);
+              return;
+            }
+
+            const id_pago_original = rows_pago[0].id_pago;
+            const total_pago_original = parseFloat(rows_pago[0].total || 0);
+
             const [data, field] = await connection.execute(
               `INSERT INTO saldos_a_favor (id_agente, monto, saldo, concepto, activo, is_facturable, is_devolucion, monto_facturado, fecha_creacion, fecha_pago) 
                VALUES (?, ?, ?, ?, 1, 0, 1, 0, NOW(), NOW())`,
-              [metadata.id_agente, monto_devolucion, monto_devolucion, concepto]
+              [metadata.id_agente, total_pago_original, monto_devolucion, concepto]
             );
-            // await connection.execute(`UPDATE pagos SET id_saldos_a_favor = ? WHERE id_pago = ?`,[field.insertId, id_pago])
+            
+            await connection.execute(
+              `UPDATE pagos SET id_saldo_a_favor = ?, saldo_aplicado = ? WHERE id_pago = ?`,
+              [data.insertId, monto_devolucion, id_pago_original]
+            );
             console.log(
               "🔄 [DEVOLUCION] Devolución creada en saldos_a_favor por:",
               monto_devolucion,
