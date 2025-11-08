@@ -52,7 +52,7 @@ router.post(
     "credito_restante",
     "responsable_pago_agente",
     "fecha_creacion",
-    "pago_por_credito",
+    "pago_por_credito", 
     "pendiente_por_cobrar",
     "total",
     "subtotal",

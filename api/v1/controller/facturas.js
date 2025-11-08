@@ -1146,7 +1146,7 @@ const getFullDetalles = async (req, res) => {
         required: ["id_agente", "id_buscar (≥1 id)"],
       });
     }
-
+ 
     // Detectar tipo por prefijo usando el primer id
     const first = ids[0].toLowerCase();
     let tipo = "pago";

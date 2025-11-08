@@ -2015,14 +2015,14 @@ const getPagoPrepago = async (req, res) => {
     });
   }
 };
-
+ 
 
 const getDetallesConexionesPagos = async (req, res) => {
   const { id_agente, id_raw } = req.query;
   try {
     const [facturas = [], reservas = []] = await executeSP2(
-      "sp_get_detalles_conexion_pagos",
-      [id_agente, id_raw],
+      "sp_get_conexion_full",
+      [id_agente, "pago",id_raw],
       { allSets: true }
     );
     if (facturas.length === 0 && reservas.length === 0) {
