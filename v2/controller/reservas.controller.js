@@ -213,6 +213,7 @@ async function asociar_items_a_pago(
   for (const item of items_a_vincular) {
     const monto = parseFloat(item.monto || 0);
     if (monto <= 0) continue;
+    console.log([item.id_item, id_pago, monto, id_hospedaje]);
 
     const [result] = await connection.execute(
       `INSERT INTO items_pagos (id_item, id_pago, monto, id_relacion) VALUES (?, ?, ?, ?)`,
@@ -930,13 +931,10 @@ const editar_reserva_definitivo = async (req, res) => {
         debeProcesarMonetario,
       });
 
-
       if (hayCambioNoches && !Number.isFinite(noches?.current)) {
-        return res
-          .status(400)
-          .json({
-            error: "Cambio de noches detectado, pero falta noches.current.",
-          });
+        return res.status(400).json({
+          error: "Cambio de noches detectado, pero falta noches.current.",
+        });
       }
 
       // Solo caso base
@@ -1059,7 +1057,6 @@ const editar_reserva_definitivo = async (req, res) => {
           "monto_restante_a_credito:",
           monto_restante_a_credito
         );
-
 
         let items_activos_originales = await Item.findActivos(
           connection,
@@ -1439,7 +1436,10 @@ const editar_reserva_definitivo = async (req, res) => {
             );
 
             if (!rows_pago || rows_pago.length === 0) {
-              console.warn("🔄 [DEVOLUCION] No se encontró el pago original para el servicio:", metadata.id_servicio);
+              console.warn(
+                "🔄 [DEVOLUCION] No se encontró el pago original para el servicio:",
+                metadata.id_servicio
+              );
               return;
             }
 
@@ -1449,9 +1449,14 @@ const editar_reserva_definitivo = async (req, res) => {
             const [data, field] = await connection.execute(
               `INSERT INTO saldos_a_favor (id_agente, monto, saldo, concepto, activo, is_facturable, is_devolucion, monto_facturado, fecha_creacion, fecha_pago) 
                VALUES (?, ?, ?, ?, 1, 0, 1, 0, NOW(), NOW())`,
-              [metadata.id_agente, total_pago_original, monto_devolucion, concepto]
+              [
+                metadata.id_agente,
+                total_pago_original,
+                monto_devolucion,
+                concepto,
+              ]
             );
-            
+
             await connection.execute(
               `UPDATE pagos SET id_saldo_a_favor = ?, saldo_aplicado = ? WHERE id_pago = ?`,
               [data.insertId, monto_devolucion, id_pago_original]
