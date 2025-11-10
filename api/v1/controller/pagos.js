@@ -1139,6 +1139,7 @@ const read = async (req, res) => {
   }
 };
 
+
 const getPagosAgente = async (req, res) => {
   try {
     const { id_agente } = req.query;
