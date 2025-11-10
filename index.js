@@ -126,28 +126,9 @@ app.get("/", (req, res) =>
   })
 );
 
-const { GoogleGenAI } = require("@google/genai");
+const { handleGeminiConnection } = require("./services/gemini/Gemini");
 
-class Assistant {
-  constructor(model) {
-    this.ai = new GoogleGenAI({});
-    this.model = model;
-  }
-}
-
-app.post("/message", async (req, res) => {
-  try {
-    const { message } = req.body;
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: message,
-    });
-    console.log(response.text);
-    res.status(200).json(response);
-  } catch (error) {
-    console.error(error);
-  }
-});
+app.post("/message", handleGeminiConnection);
 
 // 7. Manejador de errores global (solo formatea respuesta; no llama a logger.error)
 app.use(errorHandler);
