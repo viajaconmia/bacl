@@ -13,8 +13,9 @@ const create = async (conn, item) => {
     if (item.saldo !== undefined) item.saldo = Formato.precio(item.saldo);
 
     const [insertedItem, insertResponse] = await db.insert(conn, schema, item);
+    console.log("😢😢😢😢",insertedItem)
     console.log("LOG (Item.create): Resultado db.insert:", insertResponse);
-    return insertedItem;
+    return {insertedItem, id_item: item.id_item };
   } catch (validationError) {
     console.error(
       "LOG (Item.create): Error validación/formato:",
@@ -168,8 +169,9 @@ const crear_item_ajuste = async (
     // saldo: 0,
     // costo_total: 0,
   };
-  await create(conn, item);
-  return { id_item: item.id_item, ...item };
+  const {id_item} = await create(conn, item);
+  console.log("LOG (crear_item_ajuste): Item de ajuste creado: 🤩🤩🤩", id_item);
+  return { id_item: id_item, ...item };
 };
 
 const aplicar_split_precio = async (conn, items_activos, nuevo_total_venta) => {

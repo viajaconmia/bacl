@@ -11,6 +11,7 @@ const Servicio = require("../model/servicios.model");
 const Hospedaje = require("../model/hospedajes.model");
 const Item = require("../model/item.model");
 const { Calculo, calcularNoches } = require("../../lib/utils/calculates");
+const { Formato } = require("../../lib/utils/formats");
 
 /* =========================
  * UTILIDADES / HELPERS
@@ -878,6 +879,8 @@ async function caso_base_tolerante({
  * ========================= */
 
 const editar_reserva_definitivo = async (req, res) => {
+  console.log("😒😒😒😒😒😒",req.body.venta.current.total);
+  
   try {
     return await runTransaction(async (connection) => {
       console.log("🚀 [EDITAR_RESERVA] Iniciando editar_reserva_definitivo");
@@ -966,11 +969,10 @@ const editar_reserva_definitivo = async (req, res) => {
           modo: "caso_base_only",
         });
       }
-
+      console.log("✌️✌️✌️✌️✌️✌️",venta);
       // PASO 1: Caso base (refleja total si hay cambios monetarios)
-      const totalNuevo = Number.isFinite(venta?.current?.total)
-        ? venta.current.total
-        : undefined;
+      const totalNuevo = Formato.number(venta?.current?.total)
+        console.log("🔔 [MONETARIO] totalNuevo calculado:", totalNuevo);
       const respBase = await caso_base_tolerante({
         id_servicio: metadata.id_servicio,
         id_hospedaje: metadata.id_hospedaje,
