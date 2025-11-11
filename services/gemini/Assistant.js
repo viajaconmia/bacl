@@ -12,11 +12,12 @@ class Gemini {
 }
 
 class Assistant {
-  constructor(model, instrucciones, functions = []) {
+  constructor(model, instrucciones, functions = [], tools = []) {
     this.ai = Gemini.getInstance();
     this.model = model || "gemini-2.0-flash" || "gemini-2.5-flash";
     this.instrucciones = instrucciones || "";
     this.functions = functions;
+    this.tools = tools;
   }
 
   async execute(message) {
@@ -37,6 +38,7 @@ class Assistant {
           {
             functionDeclarations: this.functions,
           },
+          ...this.tools,
         ],
       },
     });
