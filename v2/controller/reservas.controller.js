@@ -544,8 +544,10 @@ async function manejar_reduccion_fiscal(
   connection,
   items_activos_post_split,
   facturas_reserva,
-  id_agente
+  id_agente,
+  restanteNum
 ) {
+
   console.log("🧾 [FISCAL] Manejando reducción fiscal (Down-scale)...");
   if (!Array.isArray(facturas_reserva) || facturas_reserva.length === 0) return;
 
@@ -607,6 +609,10 @@ async function manejar_reduccion_fiscal(
       "UPDATE facturas SET saldo_x_aplicar_items = 0 WHERE id_factura = ?",
       [factura_principal.id_factura]
     );
+  }
+  console.log("🧾 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)...")
+  if(restanteNum <= 0){
+    await connection.execute(`UPDATE items_facturas set monto = (monto + ?)/count(id_item) where id_factura in (${facturas_reserva.map(_=>"?").join(",")}) GROUP BY id_relacion`,[restanteNum,])
   }
 }
 
@@ -1178,7 +1184,8 @@ const editar_reserva_definitivo = async (req, res) => {
                 connection,
                 items_activos_actuales,
                 estado_fiscal.facturas,
-                metadata.id_agente
+                metadata.id_agente,
+                restanteNum
               );
             }
           } else if (delta_precio_venta === 0 && cambian_noches) {
@@ -1424,7 +1431,7 @@ const editar_reserva_definitivo = async (req, res) => {
         ) {
           const monto_devolucion = Math.abs(restanteNum);
           const concepto = `Devolucion por ajuste de reserva en ${
-            metadata.id_hotel ?? ""
+            metadata.hotel_reserva ?? ""
           }`;
           if (!metadata?.id_agente) {
             console.warn(
@@ -1462,6 +1469,12 @@ const editar_reserva_definitivo = async (req, res) => {
             await connection.execute(
               `UPDATE pagos SET id_saldo_a_favor = ?, saldo_aplicado = ? WHERE id_pago = ?`,
               [data.insertId, monto_devolucion, id_pago_original]
+            );
+            const nuevo_monto_total = total_pago_original - monto_devolucion;
+            await connection.execute(
+              'UPDATE items_pagos set monto = (?)/(count(id_item)) where id_pago = ? GROUP BY id_relacion'
+              ,
+              [nuevo_monto_total, id_pago_original]
             );
             console.log(
               "🔄 [DEVOLUCION] Devolución creada en saldos_a_favor por:",
