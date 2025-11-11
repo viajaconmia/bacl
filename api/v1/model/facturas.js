@@ -173,7 +173,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           id_empresa,
           uuid_factura,
           fecha_vencimiento,
-          saldo
+          saldo_x_aplicar_items
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?);
           `;
         console.log(datos_empresa);
