@@ -609,36 +609,88 @@ async function manejar_reduccion_fiscal(
       [factura_principal.id_factura]
     );
   }
-  console.log(
-    "🧾 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)..."
-  );
-  console.log(restanteNum);
-  if (restanteNum <= 0) {
-    console.log(
-      "🧾🔽🔽 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)..."
-    );
+        console.log(
+        "🧾 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)..."
+      );
+      console.log("restanteNum:", restanteNum);
 
-    const nuevo_monto = await connection.execute(
-      `
-  SELECT id_relacion, SUM(monto + (?)) / COUNT(id_item) AS nuevo_monto
-  FROM items_facturas
-  WHERE id_factura IN (${facturas_reserva.map((_) => "?").join(",")})
-  GROUP BY id_relacion;`,
-      [restanteNum, facturas_reserva]
-    );
-    console.log("👍👍👍👍", nuevo_monto);
-    await connection.execute(
-      `UPDATE items_facturas AS i
-JOIN (
-  SELECT id_relacion, SUM(monto + ?) / COUNT(id_item) AS nuevo_monto
-  FROM items_facturas
-  WHERE id_factura IN (${facturas_reserva.map((_) => "?").join(",")})
-  GROUP BY id_relacion
-) AS t ON i.id_relacion = t.id_relacion
-SET i.monto = t.nuevo_monto;`,
-      [restanteNum, facturas_reserva]
-    );
-  }
+      if (restanteNum <= 0) {
+        console.log(
+          "🧾🔽🔽 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)..."
+        );
+
+        // normalizar ids de facturas y placeholders
+        const facturas_ids = (Array.isArray(facturas_reserva)
+          ? facturas_reserva.map((f) => String(f.id_factura)).filter(Boolean)
+          : []
+        );
+
+        if (facturas_ids.length === 0) {
+          console.warn("🧾 [FISCAL][WARN] facturas_reserva vacío o sin id_factura. Omitiendo recalculo.");
+        } else {
+          const ph = facturas_ids.map(() => "?").join(",");
+
+          // 1) Suma previa y total objetivo (= suma previa + delta)
+          const [prevSumRows] = await connection.execute(
+            `
+            SELECT COALESCE(SUM(monto), 0) AS suma
+            FROM items_facturas
+            WHERE id_factura IN (${ph})
+            `,
+            facturas_ids
+          );
+          const sumaPrev = Number(prevSumRows?.[0]?.suma || 0);
+          const objetivo = Number((sumaPrev + restanteNum).toFixed(2));
+
+          console.log("🧾 [FISCAL][DEBUG] sumaPrev:", sumaPrev, "objetivo:", objetivo);
+
+          // 2) Igualar montos: cada fila = ROUND(objetivo / n, 2)
+          const updateEqualSql = `
+            UPDATE items_facturas i
+            JOIN (
+              SELECT COUNT(*) AS n
+              FROM items_facturas
+              WHERE id_factura IN (${ph})
+            ) t
+            SET i.monto = ROUND(? / NULLIF(t.n, 0), 2)
+            WHERE i.id_factura IN (${ph});
+          `;
+          const updateEqualParams = [...facturas_ids, objetivo, ...facturas_ids];
+
+          console.log("🧾 [FISCAL][DEBUG] UPDATE igualitario a ejecutar:", updateEqualSql.trim());
+          console.log("🧾 [FISCAL][DEBUG] UPDATE params:", updateEqualParams);
+
+          const [updateEqualRes] = await connection.execute(updateEqualSql, updateEqualParams);
+          console.log("🧾 [FISCAL][DEBUG] Resultado UPDATE igualitario:", updateEqualRes);
+
+          // 3) Ajuste de centavos para que la suma final == objetivo
+          const [afterSumRows] = await connection.execute(
+            `
+            SELECT 
+              COALESCE(SUM(monto), 0) AS suma,
+              MIN(id_item) AS any_item
+            FROM items_facturas
+            WHERE id_factura IN (${ph})
+            `,
+            facturas_ids
+          );
+          const sumaNueva = Number(afterSumRows?.[0]?.suma || 0);
+          const delta = Number((objetivo - sumaNueva).toFixed(2));
+
+          console.log("🧾 [FISCAL][DEBUG] sumaNueva:", sumaNueva, "delta ajuste:", delta);
+
+          if (Math.abs(delta) >= 0.01 && afterSumRows?.[0]?.any_item) {
+            await connection.execute(
+              `UPDATE items_facturas 
+              SET monto = ROUND(monto + ?, 2) 
+              WHERE id_item = ? 
+              LIMIT 1`,
+              [delta, afterSumRows[0].any_item]
+            );
+            console.log("🔧 [FISCAL] Ajuste de redondeo aplicado en items_facturas:", delta);
+          }
+        }
+      }
 }
 
 /* =========================
@@ -1495,26 +1547,61 @@ const editar_reserva_definitivo = async (req, res) => {
               `UPDATE pagos SET id_saldo_a_favor = ?, saldo_aplicado = ? WHERE id_pago = ?`,
               [data.insertId, monto_devolucion, id_pago_original]
             );
-            const nuevo_monto_total = total_pago_original - monto_devolucion;
-            await connection.execute(
-              `UPDATE items_pagos
-SET monto = (? / (
-  SELECT COUNT(*)
-  FROM (
-    SELECT 1
+            const objetivoPagoDeseado = Number(Formato.number(venta?.current?.total));
+
+// (Opcional/seguro) No sobrepasar el total del propio pago:
+const [pagoRow] = await connection.execute(
+  `SELECT total FROM pagos WHERE id_pago = ? LIMIT 1`,
+  [id_pago_original]
+);
+const totalPago = Number(pagoRow?.[0]?.total || 0);
+// Si no quieres esta cota, usa directamente "objetivoPagoDeseado".
+const objetivoPago = Math.min(objetivoPagoDeseado, totalPago);
+
+// Reparto igualitario con 2 decimales
+const updateEqualSql = `
+  UPDATE items_pagos ip
+  JOIN (
+    SELECT id_pago, COUNT(*) AS n
     FROM items_pagos
     WHERE id_pago = ?
-  ) AS sub
-))
-WHERE id_pago = ?;`,
-              [nuevo_monto_total, id_pago_original, id_pago_original]
-            );
-            console.log(
-              "🔄 [DEVOLUCION] Devolución creada en saldos_a_favor por:",
-              monto_devolucion,
-              "concepto:",
-              concepto
-            );
+  ) t ON t.id_pago = ip.id_pago
+  SET ip.monto = ROUND(? / NULLIF(t.n, 0), 2)
+  WHERE ip.id_pago = ?;
+`;
+const updateEqualParams = [id_pago_original, objetivoPago, id_pago_original];
+
+console.log("🔄 [DEVOLUCION][DEBUG] UPDATE igualitario (ROUND) a ejecutar:", updateEqualSql.trim());
+console.log("🔄 [DEVOLUCION][DEBUG] UPDATE igualitario (ROUND) params:", updateEqualParams);
+
+const [updateEqualResult] = await connection.execute(updateEqualSql, updateEqualParams);
+console.log("🔄 [DEVOLUCION][DEBUG] Resultado UPDATE igualitario (ROUND):", updateEqualResult);
+
+// Ajuste de centavos para que la suma == objetivoPago
+const [sumRows2] = await connection.execute(
+  `
+  SELECT 
+    COALESCE(SUM(monto), 0) AS suma,
+    MIN(id_item) AS any_item
+  FROM items_pagos
+  WHERE id_pago = ?
+  `,
+  [id_pago_original]
+);
+
+const sumaActual = Number(sumRows2?.[0]?.suma || 0);
+const delta = Number((objetivoPago - sumaActual).toFixed(2));
+
+if (Math.abs(delta) >= 0.01 && sumRows2?.[0]?.any_item) {
+  await connection.execute(
+    `UPDATE items_pagos 
+     SET monto = ROUND(monto + ?, 2) 
+     WHERE id_pago = ? AND id_item = ? 
+     LIMIT 1`,
+    [delta, id_pago_original, sumRows2[0].any_item]
+  );
+  console.log("🔧 [DEVOLUCION] Ajuste de redondeo items_pagos aplicado:", delta);
+}
           }
         }
 
