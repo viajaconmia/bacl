@@ -173,8 +173,9 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           id_empresa,
           uuid_factura,
           fecha_vencimiento,
-          saldo
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?);
+          saldo,
+          id_agente
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?,?);
           `;
         console.log(datos_empresa);
         const results = await conn.execute(insertFacturaQuery, [
@@ -191,7 +192,8 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           response_factura.data.Complement.TaxStamp.Uuid,
           //fecha de vencimiento
           info_user.fecha_vencimiento,
-          total
+          total,
+          id_user
         ]);
 
         // 4. Actualizar solo los items seleccionados

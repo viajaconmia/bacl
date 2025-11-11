@@ -313,7 +313,9 @@ const update_saldo_by_id = async (req, res) => {
     banco_tarjeta,
     is_cancelado
   } = req.body;
+
   console.log("Datos recibidos para actualizar saldo a favor:", req.body);
+  
   try {
     const result = await executeTransactionSP(
       STORED_PROCEDURE.PATCH.ACTUALIZA_SALDO_A_FAVOR,
