@@ -1510,98 +1510,106 @@ const editar_reserva_definitivo = async (req, res) => {
           const concepto = `Devolucion por ajuste de reserva en ${
             metadata.hotel_reserva ?? ""
           }`;
+
           if (!metadata?.id_agente) {
             console.warn(
               "🔄 [DEVOLUCION] No hay id_agente en metadata; no se inserta saldo_a_favor de devolución."
             );
           } else {
-            // Obtener el pago original
-            const [rows_pago] = await connection.execute(
-              `SELECT id_pago, total FROM pagos WHERE id_servicio = ? ORDER BY fecha_creacion ASC LIMIT 1`,
-              [metadata.id_servicio]
-            );
-
-            if (!rows_pago || rows_pago.length === 0) {
-              console.warn(
-                "🔄 [DEVOLUCION] No se encontró el pago original para el servicio:",
-                metadata.id_servicio
+            // Si es crédito, NO hacemos devolución basada en pagos/items_pagos
+            if (tipo_pago_original === "credito") {
+              console.log("🔄 [DEVOLUCION] Reserva a crédito: se omite devolución basada en pagos/items_pagos.");
+            } else {
+              // Intentar localizar un pago original solo para métodos no-crédito
+              const [rows_pago] = await connection.execute(
+                `SELECT id_pago, total FROM pagos WHERE id_servicio = ? ORDER BY fecha_creacion ASC LIMIT 1`,
+                [metadata.id_servicio]
               );
-              return;
+
+              if (!rows_pago || rows_pago.length === 0) {
+                console.warn(
+                  "🔄 [DEVOLUCION] No se encontró el pago original; se omite devolución basada en pagos."
+                );
+              } else {
+                const id_pago_original = rows_pago[0].id_pago;
+                const total_pago_original = parseFloat(rows_pago[0].total || 0);
+
+                // Crear saldo a favor (no facturable) por el monto de devolución
+                const [data /*, field*/] = await connection.execute(
+                  `INSERT INTO saldos_a_favor (id_agente, monto, saldo, concepto, activo, is_facturable, is_devolucion, monto_facturado, fecha_creacion, fecha_pago) 
+                   VALUES (?, ?, ?, ?, 1, 0, 1, 0, NOW(), NOW())`,
+                  [
+                    metadata.id_agente,
+                    total_pago_original,
+                    monto_devolucion,
+                    concepto,
+                  ]
+                );
+
+                // Ligar el saldo_a_favor al pago y registrar el monto aplicado
+                await connection.execute(
+                  `UPDATE pagos SET id_saldo_a_favor = ?, saldo_aplicado = ? WHERE id_pago = ?`,
+                  [data.insertId, monto_devolucion, id_pago_original]
+                );
+
+                // Reparto igualitario de items_pagos al total objetivo = venta.current.total (redondeado a 2)
+                const objetivoPagoDeseado = Number(Formato.number(venta?.current?.total));
+
+                // (Opcional/seguro) No sobrepasar el total del propio pago:
+                const [pagoRow] = await connection.execute(
+                  `SELECT total FROM pagos WHERE id_pago = ? LIMIT 1`,
+                  [id_pago_original]
+                );
+                const totalPago = Number(pagoRow?.[0]?.total || 0);
+                // Si no quieres esta cota, usa directamente "objetivoPagoDeseado".
+                const objetivoPago = Math.min(objetivoPagoDeseado, totalPago);
+
+                // Reparto igualitario con 2 decimales
+                const updateEqualSql = `
+                  UPDATE items_pagos ip
+                  JOIN (
+                    SELECT id_pago, COUNT(*) AS n
+                    FROM items_pagos
+                    WHERE id_pago = ?
+                  ) t ON t.id_pago = ip.id_pago
+                  SET ip.monto = ROUND(? / NULLIF(t.n, 0), 2)
+                  WHERE ip.id_pago = ?;
+                `;
+                const updateEqualParams = [id_pago_original, objetivoPago, id_pago_original];
+
+                console.log("🔄 [DEVOLUCION][DEBUG] UPDATE igualitario (ROUND) a ejecutar:", updateEqualSql.trim());
+                console.log("🔄 [DEVOLUCION][DEBUG] UPDATE igualitario (ROUND) params:", updateEqualParams);
+
+                const [updateEqualResult] = await connection.execute(updateEqualSql, updateEqualParams);
+                console.log("🔄 [DEVOLUCION][DEBUG] Resultado UPDATE igualitario (ROUND):", updateEqualResult);
+
+                // Ajuste de centavos para que la suma == objetivoPago
+                const [sumRows2] = await connection.execute(
+                  `
+                  SELECT 
+                    COALESCE(SUM(monto), 0) AS suma,
+                    MIN(id_item) AS any_item
+                  FROM items_pagos
+                  WHERE id_pago = ?
+                  `,
+                  [id_pago_original]
+                );
+
+                const sumaActual = Number(sumRows2?.[0]?.suma || 0);
+                const delta = Number((objetivoPago - sumaActual).toFixed(2));
+
+                if (Math.abs(delta) >= 0.01 && sumRows2?.[0]?.any_item) {
+                  await connection.execute(
+                    `UPDATE items_pagos 
+                     SET monto = ROUND(monto + ?, 2) 
+                     WHERE id_pago = ? AND id_item = ? 
+                     LIMIT 1`,
+                    [delta, id_pago_original, sumRows2[0].any_item]
+                  );
+                  console.log("🔧 [DEVOLUCION] Ajuste de redondeo items_pagos aplicado:", delta);
+                }
+              }
             }
-
-            const id_pago_original = rows_pago[0].id_pago;
-            const total_pago_original = parseFloat(rows_pago[0].total || 0);
-
-            const [data, field] = await connection.execute(
-              `INSERT INTO saldos_a_favor (id_agente, monto, saldo, concepto, activo, is_facturable, is_devolucion, monto_facturado, fecha_creacion, fecha_pago) 
-               VALUES (?, ?, ?, ?, 1, 0, 1, 0, NOW(), NOW())`,
-              [
-                metadata.id_agente,
-                total_pago_original,
-                monto_devolucion,
-                concepto,
-              ]
-            );
-
-            await connection.execute(
-              `UPDATE pagos SET id_saldo_a_favor = ?, saldo_aplicado = ? WHERE id_pago = ?`,
-              [data.insertId, monto_devolucion, id_pago_original]
-            );
-            const objetivoPagoDeseado = Number(Formato.number(venta?.current?.total));
-
-// (Opcional/seguro) No sobrepasar el total del propio pago:
-const [pagoRow] = await connection.execute(
-  `SELECT total FROM pagos WHERE id_pago = ? LIMIT 1`,
-  [id_pago_original]
-);
-const totalPago = Number(pagoRow?.[0]?.total || 0);
-// Si no quieres esta cota, usa directamente "objetivoPagoDeseado".
-const objetivoPago = Math.min(objetivoPagoDeseado, totalPago);
-
-// Reparto igualitario con 2 decimales
-const updateEqualSql = `
-  UPDATE items_pagos ip
-  JOIN (
-    SELECT id_pago, COUNT(*) AS n
-    FROM items_pagos
-    WHERE id_pago = ?
-  ) t ON t.id_pago = ip.id_pago
-  SET ip.monto = ROUND(? / NULLIF(t.n, 0), 2)
-  WHERE ip.id_pago = ?;
-`;
-const updateEqualParams = [id_pago_original, objetivoPago, id_pago_original];
-
-console.log("🔄 [DEVOLUCION][DEBUG] UPDATE igualitario (ROUND) a ejecutar:", updateEqualSql.trim());
-console.log("🔄 [DEVOLUCION][DEBUG] UPDATE igualitario (ROUND) params:", updateEqualParams);
-
-const [updateEqualResult] = await connection.execute(updateEqualSql, updateEqualParams);
-console.log("🔄 [DEVOLUCION][DEBUG] Resultado UPDATE igualitario (ROUND):", updateEqualResult);
-
-// Ajuste de centavos para que la suma == objetivoPago
-const [sumRows2] = await connection.execute(
-  `
-  SELECT 
-    COALESCE(SUM(monto), 0) AS suma,
-    MIN(id_item) AS any_item
-  FROM items_pagos
-  WHERE id_pago = ?
-  `,
-  [id_pago_original]
-);
-
-const sumaActual = Number(sumRows2?.[0]?.suma || 0);
-const delta = Number((objetivoPago - sumaActual).toFixed(2));
-
-if (Math.abs(delta) >= 0.01 && sumRows2?.[0]?.any_item) {
-  await connection.execute(
-    `UPDATE items_pagos 
-     SET monto = ROUND(monto + ?, 2) 
-     WHERE id_pago = ? AND id_item = ? 
-     LIMIT 1`,
-    [delta, id_pago_original, sumRows2[0].any_item]
-  );
-  console.log("🔧 [DEVOLUCION] Ajuste de redondeo items_pagos aplicado:", delta);
-}
           }
         }
 
