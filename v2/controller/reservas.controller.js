@@ -547,7 +547,6 @@ async function manejar_reduccion_fiscal(
   id_agente,
   restanteNum
 ) {
-
   console.log("🧾 [FISCAL] Manejando reducción fiscal (Down-scale)...");
   if (!Array.isArray(facturas_reserva) || facturas_reserva.length === 0) return;
 
@@ -610,9 +609,21 @@ async function manejar_reduccion_fiscal(
       [factura_principal.id_factura]
     );
   }
-  console.log("🧾 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)...")
-  if(restanteNum <= 0){
-    await connection.execute(`UPDATE items_facturas set monto = (monto + ?)/count(id_item) where id_factura in (${facturas_reserva.map(_=>"?").join(",")}) GROUP BY id_relacion`,[restanteNum,])
+  console.log(
+    "🧾 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)..."
+  );
+  if (restanteNum <= 0) {
+    await connection.execute(
+      `UPDATE items_facturas AS i
+JOIN (
+  SELECT id_relacion, SUM(monto + ?) / COUNT(id_item) AS nuevo_monto
+  FROM items_facturas
+  WHERE id_factura IN (${facturas_reserva.map((_) => "?").join(",")})
+  GROUP BY id_relacion
+) AS t ON i.id_relacion = t.id_relacion
+SET i.monto = t.nuevo_monto;`,
+      [restanteNum, facturas_reserva]
+    );
   }
 }
 
@@ -885,8 +896,8 @@ async function caso_base_tolerante({
  * ========================= */
 
 const editar_reserva_definitivo = async (req, res) => {
-  console.log("😒😒😒😒😒😒",req.body.venta.current.total);
-  
+  console.log("😒😒😒😒😒😒", req.body.venta.current.total);
+
   try {
     return await runTransaction(async (connection) => {
       console.log("🚀 [EDITAR_RESERVA] Iniciando editar_reserva_definitivo");
@@ -975,10 +986,10 @@ const editar_reserva_definitivo = async (req, res) => {
           modo: "caso_base_only",
         });
       }
-      console.log("✌️✌️✌️✌️✌️✌️",venta);
+      console.log("✌️✌️✌️✌️✌️✌️", venta);
       // PASO 1: Caso base (refleja total si hay cambios monetarios)
-      const totalNuevo = Formato.number(venta?.current?.total)
-        console.log("🔔 [MONETARIO] totalNuevo calculado:", totalNuevo);
+      const totalNuevo = Formato.number(venta?.current?.total);
+      console.log("🔔 [MONETARIO] totalNuevo calculado:", totalNuevo);
       const respBase = await caso_base_tolerante({
         id_servicio: metadata.id_servicio,
         id_hospedaje: metadata.id_hospedaje,
@@ -1472,9 +1483,17 @@ const editar_reserva_definitivo = async (req, res) => {
             );
             const nuevo_monto_total = total_pago_original - monto_devolucion;
             await connection.execute(
-              'UPDATE items_pagos set monto = (?)/(count(id_item)) where id_pago = ? GROUP BY id_relacion'
-              ,
-              [nuevo_monto_total, id_pago_original]
+              `UPDATE items_pagos
+SET monto = (? / (
+  SELECT COUNT(*)
+  FROM (
+    SELECT 1
+    FROM items_pagos
+    WHERE id_pago = ?
+  ) AS sub
+))
+WHERE id_pago = ?;`,
+              [nuevo_monto_total, id_pago_original, id_pago_original]
             );
             console.log(
               "🔄 [DEVOLUCION] Devolución creada en saldos_a_favor por:",
