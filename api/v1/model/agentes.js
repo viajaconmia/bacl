@@ -22,10 +22,11 @@ const createAgente = async (data) => {
 
 const getAgente = async (id_agente) => {
   try {
-    const query = `select va.id_agente,va.id_viajero, v.*,vca.empresas, vca.rol
+    const query = `select va.id_agente,va.id_viajero, v.*,vca.empresas, vca.rol, (CASE WHEN ad.id_agente is not null then 1 else 0 END) as rn
 from agentes_viajeros va
 inner join viajeros v on v.id_viajero = va.id_viajero
 inner join viajeros_con_empresas_con_agentes vca on vca.id_viajero = v.id_viajero
+left join agente_details ad on ad.id_viajero = v.id_viajero
 where va.id_agente = ?;`;
 
     const params = [id_agente];
