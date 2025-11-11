@@ -614,16 +614,19 @@ async function manejar_reduccion_fiscal(
   );
   console.log(restanteNum);
   if (restanteNum <= 0) {
-      console.log(
-    "🧾🔽🔽 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)..."
-  );
+    console.log(
+      "🧾🔽🔽 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)..."
+    );
 
-    const nuevo_monto = await connection.execute(`
-  SELECT id_relacion, SUM(monto + ?) / COUNT(id_item) AS nuevo_monto
+    const nuevo_monto = await connection.execute(
+      `
+  SELECT id_relacion, SUM(monto + (?)) / COUNT(id_item) AS nuevo_monto
   FROM items_facturas
   WHERE id_factura IN (${facturas_reserva.map((_) => "?").join(",")})
-  GROUP BY id_relacion;`,restanteNum, facturas_reserva);
-  console.log("👍👍👍👍",nuevo_monto);
+  GROUP BY id_relacion;`,
+      [restanteNum, facturas_reserva]
+    );
+    console.log("👍👍👍👍", nuevo_monto);
     await connection.execute(
       `UPDATE items_facturas AS i
 JOIN (
