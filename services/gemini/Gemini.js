@@ -2,11 +2,11 @@ const { Orquestador } = require("./Orquestador");
 
 const handleGeminiConnection = async (req, res) => {
   try {
-    const { message, pila } = req.body;
+    const { message, pila, historial } = req.body;
 
     const lider = new Orquestador();
 
-    const response = await lider.execute(message, pila);
+    const response = await lider.execute(message, pila, historial);
 
     res.status(200).json(response);
   } catch (error) {

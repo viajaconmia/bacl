@@ -1,9 +1,11 @@
 const { Type } = require("@google/genai");
 const { Assistant } = require("../Assistant");
 const { GeneralAssistant } = require("./General");
+const { SearchHotel } = require("./SearchHotel");
 
 const assistant = {
   general: new GeneralAssistant(),
+  search_hotel: new SearchHotel(),
 };
 
 class OrquestadorAssistant extends Assistant {
@@ -16,8 +18,9 @@ class OrquestadorAssistant extends Assistant {
     return response.candidates[0].content.parts;
   }
 
-  async call({ assistant_name, instruction_xml }) {
-    return await assistant[assistant_name.toLowerCase()].execute(
+  async call({ assistant_name, instruction_xml }, historial) {
+    console.log(assistant_name, instruction_xml);
+    return await assistant[(assistant_name || "").toLowerCase()].execute(
       instruction_xml
     );
   }
@@ -53,6 +56,7 @@ const PROMPT = `<INSTRUCCION_ORQUESTADOR_FUNCTION>
     2. **USAR FUNCIÓN**: Debes usar la herramienta 'route_to_assistant' para delegar la tarea.
     3. **GENERAR XML**: El argumento 'instruction_xml' de la función debe contener la instrucción XML completa para el asistente de destino, extrayendo y formateando los detalles de la tarea del usuario.
     4. **ASISTENTE GENERAL**: Si la tarea es ambigua o no especializada, usa el asistente 'GENERAL'.
+    5. **MANEJA RESPUESTA**: Al final manda a llamar siempre al Assistente GENERAL, el ayudara a formatear la información para que el usuario pueda verla, siempre quedara al final de las funciones a llamar
   </REGLAS_CLAVE>
 
   <ASISTENTES_Y_PLANTILLAS>
@@ -65,20 +69,20 @@ const PROMPT = `<INSTRUCCION_ORQUESTADOR_FUNCTION>
         </INSTRUCCION_CODE>
       </PLANTILLA>
     </ASISTENTE>
-    <ASISTENTE nombre="DATA">
-      <DESCRIPCION>Analiza, resume o extrae patrones de datos estructurados.</DESCRIPCION>
+    <ASISTENTE nombre="SEARCH_HOTEL">
+      <DESCRIPCION>Busca los mejores hoteles para el usuario.</DESCRIPCION>
       <PLANTILLA>
         <INSTRUCCION_DATA>
-          <ANALISIS_REQUERIDO>[Tipo de análisis.]</ANALISIS_REQUERIDO>
-          <DATOS_ENTRADA>[Los datos relevantes del prompt.]</DATOS_ENTRADA>
+          <TIPO_DE__BUSQUEDA>[Tipo de busqueda por ciudad, pais, estado, localidad.]</TIPO_DE__BUSQUEDA>
+          <DATOS_ENTRADA>[Los datos relevantes del prompt para poder buscar.]</DATOS_ENTRADA>
         </INSTRUCCION_DATA>
       </PLANTILLA>
     </ASISTENTE>
     <ASISTENTE nombre="general">
-      <DESCRIPCION>Maneja preguntas de conocimiento general, resúmenes, y conversación casual.</DESCRIPCION>
+      <DESCRIPCION>Maneja la conversación con el usuario, usar para definir platica, responder, preguntas o conversar.</DESCRIPCION>
       <PLANTILLA>
         <INSTRUCCION_GENERAL>
-          <PREGUNTA>[La pregunta de conocimiento o tema de conversación.]</PREGUNTA>
+          <INFORMACION>[La información recopilada hasta el momento.]</INFORMACION>
           <TONO>[Tono de respuesta requerido.]</TONO>
         </INSTRUCCION_GENERAL>
       </PLANTILLA>
