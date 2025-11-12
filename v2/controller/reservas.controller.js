@@ -16,6 +16,9 @@ const { Formato } = require("../../lib/utils/formats");
 /* =========================
  * UTILIDADES / HELPERS
  * ========================= */
+const getItemTotal = (it) => Number(
+  it?.total ?? it?.insertedItem?.total ?? 0
+);
 
 function toNumber(n, def = NaN) {
   const v = Number(n);
@@ -139,6 +142,7 @@ async function crear_pago_desde_wallet(
   connection,
   id_servicio,
   id_agente,
+  monto_total,
   saldos_aplicados
 ) {
   console.log("💳 [WALLET] Iniciando crear_pago_desde_wallet");
@@ -147,11 +151,6 @@ async function crear_pago_desde_wallet(
     console.log("💳 [WALLET] No hay saldos_aplicados válidos. Omitiendo pago.");
     return null;
   }
-
-  const monto_total = saldos_aplicados.reduce(
-    (acc, s) => acc + parseFloat(s?.saldo_usado || 0),
-    0
-  );
 
   if (monto_total <= 0) {
     console.log("💳 [WALLET] Monto total <= 0. No se crea pago.");
@@ -447,6 +446,24 @@ async function are_invoiced_payments({ saldos }) {
  *       IF saldo_x_aplicar_items IS NULL THEN total - monto ELSE saldo_x_aplicar_items - monto
  *     (capado a >= 0 por seguridad)
  */
+
+async function rebajar_wallet_saldos(connection, saldos_aplicados) {
+  if (!Array.isArray(saldos_aplicados) || saldos_aplicados.length === 0) return;
+
+  for (const s of saldos_aplicados) {
+    const id_saldos = s?.id_saldos;
+    const usado = Number(s?.saldo_usado || 0);
+    if (!id_saldos || usado <= 0) continue;
+
+    await connection.execute(
+      `UPDATE saldos_a_favor 
+         SET saldo = GREATEST(COALESCE(saldo,0) - ?, 0) 
+       WHERE id_saldos = ?`,
+      [usado, id_saldos]
+    );
+    console.log(`💳 [WALLET] Descontado ${usado} de saldo ${id_saldos}`);
+  }
+}
 async function asociar_factura_items_logica(
   connection,
   id_hospedaje,
@@ -1226,10 +1243,9 @@ const editar_reserva_definitivo = async (req, res) => {
           const nuevo_total_venta =
             venta?.current?.total ?? venta?.before?.total;
           if (delta_precio_venta > 0) {
-            const costo_noches_nuevas = items_nuevos.reduce(
-              (sum, it) => sum + parseFloat(it.total || 0),
-              0
-            );
+            const costo_noches_nuevas = (Array.isArray(items_nuevos) ? items_nuevos : [])
+    .reduce((sum, it) => sum + getItemTotal(it), 0);
+
             const delta_residual = delta_precio_venta - costo_noches_nuevas;
             if (delta_residual > 0.01) {
               item_ajuste = await Item.crear_item_ajuste(
@@ -1238,12 +1254,9 @@ const editar_reserva_definitivo = async (req, res) => {
                 delta_residual,
                 TASA_IVA_DECIMAL
               );
-              console.log(
-                "🧾 [ITEMS] Item de ajuste creado por delta residual:",
-                delta_residual,
-                "id_item:",
-                item_ajuste?.id_item
-              );
+              console.log("🧾 [ITEMS] Item de ajuste creado por delta residual:", delta_residual, "id_item:", item_ajuste?.id_item);
+            } else {
+              console.log("🧾 [ITEMS] Delta cubierto por noches nuevas; no se crea item de ajuste.");
             }
           } else if (delta_precio_venta < 0) {
             await Item.aplicar_split_precio(
@@ -1394,7 +1407,7 @@ const editar_reserva_definitivo = async (req, res) => {
           for (const it of items_nuevos) {
             items_a_pagar.push({
               id_item: it.id_item,
-              total: parseFloat(it.total),
+              total: getItemTotal(it),
             });
           }
 
@@ -1407,10 +1420,16 @@ const editar_reserva_definitivo = async (req, res) => {
 
           // 2.1 WALLET -> split a items_pagos
           if (saldos_aplicados.length > 0) {
-            const walletDisponible = saldos_aplicados.reduce(
-              (acc, s) => acc + parseFloat(s.saldo_usado || 0),
-              0
-            );
+              const walletDisponible = Array.isArray(saldos_aplicados)
+                ? saldos_aplicados.reduce((acc, s) => {
+                    const v =
+                      Number(s?.saldo_usado) ??
+                      Number(s?.saldo_disponible) ??
+                      Number(s?.saldo) ??
+                      Number(s?.monto) ?? 0;
+                    return acc + (Number.isFinite(v) ? v : 0);
+                  }, 0)
+                : 0;
 
             let restanteWallet = Math.min(
               walletDisponible,
@@ -1420,38 +1439,78 @@ const editar_reserva_definitivo = async (req, res) => {
 
             for (const it of items_a_pagar) {
               if (restanteWallet <= 0) break;
-              const asignar = Math.min(it.total, restanteWallet);
-              if (asignar > 0.001) {
-                asociacionesWallet.push({
-                  id_item: it.id_item,
-                  monto: asignar,
-                });
-                restanteWallet -= asignar;
-              }
+              let asignar = Math.min(Number(it.total || 0), Number(restanteWallet || 0));
+                      asignar = Number(asignar.toFixed(2));
+                      if (asignar > 0.009) {
+                        asociacionesWallet.push({
+                          id_item: it.id_item,
+                          monto: asignar,
+                        });
+                        restanteWallet = Number((restanteWallet - asignar).toFixed(2));
+                      }
             }
+            const cubiertoWallet = Number((Math.min(walletDisponible, (monto_total_a_cubrir || walletDisponible)) - Math.max(restanteWallet, 0)).toFixed(2));
 
-            if (asociacionesWallet.length > 0) {
-              const id_pago_wallet = await crear_pago_desde_wallet(
-                connection,
-                metadata.id_servicio,
-                metadata.id_agente,
-                saldos_aplicados
-              );
-              if (id_pago_wallet) {
-                await asociar_items_a_pago(
-                  connection,
-                  metadata.id_hospedaje,
-                  id_pago_wallet,
-                  asociacionesWallet
-                );
-                console.log(
-                  "💳 [PAGOS] asociacionesWallet:",
-                  asociacionesWallet.length,
-                  "id_pago:",
-                  id_pago_wallet
-                );
-              }
-            }
+if (asociacionesWallet.length > 0 && cubiertoWallet > 0.009) {
+  // 1) Crear el pago con el monto EXACTO aplicado a ítems
+  const id_pago_wallet = await crear_pago_desde_wallet(
+    connection,
+    metadata.id_servicio,
+    metadata.id_agente,
+    cubiertoWallet,     // 👈 usa el cubierto real, no "monto_total"
+    saldos_aplicados
+  );
+
+  if (id_pago_wallet) {
+    // 2) Tu asociar_items_a_pago, por lo que se ve en tus logs previos, espera: [id_item, id_pago, monto, id_hospedaje]
+    const asociacionesWalletConPago = asociacionesWallet.map(a => ([
+      a.id_item,                      // id del item
+      id_pago_wallet,                 // id del pago recién creado
+      a.monto,                        // monto para ese item
+      metadata.id_hospedaje           // id_hospedaje
+    ]));
+
+    await asociar_items_a_pago(
+      connection,
+      metadata.id_hospedaje,
+      id_pago_wallet,
+      asociacionesWallet
+    );
+    console.log(
+      "💳 [PAGOS] asociacionesWallet:",
+      asociacionesWalletConPago.length,
+      "id_pago:",
+      id_pago_wallet
+    );
+
+    // 3) Rebaja SÓLO lo realmente usado en wallet (distribución simple en orden)
+    let restantePorRebajar = cubiertoWallet;
+    const saldos_para_rebajar = [];
+
+    for (const s of saldos_aplicados) {
+      if (restantePorRebajar <= 0.009) break;
+      const disponible =
+        Number(s?.saldo_usado) ??
+        Number(s?.saldo_disponible) ??
+        Number(s?.saldo) ??
+        Number(s?.monto) ?? 0;
+
+      const usa = Math.min(disponible, restantePorRebajar);
+      if (s?.id_saldos && usa > 0.009) {
+        saldos_para_rebajar.push({ id_saldos: s.id_saldos, saldo_usado: Number(usa.toFixed(2)) });
+        restantePorRebajar = Number((restantePorRebajar - usa).toFixed(2));
+      }
+    }
+
+    if (saldos_para_rebajar.length > 0) {
+      await rebajar_wallet_saldos(connection, saldos_para_rebajar);
+      console.log("💳 [WALLET] Rebaja aplicada:", saldos_para_rebajar);
+    }
+  } else {
+    console.warn("💳 [WALLET] No se pudo crear el pago desde wallet (id_pago_wallet nulo).");
+  }
+}
+
 
             if (monto_total_a_cubrir > 0) {
               const cubiertoWallet =
@@ -1464,6 +1523,7 @@ const editar_reserva_definitivo = async (req, res) => {
                 monto_total_a_cubrir
               );
             }
+            
           }
 
           // 2.2 CRÉDITO (si queda pendiente)
