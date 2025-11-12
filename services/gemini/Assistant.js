@@ -12,34 +12,31 @@ class Gemini {
 }
 
 class Assistant {
-  constructor(model, instrucciones, functions = [], tools = []) {
+  constructor(model, instrucciones, dependencias = []) {
     this.ai = Gemini.getInstance();
-    this.model = model || "gemini-2.0-flash" || "gemini-2.5-flash";
+    this.model = model || "gemini-2.5-flash-lite" || "gemini-2.0-flash";
     this.instrucciones = instrucciones || "";
-    this.functions = functions;
-    this.tools = tools;
+    this.dependencias = dependencias;
   }
 
   async execute(message) {
+    //Aqui debo ejecutar y verificar que mi call se llame o que en mis funciones tenga ese tipo de funcion a llamar, si no entonces me salto el while y lo regreso al orquestador
     throw new Error("No se ha sobreescrito esta funcion");
   }
 
   async call(args) {
+    //Esta creo que seria la funcion a llamar, se debera sobreescribir
     throw new Error("No se ha sobreescrito esta funcion");
   }
 
   async message(message) {
+    //Aqui podria manejar el volver a intentar
     const response = await this.ai.models.generateContent({
       model: this.model,
       contents: message,
       config: {
         systemInstruction: this.instrucciones,
-        tools: [
-          {
-            functionDeclarations: this.functions,
-          },
-          ...this.tools,
-        ],
+        ...this.dependencias,
       },
     });
     return response;

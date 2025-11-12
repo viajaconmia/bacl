@@ -1,16 +1,16 @@
 const { Type } = require("@google/genai");
 const { Assistant } = require("../Assistant");
-const { GeneralAssistant } = require("./General");
-const { SearchHotel } = require("./SearchHotel");
-
-const assistant = {
-  general: new GeneralAssistant(),
-  search_hotel: new SearchHotel(),
-};
 
 class OrquestadorAssistant extends Assistant {
-  constructor() {
-    super("gemini-2.5-flash", PROMPT, [routeToAssistantFunctionDeclaration]);
+  constructor(assistantsMap) {
+    super("gemini-2.5-pro", PROMPT, {
+      tools: [
+        {
+          functionDeclarations: [routeToAssistantFunctionDeclaration],
+        },
+      ],
+    });
+    this.assistants = assistantsMap;
   }
 
   async execute(message) {
@@ -19,10 +19,15 @@ class OrquestadorAssistant extends Assistant {
   }
 
   async call({ assistant_name, instruction_xml }, historial) {
-    console.log(assistant_name, instruction_xml);
-    return await assistant[(assistant_name || "").toLowerCase()].execute(
-      instruction_xml
-    );
+    try {
+      const currentAssistant =
+        this.assistants[(assistant_name || "").toLowerCase()];
+      console.log(currentAssistant);
+      const response = await currentAssistant.execute(instruction_xml);
+      return response;
+    } catch (error) {
+      console.log(error);
+    }
   }
 }
 
