@@ -66,7 +66,7 @@ const newCreateAgente = async (req, res) => {
   const { body } = req;
 
   const id_empresa = `emp-${uuidv4()}`;
-  const id_viajero = `${uuidv4()}`;
+  const id_viajero = `via-${uuidv4()}`;
   let stripe_client;
 
   try {

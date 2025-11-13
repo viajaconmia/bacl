@@ -520,12 +520,15 @@ const asignarFacturasItems = async (req, res) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
-  const { ejemplo_saldos, usuarioCreador } = reserva;
+
+  const { ejemplo_saldos = [], usuarioCreador } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
+
   const agentes = await executeQuery(
     `SELECT * FROM agentes WHERE id_agente = ?`,
     [reserva.solicitud.id_agente]
   );
+
   if (!agentes || agentes.length === 0) {
     throw new Error("Agente no encontrado");
   }
@@ -807,6 +810,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               "credito",
             ];
             await connection.execute(queryCredito, paramsCredito);
+            
           } else if (bandera === 1) {
             console.log(
               "Procesando bandera 1 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:",

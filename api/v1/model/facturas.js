@@ -172,8 +172,10 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           rfc,
           id_empresa,
           uuid_factura,
-          fecha_vencimiento
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?);
+          fecha_vencimiento,
+          saldo,
+          id_agente
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?,?);
           `;
         console.log(datos_empresa);
         const results = await conn.execute(insertFacturaQuery, [
@@ -190,6 +192,8 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           response_factura.data.Complement.TaxStamp.Uuid,
           //fecha de vencimiento
           info_user.fecha_vencimiento,
+          total,
+          id_user
         ]);
 
         // 4. Actualizar solo los items seleccionados
@@ -759,11 +763,26 @@ order by fecha_emision desc;`;
 
 const getAllFacturasPagosPendientes = async () => {
   try {
-    const query = `SELECT *
-FROM vw_facturas
-WHERE 
-  (pagos_asociados IS NULL OR COALESCE(JSON_LENGTH(pagos_asociados), 0) = 0 OR saldo <> 0)
-  AND fecha_vencimiento <= CURDATE();`;
+    const query = `SELECT vf.*
+FROM vw_facturas AS vf
+JOIN (
+  SELECT 
+    uuid_factura,
+    fecha_emision,
+    total,
+    subtotal,
+    impuestos,
+    rfc
+  FROM vw_facturas
+  GROUP BY
+    uuid_factura, fecha_emision, total, subtotal, impuestos, rfc
+  HAVING
+    SUM(COALESCE(JSON_LENGTH(pagos_asociados), 0)) = 0
+) AS g
+USING (uuid_factura, fecha_emision, total, subtotal, impuestos, rfc)
+-- (Opcional) si además quieres limitar a saldo = 0 o NULL:
+-- WHERE vf.saldo = 0 OR vf.saldo IS NULL
+ORDER BY vf.uuid_factura, vf.fecha_emision;`;
     let response = await executeQuery(query, []);
 
     return response;
