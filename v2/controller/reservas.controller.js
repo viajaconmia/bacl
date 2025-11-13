@@ -179,7 +179,7 @@ async function crear_pago_desde_wallet(
     "wallet",
     id_saldo_principal,
     id_agente,
-    "completado",
+    "Confirmado",
     transaccion,
     monto_total,
   ];
@@ -1022,7 +1022,7 @@ const editar_reserva_definitivo = async (req, res) => {
 
       const debeProcesarMonetario =
         hayCambioPrecio ||
-        hayCambioNoches ||
+        (hayCambioNoches && hayCambioPrecio )||
         haySaldos ||
         Number.isFinite(restanteNum);
 
@@ -1059,10 +1059,79 @@ const editar_reserva_definitivo = async (req, res) => {
           habitacion,
           nuevo_incluye_desayuno,
         });
-
+        
         console.log(
           "✅ [EDITAR_RESERVA] Caso base aplicado sin cambios monetarios."
         );
+
+        // NUEVO: Si hay cambio de noches, actualizamos items aunque no haya monetario.
+        try {
+          const { cambian_noches } = Calculo.cambian_noches(noches || {});
+          const delta_noches_seguro =
+            (Number.isFinite(noches?.current)
+              ? noches.current
+              : toNumber(noches?.current, NaN)) -
+            (Number.isFinite(noches?.before)
+              ? noches.before
+              : toNumber(noches?.before, NaN));
+
+          if (cambian_noches && Number.isFinite(delta_noches_seguro) && delta_noches_seguro !== 0) {
+            await runTransaction(async (connection) => {
+              if (delta_noches_seguro > 0) {
+                // Crear noches nuevas con total = 0 (y saldo = 0)
+                const items_activos_actuales = await Item.findActivos(
+                  connection,
+                  metadata.id_hospedaje,
+                  "ASC"
+                );
+                const fecha_ultima =
+                  items_activos_actuales.length > 0
+                    ? items_activos_actuales[items_activos_actuales.length - 1].fecha_uso
+                    : check_in?.current;
+
+                // pasar precio 0 para que el item nuevo tenga total 0
+                const items_nuevos = await Item.agregar_nuevas_noches(
+                  connection,
+                  metadata.id_hospedaje,
+                  fecha_ultima,
+                  delta_noches_seguro,
+                  0
+                );
+
+                // Asegurar total/saldo 0 en caso de que la función cree valores distintos
+                const ids = (items_nuevos || []).map((it) => it.id_item).filter(Boolean);
+                if (ids.length) {
+                  const ph = makeInPlaceholders(ids.length);
+                  await connection.execute(
+                    `UPDATE items SET total = 0, saldo = 0 WHERE id_item IN (${ph})`,
+                    ids
+                  );
+                }
+                console.log("🧾 [ITEMS] Noches añadidas (no monetario) count:", items_nuevos.length);
+              } else {
+                // Desactivar noches LIFO (mantener comportamiento existente; no ajuste fiscal aquí)
+                const cantidad = Math.abs(delta_noches_seguro);
+                const items_desactivados = await Item.desactivar_noches_lifo(
+                  connection,
+                  metadata.id_hospedaje,
+                  cantidad
+                );
+                console.log("🧾 [ITEMS] Noches desactivadas (no monetario) count:", items_desactivados.length);
+                // No se manejan pasos fiscales porque no estamos procesando monetario.
+              }
+            });
+          } else {
+            console.log("🧾 [ITEMS] No hay cambio de noches para procesar en modo no-monetario.");
+          }
+        } catch (e) {
+          console.error("🧾 [ITEMS][ERROR] Falló actualización de items en modo no-monetario:", e?.message || e);
+          // No forzamos rollback del caso_base_tolerante aquí: devolvemos error 500 para visibilidad.
+          return res.status(500).json({
+            error: "Ocurrió un error al actualizar items en modo no-monetario.",
+            detalle: e?.message || e,
+          });
+        }
+
         return res.status(200).json({
           message: "Caso base aplicado sin cambios monetarios",
           resultado_paso_1: respBase,
