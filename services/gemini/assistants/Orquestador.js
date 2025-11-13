@@ -2,33 +2,32 @@ const { Type } = require("@google/genai");
 const { Assistant } = require("../Assistant");
 
 class OrquestadorAssistant extends Assistant {
-  constructor(assistantsMap) {
-    super("gemini-2.5-pro", PROMPT, {
-      tools: [
-        {
-          functionDeclarations: [routeToAssistantFunctionDeclaration],
-        },
-      ],
+  constructor() {
+    super({
+      model: "gemini-2.5-pro",
+      instrucciones: PROMPT,
+      dependencias: {
+        tools: [
+          {
+            functionDeclarations: [routeToAssistantFunctionDeclaration],
+          },
+        ],
+      },
+      name: "orquestador",
     });
-    this.assistants = assistantsMap;
   }
 
-  async execute(message) {
-    const response = await this.message(message);
-    return response.candidates[0].content.parts;
-  }
-
-  async call({ assistant_name, instruction_xml }, historial) {
-    try {
-      const currentAssistant =
-        this.assistants[(assistant_name || "").toLowerCase()];
-      console.log(currentAssistant);
-      const response = await currentAssistant.execute(instruction_xml);
-      return response;
-    } catch (error) {
-      console.log(error);
-    }
-  }
+  // async call({ assistant_name, instruction_xml }, historial) {
+  //   try {
+  //     const currentAssistant =
+  //       this.assistants[(assistant_name || "").toLowerCase()];
+  //     console.log(currentAssistant);
+  //     const response = await currentAssistant.execute(instruction_xml);
+  //     return response;
+  //   } catch (error) {
+  //     console.log(error);
+  //   }
+  // }
 }
 
 const routeToAssistantFunctionDeclaration = {

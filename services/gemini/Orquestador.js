@@ -11,42 +11,27 @@ class Orquestador {
   static instance = null;
   orquestador;
 
-  constructor() {
-    if (Orquestador.instance) {
-      throw new Error(
-        "Usa Orquestador.getInstance() para obtener la instancia."
-      );
-    }
-    this.orquestador = new OrquestadorAssistant(ASSISTANTS_MAP);
-  }
-
-  // Método de acceso estático
-  static getInstance() {
-    if (!Orquestador.instance) {
-      Orquestador.instance = new Orquestador(); // Crea la instancia si no existe
-    }
-    return Orquestador.instance;
-  }
+  constructor() {}
 
   async execute(message, queue = [], updates = []) {
     let cola = new Cola(...queue);
     let historial = new Historial(...updates);
-    if (message) historial.update({ user: message });
-    if (cola.isEmpty()) {
-      let parts = await this.orquestador.execute(message);
-      cola.push(...parts);
-      historial.update(...parts);
-    }
 
-    while ("functionCall" in cola.seeNext()) {
-      const callfuncion = cola.pop().functionCall.args;
-      const response = await this.orquestador.call(callfuncion, historial);
-      console.log("THIS IS RESPOMSE:", response);
-      cola.push(...response);
-      historial.update(...response);
-    }
+    if (message) historial.update({ role: "user", text: message });
 
-    return { cola: cola.getAll(), historial: historial.getHistorial() };
+    if (cola.isEmpty()) this.orquestador = new OrquestadorAssistant();
+
+    await this.orquestador.execute(message, cola, historial);
+
+    // while ("functionCall" in cola.seeNext()) {
+    //   const callfuncion = cola.pop().functionCall.args;
+    //   const response = await this.orquestador.call(callfuncion, historial);
+    //   console.log("THIS IS RESPOMSE:", response);
+    //   cola.push(...response);
+    //   historial.update(...response);
+    // }
+
+    return { cola: cola.getClean(), historial: historial.getClean() };
   }
 }
 
@@ -59,6 +44,8 @@ class Cola {
 
   push = (...data) => (this.cola = [...data, ...this.cola]);
   seeNext = () => (this.cola.length > 0 ? this.cola[0] : {});
+  getClean = () =>
+    this.cola.map(({ thoughtSignature, ...rest }) => ({ ...rest }));
   pop = () => this.cola.shift();
   getAll = () => [...this.cola];
   isEmpty = () => this.cola.length == 0;
@@ -73,8 +60,10 @@ class Historial {
 
   update = (...data) => this.historial.push(...data.reverse());
   getClean = () =>
-    this.historial.cola.map(({ thoughtSignature, ...rest }) => ({ ...rest }));
+    this.historial.cola.map(({ thoughtSignature, assistant, ...rest }) => ({
+      ...rest,
+    }));
   getHistorial = () => this.historial.cola;
 }
 
-module.exports = { Orquestador };
+module.exports = { Orquestador, Cola };
