@@ -131,11 +131,11 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
     JSON.stringify({ cfdi, info_user })
   );
   try {
-    const { id_solicitud, id_user, id_items, datos_empresa } = info_user;
+    const { id_solicitud, id_user, id_items, datos_empresa,items_facturados } = info_user;
     const solicitudesArray = Array.isArray(id_solicitud)
       ? id_solicitud
       : [id_solicitud];
-    const itemsArray = Array.isArray(id_items) ? id_items : [id_items];
+    const itemsArray = Array.isArray(items_facturados) ? items_facturados : [items_facturados];
 
     // 0. Calcular totales
     const { total, subtotal, impuestos } = cfdi.Items.reduce(
