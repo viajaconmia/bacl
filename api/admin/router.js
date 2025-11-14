@@ -6,6 +6,8 @@ const jwt = require("jsonwebtoken");
 
 router.use((req, res, next) => {
   const token = req.cookies["access-token"];
+  console.log(req.cookies);
+  console.log(token);
   req.session = { user: null };
   if (token) {
     try {
