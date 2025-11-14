@@ -7,44 +7,43 @@ const PORT = process.env.PORT || 3001;
 /**de aqui para abajo */
 const Stripe = require("stripe");
 require("dotenv").config();
+const { errorHandler } = require("./middleware/errorHandler");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
   apiVersion: "2024-04-10",
 });
 
-app.post("/disputa", express.raw({ type: "application/json" }), (req, res) => {
-  const sig = req.headers["stripe-signature"];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET_TEST;
+// app.post("/disputa", express.raw({ type: "application/json" }), (req, res) => {
+//   const sig = req.headers["stripe-signature"];
+//   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET_TEST;
 
-  let event;
+//   let event;
 
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-  } catch (err) {
-    console.error("❌ Error verificando la firma del webhook:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+//   try {
+//     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+//   } catch (err) {
+//     console.error("❌ Error verificando la firma del webhook:", err.message);
+//     return res.status(400).send(`Webhook Error: ${err.message}`);
+//   }
 
-  // ✅ Manejo del evento de disputa
-  if (event.type === "charge.dispute.created") {
-    const dispute = event.data.object;
-    console.log("\n\n\n\n\n🚨 Disputa recibida:", {
-      id: dispute.id,
-      amount: dispute.amount / 100,
-      currency: dispute.currency,
-      reason: dispute.reason,
-    });
+//   // ✅ Manejo del evento de disputa
+//   if (event.type === "charge.dispute.created") {
+//     const dispute = event.data.object;
+//     console.log("\n\n\n\n\n🚨 Disputa recibida:", {
+//       id: dispute.id,
+//       amount: dispute.amount / 100,
+//       currency: dispute.currency,
+//       reason: dispute.reason,
+//     });
 
-    // Aquí puedes guardar en base de datos, notificar a alguien, etc.
-  } else {
-    console.log(`📦 Evento recibido no manejado: ${event.type}`);
-  }
+//     // Aquí puedes guardar en base de datos, notificar a alguien, etc.
+//   } else {
+//     console.log(`📦 Evento recibido no manejado: ${event.type}`);
+//   }
 
-  res.status(200).json({ received: true });
-});
+//   res.status(200).json({ received: true });
+// });
 /** aqui*/
-
-const { errorHandler } = require("./middleware/errorHandler");
 
 const { checkApiKey } = require("./middleware/auth");
 const v1Router = require("./api/v1/router/general");
@@ -104,6 +103,32 @@ app.use((req, res, next) => {
   res.set("Cache-Control", "no-store");
   res.set("Pragma", "no-cache");
   res.set("Expires", "0");
+  next();
+});
+
+app.use((req, res, next) => {
+  const token = req.cookies["access-token"];
+  req.session = { user: null };
+  if (token) {
+    try {
+      const session = jwt.verify(token, SECRET_KEY);
+      req.session.user = session;
+    } catch (error) {
+      console.log(error);
+      if (error.message == "jwt expired")
+        error.message = "sesion expirada, inicia sesión nuevamente";
+      res
+        .status(500)
+        .clearCookie("access-token")
+        .json({
+          message: error.message || "Error al salir",
+          error,
+          data: null,
+        });
+      return;
+    }
+  }
+  console.log(req.session);
   next();
 });
 

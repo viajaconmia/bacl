@@ -141,7 +141,6 @@ const verifySession = async (req, res) => {
   try {
     const { user } = req.session;
     const usuario = await getUser(user.email);
-    console.log(usuario);
     if (!usuario) {
       res.clearCookie("access-token").status(204).json({ message: "session" });
     }

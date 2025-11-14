@@ -1459,7 +1459,7 @@ const createFromOperaciones = async (req, res) => {
     }
 
     let response = await model.insertarReservaOperaciones(
-      req.body,
+      { ...req.body, ...req.session },
       req.body.bandera
     );
     res

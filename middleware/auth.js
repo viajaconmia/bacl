@@ -78,36 +78,7 @@ async function updateJti(jti, status) {
   }
 }
 
-const getSession = async (req, res, next) => {
-  const token = req.cookies["access-token"];
-  console.log(req.cookies);
-  console.log(token);
-  req.session = { user: null };
-  if (token) {
-    try {
-      const session = jwt.verify(token, SECRET_KEY);
-      req.session.user = session;
-    } catch (error) {
-      console.log(error);
-      if (error.message == "jwt expired")
-        error.message = "sesion expirada, inicia sesión nuevamente";
-      res
-        .status(500)
-        .clearCookie("access-token")
-        .json({
-          message: error.message || "Error al salir",
-          error,
-          data: null,
-        });
-      return;
-    }
-  }
-  console.log(req.session);
-  next();
-};
-
 module.exports = {
   checkApiKey,
   isSignToken,
-  getSession,
 };

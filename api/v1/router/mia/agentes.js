@@ -1,6 +1,5 @@
 const controller = require("../../controller/agentes");
 const { executeQuery } = require("../../../../config/db");
-const { getSession } = require("../../../../middleware/auth");
 const router = require("express").Router();
 
 router.post("/", controller.create);
@@ -38,9 +37,8 @@ WHERE e_a.id_agente =?;`;
     res.status(500).json({ message: "Error server", details: error });
   }
 });
-router.get("/all", getSession, async (req, res) => {
+router.get("/all", async (req, res) => {
   try {
-    console.log("Revisando la sesión", req.session);
     const { query } = req;
     const { filterType = "Creacion" } = query;
     let conditions = [];
