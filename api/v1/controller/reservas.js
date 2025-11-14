@@ -1429,7 +1429,7 @@ async function updateReserva3(req, res) {
 
 const createFromOperaciones = async (req, res) => {
   try {
-    console.log("Revisando el body  😭😭😭😭", req.body);
+    console.log("Revisando la bandera sesion", req.session);
     const { bandera } = req.body;
     const { check_in, check_out } = req.body;
     console.log(check_in, check_out);
@@ -1443,8 +1443,6 @@ const createFromOperaciones = async (req, res) => {
 
     console.log("a ver esto,", checkInDate, checkOutDate);
     console.log(
-      
-      
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime()
     );

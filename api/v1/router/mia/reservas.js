@@ -1,4 +1,5 @@
 const router = require("express").Router();
+const { getSession } = require("../../../../middleware/auth");
 const controller = require("../../controller/reservas");
 const middleware = require("../../middleware/validateParams");
 
@@ -13,6 +14,7 @@ router.put(
 router.post(
   "/operaciones",
   middleware.validateParams(requiredParamsToCreate),
+  getSession,
   controller.createFromOperaciones
 );
 router.post(
@@ -32,6 +34,5 @@ router.get(
   "/reservasConItemsSinPagar",
   controller.getReservasWithItemsSinPagarByAgente
 );
-
 
 module.exports = router;
