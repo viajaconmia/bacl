@@ -74,11 +74,11 @@ const agregar_nuevas_noches = async (
   id_hospedaje,
   fecha_ultima_noche,
   delta_noches,
-  precio_por_noche
+  precio_por_noche,
+  tipo_pago = "wallet" // 👈 NUEVO PARÁMETRO
 ) => {
   const items_creados = [];
   let ultima_fecha = new Date(fecha_ultima_noche);
-  // ... (logs) ...
 
   for (let i = 0; i < delta_noches; i++) {
     ultima_fecha.setDate(ultima_fecha.getDate() + 1);
@@ -87,10 +87,11 @@ const agregar_nuevas_noches = async (
       subtotal: sub_item,
       impuestos: imp_item,
     } = Calculo.precio({ total: precio_por_noche });
-    // ... (logs) ...
+
+    // 👇 CALCULAR SALDO SEGÚN TIPO DE PAGO
+    const saldo_inicial = tipo_pago === "credito" ? total_item : 0;
 
     const itemData = {
-      // Renombrado para claridad
       id_hospedaje: id_hospedaje,
       id_catalogo_item: null,
       id_factura: null,
@@ -99,7 +100,7 @@ const agregar_nuevas_noches = async (
       total: total_item,
       subtotal: sub_item,
       impuestos: imp_item,
-      saldo: 0,
+      saldo: saldo_inicial, // 👈 AHORA DEPENDE DEL TIPO DE PAGO
       costo_total: 0,
       costo_subtotal: 0,
       costo_impuestos: 0,
@@ -111,22 +112,14 @@ const agregar_nuevas_noches = async (
     };
 
     console.log(
-      "LOG (agregar_nuevas_noches): Objeto item ANTES de llamar a create:",
-      itemData
+      "LOG (agregar_nuevas_noches): Item con saldo inicial:",
+      { id_item_temp: "pending", saldo: saldo_inicial, tipo_pago }
     );
 
-    // --- CAPTURAR EL RESULTADO COMPLETO DE CREATE ---
-    const newItemRecord = await create(conn, itemData); // Llama a Item.create
-    console.log(
-      "LOG (agregar_nuevas_noches): Item creado devuelto por create:",
-      newItemRecord
-    );
-
-    // --- USAR EL RESULTADO PARA EL ARRAY DEVUELTO ---
-    // newItemRecord ahora contiene el id_item generado
+    const newItemRecord = await create(conn, itemData);
     items_creados.push(newItemRecord);
   }
-  return items_creados; // Devuelve el array de objetos item completos
+  return items_creados;
 };
 const desactivar_noches_lifo = async (conn, id_hospedaje, delta_noches_abs) => {
   const items_activos_lifo = await findActivos(conn, id_hospedaje, "LIFO");
@@ -184,6 +177,7 @@ const aplicar_split_precio = async (conn, items_activos, nuevo_total_venta) => {
     const item = items_activos[i];
     let calculo;
 
+    // Reparto del total nuevo entre los items
     if (i === items_activos.length - 1) {
       const total_restante = nuevo_total_venta - total_acumulado;
       calculo = Calculo.precio({ total: total_restante });
@@ -192,13 +186,44 @@ const aplicar_split_precio = async (conn, items_activos, nuevo_total_venta) => {
       total_acumulado += Formato.precio(calculo.total);
     }
 
-    const query = `UPDATE ${schema.table} SET total = ?, subtotal = ?, impuestos = ? WHERE id_item = ?`;
+    // 1) Obtener cuánto ya se ha pagado de este item
+    const [rowsPagos] = await conn.execute(
+      "SELECT COALESCE(SUM(monto), 0) AS pagado FROM items_pagos WHERE id_item = ?",
+      [item.id_item]
+    );
+
+    const pagado = Number(rowsPagos?.[0]?.pagado || 0);
+
+    // 2) Recalcular saldo en función del nuevo total y lo ya pagado
+    let nuevoSaldo = calculo.total - pagado;
+    if (!Number.isFinite(nuevoSaldo) || nuevoSaldo < 0) {
+      nuevoSaldo = 0;
+    }
+
+    // 3) Actualizar item con total/subtotal/impuestos/saldo
+    const query = `
+      UPDATE ${schema.table}
+      SET total = ?, subtotal = ?, impuestos = ?, saldo = ?
+      WHERE id_item = ?
+    `;
+
     await conn.execute(query, [
       calculo.total,
       calculo.subtotal,
       calculo.impuestos,
+      nuevoSaldo,
       item.id_item,
     ]);
+
+    // (Opcional) log de depuración
+    console.log("🧾 [SPLIT_PRECIO] Item actualizado:", {
+      id_item: item.id_item,
+      total_nuevo: calculo.total,
+      subtotal_nuevo: calculo.subtotal,
+      impuestos_nuevo: calculo.impuestos,
+      pagado,
+      nuevoSaldo,
+    });
   }
 };
 

@@ -717,7 +717,8 @@ async function manejar_reduccion_fiscal(
 async function actualizar_credito_existente(
   connection,
   id_servicio,
-  delta_total
+  delta_total,
+  id_agente
 ) {
   console.log(
     `🏦 [CREDITO] Actualizando pagos_credito para ${id_servicio} por delta: ${delta_total}`
@@ -741,10 +742,12 @@ async function actualizar_credito_existente(
       subtotal = (total + ?) / 1.16,
       impuestos = (total + ?) - ((total + ?) / 1.16),
       monto_a_credito = monto_a_credito + ?,
-      pendiente_por_cobrar = pendiente_por_cobrar + ?
+      pendiente_por_cobrar = pendiente_por_cobrar + ?,
+      pago_por_credito =  ?
     WHERE id_credito = ?`;
 
   const [updateResult] = await connection.execute(updateQuery, [
+    delta_total,
     delta_total,
     delta_total,
     delta_total,
@@ -757,6 +760,19 @@ async function actualizar_credito_existente(
     "🏦 [CREDITO] Resultado UPDATE pagos_credito:",
     updateResult?.info || ""
   );
+  if (delta_total < 0 && id_agente) {
+  const montoDevolver = Math.abs(delta_total);
+  await connection.execute(
+    "UPDATE agentes SET saldo = saldo + ? WHERE id_agente = ?",
+    [montoDevolver, id_agente]
+  );
+  console.log(
+    "🏦 [CREDITO] Devolución de crédito aplicada al agente:",
+    montoDevolver,
+    "agente:",
+    id_agente
+  );
+}
 }
 
 async function crear_nuevo_pago_credito(
@@ -1020,11 +1036,18 @@ const editar_reserva_definitivo = async (req, res) => {
       const haySaldos = Array.isArray(saldos) && saldos.length > 0;
       const restanteNum = toNumber(restante, NaN);
 
-      const debeProcesarMonetario =
-        hayCambioPrecio ||
-        (hayCambioNoches && hayCambioPrecio )||
-        haySaldos ||
-        Number.isFinite(restanteNum);
+   let debeProcesarMonetario =
+  hayCambioPrecio ||
+  (hayCambioNoches && hayCambioPrecio) ||
+  haySaldos ||
+  Number.isFinite(restanteNum);
+
+// ⚠️ Parche especial:
+// Si hay cambio de noches PERO NO cambio de precio,
+// se desactiva el procesamiento monetario.
+if (hayCambioNoches && !hayCambioPrecio) {
+  debeProcesarMonetario = false;
+}
 
       console.log("🔎 [EDITAR_RESERVA] Flags:", {
         hayCambioPrecio,
@@ -1105,7 +1128,7 @@ const editar_reserva_definitivo = async (req, res) => {
                   await connection.execute(
                     `UPDATE items SET total = 0, saldo = 0 WHERE id_item IN (${ph})`,
                     ids
-                  );
+                  );  
                 }
                 console.log("🧾 [ITEMS] Noches añadidas (no monetario) count:", items_nuevos.length);
               } else {
@@ -1248,7 +1271,8 @@ const editar_reserva_definitivo = async (req, res) => {
           await actualizar_credito_existente(
             connection,
             metadata.id_servicio,
-            delta_precio_venta
+            delta_precio_venta,
+            metadata.id_agente
           );
 
           items_activos_actuales = await Item.findActivos(
@@ -1272,16 +1296,22 @@ const editar_reserva_definitivo = async (req, res) => {
               noches_finales > 0 ? venta.current.total / noches_finales : 0;
 
             // nuevas noches (saldo=0)
+            // 👇 PASAR EL TIPO DE PAGO
+            const tipo_pago_para_items = 
+              tipo_pago_original === "credito" ? "credito" : "wallet";
+
             items_nuevos = await Item.agregar_nuevas_noches(
               connection,
               metadata.id_hospedaje,
               fecha_ultima,
               delta_noches_seguro,
-              precio_noche_std
+              precio_noche_std,
+              tipo_pago_para_items  // 👈 NUEVO ARGUMENTO
             );
+            
             console.log(
-              "🧾 [ITEMS] Nuevas noches creadas:",
-              items_nuevos.length
+              "🧾 [ITEMS] Nuevas noches creadas con saldo inicial:",
+              items_nuevos.map(i => ({ id_item: i.id_item, saldo: i.saldo }))
             );
           } else if (delta_noches_seguro < 0) {
             const items_desactivados = await Item.desactivar_noches_lifo(

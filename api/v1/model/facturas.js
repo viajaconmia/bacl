@@ -209,9 +209,13 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         // ]);
         // 4 NUEVO: Insertar en items factura
         const numberOfItems = itemsArray.length;
+        console.log("ITEMSSS",itemsArray);
         const insertItemsFacturasQuery = `
         insert into items_facturas (id_factura,id_relacion,id_item,monto) values(?,?,?,?);`;
         for (let i = 0; i < numberOfItems; i++) {
+          console.log("😎😎😎😎😎😎😎😎😎😎😎😎😎🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬",itemsArray[i].id_hospedaje,
+            itemsArray[i].id_item,
+            total / numberOfItems,);
           await conn.execute(insertItemsFacturasQuery, [
             id_factura,
             itemsArray[i].id_hospedaje,
