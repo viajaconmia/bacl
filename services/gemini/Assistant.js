@@ -1,5 +1,4 @@
 const { GoogleGenAI } = require("@google/genai");
-const { Cola } = require("./Orquestador");
 
 class Assistant {
   constructor({ model, instrucciones = "", dependencias = [], name = "" }) {
@@ -36,32 +35,30 @@ class Assistant {
 
   async execute(message) {
     const response = await this.message(message);
-    const cola = new Cola(...response.candidates[0].content.parts);
-
-    while ("functionCall" in cola) {
-      const callfuncion = cola.pop().functionCall.args;
-      console.log(response);
-      const response = await this.orquestador.call(callfuncion, historial);
-      cola.push(...response);
-      historial.update(...response);
-    }
-
-    //TODO
-    /**
-     * ME QUEDE EN CREAR UN OBJETO TAREA, ESTE ME SERVIRA PARA PODER MANEJAR LAS TAREAS Y CORRERLAS PARA DARLAS POR TERMINADAS UNA VES QUE EL ORQUESTADOR PUEDA REVISARLAS
-     */
 
     return response.candidates[0].content.parts.map((part) => ({
       role: "assistant",
       assistant: this.name,
-      ...part,
+      ...("functionCall" in part
+        ? {
+            functionCall: new Task({
+              id: (Math.random() * 9999999).toFixed(0),
+              tarea: part.functionCall.name,
+              args: part.functionCall.args,
+              assistant: this.name,
+            }),
+          }
+        : part),
     }));
   }
 
-  async call(args) {
-    //Esta creo que seria la funcion a llamar, se debera sobreescribir
-    // throw new Error("No se ha sobreescrito esta funcion");
-    console.log("ME ESTAN LLAMANDO, quien?", this.name);
+  async call(args, historial, pila) {
+    return [
+      {
+        message: "Aun no se implementa algo para esta función",
+        assistant: this.name,
+      },
+    ];
   }
 }
 
@@ -73,6 +70,129 @@ class Gemini {
       Gemini.#aiInstance = new GoogleGenAI({});
     }
     return Gemini.#aiInstance;
+  }
+}
+
+class Task {
+  constructor({
+    finalizada = false,
+    tarea = "",
+    assistant = "",
+    args = {},
+    id = "",
+  }) {
+    this.finalizada = finalizada;
+    this.tarea = tarea;
+    this.assistant = assistant;
+    this.args = args;
+    this.id = id;
+  }
+
+  finalizar(resolucion) {
+    this.finalizada = true;
+    this.resolucion = resolucion;
+  }
+
+  get() {
+    return {
+      finalizada: this.finalizada,
+      tarea: this.tarea,
+      assistant: this.assistant,
+      args: this.args,
+    };
+  }
+}
+
+module.exports = { Assistant };
+
+// src/core/Assistant.js
+// const { Task } = require("./Task");
+
+class Assistant {
+  constructor({ model, instrucciones = "", dependencias = [], name = "" }) {
+    this.ai = Assistant.getInstance();
+    this.model = model || "gemini-2.5-flash-lite";
+    this.instrucciones = instrucciones;
+    this.dependencias = dependencias;
+    this.name = name;
+  }
+
+  static getInstance() {
+    if (!Assistant.instance) {
+      Assistant.instance = new GoogleGenAI({});
+    }
+    return Assistant.instance;
+  }
+
+  async message(message, retry = false) {
+    try {
+      if (!message) throw new Error("Mensaje vacío no permitido");
+      if (message.length === 2000) throw new Error("Mensaje demasiado largo");
+
+      const response = await this.ai.models.generateContent({
+        model: this.model,
+        contents: message,
+        config: {
+          systemInstruction: this.instrucciones,
+          ...this.dependencias,
+        },
+      });
+      return response;
+    } catch (error) {
+      console.error(`[${this.name}] Error:`, error.message);
+
+      if (!retry) {
+        // Retry con modelo alternativo
+        this.model =
+          this.model === "gemini-2.5-flash-lite"
+            ? "gemini-2.0-flash"
+            : "gemini-2.5-flash-lite";
+        console.log(`[${this.name}] Reintentando con modelo: ${this.model}`);
+        return this.message(message, true);
+      }
+
+      throw new Error(
+        error.message || `[${this.name}] Falló mensaje tras retry`
+      );
+    }
+  }
+
+  async execute(message) {
+    const response = await this.message(message);
+
+    const parts = response?.candidates?.[0]?.content?.parts || [];
+
+    return parts.map((part) => {
+      if ("functionCall" in part) {
+        return {
+          role: "assistant",
+          assistant: this.name,
+          functionCall: new Task({
+            id: Math.random().toString(36).substring(2, 9),
+            tarea: part.functionCall.name,
+            args: part.functionCall.args,
+            assistant: this.name,
+          }),
+        };
+      }
+
+      return {
+        role: "assistant",
+        assistant: this.name,
+        message: part.text || "",
+      };
+    });
+  }
+
+  // Método genérico a sobreescribir en subclases
+  async call(args, historial, pila) {
+    return [
+      {
+        role: "assistant",
+        assistant: this.name,
+        message: "⚠️ Esta función aún no está implementada.",
+      },
+    ];
   }
 }
 

@@ -31,7 +31,7 @@ class OrquestadorAssistant extends Assistant {
 }
 
 const routeToAssistantFunctionDeclaration = {
-  name: "route_to_assistant",
+  name: "correr_asistente",
   description:
     "Routes the user's request to the most appropriate specialized assistant by generating the necessary XML instruction.",
   parameters: {

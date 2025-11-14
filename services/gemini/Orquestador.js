@@ -1,3 +1,4 @@
+const { Cola, Historial } = require("../../lib/utils/estructuras");
 const { GeneralAssistant } = require("./assistants/General");
 const { OrquestadorAssistant } = require("./assistants/Orquestador");
 const { SearchHotel } = require("./assistants/SearchHotel");
@@ -5,6 +6,7 @@ const { SearchHotel } = require("./assistants/SearchHotel");
 const ASSISTANTS_MAP = {
   general: new GeneralAssistant(),
   search_hotel: new SearchHotel(),
+  orquestador: new OrquestadorAssistant(),
 };
 
 class Orquestador {
@@ -19,51 +21,46 @@ class Orquestador {
 
     if (message) historial.update({ role: "user", text: message });
 
-    if (cola.isEmpty()) this.orquestador = new OrquestadorAssistant();
+    if (cola.isEmpty()) {
+      this.orquestador = ASSISTANTS_MAP["orquestador"];
+    } else {
+      this.orquestador = ASSISTANTS_MAP[cola.seeNext().assistant];
+    }
+    let response;
 
-    await this.orquestador.execute(message, cola, historial);
+    console.log(cola);
 
-    // while ("functionCall" in cola.seeNext()) {
-    //   const callfuncion = cola.pop().functionCall.args;
-    //   const response = await this.orquestador.call(callfuncion, historial);
-    //   console.log("THIS IS RESPOMSE:", response);
-    //   cola.push(...response);
-    //   historial.update(...response);
-    // }
+    if (cola.seeNext().functionCall) {
+      const task = cola.pop();
+      response = await this.orquestador.call(
+        task.functionCall.args,
+        historial,
+        cola
+      );
+    } else {
+      response = await this.orquestador.execute(message);
+    }
+    console.log(response);
+
+    let parts = response.map((part) => ({
+      role: "assistant",
+      assistant: this.name,
+      ...("functionCall" in part
+        ? {
+            functionCall: new Task({
+              tarea: part.functionCall.name,
+              args: part.functionCall.args,
+              assistant: this.name,
+            }),
+          }
+        : part),
+    }));
+
+    cola.push(...parts);
+    historial.update(...parts);
 
     return { cola: cola.getClean(), historial: historial.getClean() };
   }
 }
 
-class Cola {
-  cola = [];
-
-  constructor(...data) {
-    this.cola.push(...data);
-  }
-
-  push = (...data) => (this.cola = [...data, ...this.cola]);
-  seeNext = () => (this.cola.length > 0 ? this.cola[0] : {});
-  getClean = () =>
-    this.cola.map(({ thoughtSignature, ...rest }) => ({ ...rest }));
-  pop = () => this.cola.shift();
-  getAll = () => [...this.cola];
-  isEmpty = () => this.cola.length == 0;
-}
-
-class Historial {
-  historial;
-
-  constructor(...data) {
-    this.historial = new Cola(...data);
-  }
-
-  update = (...data) => this.historial.push(...data.reverse());
-  getClean = () =>
-    this.historial.cola.map(({ thoughtSignature, assistant, ...rest }) => ({
-      ...rest,
-    }));
-  getHistorial = () => this.historial.cola;
-}
-
-module.exports = { Orquestador, Cola };
+module.exports = { Orquestador };
