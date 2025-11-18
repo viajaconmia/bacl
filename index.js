@@ -1,16 +1,16 @@
+const { handleChat } = require("./services/gemini/Core");
 // src/index.js
 const express = require("express");
 const app = express();
 const cookieParser = require("cookie-parser");
-const jwt = require("jsonwebtoken");
 const PORT = process.env.PORT || 3001;
 /**de aqui para abajo */
-const Stripe = require("stripe");
 require("dotenv").config();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
-  apiVersion: "2024-04-10",
-});
+// const Stripe = require("stripe");
+// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
+//   apiVersion: "2024-04-10",
+// });
 
 // app.post("/disputa", express.raw({ type: "application/json" }), (req, res) => {
 //   const sig = req.headers["stripe-signature"];
@@ -42,6 +42,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
 
 //   res.status(200).json({ received: true });
 // });
+// const { SECRET_KEY } = require("./lib/constant");
 /** aqui*/
 
 const { errorHandler } = require("./middleware/errorHandler");
@@ -54,7 +55,6 @@ const morgan = require("morgan");
 // Logger y trazabilidad
 const logger = require("./api/v1/utils/logger");
 const requestContext = require("./middleware/requestContext");
-const { SECRET_KEY } = require("./lib/constant");
 
 // Control de CORS
 const corsOptions = {
@@ -126,9 +126,7 @@ app.get("/", (req, res) =>
   })
 );
 
-const { handleGeminiConnection } = require("./services/gemini/Gemini");
-
-app.post("/message", handleGeminiConnection);
+app.post("/message", handleChat);
 
 // 7. Manejador de errores global (solo formatea respuesta; no llama a logger.error)
 app.use(errorHandler);

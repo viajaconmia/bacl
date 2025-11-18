@@ -1,87 +1,15 @@
 const { GoogleGenAI } = require("@google/genai");
-
-class Assistant {
-  constructor({ model, instrucciones = "", dependencias = [], name = "" }) {
-    this.ai = Gemini.getInstance();
-    this.model = model || "gemini-2.5-flash-lite" || "gemini-2.0-flash";
-    this.instrucciones = instrucciones || "";
-    this.dependencias = dependencias;
-    this.name = name;
-  }
-
-  async message(message, intent = false) {
-    try {
-      const response = await this.ai.models.generateContent({
-        model: this.model,
-        contents: message,
-        config: {
-          systemInstruction: this.instrucciones,
-          ...this.dependencias,
-        },
-      });
-      return response;
-    } catch (error) {
-      if (!intent) {
-        this.model =
-          this.model == "gemini-2.5-flash-lite"
-            ? "gemini-2.0-flash"
-            : "gemini-2.5-flash-lite";
-        const response = await this.message(message, true);
-        return response;
-      }
-      throw error;
-    }
-  }
-
-  async execute(message) {
-    const response = await this.message(message);
-
-    return response.candidates[0].content.parts.map((part) => ({
-      role: "assistant",
-      assistant: this.name,
-      ...("functionCall" in part
-        ? {
-            functionCall: new Task({
-              id: (Math.random() * 9999999).toFixed(0),
-              tarea: part.functionCall.name,
-              args: part.functionCall.args,
-              assistant: this.name,
-            }),
-          }
-        : part),
-    }));
-  }
-
-  async call(args, historial, pila) {
-    return [
-      {
-        message: "Aun no se implementa algo para esta función",
-        assistant: this.name,
-      },
-    ];
-  }
-}
-
-class Gemini {
-  static #aiInstance = null;
-
-  static getInstance() {
-    if (!Gemini.#aiInstance) {
-      Gemini.#aiInstance = new GoogleGenAI({});
-    }
-    return Gemini.#aiInstance;
-  }
-}
+const { v4: uuidv4 } = require("uuid");
 
 class Task {
   constructor({
-    finalizada = false,
+    status = false,
     tarea = "",
     assistant = "",
     args = {},
     id = "",
   }) {
-    this.finalizada = finalizada;
+    this.status = status; // loading, success, error
     this.tarea = tarea;
     this.assistant = assistant;
     this.args = args;
@@ -89,24 +17,19 @@ class Task {
   }
 
   finalizar(resolucion) {
-    this.finalizada = true;
+    this.status = true;
     this.resolucion = resolucion;
   }
 
   get() {
     return {
-      finalizada: this.finalizada,
+      status: this.status,
       tarea: this.tarea,
       assistant: this.assistant,
       args: this.args,
     };
   }
 }
-
-module.exports = { Assistant };
-
-// src/core/Assistant.js
-// const { Task } = require("./Task");
 
 class Assistant {
   constructor({ model, instrucciones = "", dependencias = [], name = "" }) {
@@ -168,7 +91,7 @@ class Assistant {
           role: "assistant",
           assistant: this.name,
           functionCall: new Task({
-            id: Math.random().toString(36).substring(2, 9),
+            id: uuidv4(),
             tarea: part.functionCall.name,
             args: part.functionCall.args,
             assistant: this.name,
@@ -185,7 +108,7 @@ class Assistant {
   }
 
   // Método genérico a sobreescribir en subclases
-  async call(args, historial, pila) {
+  async call(task, pila) {
     return [
       {
         role: "assistant",

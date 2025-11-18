@@ -1,5 +1,5 @@
 const { Type } = require("@google/genai");
-const { Assistant } = require("../Assistant");
+const { Assistant } = require("./Assistant");
 
 class OrquestadorAssistant extends Assistant {
   constructor() {
@@ -16,22 +16,17 @@ class OrquestadorAssistant extends Assistant {
       name: "orquestador",
     });
   }
-
-  // async call({ assistant_name, instruction_xml }, historial) {
-  //   try {
-  //     const currentAssistant =
-  //       this.assistants[(assistant_name || "").toLowerCase()];
-  //     console.log(currentAssistant);
-  //     const response = await currentAssistant.execute(instruction_xml);
-  //     return response;
-  //   } catch (error) {
-  //     console.log(error);
-  //   }
-  // }
+  async call(task, pila) {
+    console.log(task);
+    console.log(pila);
+    // const mensaje = `<TAREA_USUARIO>${task.args.tarea_usuario}</TAREA_USUARIO>`;
+    // const response = await this.message(mensaje);
+    // return ;
+  }
 }
 
 const routeToAssistantFunctionDeclaration = {
-  name: "correr_asistente",
+  name: "conectar_a_asistente",
   description:
     "Routes the user's request to the most appropriate specialized assistant by generating the necessary XML instruction.",
   parameters: {

@@ -1,4 +1,4 @@
-const { Assistant } = require("../Assistant");
+const { Assistant } = require("./Assistant");
 
 class GeneralAssistant extends Assistant {
   constructor() {
