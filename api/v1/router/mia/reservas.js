@@ -1,15 +1,17 @@
 const router = require("express").Router();
 const controller = require("../../controller/reservas");
 const middleware = require("../../middleware/validateParams");
+const controller_v2 = require("../../../../v2/controller/reservas.controller");
 
 const requiredParamsToCreate = [];
 router.get("/detallesConexion", controller.getDetallesConexionReservas);
-router.put(
+router.put("/nuevo-editar-reserva", controller_v2.editar_reserva_definitivo);
+/*router.put(
   "/",
   //middleware.validateParams(requiredParamsToCreate),
   // controller.updateReserva //se vovio el original era updateReserva
   controller.updateReserva2
-);
+);*/
 router.post(
   "/operaciones",
   middleware.validateParams(requiredParamsToCreate),
