@@ -849,6 +849,7 @@ async function caso_base_tolerante({
   estado,
   check_in,
   check_out,
+  costo_total,
   noches,
   id_viajero_principal,
   acompanantes,
@@ -882,6 +883,7 @@ async function caso_base_tolerante({
       estado,
       ...(check_in?.current ? { check_in: check_in.current } : {}),
       ...(check_out?.current ? { check_out: check_out.current } : {}),
+      costo_total
     });
 
     if (Number.isFinite(total)) {
@@ -1014,6 +1016,7 @@ const editar_reserva_definitivo = async (req, res) => {
         noches,
         check_in,
         check_out,
+        proveedor,
         estado_reserva,
         viajero,
         acompanantes,
@@ -1084,6 +1087,7 @@ const editar_reserva_definitivo = async (req, res) => {
           estado: estado_reserva?.current,
           check_in,
           check_out,
+          costo_total: proveedor?.current?.total,
           noches,
           id_viajero_principal: viajero?.current?.id_viajero,
           acompanantes,
@@ -1100,6 +1104,7 @@ const editar_reserva_definitivo = async (req, res) => {
 
         // NUEVO: Si hay cambio de noches, actualizamos items aunque no haya monetario.
         try {
+          let items_nuevos = [];
           const { cambian_noches } = Calculo.cambian_noches(noches || {});
           const delta_noches_seguro =
             (Number.isFinite(noches?.current)
@@ -1202,6 +1207,7 @@ const editar_reserva_definitivo = async (req, res) => {
         estado: estado_reserva?.current,
         check_in,
         check_out,
+        costo_total: proveedor?.current?.total,
         noches,
         id_viajero_principal: viajero?.current?.id_viajero,
         acompanantes,
