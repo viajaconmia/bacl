@@ -1438,102 +1438,96 @@ const editar_reserva_definitivo = async (req, res) => {
         }
       }
 
-      // === HERENCIA FISCAL (reserva facturada y/o wallets facturados) ===
-      try {
-        const hayReservaFacturada = !!estado_fiscal?.es_facturada;
-        const haySaldosFacturados = saldos_filtrados.length > 0;
+   // === HERENCIA FISCAL (reserva facturada y/o wallets facturados) ===
+try {
+  const hayReservaFacturada = !!estado_fiscal?.es_facturada;
+  const haySaldosFacturados = saldos_filtrados.length > 0;
 
-        // Items a fiscalizar: noches nuevas + ajuste positivo
-        const items_para_fiscal = [
-          ...(Array.isArray(items_nuevos) ? items_nuevos : []),
-          ...(item_ajuste ? [item_ajuste] : []),
-        ];
+  // Items a fiscalizar: noches nuevas + ajuste positivo
+  const items_para_fiscal = [
+    ...(Array.isArray(items_nuevos) ? items_nuevos : []),
+    ...(item_ajuste ? [item_ajuste] : []),
+  ];
 
-        if (
-          (hayReservaFacturada || haySaldosFacturados) &&
-          items_para_fiscal.length > 0
-        ) {
-          // Normaliza facturas del SP (si aportan)
-          const facturas_sp = Array.isArray(estado_fiscal?.facturas)
-            ? estado_fiscal.facturas.map((f) => ({
-                id_factura: String(f.id_factura),
-                saldo_interpretado_para_items: Number(
-                  typeof f.saldo_interpretado_para_items !== "undefined" &&
-                    f.saldo_interpretado_para_items !== null
-                    ? f.saldo_interpretado_para_items
-                    : (f.saldo_x_aplicar_items == null
-                        ? f.total
-                        : f.saldo_x_aplicar_items) || 0
-                ),
-              }))
-            : [];
+  if ((hayReservaFacturada || haySaldosFacturados) && items_para_fiscal.length > 0) {
+    
+    // ================================================
+    // 🛠 FIX REAL DE ESPACIO FISCAL DISPONIBLE
+    // ================================================
+    const facturas_disponibles_final = Array.isArray(estado_fiscal?.facturas)
+      ? estado_fiscal.facturas.map((f) => {
+          const total = Number(f.total || 0);
+          const facturado = Number(f.monto_reserva_facturado || 0);
 
-          // Normaliza facturas por wallets
-          const facturas_w = (facturas_wallet || []).map((f) => ({
+          // Espacio fiscal REAL disponible
+          const espacioDisponible = Math.max(total - facturado, 0);
+
+          return {
             id_factura: String(f.id_factura),
-            saldo_interpretado_para_items: Number(
-              f.saldo_interpretado_para_items || 0
-            ),
-          }));
+            saldo_interpretado_para_items: espacioDisponible,
+          };
+        })
+      : [];
 
-          // Combina y consolida por id_factura (suma de saldos, por si viene repetida)
-          const mapFact = new Map();
-          for (const f of [...facturas_sp, ...facturas_w]) {
-            const prev = mapFact.get(f.id_factura) || 0;
-            mapFact.set(
-              f.id_factura,
-              Number((prev + (f.saldo_interpretado_para_items || 0)).toFixed(2))
-            );
-          }
-          const facturas_disponibles_final = Array.from(mapFact.entries()).map(
-            ([id_factura, saldo_interpretado_para_items]) => ({
-              id_factura,
-              saldo_interpretado_para_items,
-            })
-          );
+    console.log("🧾[FISCAL][FIX] facturas_disponibles_final =", facturas_disponibles_final);
 
-          if (facturas_disponibles_final.length === 0) {
-            console.warn(
-              "🧾 [FISCAL] Hay señal de fiscalidad, pero 'facturas_disponibles_final' está vacío. Omitido."
-            );
-          } else {
-            console.log(
-              "🧾 [FISCAL] Ejecutando herencia fiscal para items:",
-              items_para_fiscal.map((i) => i.id_item),
-              "con facturas:",
-              facturas_disponibles_final.map(
-                (f) => `${f.id_factura}:${f.saldo_interpretado_para_items}`
-              )
-            );
-            await asociar_factura_items_logica(
-              connection,
-              metadata.id_hospedaje,
-              items_para_fiscal,
-              facturas_disponibles_final
-            );
-            console.log(
-              "🧾 [FISCAL] Herencia fiscal completada para",
-              items_para_fiscal.length,
-              "items."
-            );
-          }
-        } else {
-          console.log(
-            "🧾 [FISCAL] No se ejecuta herencia fiscal. Condiciones:",
-            {
-              hayReservaFacturada,
-              haySaldosFacturados,
-              items_para_fiscal: items_para_fiscal.length,
-            }
-          );
-        }
-      } catch (e) {
-        console.error(
-          "🧾 [FISCAL][ERROR] Falló herencia fiscal de items:",
-          e?.message || e
-        );
-        throw e; // rollback si fiscalidad no cuadra
-      }
+    // Calcular total de espacio REAL disponible
+    const totalSaldoDisponible = facturas_disponibles_final.reduce(
+      (acc, f) => acc + Number(f.saldo_interpretado_para_items || 0),
+      0
+    );
+
+    console.log("🧾[FISCAL][FIX] totalSaldoDisponible (REAL) =", totalSaldoDisponible);
+
+    // ================================================
+    // 🛡 BLOQUEADOR: si no hay espacio → NO asociar incremento
+    // ================================================
+    if (totalSaldoDisponible <= 0.009) {
+      console.warn(
+        "🧾[FISCAL][FIX] 0 de espacio fiscal → NO se asociará el incremento a facturas."
+      );
+      facturas_disponibles_final.length = 0;
+    }
+
+    // ================================================
+    // EJECUCIÓN DE HERENCIA FISCAL SI QUEDA ESPACIO
+    // ================================================
+    if (facturas_disponibles_final.length === 0) {
+      console.warn("🧾[FISCAL] No hay facturas disponibles (después del FIX). Se omite herencia fiscal.");
+    } else {
+      console.log(
+        "🧾[FISCAL] Ejecutando herencia fiscal para items:",
+        items_para_fiscal.map((i) => i.id_item),
+        "con facturas:",
+        facturas_disponibles_final.map((f) => `${f.id_factura}:${f.saldo_interpretado_para_items}`)
+      );
+
+      await asociar_factura_items_logica(
+        connection,
+        metadata.id_hospedaje,
+        items_para_fiscal,
+        facturas_disponibles_final
+      );
+
+      console.log(
+        "🧾[FISCAL] Herencia fiscal completada para",
+        items_para_fiscal.length,
+        "items."
+      );
+    }
+
+  } else {
+    console.log("🧾[FISCAL] No se ejecuta herencia fiscal. Condiciones:", {
+      hayReservaFacturada,
+      haySaldosFacturados,
+      items_para_fiscal: items_para_fiscal.length,
+    });
+  }
+} catch (e) {
+  console.error("🧾[FISCAL][ERROR] Falló herencia fiscal:", e?.message || e);
+  throw e; // rollback
+}
+
 
       // 2) PAGOS – WALLET / CRÉDITO
       if (
