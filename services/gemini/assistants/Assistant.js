@@ -1,15 +1,16 @@
 const { GoogleGenAI } = require("@google/genai");
 const { v4: uuidv4 } = require("uuid");
+require("dotenv").config();
 
 class Task {
   constructor({
-    status = false,
+    status = "queue",
     tarea = "",
     assistant = "",
     args = {},
     id = "",
   }) {
-    this.status = status; // loading, success, error
+    this.status = status; // loading, success, error, queue
     this.tarea = tarea;
     this.assistant = assistant;
     this.args = args;
@@ -33,18 +34,11 @@ class Task {
 
 class Assistant {
   constructor({ model, instrucciones = "", dependencias = [], name = "" }) {
-    this.ai = Assistant.getInstance();
+    this.ai = new GoogleGenAI({});
     this.model = model || "gemini-2.5-flash-lite";
     this.instrucciones = instrucciones;
     this.dependencias = dependencias;
     this.name = name;
-  }
-
-  static getInstance() {
-    if (!Assistant.instance) {
-      Assistant.instance = new GoogleGenAI({});
-    }
-    return Assistant.instance;
   }
 
   async message(message, retry = false) {
@@ -108,14 +102,8 @@ class Assistant {
   }
 
   // Método genérico a sobreescribir en subclases
-  async call(task, pila) {
-    return [
-      {
-        role: "assistant",
-        assistant: this.name,
-        message: "⚠️ Esta función aún no está implementada.",
-      },
-    ];
+  async call(task, history, stack) {
+    throw new Error("Method not implemented.");
   }
 }
 

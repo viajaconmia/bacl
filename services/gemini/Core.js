@@ -1,127 +1,117 @@
 const { Cola, Historial } = require("../../lib/utils/estructuras");
-const { dispatcher, agentes } = require("./assistants/Dispatcher");
+const { dispatcher, executer } = require("./assistants/Dispatcher");
 
-// class Orquestador {
-//   static instance = null;
-//   orquestador;
+async function processExecute(message, history = [], stack = []) {
+  //Este procesa la ejecución normal del asistente, recibe un asistente y debemos manejar tambien cuando la ejecucion falla poder borrar como si no hubiera sido el pop y que se guarde en la base de datos por si se quiere volver a iniciar el chat
+  //Debemos manejar cuando la pila este vacia
+  const next = stack.pop();
+  try {
+    const newTasks = [];
+    const messages = [];
+    const parts = await executer(
+      message ? "orquestador" : stack.seeNext()?.assistant,
+      message ? message : next
+    );
 
-//   constructor() {}
-
-//   async execute(message, queue = [], updates = []) {
-//     let cola = new Cola(...queue);
-//     let historial = new Historial(...updates);
-
-//     if (message) historial.update({ role: "user", text: message });
-
-//     if (cola.isEmpty()) {
-//       this.orquestador = ASSISTANTS_MAP["orquestador"];
-//     } else {
-//       this.orquestador = ASSISTANTS_MAP[cola.seeNext().assistant];
-//     }
-//     let response;
-
-//     console.log(cola);
-
-// if (cola.seeNext().functionCall) {
-//   const task = cola.pop();
-//   response = await this.orquestador.call(
-//     task.functionCall.args,
-//     historial,
-//     cola
-//   );
-// } else {
-//   response = await this.orquestador.execute(message);
-// }
-// console.log(response);
-
-//     let parts = response.map((part) => ({
-//       role: "assistant",
-//       assistant: this.name,
-//       ...("functionCall" in part
-//         ? {
-//             functionCall: new Task({
-//               tarea: part.functionCall.name,
-//               args: part.functionCall.args,
-//               assistant: this.name,
-//             }),
-//           }
-//         : part),
-//     }));
-
-//     cola.push(...parts);
-//     historial.update(...parts);
-
-//     return { cola: cola.getClean(), historial: historial.getClean() };
-//   }
-// }
-
-async function orchestrate(message, history = [], stack = []) {
-  const activeAgent = agentes["orquestador"]; // el agente principal
-  const responses = await activeAgent.execute(message);
-
-  const messages = [];
-  const newTasks = [];
-
-  for (const part of responses) {
-    if (part.functionCall) {
-      newTasks.push(part.functionCall);
-    } else {
-      messages.push({
-        role: "assistant",
-        text: part.message,
-        assistant: part.assistant,
-      });
+    for (const part of parts) {
+      if (part.functionCall) {
+        newTasks.push(part);
+      } else {
+        messages.push(part);
+      }
     }
-  }
 
-  return { messages, tasks: [...stack, ...newTasks] };
+    history.update(...parts);
+    stack.push(...newTasks);
+  } catch (error) {
+    //Aqui deberiamos regresar la tarea del pop si es que hubo tarea del pop, si no hubo entonces no hacemos nada
+    console.log("Error processing execute 🖥️:\n", next, "\n\n", error);
+  }
 }
 
-async function processTask(task, history, stack) {
-  const result = await dispatcher(
-    task.assistant.toLowerCase(),
-    task.args,
-    history,
-    stack
-  );
+async function processTask(history, stack) {
+  //Este procesa la tarea, recibe un asistente y debemos manejar tambien cuando la tarea falla poder mandar al task el error y el status failed, si pasa entonces deberemos colocar la solución y el status completed, nosotros nos encargamos de eso
+  const task = stack.pop();
+  const { functionCall, args, assistant } = task;
+  const { id } = functionCall;
+  try {
+    const response = await dispatcher(
+      assistant.toLowerCase(),
+      args,
+      history,
+      stack
+    );
 
-  // resultado del agente (por ejemplo: vuelos encontrados)
-  const messages = result.map((r) => ({
-    role: "assistant",
-    text: r.message,
-    data: r.data || null,
-    assistant: r.assistant,
-  }));
-
-  return { messages, taskResult: { ...task, status: "completed" } };
+    history.map((part) =>
+      "functionCall" in part && part.functionCall.id == id
+        ? {
+            ...part,
+            functionCall: {
+              ...part.functionCall,
+              status: "success",
+              resolucion: response,
+            },
+          }
+        : part
+    );
+  } catch (error) {
+    //Aqui deberiamos regresar la tarea del pop si es que hubo tarea del pop, si no hubo entonces no hacemos nada
+    history.map((part) =>
+      "functionCall" in part && part.functionCall.id == id
+        ? {
+            ...part,
+            functionCall: {
+              ...part.functionCall,
+              status: "error",
+              error: error.message,
+            },
+          }
+        : part
+    );
+    console.log("Error processing task 🖥️:\n", task, "\n\n", error);
+  }
 }
 
 async function handleChat(req, res) {
+  const { message } = req.body;
+  const stack = new Cola(...(req.body.stack || []));
+  const history = new Historial(...(req.body.history || []));
   try {
     //HAGAMOS ALGO, ESTE ES EL PUNTO DE ENTRADA, EN ESTA PARTE LO QUE VA A PASAR ES ESTO:
     /**
-     * 1. RECIBIMOS EL MENSAJE, EL HISTORIAL Y LA PILA DE TAREAS
-     * 2. SI HAY UNA TAREA EN LA PILA, LA PROCESAMOS, MANDAMOS A LLAMAR UNA FUNCIÓN QUE SE ENCARGUE DE ESO Y DENTRO DEBERA ESCOGER EL ASISTENTE CORRECTO Y ASI
-     * 4. SI NO HAY TAREAS, LLAMAMOS AL ASISTENTE, USANDO UNA FUNCIÓN QUE SE ENCARGUE DE ESO Y DENTRO DEBERA ESCOGER EL ASISTENTE CORRECTO Y ASI
-     * 5. DEVOLVEMOS LAS RESPUESTAS Y EL RESULTADO DE LA TAREA (SI HUBO ALGUNA)
+     * 1. RECIBIMOS EL MENSAJE, EL HISTORIAL Y LA PILA DE TAREAS Y LOS FORMATEAMOS A NUESTRA CLASE PARA QUE SEA MAS FACIL TRABAJAR CON ELLOS
+     * 2. SI HAY UN MENSAJE, LO AGREGAMOS AL HISTORIAL
+     * 3. IF HAY TAREA EN LA PILA
+     *    3.1. SI HAY UNA TAREA EN LA PILA, LA PROCESAMOS, MANDAMOS A LLAMAR UNA FUNCIÓN QUE SE ENCARGUE DE ESO Y DENTRO DEBERA ESCOGER EL ASISTENTE CORRECTO Y ASI, ACTUALIZAMOS LA PILA Y EL HISTORIAL CON LA RESPUESTA DE LA TAREA
+     *    3.2. SI NO HAY TAREAS, LLAMAMOS AL ASISTENTE, USANDO UNA FUNCIÓN QUE SE ENCARGUE DE ESO Y DENTRO DEBERA ESCOGER EL ASISTENTE CORRECTO Y ASI NOS DEVOLVERA LAS RESPUESTAS Y LAS NUEVAS TAREAS A AGREGAR A LA PILA PARA ACTUALIZAR EL HISTORIAL Y LA PILA
+     * 4. DEBEMOS AGREGAR LAS TAREAS QUE NOS MANDEN LAS RESPUESTAS A LA PILA Y TAMBIEN AL HISTORIAL
      */
-    const { message, history = [], stack = [] } = req.body;
-    let asistente = new Orquestador();
 
-    if (!!stack.seeNext().functionCall) {
-      const { messages, taskResult } = await processTask(task, history, stack);
+    if (message) history.update({ role: "user", text: message });
+
+    if (!!stack.seeNext()?.functionCall) {
+      await processTask(history, stack);
     } else {
-      const { messages, tasks } = await orchestrate(message, history, stack);
+      await processExecute(message, history, stack);
     }
 
-    res.json({
-      history: [...history, ...messages],
-      stack: tasks || stack,
-      taskResult,
+    res.status(200).json({
+      message: "",
+      data: {
+        history: history.getClean(),
+        stack: stack.getClean(),
+      },
     });
   } catch (error) {
-    console.error("Error processing chat:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+    console.error("Error processing chat 🖥️:", error);
+    res.status(500).json({
+      error: error,
+      message: error.message || "Internal Server Error",
+      data: {
+        history: history.getClean(),
+        stack: stack.getClean(),
+      },
+    });
   }
 }
 

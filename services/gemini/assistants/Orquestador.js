@@ -16,12 +16,10 @@ class OrquestadorAssistant extends Assistant {
       name: "orquestador",
     });
   }
-  async call(task, pila) {
-    console.log(task);
-    console.log(pila);
-    // const mensaje = `<TAREA_USUARIO>${task.args.tarea_usuario}</TAREA_USUARIO>`;
-    // const response = await this.message(mensaje);
-    // return ;
+  async call(task, history, stack) {
+    //TODO: Implementar la lógica del orquestador para manejar los siguientes pasos y que mande a llamar a los asistentes especializados
+    throw new Error("Method not implemented.");
+    return { message: "this is the result" };
   }
 }
 
@@ -30,31 +28,34 @@ const routeToAssistantFunctionDeclaration = {
   description:
     "Routes the user's request to the most appropriate specialized assistant by generating the necessary XML instruction.",
   parameters: {
-    type: Type.OBJECT,
-    properties: {
-      assistant_name: {
-        type: Type.STRING,
-        description:
-          'The name of the specialized assistant to call (e.g., "CODE", "DATA", or "GENERAL").',
+    type: Type.ARRAY,
+    items: {
+      type: Type.OBJECT,
+      properties: {
+        assistant_name: {
+          type: Type.STRING,
+          description:
+            'The name of the specialized assistant to call (e.g., "CODE", "DATA", or "GENERAL").',
+        },
+        instruction_xml: {
+          type: Type.STRING,
+          description:
+            "The complete and finalized XML instruction block (e.g., <INSTRUCCION_CODE>...</INSTRUCCION_CODE>) for the selected assistant.",
+        },
       },
-      instruction_xml: {
-        type: Type.STRING,
-        description:
-          "The complete and finalized XML instruction block (e.g., <INSTRUCCION_CODE>...</INSTRUCCION_CODE>) for the selected assistant.",
-      },
+      required: ["assistant_name", "instruction_xml"],
     },
-    required: ["assistant_name", "instruction_xml"],
   },
 };
 
 const PROMPT = `<INSTRUCCION_ORQUESTADOR_FUNCTION>
   <ROL>
-    Eres el Orquestador y Validador de Herramientas. Tu función es: 1) Analizar la <TAREA_USUARIO> y **validar si contiene todos los datos** necesarios para la tarea. 2) Si faltan datos, emitir un mensaje al usuario para solicitarlos. 3) Si los datos están completos, emitir una llamada a la función 'route_to_assistant' para delegar la tarea.
+    Eres el Orquestador y Validador de Herramientas. Tu función es: 1) Analizar la <TAREA_USUARIO> y **validar si contiene todos los datos** necesarios para la tarea. 2) Si faltan datos, emitir un mensaje al usuario para solicitarlos. 3) Si los datos están completos, emitir una llamada a la función 'conectar_a_asistente' para delegar la tarea.
   </ROL>
 
   <REGLAS_CLAVE>
     1. **SALIDA ÚNICA**: Tu respuesta DEBE ser **SOLAMENTE** una llamada a la función o **SOLAMENTE** un mensaje de texto. Nunca combines ambos.
-    2. **USAR FUNCIÓN**: Usa la herramienta 'route_to_assistant' si y solo si tienes toda la información requerida por el asistente de destino (ej., Destino y Fechas para SEARCH_HOTEL).
+    2. **USAR FUNCIÓN**: Usa la herramienta 'conectar_a_asistente' si y solo si tienes toda la información requerida por el asistente de destino, sino regresa un texto al usuario para que complete la información.
     3. **VALIDACIÓN**: Si la tarea es 'SEARCH_HOTEL' y faltan datos cruciales (ej., destino o fechas), **ignora la función** y emite un mensaje en lenguaje natural solicitando la información faltante.
     4. **GENERAR XML**: El argumento 'instruction_xml' de la función debe contener la instrucción XML completa para el asistente de destino.
     5. **MÚLTIPLES PASOS**: Si la ejecución requiere más de un asistente (ej. SEARCH_HOTEL seguido de GENERAL), solo llama al **primer asistente** necesario. La lógica de negocio (tu código JavaScript) se encargará de encadenar el resultado al asistente 'GENERAL' automáticamente.
