@@ -103,6 +103,10 @@ async function handleChat(req, res) {
       await processExecute(message, history, stack);
     }
 
+    while (!!stack.seeNext()?.assistantCall) {
+      await processExecute(null, history, stack);
+    }
+
     res.status(200).json({
       history: history.getClean(),
       stack: stack.getClean(),

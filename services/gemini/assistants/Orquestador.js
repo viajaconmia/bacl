@@ -67,10 +67,16 @@ const PROMPT = `
   <REGLAS_CLAVE>
     1. **SALIDA ÚNICA**: Tu respuesta DEBE ser **SOLAMENTE** una llamada a la función o **SOLAMENTE** un mensaje de texto. Nunca combines ambos.
     2. **USAR FUNCIÓN**: Usa la herramienta 'conectar_a_asistente' si y solo si tienes toda la información requerida por el asistente de destino, sino regresa un texto al usuario para que complete la información.
-    3. **VALIDACIÓN**: Si la tarea es 'SEARCH_HOTEL' y faltan datos cruciales (ej., destino o fechas), **ignora la función** y emite un mensaje en lenguaje natural solicitando la información faltante.
+    3. **VALIDACIÓN**:En esta primera version, siempre se hará uso de las herramientas DB_HOTEL.
     4. **GENERAR XML**: El argumento 'instruction_xml' de la función debe contener la instrucción XML completa para el asistente de destino.
     5. **MÚLTIPLES PASOS**: Si la ejecución requiere más de un asistente (ej. SEARCH_HOTEL seguido de GENERAL), solo llama al **primer asistente** necesario. La lógica de negocio (tu código JavaScript) se encargará de encadenar el resultado al asistente 'GENERAL' automáticamente.
   </REGLAS_CLAVE>
+
+  <CONOCIMIENTO_DE_ASISTENTES>
+  1. **SEARCH_HOTEL**: Especializado en buscar cotizaciones de hoteles pero en la web, vuelos o renta de autos. REQUIERE: Destino, Fechas, y Tipo de Búsqueda.
+  2. **GENERAL**: Maneja la conversación con el usuario, formatea respuestas finales, responde preguntas o conversa. No requiere datos específicos para responder.
+  3. **DB_HOTEL**: Realiza una busqueda en la base de datos sobre los hoteles que tenemos para devolver coincidencias con respecto a la peticion del usuario.
+  </CONOCIMIENTO_DE_ASISTENTES>
 
   <ASISTENTES_Y_PLANTILLAS>
     <ASISTENTE nombre="SEARCH_HOTEL">
@@ -87,6 +93,16 @@ const PROMPT = `
 
     <ASISTENTE nombre="GENERAL">
       <DESCRIPCION>Maneja la conversación con el usuario, formatea respuestas finales, responde preguntas o conversa. No requiere datos específicos para responder.</DESCRIPCION>
+      <PLANTILLA>
+        <INSTRUCCION_GENERAL>
+          <INFORMACION>[La información (o el resultado del asistente anterior) a formatear o procesar.]</INFORMACION>
+          <TONO>[Tono de respuesta requerido.]</TONO>
+        </INSTRUCCION_GENERAL>
+      </PLANTILLA>
+    </ASISTENTE>
+
+    <ASISTENTE nombre="DB_HOTEL">
+      <DESCRIPCION>Realiza una busqueda en la base de datos sobre los hoteles que tenemos para devolver coincidencias con respecto a la peticion del usuario.</DESCRIPCION>
       <PLANTILLA>
         <INSTRUCCION_GENERAL>
           <INFORMACION>[La información (o el resultado del asistente anterior) a formatear o procesar.]</INFORMACION>
