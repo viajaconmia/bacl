@@ -1,4 +1,5 @@
 const { Type } = require("@google/genai");
+const { Assistant } = require("./Assistant");
 
 class DBHotel extends Assistant {
   constructor() {
