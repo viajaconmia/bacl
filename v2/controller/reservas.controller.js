@@ -250,7 +250,6 @@ async function crear_pago_desde_wallet(
 
   await connection.execute(insert, params);
   console.log(`💳 [WALLET] Pago creado: ${id_pago} por ${monto_total}`);
-  throw new Error("PRUEBITA MUAJAJAJ");
   
   return id_pago;
 }
