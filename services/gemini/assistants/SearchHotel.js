@@ -6,23 +6,7 @@ class SearchHotel extends Assistant {
       tools: [{ googleSearch: {} }],
     });
   }
-
-  async execute(message) {
-    console.log("I think im start to search");
-    const response = await this.message(message);
-    console.log("\n\n\n\nWTF");
-    console.log(response.candidates[0].groundingMetadata, "\n\n\n");
-    console.log(response.candidates);
-    response.candidates.map((data) => {
-      data.content.parts.map((m) =>
-        console.log(
-          "---------------------------------------------------\n\n\t\t",
-          m
-        )
-      );
-    });
-    return response.candidates[0].content.parts;
-  }
+  async call(task, history, stack) {}
 }
 
 const PROMPT = `<INSTRUCCION_ASISTENTE_HOTELES>

@@ -16,10 +16,20 @@ class OrquestadorAssistant extends Assistant {
       name: "orquestador",
     });
   }
+
   async call(task, history, stack) {
-    //TODO: Implementar la lógica del orquestador para manejar los siguientes pasos y que mande a llamar a los asistentes especializados
-    throw new Error("Method not implemented.");
-    return { message: "this is the result" };
+    console.log("Orquestador processing task:", task);
+
+    const { args } = task.functionCall;
+    const { assistant_name, instruction_xml } = args;
+
+    stack.push({
+      role: "assistant",
+      assistant: assistant_name,
+      assistantCall: {
+        instruction: instruction_xml,
+      },
+    });
   }
 }
 
@@ -48,7 +58,8 @@ const routeToAssistantFunctionDeclaration = {
   },
 };
 
-const PROMPT = `<INSTRUCCION_ORQUESTADOR_FUNCTION>
+const PROMPT = `
+<INSTRUCCION_ORQUESTADOR_FUNCTION>
   <ROL>
     Eres el Orquestador y Validador de Herramientas. Tu función es: 1) Analizar la <TAREA_USUARIO> y **validar si contiene todos los datos** necesarios para la tarea. 2) Si faltan datos, emitir un mensaje al usuario para solicitarlos. 3) Si los datos están completos, emitir una llamada a la función 'conectar_a_asistente' para delegar la tarea.
   </ROL>
@@ -84,6 +95,8 @@ const PROMPT = `<INSTRUCCION_ORQUESTADOR_FUNCTION>
       </PLANTILLA>
     </ASISTENTE>
   </ASISTENTES_Y_PLANTILLAS>
-</INSTRUCCION_ORQUESTADOR_FUNCTION>`;
+</INSTRUCCION_ORQUESTADOR_FUNCTION>`
+  .replaceAll("  ", "")
+  .replaceAll("\n", " ");
 
 module.exports = { OrquestadorAssistant };

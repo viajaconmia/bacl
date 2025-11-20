@@ -1,3 +1,4 @@
+const { Historial } = require("../../../lib/utils/estructuras");
 const { GeneralAssistant } = require("./General");
 const { OrquestadorAssistant } = require("./Orquestador");
 const { SearchHotel } = require("./SearchHotel");
@@ -12,17 +13,23 @@ const agentes = {
   orquestador: new OrquestadorAssistant(),
 };
 
-async function dispatcher(agentName, input, history = [], stack = []) {
+const agentes_context = ["general", "orquestador"];
+
+async function dispatcher(agentName, task, history = [], stack = []) {
   const agent = agentes[agentName];
   if (!agent) throw new Error(`Agente no encontrado: ${agentName}`);
 
-  return await agent.call(input, history, stack);
+  return await agent.call(task, history, stack);
 }
-async function executer(agentName, input) {
+
+async function executer(agentName, input, history = []) {
   const agent = agentes[agentName];
   if (!agent) throw new Error(`Agente no encontrado: ${agentName}`);
 
-  return await agent.execute(input);
+  return await agent.execute(
+    input,
+    agentes_context.includes(agentName) ? history : new Historial()
+  );
 }
 
 module.exports = { agentes, dispatcher, executer };

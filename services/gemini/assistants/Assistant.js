@@ -41,19 +41,53 @@ class Assistant {
     this.name = name;
   }
 
-  async message(message, retry = false) {
+  async message(message, history, retry = false) {
     try {
       if (!message) throw new Error("Mensaje vacío no permitido");
       if (message.length === 2000) throw new Error("Mensaje demasiado largo");
 
+      const formatted = history
+        .getClean()
+        .reverse()
+        .slice(-30)
+        .map((item) => {
+          // Si es functionCall
+          if (item.functionCall) {
+            return {
+              role: "model",
+              parts: [
+                {
+                  text: `functionCall: ${
+                    item.functionCall.name
+                  }\nargs: ${JSON.stringify(item.functionCall.args, null, 2)}`,
+                },
+              ],
+            };
+          }
+          // Mensajes normales
+          return {
+            role: item.role == "assistant" ? "model" : item.role,
+            parts: [{ text: item.text || item.message || "" }],
+          };
+        });
+
+      const contents = [
+        ...(history.isEmpty()
+          ? [{ role: "user", parts: [{ text: message }] }]
+          : [...formatted]),
+      ];
+
+      console.log("contents:", ...contents);
+
       const response = await this.ai.models.generateContent({
         model: this.model,
-        contents: message,
+        contents,
         config: {
           systemInstruction: this.instrucciones,
           ...this.dependencias,
         },
       });
+
       return response;
     } catch (error) {
       console.error(`[${this.name}] Error:`, error.message);
@@ -65,7 +99,7 @@ class Assistant {
             ? "gemini-2.0-flash"
             : "gemini-2.5-flash-lite";
         console.log(`[${this.name}] Reintentando con modelo: ${this.model}`);
-        return this.message(message, true);
+        return this.message(message, history, true);
       }
 
       throw new Error(
@@ -74,8 +108,8 @@ class Assistant {
     }
   }
 
-  async execute(message) {
-    const response = await this.message(message);
+  async execute(message, history) {
+    const response = await this.message(message, history);
 
     const parts = response?.candidates?.[0]?.content?.parts || [];
 

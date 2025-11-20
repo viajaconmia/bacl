@@ -8,10 +8,14 @@ async function processExecute(message, history = [], stack = []) {
   try {
     const newTasks = [];
     const messages = [];
+    console.log("Processing execute 🖥️:\n", next);
     const parts = await executer(
-      message ? "orquestador" : stack.seeNext()?.assistant,
-      message ? message : next
+      message ? "orquestador" : next?.assistant.toLowerCase(),
+      message ? message : next?.assistantCall?.instruction,
+      history
     );
+
+    console.log("parts:", parts);
 
     for (const part of parts) {
       if (part.functionCall) {
@@ -25,7 +29,7 @@ async function processExecute(message, history = [], stack = []) {
     stack.push(...newTasks);
   } catch (error) {
     //Aqui deberiamos regresar la tarea del pop si es que hubo tarea del pop, si no hubo entonces no hacemos nada
-    console.log("Error processing execute 🖥️:\n", next, "\n\n", error);
+    // console.log("Error processing execute 🖥️:\n", next, "\n\n", error);
   }
 }
 
@@ -37,7 +41,7 @@ async function processTask(history, stack) {
   try {
     const response = await dispatcher(
       assistant.toLowerCase(),
-      args,
+      task,
       history,
       stack
     );
@@ -68,7 +72,7 @@ async function processTask(history, stack) {
           }
         : part
     );
-    console.log("Error processing task 🖥️:\n", task, "\n\n", error);
+    // console.log("Error processing task 🖥️:\n", task, "\n\n", error);
   }
 }
 
@@ -77,7 +81,7 @@ async function handleChat(req, res) {
   const stack = new Cola(...(req.body.stack || []));
   const history = new Historial(...(req.body.history || []));
   try {
-    //HAGAMOS ALGO, ESTE ES EL PUNTO DE ENTRADA, EN ESTA PARTE LO QUE VA A PASAR ES ESTO:
+    //ESTE ES EL PUNTO DE ENTRADA, EN ESTA PARTE LO QUE VA A PASAR ES ESTO:
     /**
      * 1. RECIBIMOS EL MENSAJE, EL HISTORIAL Y LA PILA DE TAREAS Y LOS FORMATEAMOS A NUESTRA CLASE PARA QUE SEA MAS FACIL TRABAJAR CON ELLOS
      * 2. SI HAY UN MENSAJE, LO AGREGAMOS AL HISTORIAL
@@ -86,6 +90,10 @@ async function handleChat(req, res) {
      *    3.2. SI NO HAY TAREAS, LLAMAMOS AL ASISTENTE, USANDO UNA FUNCIÓN QUE SE ENCARGUE DE ESO Y DENTRO DEBERA ESCOGER EL ASISTENTE CORRECTO Y ASI NOS DEVOLVERA LAS RESPUESTAS Y LAS NUEVAS TAREAS A AGREGAR A LA PILA PARA ACTUALIZAR EL HISTORIAL Y LA PILA
      * 4. DEBEMOS AGREGAR LAS TAREAS QUE NOS MANDEN LAS RESPUESTAS A LA PILA Y TAMBIEN AL HISTORIAL
      */
+
+    if (stack.isEmpty() && !message) {
+      throw new Error("No hay mensaje ni tareas para procesar");
+    }
 
     if (message) history.update({ role: "user", text: message });
 
@@ -96,11 +104,8 @@ async function handleChat(req, res) {
     }
 
     res.status(200).json({
-      message: "",
-      data: {
-        history: history.getClean(),
-        stack: stack.getClean(),
-      },
+      history: history.getClean(),
+      stack: stack.getClean(),
     });
   } catch (error) {
     console.error("Error processing chat 🖥️:", error);

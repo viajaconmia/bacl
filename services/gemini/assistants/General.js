@@ -4,12 +4,6 @@ class GeneralAssistant extends Assistant {
   constructor() {
     super("gemini-2.5-flash", PROMPT);
   }
-
-  async execute(message) {
-    const response = await this.message(message);
-    console.log("Cargando respuesta from this bro");
-    return response.candidates[0].content.parts;
-  }
 }
 
 const PROMPT = `<INSTRUCCION_ASISTENTE_GENERAL>
