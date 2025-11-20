@@ -1,4 +1,5 @@
 const { Historial } = require("../../../lib/utils/estructuras");
+const { DBHotel } = require("./DBHotel");
 const { GeneralAssistant } = require("./General");
 const { OrquestadorAssistant } = require("./Orquestador");
 const { SearchHotel } = require("./SearchHotel");
@@ -11,6 +12,7 @@ const agentes = {
   general: new GeneralAssistant(),
   search_hotel: new SearchHotel(),
   orquestador: new OrquestadorAssistant(),
+  db_hotel: new DBHotel(),
 };
 
 const agentes_context = ["general", "orquestador"];
