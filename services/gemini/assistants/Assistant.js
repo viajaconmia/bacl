@@ -130,7 +130,7 @@ class Assistant {
       return {
         role: "assistant",
         assistant: this.name,
-        message: part.text || "",
+        text: part.text || "",
       };
     });
   }
