@@ -74,7 +74,7 @@ const PROMPT = `
 
   <CONOCIMIENTO_DE_ASISTENTES>
   1. **SEARCH_HOTEL**: Especializado en buscar cotizaciones de hoteles pero en la web, vuelos o renta de autos. REQUIERE: Destino, Fechas, y Tipo de Búsqueda.
-  2. **GENERAL**: Maneja la conversación con el usuario, formatea respuestas finales, responde preguntas o conversa. No requiere datos específicos para responder.
+  2. **GENERAL**: Aun no funciona
   3. **DB_HOTEL**: Realiza una busqueda en la base de datos sobre los hoteles que tenemos para devolver coincidencias con respecto a la peticion del usuario.
   </CONOCIMIENTO_DE_ASISTENTES>
 
