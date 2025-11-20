@@ -1168,83 +1168,61 @@ ORDER BY s.created_at DESC;`;
 
 const getReservaAllFacturacion = async () => {
   try {
-    const query = `SELECT
-  ad.id_agente as id_usuario_generador,
-  rc.id_servicio,
-  rc.status_reserva           AS estado_reserva,
-  rc.created_at_reserva       AS created_at,
-  rc.id_solicitud,
-  rc.id_viajero_reserva       AS id_viajero,
-  rc.hotel_reserva            AS hotel,
-  rc.check_in,
-  rc.check_out,
-  rc.tipo_cuarto              AS room,
-  rc.total,
-  rc.nombre_viajero_reservacion AS nombre_viajero,
-  rc.id_booking,
-  rc.updated_at,
-  rc.costo_total,
-  rc.id_hospedaje,
-  rc.comments,
-  rc.codigo_reservacion_hotel,
-  GROUP_CONCAT(DISTINCT rc.id_pago     SEPARATOR ',') AS id_pago,
-  GROUP_CONCAT(DISTINCT rc.id_credito  SEPARATOR ',') AS id_credito,
-  ad.nombre        AS nombre_agente_completo,
-  ad.correo,
-  ad.telefono,
-  ad.razon_social,
-  ad.rfc,
-  ad.tipo_persona,
-  (
-    SELECT JSON_ARRAYAGG(
-             JSON_OBJECT(
-               'id_item', i.id_item,
-               'fecha_uso', i.fecha_uso,
-               'total', i.total,
-               'subtotal', i.subtotal,
-               'impuestos', i.impuestos,
-               'costo_total', i.costo_total,
-               'costo_subtotal', i.costo_subtotal,
-               'costo_impuestos', i.costo_impuestos,
-               'saldo', i.saldo,
-               'is_facturado', i.is_facturado,
-               'id_factura', i.id_factura
+        const query = `SELECT
+    v.id_agente                      AS id_usuario_generador,
+    v.id_servicio,
+    v.status_reserva                 AS estado_reserva,
+    v.created_at_reserva             AS created_at,
+    v.id_solicitud,
+    v.id_viajero_reserva             AS id_viajero,
+    v.hotel_reserva                  AS hotel,
+    v.check_in,
+    v.check_out,
+    v.room,
+    v.tipo_cuarto,
+    v.total,
+    v.nombre_viajero_reservacion     AS nombre_viajero,
+    v.id_booking,
+    v.updated_at,
+    v.costo_total,
+    v.id_hospedaje,
+    v.comments,
+    v.codigo_reservacion_hotel,
+    v.id_pago,
+    v.id_credito,
+    v.nombre_cliente                 AS nombre_agente_completo,
+    v.correo,
+    v.telefono,
+    v.razon_social,
+    v.rfc,
+    v.tipo_persona,
+
+    -- === ITEMS generados igual que en tu query anterior ===
+    (
+      SELECT JSON_ARRAYAGG(
+               JSON_OBJECT(
+                 'id_item',       i.id_item,
+                 'fecha_uso',     i.fecha_uso,
+                 'total',         i.total,
+                 'subtotal',      i.subtotal,
+                 'impuestos',     i.impuestos,
+                 'costo_total',   i.costo_total,
+                 'costo_subtotal',i.costo_subtotal,
+                 'costo_impuestos',i.costo_impuestos,
+                 'saldo',         i.saldo,
+                 'is_facturado',  i.is_facturado,
+                 'id_factura',    i.id_factura
+               )
              )
-             -- ORDER BY i.fecha_uso
-           )
-    FROM items i
-    WHERE i.id_hospedaje = h.id_hospedaje
-  ) AS items
-FROM vw_reservas_client rc
-LEFT JOIN agente_details ad ON ad.id_agente = rc.id_agente
-LEFT JOIN hospedajes h
-       ON h.id_hospedaje = rc.id_hospedaje
-WHERE rc.status_reserva = 'Confirmada' AND rc.id_credito is not null
-GROUP BY
-  rc.id_hospedaje,
-  rc.id_servicio,
-  rc.status_reserva,
-  rc.created_at_reserva,
-  rc.id_solicitud,
-  rc.id_viajero_reserva,
-  rc.hotel_reserva,
-  rc.check_in,
-  rc.check_out,
-  rc.tipo_cuarto,
-  rc.total,
-  rc.nombre_viajero_reservacion,
-  rc.id_booking,
-  rc.updated_at,
-  rc.costo_total,
-  rc.comments,
-  rc.codigo_reservacion_hotel,
-  ad.nombre,
-  ad.correo,
-  ad.telefono,
-  ad.razon_social,
-  ad.rfc,
-  ad.tipo_persona
-ORDER BY rc.created_at_reserva DESC`;
+      FROM items i
+      WHERE i.id_hospedaje = v.id_hospedaje
+    ) AS items
+
+FROM vw_reservas_a_credito_sin_facturas v
+
+ORDER BY v.created_at_reserva DESC;
+`;
+
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);
