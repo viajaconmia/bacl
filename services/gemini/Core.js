@@ -108,8 +108,11 @@ async function handleChat(req, res) {
     }
 
     res.status(200).json({
-      history: history.getClean(),
-      stack: stack.getClean(),
+      message: "",
+      data: {
+        history: history.getClean(),
+        stack: stack.getClean(),
+      },
     });
   } catch (error) {
     console.error("Error processing chat 🖥️:", error);
