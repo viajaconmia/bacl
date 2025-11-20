@@ -144,11 +144,78 @@ async function crear_pago_desde_wallet(
   saldos_aplicados
 ) {
   console.log("💳 [WALLET] Iniciando crear_pago_desde_wallet");
-
+  console.log("🚓🚓🚓 saldos_aplicados:", saldos_aplicados);
+  
   if (!Array.isArray(saldos_aplicados) || saldos_aplicados.length === 0) {
     console.log("💳 [WALLET] No hay saldos_aplicados válidos. Omitiendo pago.");
     return null;
   }
+
+  // ✅ VALIDACIÓN: Corroborar que los saldos enviados desde front existan en BD
+  console.log("💳 [WALLET] Iniciando validación de saldos en BD...");
+  
+  const ids_saldos = saldos_aplicados
+    .map((s) => s?.id_saldos)
+    .filter(Boolean)
+    .map(String);
+
+  if (ids_saldos.length === 0) {
+    console.warn("💳 [WALLET] No hay id_saldos válidos para validar.");
+    return null;
+  }
+
+  // Consultar BD para verificar que los saldos existan y tengan el saldo correcto
+  const ph = ids_saldos.map(() => "?").join(",");
+  const [saldos_bd] = await connection.execute(
+    `SELECT id_saldos, saldo, monto FROM saldos_a_favor WHERE id_saldos IN (${ph})`,
+    ids_saldos
+  );
+
+  if (!saldos_bd || saldos_bd.length === 0) {
+    console.error(
+      "💳 [WALLET][ERROR] No se encontraron saldos en BD. IDs solicitados:",
+      ids_saldos
+    );
+    throw new Error(
+      "Validación fallida: Los saldos solicitados no existen en la base de datos."
+    );
+  }
+
+  // Validar que cada saldo coincida y tenga disponibilidad
+  const saldos_bd_map = new Map(saldos_bd.map((s) => [String(s.id_saldos), s]));
+  
+  for (const saldo_front of saldos_aplicados) {
+    const id_saldo = String(saldo_front.id_saldos);
+    const saldo_bd = saldos_bd_map.get(id_saldo);
+
+    if (!saldo_bd) {
+      console.error(
+        `💳 [WALLET][ERROR] Saldo ${id_saldo} no encontrado en BD.`
+      );
+      throw new Error(
+        `Validación fallida: Saldo ${id_saldo} no existe en la base de datos.`
+      );
+    }
+
+    // Validar que el saldo en BD sea >= al saldo_usado que se intenta aplicar
+    const saldo_disponible_bd = Number(saldo_bd.saldo || saldo_bd.monto || 0);
+    const saldo_usado_front = Number(saldo_front.saldo_usado || 0);
+
+    if (saldo_disponible_bd < saldo_usado_front) {
+      console.error(
+        `💳 [WALLET][ERROR] Saldo insuficiente. ID: ${id_saldo}. BD: ${saldo_disponible_bd}, Front solicita: ${saldo_usado_front}`
+      );
+      throw new Error(
+        `Validación fallida: Saldo insuficiente en ${id_saldo}. Disponible: ${saldo_disponible_bd}, Solicitado: ${saldo_usado_front}`
+      );
+    }
+
+    console.log(
+      `✅ [WALLET] Saldo ${id_saldo} validado. BD: ${saldo_disponible_bd}, Usar: ${saldo_usado_front}`
+    );
+  }
+
+  console.log("✅ [WALLET] Todas las validaciones de saldos pasaron correctamente.");
 
   if (monto_total <= 0) {
     console.log("💳 [WALLET] Monto total <= 0. No se crea pago.");
@@ -157,7 +224,6 @@ async function crear_pago_desde_wallet(
 
   const primer = saldos_aplicados[0] || {};
   const id_saldo_principal = primer.id_saldos || null;
-  //  const id_agente = primer.id_agente || null;
   const id_pago = `pag-${uuidv4()}`;
   const transaccion = id_pago;
 
@@ -184,6 +250,8 @@ async function crear_pago_desde_wallet(
 
   await connection.execute(insert, params);
   console.log(`💳 [WALLET] Pago creado: ${id_pago} por ${monto_total}`);
+  throw new Error("PRUEBITA MUAJAJAJ");
+  
   return id_pago;
 }
 
