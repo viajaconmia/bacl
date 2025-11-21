@@ -272,7 +272,7 @@ const createFromCartWallet = async (req, res) => {
             saf.link_stripe,
             saf.ult_digits
           FROM saldos_a_favor saf
-          WHERE saf.id_agente = ? and saf.activo =1 and saf.saldo > 0
+          WHERE saf.id_agente = ? and saf.activo =1 and saf.saldo > 0 and saf.is_wallet_credito <> 1
           ORDER BY saf.saldo ASC,saf.fecha_pago ASC 
           FOR UPDATE
           `,

@@ -865,7 +865,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             // Validación de saldos
             for (const saldo of ejemplo_saldos) {
               const [rows] = await connection.execute(
-                `SELECT saldo FROM saldos_a_favor WHERE id_saldos = ?`,
+                `SELECT saldo FROM saldos_a_favor WHERE id_saldos = ? and activo = 1 and is_wallet_credito <> 1`,
                 [saldo.id_saldo]
               );
               const saldo_real = rows && rows[0] ? rows[0].saldo : null;

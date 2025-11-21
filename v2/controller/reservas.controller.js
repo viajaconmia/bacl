@@ -167,7 +167,7 @@ async function crear_pago_desde_wallet(
   // Consultar BD para verificar que los saldos existan y tengan el saldo correcto
   const ph = ids_saldos.map(() => "?").join(",");
   const [saldos_bd] = await connection.execute(
-    `SELECT id_saldos, saldo, monto FROM saldos_a_favor WHERE id_saldos IN (${ph})`,
+    `SELECT id_saldos, saldo, monto FROM saldos_a_favor WHERE id_saldos IN (${ph}) and is_wallet_credito <>1;`,
     ids_saldos
   );
 

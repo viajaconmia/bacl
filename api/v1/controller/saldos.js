@@ -174,7 +174,11 @@ const saldosByType = async (req, res) => {
 };
 const readSaldoByAgente = async (req, res) => {
   const { id } = req.params;
+  const { incluir } = req.query;
+  console.log("ID agente recibido:", id, "Incluir:", incluir);
   try {
+    const condicional_query = incluir ? '' : ' and sf.is_wallet_credito <> 1 ';
+    console.log("Condicional query:", condicional_query);
     const saldo = await executeQuery(
       `SELECT
   sf.id_agente,
@@ -205,8 +209,7 @@ INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
 LEFT JOIN vw_pagos_prepago_facturables AS v
   ON v.raw_id = sf.id_saldos
-  where sf.id_agente = ? and sf.is_cancelado =0
-  ;`,
+  where sf.id_agente = ? and sf.is_cancelado =0 ${condicional_query} ;`,
       [id]
     );
     // console.log(saldo);
@@ -305,7 +308,7 @@ const update_saldo_by_id = async (req, res) => {
     comentario,
     link_stripe,
     is_facturable,
-    is_descuento,
+    is_wallet_credito,
     comprobante,
     activo,
     ult_digits,
@@ -333,7 +336,7 @@ const update_saldo_by_id = async (req, res) => {
         comentario,
         link_stripe,
         is_facturable,
-        is_descuento,
+        is_wallet_credito,
         comprobante,
         activo,
         ult_digits,
@@ -365,6 +368,7 @@ module.exports = {
   readSaldoByAgente,
   update_saldo_by_id,
   saldosAgrupadosPorMetodoPorIdClient,
+  // readSaldoByAgenteSinCredito,
   saldosByType,
   getStripeInfo,
 };
