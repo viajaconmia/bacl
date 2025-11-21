@@ -103,8 +103,15 @@ async function handleChat(req, res) {
       await processExecute(message, history, stack);
     }
 
-    while (!!stack.seeNext()?.assistantCall) {
-      await processExecute(null, history, stack);
+    while (
+      !!stack.seeNext()?.functionCall?.tarea == "conectar_a_asistente" ||
+      !!stack.seeNext()?.assistantCall
+    ) {
+      if (!!stack.seeNext()?.functionCall?.tarea == "conectar_a_asistente") {
+        await processTask(history, stack);
+      } else {
+        await processExecute(null, history, stack);
+      }
     }
 
     res.status(200).json({
