@@ -174,7 +174,11 @@ const saldosByType = async (req, res) => {
 };
 const readSaldoByAgente = async (req, res) => {
   const { id } = req.params;
+  const { incluir } = req.query;
+  console.log("ID agente recibido:", id, "Incluir:", incluir);
   try {
+    const condicional_query = incluir ? '' : ' and sf.is_wallet_credito <> 1 ';
+    console.log("Condicional query:", condicional_query);
     const saldo = await executeQuery(
       `SELECT
   sf.id_agente,
@@ -205,59 +209,7 @@ INNER JOIN agente_details AS a
   ON a.id_agente = sf.id_agente
 LEFT JOIN vw_pagos_prepago_facturables AS v
   ON v.raw_id = sf.id_saldos
-  where sf.id_agente = ? and sf.is_cancelado =0
-  ;`,
-      [id]
-    );
-    // console.log(saldo);
-    res
-      .status(200)
-      .json({ message: "Saldos obtenidos correctamente", data: saldo });
-  } catch (error) {
-    console.log(error);
-    res.status(error.status || 500).json({
-      error,
-      message:
-        error.message || "Error desconocido en servidor, read saldo by agente",
-      data: null,
-    });
-  }
-};
-const readSaldoByAgenteSinCredito = async (req, res) => {
-  const { id } = req.params;
-  try {
-    const saldo = await executeQuery(
-      `SELECT
-  sf.id_agente,
-  a.nombre,
-  sf.id_saldos,
-  sf.fecha_creacion,
-  sf.saldo,
-  sf.monto,
-  sf.metodo_pago,
-  sf.fecha_pago,
-  sf.concepto,
-  sf.referencia,
-  sf.currency,
-  sf.tipo_tarjeta,
-  sf.ult_digits,
-  sf.comentario,
-  sf.link_stripe,
-  sf.is_facturable,
-  sf.is_wallet_credito,
-  sf.comprobante,
-  sf.activo,
-  sf.numero_autorizacion,
-  sf.banco_tarjeta,
-  COALESCE(v.monto_facturado, 0)     AS monto_facturado,
-  COALESCE(v.monto_por_facturar, 0)  AS monto_por_facturar
-FROM saldos_a_favor AS sf
-INNER JOIN agente_details AS a
-  ON a.id_agente = sf.id_agente
-LEFT JOIN vw_pagos_prepago_facturables AS v
-  ON v.raw_id = sf.id_saldos
-  where sf.id_agente = ? and sf.is_cancelado =0 and sf.is_wallet_credito=1
-  ;`,
+  where sf.id_agente = ? and sf.is_cancelado =0 ${condicional_query} ;`,
       [id]
     );
     // console.log(saldo);
@@ -416,7 +368,7 @@ module.exports = {
   readSaldoByAgente,
   update_saldo_by_id,
   saldosAgrupadosPorMetodoPorIdClient,
-  readSaldoByAgenteSinCredito,
+  // readSaldoByAgenteSinCredito,
   saldosByType,
   getStripeInfo,
 };
