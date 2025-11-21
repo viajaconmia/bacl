@@ -82,7 +82,6 @@ const getSolicitudes = async (req, res) => {
       .map(r => r.id_solicitud_proveedor)
       .filter(id => id !== null && id !== undefined);
 
-    // Evita IN() vacío
     let pagosRaw = [];
     let facturasRaw = [];
 
@@ -163,32 +162,74 @@ const getSolicitudes = async (req, res) => {
       tipo_tarjeta,
       rfc,
       razon_social,
+      // 👇 importante: aquí viene estatus_pagos desde el SP
+      estatus_pagos,
       ...rest
-    }) => ({
-      ...rest,
-      solicitud_proveedor: {
-        id_solicitud_proveedor,
-        fecha_solicitud,
-        monto_solicitado,
-        saldo,
-        forma_pago_solicitada,
-        id_tarjeta_solicitada,
-        usuario_solicitante,
-        usuario_generador,
-        comentarios,
-        estado_solicitud,
-        estado_facturacion,
-      },
-      tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
-      proveedor: { rfc, razon_social },
-      // Siempre arreglos, nunca undefined:
-      pagos: pagosBySolicitud[String(id_solicitud_proveedor)] ?? [],
-      // 🚫 eliminado el bug:
-      // estado_pago: pagos.estado_pago,
-      facturas: facturasBySolicitud[String(id_solicitud_proveedor)] ?? [],
-    }));
+    }) => {
+      const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
+      const facturas = facturasBySolicitud[String(id_solicitud_proveedor)] ?? [];
 
-    // Evita confusiones de cache lado cliente
+      // ¿Está pagada? (por estatus_pagos o por pagos reales con estado_pagado)
+      const estaPagada =
+        estatus_pagos === "pagado" ||
+        pagos.some(p => p.pago_estado_pago === "pagado");
+
+      // Clasificación para filtros
+      let filtro_pago = "todos";
+
+      if (estaPagada) {
+        filtro_pago = "pagada";
+      } else if (forma_pago_solicitada === "transfer") {
+        filtro_pago = "spei_solicitado";
+      } else if (forma_pago_solicitada === "card") {
+        filtro_pago = "pago_tdc";
+      } else if (forma_pago_solicitada === "link") {
+        filtro_pago = "cupon_enviado";
+      }
+
+      return {
+        ...rest,
+        estatus_pagos,          // lo sigues mandando por si lo ocupas en front
+        filtro_pago,            // 🔥 NUEVO: etiqueta directa para el front
+        solicitud_proveedor: {
+          id_solicitud_proveedor,
+          fecha_solicitud,
+          monto_solicitado,
+          saldo,
+          forma_pago_solicitada,
+          id_tarjeta_solicitada,
+          usuario_solicitante,
+          usuario_generador,
+          comentarios,
+          estado_solicitud,
+          estado_facturacion,
+        },
+        tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
+        proveedor: { rfc, razon_social },
+        pagos,
+        facturas,
+      };
+    });
+
+    // 👉 OPCIÓN 1: mandar solo el array con la etiqueta filtro_pago en cada item
+    // y que el front filtre por esa propiedad.
+    //
+    // 👉 OPCIÓN 2: mandar ya separado en objetos (grupos). Te dejo hecho esto también:
+
+    const todos = data;
+    const spei_solicitado = data.filter(
+      d => d.filtro_pago === "spei_solicitado"
+    );
+    const pago_tdc = data.filter(
+      d => d.filtro_pago === "pago_tdc"
+    );
+    const cupon_enviado = data.filter(
+      d => d.filtro_pago === "cupon_enviado"
+    );
+    const pagada = data.filter(
+      d => d.filtro_pago === "pagada"
+    );
+
     res.set({
       "Cache-Control": "no-store",
       "Pragma": "no-cache",
@@ -198,11 +239,15 @@ const getSolicitudes = async (req, res) => {
     res.status(200).json({
       message: "Registros obtenidos con exito",
       ok: true,
-      data,
+      // ⬇️ así le llegan al front ya listos para solo mostrarlos
+      data: {
+        todos,
+        spei_solicitado,
+        pago_tdc,
+        cupon_enviado,
+        pagada,
+      },
     });
-
-    // Este log no ayuda (imprime el objeto de respuesta de Express)
-    // console.log("inforvrrrr...", res);
 
   } catch (error) {
     console.error(error);

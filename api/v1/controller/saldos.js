@@ -193,7 +193,7 @@ const readSaldoByAgente = async (req, res) => {
   sf.comentario,
   sf.link_stripe,
   sf.is_facturable,
-  sf.is_descuento,
+  sf.is_wallet_credito,
   sf.comprobante,
   sf.activo,
   sf.numero_autorizacion,
@@ -270,7 +270,7 @@ const createNewSaldo = async (req, res) => {
       data.comentario || null, // p_comentario
       data.link_stripe || null, // p_link_stripe
       data.is_facturable ?? false, // p_is_facturable
-      data.descuento_aplicable ?? false, // p_is_descuento
+      data.is_wallet_credito ?? false, // p_is_descuento
       null, // p_comprobante
       data.ult_digits || null, // p_ult_digits
       data.numero_autorizacion || null, // p_numero_autorizacion
