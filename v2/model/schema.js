@@ -82,7 +82,8 @@ const FACTURAS = {
   ],
 };
 const ITEMS = {
-  required: ["id_item", "total", "fecha_uso", "saldo", "costo_total"],
+  // required: ["id_item", "total", "fecha_uso", "saldo", "costo_total"],
+  required: [],
   table: "items",
   id: "id_item",
   columnas: [
@@ -103,6 +104,7 @@ const ITEMS = {
     "is_ajuste",
     "id_viaje_aereo",
     "id_renta_carro",
+    "estado",
   ],
 };
 const BOOKINGS = {
