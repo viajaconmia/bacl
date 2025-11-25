@@ -8,14 +8,14 @@ async function processExecute(message, history = [], stack = []) {
   try {
     const newTasks = [];
     const messages = [];
-    console.log("Processing execute 🖥️:\n", next);
+    // console.log("Processing execute 🖥️:\n", next);
     const parts = await executer(
       message ? "orquestador" : next?.assistant.toLowerCase(),
       message ? message : next?.assistantCall?.instruction,
       history
     );
 
-    console.log("parts:", parts);
+    // console.log("parts:", parts);
 
     for (const part of parts) {
       if (part.functionCall) {
@@ -91,6 +91,8 @@ async function handleChat(req, res) {
      * 4. DEBEMOS AGREGAR LAS TAREAS QUE NOS MANDEN LAS RESPUESTAS A LA PILA Y TAMBIEN AL HISTORIAL
      */
 
+    console.log("-NEW: Initial stack:", stack);
+
     if (stack.isEmpty() && !message) {
       throw new Error("No hay mensaje ni tareas para procesar");
     }
@@ -98,8 +100,10 @@ async function handleChat(req, res) {
     if (message) history.update({ role: "user", text: message });
 
     if (!!stack.seeNext()?.functionCall) {
+      console.log("Processing task from stack 🖥️:", stack.seeNext());
       await processTask(history, stack);
     } else {
+      console.log("Processing execute 🖥️:", stack.seeNext());
       await processExecute(message, history, stack);
     }
 
@@ -108,8 +112,10 @@ async function handleChat(req, res) {
       !!stack.seeNext()?.assistantCall
     ) {
       if (!!stack.seeNext()?.functionCall?.tarea == "conectar_a_asistente") {
+        console.log("Processing task from stack en ciclo 🖥️:", stack.seeNext());
         await processTask(history, stack);
       } else {
+        console.log("Processing execute desde ciclo 🖥️:", stack.seeNext());
         await processExecute(null, history, stack);
       }
     }

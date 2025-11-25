@@ -3,6 +3,7 @@ const { DBHotel } = require("./DBHotel");
 const { GeneralAssistant } = require("./General");
 const { OrquestadorAssistant } = require("./Orquestador");
 const { SearchHotel } = require("./SearchHotel");
+const { SearchVuelo } = require("./SearchVuelo");
 
 /*Esta es la forma que se pone:
  * KEY: name del XML agregado al orquestador y el name del assistant
@@ -13,6 +14,7 @@ const agentes = {
   search_hotel: new SearchHotel(),
   orquestador: new OrquestadorAssistant(),
   db_hotel: new DBHotel(),
+  search_vuelo: new SearchVuelo(),
 };
 
 const agentes_context = ["general", "orquestador"];
