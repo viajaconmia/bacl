@@ -4,8 +4,8 @@ const { dispatcher, executer } = require("./assistants/Dispatcher");
 async function processExecute(
   message,
   history = [],
-  stack = [],
-  guardar_respuesta = false
+  stack = []
+  // guardar_respuesta = false
 ) {
   //Este procesa la ejecución normal del asistente, recibe un asistente y debemos manejar tambien cuando la ejecucion falla poder borrar como si no hubiera sido el pop y que se guarde en la base de datos por si se quiere volver a iniciar el chat
   //Debemos manejar cuando la pila este vacia
@@ -20,8 +20,7 @@ async function processExecute(
       history
     );
 
-    if (guardar_respuesta) console.log(parts);
-
+    // if (guardar_respuesta) console.log(parts);
     // console.log("parts:", parts);
 
     for (const part of parts) {
@@ -141,4 +140,4 @@ async function handleChat(req, res) {
   }
 }
 
-module.exports = { handleChat };
+module.exports = { handleChat, processExecute };

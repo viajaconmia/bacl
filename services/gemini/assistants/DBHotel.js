@@ -54,13 +54,73 @@ class DBHotel extends Assistant {
 
       // se asume que executeSP2 recibe (nombreSP, parametrosArray)
       const result = await executeSP("sp_filtrar_hoteles_avanzado", spParams);
-      //return { "Hoteles Encontrados": result };
-      return JSON.stringify([]);
+      const newTasks = [];
+      const messages = [];
+      console.log(history);
+      const agente = new GeneralAssistant();
+      const parts = await agente.execute([], history);
+      console.log(parts);
+      for (const part of parts) {
+        if (part.functionCall) {
+          newTasks.push(part);
+        } else {
+          messages.push(part);
+        }
+      }
+      console.log(newTasks);
+
+      history.update(...parts);
+      stack.push(...newTasks);
+      console.log(history);
+      return result;
     } catch (error) {
+      console.log(error);
       throw error;
     }
   }
 }
+
+const prompt_to_general = (data) => `
+<SISTEMA>
+Eres un motor de transformación de datos "headless". Tu única función es convertir arrays JSON de entrada en una estructura XML específica. No tienes personalidad, no conversas, solo procesas datos.
+</SISTEMA>
+
+<CONTEXTO>
+Recibirás un input que contiene un array JSON de IDs (ejemplo: ["id1", "id2"]). Tu tarea es mapear cada elemento de ese array a la estructura XML definida en la plantilla.
+</CONTEXTO>
+
+<PLANTILLA_EXITO>
+<root>
+    <type>"db_hotel"</type>
+    <seleccionados>
+        <id>{VALOR_ID}</id>
+    </seleccionados>
+</root>
+</PLANTILLA_EXITO>
+
+<REGLAS_CRITICAS>
+1. SALIDA PURA: Tu respuesta debe ser EXCLUSIVAMENTE el código XML.
+   - PROHIBIDO usar bloques de código markdown (\`\`\`xml).
+   - PROHIBIDO escribir frases como "Aquí está el XML".
+   - Empieza inmediatamente con <root>.
+
+2. LOGICA DE ITERACION:
+   - Debes generar una etiqueta <id> por cada elemento existente en el array JSON.
+   - Si el array tiene 3 elementos, debe haber 3 etiquetas <id>.
+
+3. MANEJO DE CASOS BORDE:
+   - Caso Array Vacío ([]): Devuelve la estructura con <seleccionados/> (autocerrado) o vacío.
+   - Caso Null/Invalido: Si la entrada no es un array o es ilegible, devuelve: <error>INPUT_INVALIDO</error>.
+
+4. FORMATO:
+   - El valor de <type> siempre debe incluir las comillas dobles internas: "db_hotel".
+   - Mantén la indentación para legibilidad.
+</REGLAS_CRITICAS>
+
+<INPUT_USUARIO>
+${data}
+</INPUT_USUARIO>
+        `;
 
 const routeToAssistantFunctionDeclaration = {
   name: "conectar_a_buscador_hoteles_db",

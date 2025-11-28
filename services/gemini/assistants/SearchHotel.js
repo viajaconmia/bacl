@@ -26,18 +26,17 @@ const PROMPT = `<INSTRUCCION_ASISTENTE_HOTELES>
        - Las fechas/horas deben ser ISO 8601 (YYYY-MM-DDTHH:mm:ss).
        - Los precios deben ser numéricos.
        - La URL debe tener los caracteres especiales escapados (&amp;).
-    5. SEGUIMIENTO DE DATOS:
+    5. **SEGUIMIENTO DE DATOS**:
        - Aunque no cuentes con la información, deberás mandar las propiedades en XML, pero indicando la situación (ej. en precio: "rango encontrado", en calificación: "no disponible").
-  </REGLAS_CLAVE>
+    6. **TRATAMIENTO DE IMÁGENES**:
+       - Debes extraer URLs directas de imágenes (jpg, png, webp) encontradas en la búsqueda.
+       - **CRÍTICO**: Las URLs suelen contener caracteres como '&'. DEBES escaparlos como '&amp;' para no romper el XML.
+       - Si no encuentras una imagen verificada mandalo vacio el <media>,.
+       - NO inventes rutas lógicas (ej. hotel.com/img1.jpg). Solo usa las que el navegador haya reportado.
+       - Busca en las paginas de los hoteles para obtener las imagenes porque son importantesIan Perez, Recién
+'8ec3164d-4985-4124-b190-2a9b49e6d72c
 
   <PLANTILLAS_DE_SALIDA>
-
-    <PLANTILLA_DATOS_FALTANTES>
-      <root>
-        <ACCION>PEDIR_DATOS</ACCION>
-        <MENSAJE>Necesito la ubicación y las fechas de check-in y check-out para buscar hoteles.</MENSAJE>
-      </root>
-    </PLANTILLA_DATOS_FALTANTES>
     
     <PLANTILLA_EXITO>
       <root>
@@ -56,6 +55,14 @@ const PROMPT = `<INSTRUCCION_ASISTENTE_HOTELES>
               <starRating>[Número de estrellas, ej. 4]</starRating>
               <guestRating>[Calificación del público, ej. 8.5/10]</guestRating>
               <amenities>[Servicios clave separados por coma, ej. Piscina, Desayuno incluido, Wi-Fi gratis]</amenities>
+             <media>
+                <image>
+                  [URL_EXTERIOR_O_PRINCIPAL] 
+                </image>
+                <image>
+                   [URL_INTERIOR_HABITACION]
+                </image>
+              </media>
             </hotelDetails>
             <roomDetails>
               <roomType>[Tipo de habitación, ej. Doble Estándar, Suite de Lujo]</roomType>
