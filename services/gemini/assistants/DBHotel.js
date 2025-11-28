@@ -1,11 +1,11 @@
 const { Type } = require("@google/genai");
 const { Assistant } = require("./Assistant");
 const { executeSP } = require("../../../config/db");
+const { GeneralAssistant } = require("./General");
 
 class DBHotel extends Assistant {
   constructor() {
     super({
-      model: "gemini-2.5-pro",
       instrucciones: PROMPT,
       dependencias: {
         tools: [
@@ -54,7 +54,8 @@ class DBHotel extends Assistant {
 
       // se asume que executeSP2 recibe (nombreSP, parametrosArray)
       const result = await executeSP("sp_filtrar_hoteles_avanzado", spParams);
-      return { "Hoteles Encontrados": result };
+      //return { "Hoteles Encontrados": result };
+      return JSON.stringify([]);
     } catch (error) {
       throw error;
     }
@@ -95,7 +96,38 @@ const routeToAssistantFunctionDeclaration = {
     },
   },
 };
+const PROMPT = `<INSTRUCCION_AGENTE_DB_HOTEL>
+  <ROL>
+    Eres el Agente DB_HOTEL, un especialista en parametrización de consultas a bases de datos.
+    Tu OBJETIVO ÚNICO es traducir las instrucciones de búsqueda recibidas (XML o texto) en una ejecución precisa de la herramienta 'conectar_a_buscador_hoteles_db'.
+  </ROL>
 
-const PROMPT = `<INSTRUCCION_ASISTENTE_DB_HOTELES>`;
+  <REGLAS_DE_PARAMETRIZACION>
+    1. **INTERPRETACIÓN DE DATOS**: Analiza el bloque <DATOS_ENTRADA> recibido. Extrae ubicación, precios y servicios solicitados.
+    
+    2. **MAPEO DE CAMPOS OBLIGATORIO**:
+       - **p_ciudad_zona**: Es el campo más importante. Extrae la ciudad y zona (ej. "Monterrey Centro", "Guadalajara").
+       - **p_activo**: SIEMPRE debe ser **1** (Integer).
+       - **p_estado**: Solo si el usuario menciona explícitamente el estado (ej. "Nuevo León").
+    
+    3. **MAPEO DE FILTROS OPCIONALES**:
+       - **p_precio_min / p_precio_max**:
+          - Si el usuario dice "barato" o "económico", usa p_precio_max: 1500.
+          - Si el usuario dice "lujo", usa p_precio_min: 4000.
+          - Si da un rango ("entre 1000 y 2000"), úsalos literalmente.
+       - **SERVICIOS (Strings "SI" / "NO")**:
+          - **p_incluye_desayuno**: "SI" si pide desayuno/alimentos.
+          - **p_mascotas**: "SI" si menciona perros/gatos/mascotas.
+          - **p_salones**: "SI" si menciona eventos/conferencias.
+          - **p_transportacion**: "SI" si menciona aeropuerto/traslado.
+
+    4. **ESTRUCTURA DE LLAMADA**:
+       - Tu función espera un **ARRAY** de objetos. Asegúrate de pasar una lista, incluso si es un solo criterio.
+       - Ejemplo estructura JSON esperada en la tool: \`[ { "p_ciudad_zona": "Monterrey", "p_activo": 1, ... } ]\`
+
+    5. **COMPORTAMIENTO**: NO hables. NO expliques. Solo invoca la herramienta.
+  </REGLAS_DE_PARAMETRIZACION>
+
+</INSTRUCCION_AGENTE_DB_HOTEL>`;
 
 module.exports = { DBHotel };

@@ -33,9 +33,14 @@ class Task {
 }
 
 class Assistant {
-  constructor({ model, instrucciones = "", dependencias = [], name = "" }) {
+  constructor({
+    model = "gemini-2.5-pro",
+    instrucciones = "",
+    dependencias = [],
+    name = "",
+  }) {
     this.ai = new GoogleGenAI({});
-    this.model = model || "gemini-2.5-flash-lite";
+    this.model = model;
     this.instrucciones = instrucciones;
     this.dependencias = dependencias;
     this.name = name;
@@ -77,8 +82,6 @@ class Assistant {
           : [...formatted]),
       ];
 
-      console.log("contents:", ...contents);
-
       const response = await this.ai.models.generateContent({
         model: this.model,
         contents,
@@ -95,10 +98,12 @@ class Assistant {
       if (!retry) {
         // Retry con modelo alternativo
         this.model =
-          this.model === "gemini-2.5-flash-lite"
-            ? "gemini-2.0-flash"
-            : "gemini-2.5-flash-lite";
-        console.log(`[${this.name}] Reintentando con modelo: ${this.model}`);
+          this.model === "gemini-2.5-flash"
+            ? "gemini-2.5-pro"
+            : "gemini-2.5-flash";
+        console.log(
+          `\n\n[${this.name}] Reintentando con modelo: ${this.model}\n\n`
+        );
         return this.message(message, history, true);
       }
 

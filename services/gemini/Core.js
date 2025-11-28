@@ -1,7 +1,12 @@
 const { Cola, Historial } = require("../../lib/utils/estructuras");
 const { dispatcher, executer } = require("./assistants/Dispatcher");
 
-async function processExecute(message, history = [], stack = []) {
+async function processExecute(
+  message,
+  history = [],
+  stack = [],
+  guardar_respuesta = false
+) {
   //Este procesa la ejecución normal del asistente, recibe un asistente y debemos manejar tambien cuando la ejecucion falla poder borrar como si no hubiera sido el pop y que se guarde en la base de datos por si se quiere volver a iniciar el chat
   //Debemos manejar cuando la pila este vacia
   const next = stack.pop();
@@ -14,6 +19,8 @@ async function processExecute(message, history = [], stack = []) {
       message ? message : next?.assistantCall?.instruction,
       history
     );
+
+    if (guardar_respuesta) console.log(parts);
 
     // console.log("parts:", parts);
 
@@ -80,19 +87,8 @@ async function handleChat(req, res) {
   const { message } = req.body;
   const stack = new Cola(...(req.body.stack || []));
   const history = new Historial(...(req.body.history || []));
+
   try {
-    //ESTE ES EL PUNTO DE ENTRADA, EN ESTA PARTE LO QUE VA A PASAR ES ESTO:
-    /**
-     * 1. RECIBIMOS EL MENSAJE, EL HISTORIAL Y LA PILA DE TAREAS Y LOS FORMATEAMOS A NUESTRA CLASE PARA QUE SEA MAS FACIL TRABAJAR CON ELLOS
-     * 2. SI HAY UN MENSAJE, LO AGREGAMOS AL HISTORIAL
-     * 3. IF HAY TAREA EN LA PILA
-     *    3.1. SI HAY UNA TAREA EN LA PILA, LA PROCESAMOS, MANDAMOS A LLAMAR UNA FUNCIÓN QUE SE ENCARGUE DE ESO Y DENTRO DEBERA ESCOGER EL ASISTENTE CORRECTO Y ASI, ACTUALIZAMOS LA PILA Y EL HISTORIAL CON LA RESPUESTA DE LA TAREA
-     *    3.2. SI NO HAY TAREAS, LLAMAMOS AL ASISTENTE, USANDO UNA FUNCIÓN QUE SE ENCARGUE DE ESO Y DENTRO DEBERA ESCOGER EL ASISTENTE CORRECTO Y ASI NOS DEVOLVERA LAS RESPUESTAS Y LAS NUEVAS TAREAS A AGREGAR A LA PILA PARA ACTUALIZAR EL HISTORIAL Y LA PILA
-     * 4. DEBEMOS AGREGAR LAS TAREAS QUE NOS MANDEN LAS RESPUESTAS A LA PILA Y TAMBIEN AL HISTORIAL
-     */
-
-    console.log("-NEW: Initial stack:", stack);
-
     if (stack.isEmpty() && !message) {
       throw new Error("No hay mensaje ni tareas para procesar");
     }
@@ -100,11 +96,16 @@ async function handleChat(req, res) {
     if (message) history.update({ role: "user", text: message });
 
     if (!!stack.seeNext()?.functionCall) {
-      console.log("Processing task from stack 🖥️:", stack.seeNext());
+      //console.log("Processing task from stack 🖥️:", stack.seeNext());
       await processTask(history, stack);
     } else {
-      console.log("Processing execute 🖥️:", stack.seeNext());
-      await processExecute(message, history, stack);
+      //console.log("Processing execute 🖥️:", stack.seeNext());
+      await processExecute(
+        message,
+        history,
+        stack,
+        !!stack.seeNext()?.assistantCall
+      );
     }
 
     while (
@@ -112,10 +113,10 @@ async function handleChat(req, res) {
       !!stack.seeNext()?.assistantCall
     ) {
       if (!!stack.seeNext()?.functionCall?.tarea == "conectar_a_asistente") {
-        console.log("Processing task from stack en ciclo 🖥️:", stack.seeNext());
+        //console.log("Processing task from stack en ciclo 🖥️:", stack.seeNext());
         await processTask(history, stack);
       } else {
-        console.log("Processing execute desde ciclo 🖥️:", stack.seeNext());
+        // console.log("Processing execute desde ciclo 🖥️:", stack.seeNext());
         await processExecute(null, history, stack);
       }
     }
