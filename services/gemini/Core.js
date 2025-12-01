@@ -46,24 +46,34 @@ async function processTask(history, stack) {
   const { id } = functionCall;
   try {
     const response = await dispatcher(
-      assistant.toLowerCase(),
-      task,
-      history,
-      stack
-    );
+  assistant.toLowerCase(),
+  task,
+  history,
+  stack
+);
 
-    history.map((part) =>
-      "functionCall" in part && part.functionCall.id == id
-        ? {
-            ...part,
-            functionCall: {
-              ...part.functionCall,
-              status: "success",
-              resolucion: response,
-            },
-          }
-        : part
-    );
+// 1) Actualiza el functionCall
+history.map((part) =>
+  "functionCall" in part && part.functionCall.id == id
+    ? {
+        ...part,
+        functionCall: {
+          ...part.functionCall,
+          status: "success",
+          resolucion: response,
+        },
+      }
+    : part
+);
+
+// 2) Insertar el mensaje visible que DBHotel devuelve
+if (Array.isArray(response)) {
+  const mensajes = response.filter((r) => r.text);
+  if (mensajes.length > 0) {
+    history.update(...mensajes);
+  }
+}
+
   } catch (error) {
     //Aqui deberiamos regresar la tarea del pop si es que hubo tarea del pop, si no hubo entonces no hacemos nada
     history.map((part) =>
