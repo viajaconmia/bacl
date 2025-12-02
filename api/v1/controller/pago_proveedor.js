@@ -74,6 +74,88 @@ const createSolicitud = async (req, res) => {
   }
 };
 
+const createDispersion = async (req, res) => {
+  try {
+    console.log("📥 Datos recibidos en createDispersion:", req.body);
+
+    const {
+      id_dispersion,
+      referencia_numerica, // no se usa en esta tabla
+      motivo_pago,         // no se usa en esta tabla
+      layoutUrl,           // no se usa aquí (va null)
+      solicitudes,
+    } = req.body;
+
+    // Validaciones básicas
+    if (!id_dispersion) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "id_dispersion es requerido" });
+    }
+
+    if (!Array.isArray(solicitudes) || solicitudes.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debe haber al menos una solicitud en la dispersión",
+      });
+    }
+
+    // Creamos el arreglo de valores
+    const values = solicitudes.map((s) => [
+      s.id_solicitud_proveedor ?? null,   // id_solicitud_proveedor
+      s.costo_proveedor ?? 0,             // monto_solicitado
+      s.costo_proveedor ?? 0,             // saldo
+      0,                                  // monto_pagado
+      id_dispersion,                      // codigo_dispersion
+      null,                               // fecha_pago -> null
+      null,                               // url_layout -> null
+      null,                               // url_pago -> null
+    ]);
+
+    // Preparamos la consulta dinámica para los placeholders (usamos `?` para cada valor)
+    const placeholders = values
+      .map(() => "(?, ?, ?, ?, ?, ?, ?, ?)")
+      .join(", ");
+
+    // Generamos la consulta SQL
+    const sql = `
+      INSERT INTO dispersion_pagos_proveedor (
+        id_solicitud_proveedor,
+        monto_solicitado,
+        saldo,
+        monto_pagado,
+        codigo_dispersion,
+        fecha_pago,
+        url_layout,
+        url_pago
+      ) VALUES ${placeholders}
+    `;
+
+    // Aplanamos el array de valores para pasar en executeQuery
+    const flattenedValues = values.flat();
+
+    // Ejecutamos la query con el arreglo aplanado
+    const dbResult = await executeQuery(sql, flattenedValues);
+
+    res.status(200).json({
+      ok: true,
+      message: "Dispersión creada y registros guardados correctamente",
+      data: {
+        id_dispersion,
+        total_registros: solicitudes.length,
+        dbResult,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error en createDispersion:", error);
+    res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message,
+    });
+  }
+};
+
+
 const getSolicitudes = async (req, res) => {
   try {
     const spRows = await executeSP(STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR);
@@ -162,19 +244,16 @@ const getSolicitudes = async (req, res) => {
       tipo_tarjeta,
       rfc,
       razon_social,
-      // 👇 importante: aquí viene estatus_pagos desde el SP
       estatus_pagos,
       ...rest
     }) => {
       const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
       const facturas = facturasBySolicitud[String(id_solicitud_proveedor)] ?? [];
 
-      // ¿Está pagada? (por estatus_pagos o por pagos reales con estado_pagado)
       const estaPagada =
         estatus_pagos === "pagado" ||
         pagos.some(p => p.pago_estado_pago === "pagado");
 
-      // Clasificación para filtros
       let filtro_pago = "todos";
 
       if (estaPagada) {
@@ -189,8 +268,8 @@ const getSolicitudes = async (req, res) => {
 
       return {
         ...rest,
-        estatus_pagos,          // lo sigues mandando por si lo ocupas en front
-        filtro_pago,            // 🔥 NUEVO: etiqueta directa para el front
+        estatus_pagos,
+        filtro_pago,
         solicitud_proveedor: {
           id_solicitud_proveedor,
           fecha_solicitud,
@@ -210,11 +289,6 @@ const getSolicitudes = async (req, res) => {
         facturas,
       };
     });
-
-    // 👉 OPCIÓN 1: mandar solo el array con la etiqueta filtro_pago en cada item
-    // y que el front filtre por esa propiedad.
-    //
-    // 👉 OPCIÓN 2: mandar ya separado en objetos (grupos). Te dejo hecho esto también:
 
     const todos = data;
     const spei_solicitado = data.filter(
@@ -239,7 +313,6 @@ const getSolicitudes = async (req, res) => {
     res.status(200).json({
       message: "Registros obtenidos con exito",
       ok: true,
-      // ⬇️ así le llegan al front ya listos para solo mostrarlos
       data: {
         todos,
         spei_solicitado,
@@ -255,8 +328,8 @@ const getSolicitudes = async (req, res) => {
   }
 };
 
-
 module.exports = {
   createSolicitud,
   getSolicitudes,
+  createDispersion
 };
