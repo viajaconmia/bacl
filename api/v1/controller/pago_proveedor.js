@@ -21,7 +21,6 @@ const createSolicitud = async (req, res) => {
 
     console.log("📥 Datos recibidos:", solicitud);
 
-    let response;
     if (paymentType !== "credit") {
       const estado_pago = paymentStatus; 
       
@@ -108,16 +107,14 @@ const createDispersion = async (req, res) => {
       0,                                  // monto_pagado
       id_dispersion,                      // codigo_dispersion
       null,                               // fecha_pago -> null
-      null,                               // url_layout -> null
-      null,                               // url_pago -> null
     ]);
 
     // Preparamos la consulta dinámica para los placeholders (usamos `?` para cada valor)
     const placeholders = values
-      .map(() => "(?, ?, ?, ?, ?, ?, ?, ?)")
+      .map(() => "(?, ?, ?, ?, ?, ?)")
       .join(", ");
 
-    // Generamos la consulta SQL
+    // Generamos la consulta SQL para insertar los registros
     const sql = `
       INSERT INTO dispersion_pagos_proveedor (
         id_solicitud_proveedor,
@@ -125,23 +122,42 @@ const createDispersion = async (req, res) => {
         saldo,
         monto_pagado,
         codigo_dispersion,
-        fecha_pago,
-        url_layout,
-        url_pago
-      ) VALUES ${placeholders}
+        fecha_pago
+      ) VALUES ${placeholders};
     `;
 
     // Aplanamos el array de valores para pasar en executeQuery
     const flattenedValues = values.flat();
 
-    // Ejecutamos la query con el arreglo aplanado
+    // Ejecutamos la query para insertar los registros
     const dbResult = await executeQuery(sql, flattenedValues);
+
+    // Obtener el último ID insertado (para las inserciones múltiples)
+    // Consulta para obtener todos los id_pago generados
+    const lastInsertIdQuery = `
+      SELECT id_dispersion_pagos_proveedor
+      FROM dispersion_pagos_proveedor 
+      WHERE codigo_dispersion = ? ;
+    `;
+
+    // Ejecutamos la consulta para obtener los ids generados
+    const lastInsertIdResult = await executeQuery(lastInsertIdQuery, [id_dispersion]);
+    console.log("busqueda", lastInsertIdResult)
+    
+    // Extraemos los id_pago de los resultados
+    const id_pagos = lastInsertIdResult.map(row => 
+      String(row.id_dispersion_pagos_proveedor).padStart(10, '0')
+    );
+    
+    console.log("CAMBIOS",id_pagos)
+
 
     res.status(200).json({
       ok: true,
       message: "Dispersión creada y registros guardados correctamente",
       data: {
         id_dispersion,
+        id_pagos, // Incluir el id_pago generado
         total_registros: solicitudes.length,
         dbResult,
       },
@@ -155,6 +171,309 @@ const createDispersion = async (req, res) => {
   }
 };
 
+const createPago = async (req, res) => {
+  try {
+    // Obtener los datos del payload (según lo que envía el frontend)
+    const { frontendData, csvData, montos, codigo_dispersion, isMasivo, user } = req.body;
+    
+    // Si es modo individual (una sola inserción)
+    if (!isMasivo) {
+      console.log("📥 Datos recibidos para pago individual:", req.body);
+      
+      // Usar datos del frontend y los montos
+      const pagoData = {
+        // Datos del frontend
+        id_solicitud_proveedor: frontendData.id_solicitud_proveedor,
+        user_created: frontendData.user_created || 'system',
+        user_update: frontendData.user_update || 'system',
+        concepto: frontendData.concepto,
+        descripcion: frontendData.descripcion,
+        iva: parseFloat(frontendData.iva) || 0,
+        total: parseFloat(frontendData.total) || 0,
+        
+        // Datos específicos para modo individual
+        codigo_dispersion: codigo_dispersion || generarCodigoDispersion(),
+        monto: parseFloat(Object.values(montos)[0] || 0), // Tomar el primer monto
+        monto_pagado: parseFloat(Object.values(montos)[0] || 0),
+        
+        // Campos con valores por defecto
+        fecha_emision: frontendData.fecha_emision ? new Date(frontendData.fecha_emision) : new Date(),
+        fecha_pago: new Date(),
+        url_pdf: frontendData.url_pdf || null,
+        numero_comprobante: `COMP-${Date.now()}`,
+        cuenta_origen: '', // Se pueden dejar vacíos o pedir en frontend
+        cuenta_destino: '',
+        moneda: 'MXN',
+        metodo_de_pago: 'Transferencia',
+        referencia_pago: '',
+        nombre_pagador: '',
+        rfc_pagador: '',
+        domicilio_pagador: '',
+        nombre_beneficiario: '',
+        domicilio_beneficiario: ''
+      };
+
+      // Validar campos requeridos para modo individual
+      if (!pagoData.id_solicitud_proveedor) {
+        return res.status(400).json({
+          error: "Bad Request",
+          details: "El campo id_solicitud_proveedor es requerido"
+        });
+      }
+
+      // Preparamos la consulta SQL para insertar los valores
+      const query = `
+        INSERT INTO pago_proveedores (
+          id_solicitud_proveedor, codigo_dispersion, monto_pagado, fecha_pago,
+          url_pdf, user_update, user_created, fecha_emision, numero_comprobante,
+          cuenta_origen, cuenta_destino, monto, moneda, concepto, metodo_de_pago,
+          referencia_pago, nombre_pagador, rfc_pagador, domicilio_pagador,
+          nombre_beneficiario, domicilio_beneficiario, descripcion, iva, total
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const values = [
+        pagoData.id_solicitud_proveedor,
+        pagoData.codigo_dispersion,
+        pagoData.monto_pagado,
+        pagoData.fecha_pago,
+        pagoData.url_pdf,
+        pagoData.user_update,
+        pagoData.user_created,
+        pagoData.fecha_emision,
+        pagoData.numero_comprobante,
+        pagoData.cuenta_origen,
+        pagoData.cuenta_destino,
+        pagoData.monto,
+        pagoData.moneda,
+        pagoData.concepto,
+        pagoData.metodo_de_pago,
+        pagoData.referencia_pago,
+        pagoData.nombre_pagador,
+        pagoData.rfc_pagador,
+        pagoData.domicilio_pagador,
+        pagoData.nombre_beneficiario,
+        pagoData.domicilio_beneficiario,
+        pagoData.descripcion,
+        pagoData.iva,
+        pagoData.total
+      ];
+
+      // Ejecutar la query para insertar el pago
+      const [result] = await db.executeQuery(query, values);
+      
+      const idPagoInsertado = result.insertId;
+      const idPagoDispersion = `PD-${String(idPagoInsertado).padStart(6, '0')}`;
+      
+      // Actualizar la tabla con el id_pago_dispersion
+      const updateQuery = `UPDATE pago_proveedores SET id_pago_dispersion = ? WHERE id_pago_proveedores = ?`;
+      await db.executeQuery(updateQuery, [idPagoDispersion, idPagoInsertado]);
+
+      // Responder con éxito
+      return res.status(201).json({
+        success: true,
+        message: "Pago creado exitosamente",
+        data: {
+          id_pago_proveedores: idPagoInsertado,
+          id_pago_dispersion: idPagoDispersion,
+          codigo_dispersion: pagoData.codigo_dispersion,
+          numero_comprobante: pagoData.numero_comprobante,
+          monto: pagoData.monto,
+          fecha_pago: pagoData.fecha_pago
+        }
+      });
+    }
+
+    // MODO MASIVO: Procesar múltiples inserciones del CSV
+    if (isMasivo) {
+      const resultados = [];
+      const errores = [];
+      console.log(csvData, "🐨🐨🐨🐨🐨🐨🐨🐨");
+
+      // Procesar cada fila del CSV
+      for (let i = 0; i < csvData.length; i++) {
+        try {
+          const csvRow = csvData[i];
+          
+          // Mapear nombres de columnas del CSV a los nombres de la base de datos
+          const pagoData = {
+            // Datos del frontend (comunes a todos)
+            id_pago_dispercion: csvRow["id_pago_dispercion"],
+            user_created: frontendData.user_created + `,` + user || 'system',
+            user_update: frontendData.user_update + `,` + user || 'system',
+            concepto: csvRow["Concepto"] || frontendData.concepto,
+            descripcion: csvRow["Descripcion"] || frontendData.descripcion,
+            
+            // Datos del CSV - mapeo de columnas
+            codigo_dispersion: csvRow["codigo_dispersion"] || csvRow["Codigo de dispersion"] || generarCodigoDispersion(),
+            monto_pagado: parseFloat(csvRow["Monto"] || csvRow["Total"] || "0"),
+            fecha_pago: csvRow["Fecha de pago"] ? parseFecha(csvRow["Fecha de pago"]) : new Date(),
+            numero_comprobante: csvRow["Numero de comprobante"] || `COMP-CSV-${Date.now()}-${i}`,
+            cuenta_origen: csvRow["Cuenta de origen"] || "",
+            cuenta_destino: csvRow["Cuenta de destino"] || "",
+            monto: parseFloat(csvRow["Monto"] || csvRow["Total"] || "0"),
+            moneda: csvRow["Moneda"] || 'MXN',
+            metodo_de_pago: csvRow["Metodo de pago"] || 'Transferencia',
+            referencia_pago: csvRow["Referencia de pago"] || "",
+            nombre_pagador: csvRow["Nombre del pagador"] || "",
+            rfc_pagador: csvRow["RFC del pagador"] || "",
+            domicilio_pagador: csvRow["Domicilio del pagador"] || "",
+            nombre_beneficiario: csvRow["Nombre del beneficiario"] || "",
+            domicilio_beneficiario: csvRow["Domicilio del beneficiario"] || "",
+            iva: parseFloat(csvRow["IVA"] || "0"),
+            total: parseFloat(csvRow["Total"] || csvRow["Monto"] || "0"),
+            
+            // Campos con valores por defecto
+            fecha_emision: csvRow["Fecha de emisión"] ? parseFecha(csvRow["Fecha de emisión"]) : new Date(),
+            url_pdf: null
+          };
+
+          // Validar campos requeridos para modo masivo
+          if (!pagoData.cuenta_destino || !pagoData.cuenta_origen) {
+            errores.push({
+              fila: i + 1,
+              error: "Las cuentas de origen y destino son requeridas",
+              datos: { cuenta_origen: pagoData.cuenta_origen, cuenta_destino: pagoData.cuenta_destino }
+            });
+            continue;
+          }
+
+          // Preparamos la consulta SQL para insertar los valores del CSV
+          const query = `
+            INSERT INTO pago_proveedores (
+              id_pago_dispersion, codigo_dispersion, monto_pagado, fecha_pago,
+              url_pdf, user_update, user_created, fecha_emision, numero_comprobante,
+              cuenta_origen, cuenta_destino, monto, moneda, concepto, metodo_de_pago,
+              referencia_pago, nombre_pagador, rfc_pagador, domicilio_pagador,
+              nombre_beneficiario, domicilio_beneficiario, descripcion, iva, total
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `;
+
+          const values = [
+            pagoData.id_pago_dispercion,
+            pagoData.codigo_dispersion,
+            pagoData.monto_pagado,
+            pagoData.fecha_pago,
+            pagoData.url_pdf,
+            pagoData.user_update,
+            pagoData.user_created,
+            pagoData.fecha_emision,
+            pagoData.numero_comprobante,
+            pagoData.cuenta_origen,
+            pagoData.cuenta_destino,
+            pagoData.monto,
+            pagoData.moneda,
+            pagoData.concepto,
+            pagoData.metodo_de_pago,
+            pagoData.referencia_pago,
+            pagoData.nombre_pagador,
+            pagoData.rfc_pagador,
+            pagoData.domicilio_pagador,
+            pagoData.nombre_beneficiario,
+            pagoData.domicilio_beneficiario,
+            pagoData.descripcion,
+            pagoData.iva,
+            pagoData.total
+          ];
+
+          // Ejecutar la query para insertar el pago
+          const [result] = await executeQuery(query, values);
+          console.log("result", result);
+
+          const idPagoInsertado = result.insertId;
+          const idPagoDispersion = `PD-${String(idPagoInsertado).padStart(6, '0')}`;
+          
+          const updateQuery = `UPDATE pago_proveedores SET id_pago_dispersion = ? WHERE id_pago_proveedores = ?`;
+          await executeQuery(updateQuery, [idPagoDispersion, idPagoInsertado]);
+
+          resultados.push({
+            fila: i + 1,
+            success: true,
+            id_pago_proveedores: idPagoInsertado,
+            id_pago_dispersion: idPagoDispersion,
+            codigo_dispersion: pagoData.codigo_dispersion,
+            numero_comprobante: pagoData.numero_comprobante,
+            monto: pagoData.monto
+          });
+
+        } catch (error) {
+          errores.push({
+            fila: i + 1,
+            error: error.message,
+            code: error.code
+          });
+        }
+      }
+
+      // Responder con resultados
+      return res.status(201).json({
+        success: true,
+        message: `Procesamiento completado: ${resultados.length} pagos creados, ${errores.length} errores`,
+        summary: {
+          total_filas: csvData.length,
+          exitosas: resultados.length,
+          errores: errores.length
+        },
+        resultados: resultados,
+        errores: errores.length > 0 ? errores : undefined
+      });
+    }
+
+    // Si no es ni individual ni masivo válido
+    return res.status(400).json({
+      error: "Bad Request",
+      details: "Datos inválidos. Verifique el modo de operación y los datos enviados."
+    });
+
+  } catch (error) {
+    console.error("❌ Error en al momento de crear pago: ", error);
+    
+    // Manejar errores específicos de duplicados
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({
+        error: "Conflict",
+        details: "Ya existe un registro con estos datos",
+        field: error.message.match(/for key '(.+)'/)?.[1]
+      });
+    }
+    
+    // Manejar errores de validación de datos
+    if (error.code === 'ER_DATA_TOO_LONG') {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: "Algunos datos exceden la longitud permitida"
+      });
+    }
+    
+    return res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
+// Función auxiliar para parsear fechas desde diferentes formatos
+function parseFecha(fechaString) {
+  if (!fechaString) return new Date();
+  
+  // Intentar diferentes formatos de fecha
+  const fecha = new Date(fechaString);
+  
+  // Si la fecha es inválida, retornar fecha actual
+  if (isNaN(fecha.getTime())) {
+    return new Date();
+  }
+  
+  return fecha;
+}
+
+// Función para generar código de dispersión
+function generarCodigoDispersion() {
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 1000);
+  return `DISP-${timestamp}-${random.toString().padStart(3, '0')}`;
+}
 
 const getSolicitudes = async (req, res) => {
   try {
@@ -331,5 +650,6 @@ const getSolicitudes = async (req, res) => {
 module.exports = {
   createSolicitud,
   getSolicitudes,
-  createDispersion
+  createDispersion,
+  createPago
 };
