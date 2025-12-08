@@ -2,6 +2,7 @@ const {
   executeQuery,
   executeTransaction,
   runTransaction,
+  executeSP2,
 } = require("../../../config/db");
 const { CustomError } = require("../../../middleware/errorHandler");
 const { crearCfdi } = require("./facturamaModel");
@@ -795,6 +796,16 @@ ORDER BY vf.uuid_factura, vf.fecha_emision;`;
   }
 };
 
+const facturasPagoPendiente= async (id_agente) =>{
+  try {
+
+    const response = await executeSP2('sp_get_facturas_pendientes_por_agente',[id_agente])
+    return response;
+  } catch (error) {
+    throw error;
+  }
+}
+
 const getDetailsFactura = async (id_factura) => {
   try {
     const query = `select count(*) AS noches_facturadas, i.*, h.*, b.total as total_booking, b.subtotal as subtotal_booking, b.impuestos as impuestos_booking from items i 
@@ -876,4 +887,5 @@ module.exports = {
   getDetailsFactura,
   isFacturada,
   crearFacturaEmi,
+  facturasPagoPendiente
 };

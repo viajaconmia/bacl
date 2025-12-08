@@ -115,6 +115,17 @@ const getfacturasPagoPendiente = async (req, res) => {
   }
 };
 
+const getfacturasPagoPendienteByAgente = async (req, res) => {
+  try {
+    const { id_agente } = req.query;
+    let solicitudes = await model.facturasPagoPendiente(id_agente);
+    res.status(200).json(solicitudes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Internal Server Error", details: error });
+  }
+};
+
 const readDetailsFactura = async (req, res) => {
   try {
     const { id_factura } = req.query;
@@ -2078,6 +2089,7 @@ module.exports = {
   asignarURLS_factura,
   getfacturasPagoPendiente,
   asignarFacturaPagos,
+  getfacturasPagoPendienteByAgente
 };
 
 //ya quedo "#$%&/()="
