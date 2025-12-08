@@ -298,7 +298,7 @@ const createPago = async (req, res) => {
           // Mapear nombres de columnas del CSV a los nombres de la base de datos
           const pagoData = {
             // Datos del frontend (comunes a todos)
-            id_pago_dispercion: csvRow["id_pago_dispercion"],
+            id_pago_dispercion: csvRow["id_pago_dispersion"],
             user_created: frontendData.user_created + `,` + user || 'system',
             user_update: frontendData.user_update + `,` + user || 'system',
             concepto: csvRow["Concepto"] || frontendData.concepto,
@@ -340,8 +340,7 @@ const createPago = async (req, res) => {
 
           // Preparamos la consulta SQL para insertar los valores del CSV
           const query = `
-            INSERT INTO pago_proveedores (
-              id_pago_dispersion, codigo_dispersion, monto_pagado, fecha_pago,
+            INSERT INTO pago_proveedores (id_pago_dispersion, codigo_dispersion, monto_pagado, fecha_pago,
               url_pdf, user_update, user_created, fecha_emision, numero_comprobante,
               cuenta_origen, cuenta_destino, monto, moneda, concepto, metodo_de_pago,
               referencia_pago, nombre_pagador, rfc_pagador, domicilio_pagador,
@@ -489,29 +488,32 @@ const getSolicitudes = async (req, res) => {
     if (ids.length > 0) {
       const placeholders = ids.map(() => "?").join(",");
 
-      pagosRaw = await executeQuery(
-        `SELECT 
-           ps.*, 
-           pp.id_pago_proveedor       AS pago_id_pago_proveedor,
-           pp.monto_pagado            AS pago_monto_pagado,
-           pp.forma_pago_ejecutada    AS pago_forma_pago_ejecutada,
-           pp.id_tarjeta_pagada       AS pago_id_tarjeta_pagada,
-           pp.id_cuenta_bancaria      AS pago_id_cuenta_bancaria,
-           pp.url_comprobante_pago    AS pago_url_comprobante_pago,
-           pp.fecha_pago              AS pago_fecha_pago,
-           pp.fecha_transaccion_tesoreria AS pago_fecha_transaccion_tesoreria,
-           pp.usuario_tesoreria_pago  AS pago_usuario_tesoreria_pago,
-           pp.comentarios_tesoreria   AS pago_comentarios_tesoreria,
-           pp.numero_autorizacion     AS pago_numero_autorizacion,
-           pp.creado_en               AS pago_creado_en,
-           pp.actualizado_en          AS pago_actualizado_en,
-           pp.estado_pago             AS pago_estado_pago
-         FROM pagos_solicitudes ps
-         LEFT JOIN pagos_proveedor pp 
-           ON pp.id_pago_proveedor = ps.id_pago_proveedor
-         WHERE ps.id_solicitud_proveedor IN (${placeholders});`,
-        ids
-      );
+      // pagosRaw = await executeQuery(
+      //   `SELECT 
+      //      ps.*, 
+      //      pp.id_pago_proveedor       AS pago_id_pago_proveedor,
+      //      pp.monto_pagado            AS pago_monto_pagado,
+      //      pp.forma_pago_ejecutada    AS pago_forma_pago_ejecutada,
+      //      pp.id_tarjeta_pagada       AS pago_id_tarjeta_pagada,
+      //      pp.id_cuenta_bancaria      AS pago_id_cuenta_bancaria,
+      //      pp.url_comprobante_pago    AS pago_url_comprobante_pago,
+      //      pp.fecha_pago              AS pago_fecha_pago,
+      //      pp.fecha_transaccion_tesoreria AS pago_fecha_transaccion_tesoreria,
+      //      pp.usuario_tesoreria_pago  AS pago_usuario_tesoreria_pago,
+      //      pp.comentarios_tesoreria   AS pago_comentarios_tesoreria,
+      //      pp.numero_autorizacion     AS pago_numero_autorizacion,
+      //      pp.creado_en               AS pago_creado_en,
+      //      pp.actualizado_en          AS pago_actualizado_en,
+      //      pp.estado_pago             AS pago_estado_pago
+      //    FROM pagos_solicitudes ps
+      //    LEFT JOIN pagos_proveedor pp 
+      //      ON pp.id_pago_proveedor = ps.id_pago_proveedor
+      //    WHERE ps.id_solicitud_proveedor IN (${placeholders});`,
+      //   ids
+      // );
+
+      pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
+
 
       facturasRaw = await executeQuery(
         `SELECT 
@@ -536,9 +538,11 @@ const getSolicitudes = async (req, res) => {
 
     const pagosBySolicitud = pagosRaw.reduce((acc, row) => {
       const key = String(row.id_solicitud_proveedor);
-      (acc[key] ||= []).push(row);
+      (acc[key] ||= []).push(row.dispersiones_json,row.pagos_json);
       return acc;
     }, {});
+
+    console.log(pagosBySolicitud,"◾◾◾◾◾◾◾◾◾◾◾")
 
     const facturasBySolicitud = facturasRaw.reduce((acc, row) => {
       const key = String(row.id_solicitud_proveedor);
@@ -571,12 +575,13 @@ const getSolicitudes = async (req, res) => {
 
       const estaPagada =
         estatus_pagos === "pagado" ||
-        pagos.some(p => p.pago_estado_pago === "pagado");
+        pagos.some(p => p.pago_estado_pago === "pagado" || p.saldo == 0);
 
       let filtro_pago = "todos";
 
-      if (estaPagada) {
+      if (saldo == 0.00) {
         filtro_pago = "pagada";
+        console.log("pagada 😘😘😘😘😘😘😘😘😘😘", saldo)
       } else if (forma_pago_solicitada === "transfer") {
         filtro_pago = "spei_solicitado";
       } else if (forma_pago_solicitada === "card") {
@@ -622,7 +627,6 @@ const getSolicitudes = async (req, res) => {
     const pagada = data.filter(
       d => d.filtro_pago === "pagada"
     );
-
     res.set({
       "Cache-Control": "no-store",
       "Pragma": "no-cache",

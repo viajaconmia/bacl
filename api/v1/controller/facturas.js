@@ -170,6 +170,8 @@ const crearFacturaDesdeCarga = async (req, res) => {
   } = req.body;
   const id_factura = "fac-" + uuidv4();
 
+  console.log(items,"estos son los items 👌👌👌👌👌👌👌👌")
+
   try {
     console.log("😒😒😒😒😒", req.body);
     const response = await executeSP("sp_inserta_factura_desde_carga", [
