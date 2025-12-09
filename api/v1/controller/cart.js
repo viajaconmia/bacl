@@ -1,6 +1,7 @@
-const { executeQuery } = require("../../../config/db");
+const { executeQuery, runTransaction } = require("../../../config/db");
 const { calcularNoches } = require("../../../lib/utils/calculates");
 const { CustomError } = require("../../../middleware/errorHandler");
+const db = require("../../../v2/model/db.model");
 
 /****************+ GET ********************* */
 const getCartItemsById = async (req, res) => {
@@ -19,6 +20,7 @@ const getCartItemsById = async (req, res) => {
   c.*, 
   s.id_servicio, 
   s.id_viajero,
+  s.data_gemini as data,
   CONCAT_WS(' ', v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno) AS viajero_principal,
   s.hotel, 
   s.check_in, 
@@ -44,9 +46,9 @@ where (c.id_agente = ? OR c.usuario_generador = ?) AND c.active = 1 ${
         type,
         selected: Boolean(selected),
         details: {
-          ...item,
-          noches: calcularNoches(item.check_in, item.check_out),
-          usuario_creador: item.usuario_generador,
+          ...(item || {}),
+          noches: item ? calcularNoches(item.check_in, item.check_out) : 0,
+          usuario_creador: item ? item.usuario_generador : "",
         },
       })
     );
@@ -181,9 +183,73 @@ const setSelectedCartItem = async (req, res) => {
   }
 };
 
+const procesarServicio = async (req, res) => {
+  try {
+    const { usuario_generador, id_agente } = req.body;
+    if (!usuario_generador || !id_agente)
+      throw new CustomError(
+        "No encontrado el agente",
+        400,
+        "MISSING_ITEM_ID",
+        null
+      );
+
+    const data = await executeQuery(
+      `SELECT * FROM cart WHERE usuario_generador = ? and active = 1`,
+      [usuario_generador]
+    );
+
+    const total = data.reduce((acc, curr) => acc + Number(curr.total), 0);
+
+    await runTransaction(async (conn) => {
+      try {
+        const [servicio] = await db.SERVICIO.create(conn, {
+          total,
+          is_cotizacion: true,
+          id_agente,
+        });
+
+        const ids_solicitudes = data.map((cart) => cart.id_solicitud);
+        const solicitudes = await db.SOLICITUDES.get(...ids_solicitudes);
+
+        Promise.all(
+          solicitudes.map(
+            async (solicitud) =>
+              await db.SOLICITUDES.update(conn, {
+                id_servicio: servicio.id_servicio,
+                id_solicitud: solicitud.id_solicitud,
+              })
+          )
+        );
+
+        const query = `UPDATE cart SET active = ? WHERE id = ?`;
+        Promise.all(
+          data.map(async (cart) => await conn.execute(query, [false, cart.id]))
+        );
+      } catch (error) {
+        console.error(error);
+        throw error;
+      }
+    });
+
+    res.status(200).json({
+      message: "Item actualizado con exito",
+      data,
+    });
+  } catch (error) {
+    console.log(error.message);
+    return res.status(error.statusCode || 500).json({
+      error: error.details,
+      message: error.message,
+      data: null,
+    });
+  }
+};
+
 module.exports = {
   getCartItemsById,
   deleteCartItem,
   setSelectedCartItem,
   createCartItem,
+  procesarServicio,
 };

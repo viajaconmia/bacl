@@ -20,7 +20,7 @@ const PROMPT = `<INSTRUCCION_ASISTENTE_HOTELES>
 
   <REGLAS_CLAVE>
     1. **BÚSQUEDA REAL**: Usa Google Search para encontrar nombres de hoteles, ubicaciones, calificaciones, tipos de habitación, servicios y precios reales y actuales.
-    2. **DATOS FALTANTES**: Si no tienes **Ubicación** y **Fechas (Check-in/Check-out)**, devuelve solo el bloque <ACCION>PEDIR_DATOS</ACCION>.
+    2. **DATOS FALTANTES**: Si no tienes **Ubicación** y **Fechas (Check-in/Check-out)**, pideselo al usuario de forma amable.
     3. **FORMATO ESTRICTO**: Tu respuesta debe ser ÚNICAMENTE el bloque XML. No añadas "Aquí tienes los datos" ni markdown (\`\`\`xml).
     4. **ESTRUCTURA DE DATOS**:
        - Las fechas/horas deben ser ISO 8601 (YYYY-MM-DDTHH:mm:ss).

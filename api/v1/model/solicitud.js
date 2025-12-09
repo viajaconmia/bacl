@@ -1,44 +1,16 @@
-const { urlencoded } = require("express");
-const { executeTransaction, executeQuery } = require("../../../config/db");
+const { executeQuery, runTransaction } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
-const e = require("express");
-
-// const createSolicitudYTicket = async (solicitud) => {
-//   try {
-//     let query = `INSERT INTO solicitudes (confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-//     let params = [
-//       solicitud.confirmation_code,
-//       solicitud.id_viajero,
-//       solicitud.hotel_name,
-//       solicitud.check_in,
-//       solicitud.check_out,
-//       solicitud.room_type,
-//       solicitud.total_price,
-//       solicitud.status,
-//     ];
-
-//     let response = await executeTransaction(
-//       query,
-//       params,
-//       async (results, connection) => {
-//         console.log("Creamos el ticket");
-//       }
-//     );
-
-//     return response;
-//   } catch (error) {
-//     throw error;
-//   }
-// };
 
 const createSolicitudes = async (body) => {
-  const { solicitudes, Gemini_response, tradicional = false } = body;
+  try {
+    const { solicitudes, tradicional = true } = body;
+    const types = { hotel: 0, flight: 1, car_rental: 2 };
+    const s = Array.isArray(solicitudes) ? solicitudes[0] : solicitudes;
+    const id_solicitud = `sol-${uuidv4()}`;
+    const proveedor = s?.proveedor || null;
+    const tipo = types[(s.type || "HOTEL").toLowerCase()]; // hotel, flight, car_rental
 
-  // ============================
-  // 1. FLUJO TRADICIONAL (SIN GEMINI)
-  // ============================
-  if (tradicional) {
-    try {
+    if (tradicional) {
       const query_solicitudes = `
         INSERT INTO solicitudes (
           id_solicitud, 
@@ -59,13 +31,10 @@ const createSolicitudes = async (body) => {
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `;
 
-      const id_solicitud = `sol-${uuidv4()}`;
-      const s = solicitudes[0];
-
       const params = [
         id_solicitud,
         s.id_agente,
-        s.confirmation_code,
+        s.confirmation_code || null,
         s.id_viajero,
         s.hotel,
         s.check_in,
@@ -81,143 +50,151 @@ const createSolicitudes = async (body) => {
       ];
 
       await executeQuery(query_solicitudes, params);
-
       return { id_solicitud };
-    } catch (error) {
-      throw error;
-    }
-  }
+    } else {
+      let id_proveedor_gemini;
 
-  // ============================
-  // 2. FLUJO NUEVO CON GEMINI
-  // ============================
-  try {
-    if (!Gemini_response) {
-      throw new Error("Gemini_response no fue enviado.");
-    }
-
-    const proveedor = Gemini_response.proveedor;
-    const tipo = Gemini_response.type.toLowerCase(); // hotel, flight, car_rental
-    const config = Gemini_response.Config;
-
-    if (!proveedor?.nombre || !proveedor?.tipo_proveedor_gemini) {
-      throw new Error("Proveedor Gemini incompleto.");
-    }
-
-    // ------------------------------
-    // 2.1 Buscar o crear proveedor
-    // ------------------------------
-    const q_buscar = `
+      const q_buscar = `
       SELECT id_proveedor_gemini 
       FROM proveedores_gemini 
       WHERE nombre_proveedor = ? AND tipo_proveedor = ?
       LIMIT 1
     `;
 
-    const existe = await executeQuery(q_buscar, [
-      proveedor.nombre,
-      proveedor.tipo_proveedor_gemini,
-    ]);
+      const existe = await executeQuery(q_buscar, [proveedor, tipo]);
 
-    let id_proveedor_gemini;
-    if (existe.length > 0) {
-      id_proveedor_gemini = existe[0].id_proveedor_gemini;
-    } else {
-      id_proveedor_gemini = `prg-${uuidv4()}`;
+      await runTransaction(async (connection) => {
+        if (existe.length > 0) {
+          id_proveedor_gemini = existe[0].id_proveedor_gemini;
+        } else {
+          id_proveedor_gemini = `prg-${uuidv4()}`;
 
-      const q_insert = `
-        INSERT INTO proveedores_gemini 
-        (id_proveedor_gemini, tipo_proveedor, nombre_proveedor, url_consultada, amenidades)
-        VALUES (?,?,?,?,?)
-      `;
+          const q_insert = `
+          INSERT INTO proveedores_gemini 
+          (id_proveedor_gemini, tipo_proveedor, nombre_proveedor, url_consultada, complementos)
+          VALUES (?,?,?,?,?)
+        `;
+          await executeQuery(q_insert, [
+            id_proveedor_gemini,
+            tipo,
+            proveedor,
+            proveedor.url_consultada ?? null,
+            JSON.stringify(s),
+          ]);
+        }
 
-      await executeQuery(q_insert, [
-        id_proveedor_gemini,
-        proveedor.tipo_proveedor_gemini,
-        proveedor.nombre,
-        proveedor.url_consultada ?? null,
-        JSON.stringify(proveedor.complementos ?? null),
-      ]);
-    }
+        const q_insert_solicitud = `
+              INSERT INTO solicitudes (
+                id_solicitud,
+                tipo_solicitud_gemini,
+                id_proveedor_gemini,
+                data_gemini,
+                total,
+                status,
+                creado_por,
+                hotel,
+                id_viajero,
+                check_in,
+                check_out,
+                room
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            `;
+        try {
+          console.log([
+            id_solicitud,
+            tipo,
+            id_proveedor_gemini,
+            JSON.stringify(s),
+            s.total,
+            s.status,
+            s.usuario_creador ?? null,
+            s.hotel || null,
+            s.id_viajero,
+            s.check_in,
+            s.check_out,
+            s.room || null,
+          ]);
+          await connection.execute(q_insert_solicitud, [
+            id_solicitud,
+            tipo,
+            id_proveedor_gemini,
+            JSON.stringify(s),
+            s.total,
+            s.status,
+            s.usuario_creador ?? null,
+            s.hotel || null,
+            s.id_viajero,
+            s.check_in || null,
+            s.check_out || null,
+            s.room || null,
+          ]);
 
-    // ------------------------------
-    // 2.2 Preparar datos según TIPO
-    // ------------------------------
+          await createCartItem(connection, {
+            id_solicitud,
+            id_agente: s.id_agente,
+            usuario_generador: s.usuario_creador,
+            total: s.total,
+            type: s.type,
+          });
+        } catch (error) {
+          throw error;
+        }
+      });
 
-    let payloadSolicitud = null;
-
-    if (tipo === "hotel") {
-      payloadSolicitud = {
-        hotel: config.hotel,
-        check_in: config.check_in,
-        check_out: config.check_out,
-        room: config.room,
-        total: config.total,
-        status: config.status,
-      };
-    }
-
-    if (tipo === "flight") {
-      payloadSolicitud = {
-        vuelo_json: JSON.stringify(config.vuelo),
-        total: config.vuelo.price.total,
-        status: "pending",
-      };
-    }
-
-    if (tipo === "car_rental") {
-      payloadSolicitud = {
-        auto_json: JSON.stringify(config.auto),
-        total: config.auto.price.total,
-        status: "pending",
-      };
-    }
-
-    if (!payloadSolicitud) {
-      throw new Error("Tipo Gemini_response no soportado.");
-    }
-
-    // ------------------------------
-    // 2.3 Insertar SOLICITUD
-    // ------------------------------
-
-    const id_solicitud = `sol-${uuidv4()}`;
-
-    const q_insert_solicitud = `
-      INSERT INTO solicitudes (
+      return {
         id_solicitud,
-        tipo_solicitud_gemini,
         id_proveedor_gemini,
-        data_gemini,
-        total,
-        status,
-        creado_por
-      ) VALUES (?,?,?,?,?,?,?)
-    `;
-
-    await executeQuery(q_insert_solicitud, [
-      id_solicitud,
-      tipo,
-      id_proveedor_gemini,
-      JSON.stringify(payloadSolicitud),
-      payloadSolicitud.total,
-      payloadSolicitud.status,
-      body.usuario_creador ?? null,
-    ]);
-
-    return {
-      id_solicitud,
-      id_proveedor_gemini,
-      tipo,
-      payload: payloadSolicitud,
-    };
-
+        tipo,
+        payload: s,
+      };
+    }
   } catch (error) {
-    console.error("Error creando solicitud:", error);
     throw error;
   }
 };
 
+const createCartItem = async (
+  connect,
+  { id_solicitud, id_agente, usuario_generador, total, type, selected }
+) => {
+  try {
+    if (!id_solicitud || !id_agente || !usuario_generador || !total || !type)
+      throw new CustomError(
+        "Faltan datos necesarios para crear el item del carrito",
+        400,
+        "MISSING_DATA",
+        null
+      );
+
+    const [result] = await connect.execute(
+      `INSERT INTO cart (
+    total,
+    id_agente,
+    type,
+    selected,
+    id_solicitud,
+    usuario_generador
+) VALUES ( ?, ?, ?, ?, ?, ?); `,
+      [
+        total,
+        id_agente,
+        type,
+        /*selected*/ true,
+        id_solicitud,
+        usuario_generador,
+      ]
+    );
+
+    return result;
+  } catch (error) {
+    console.log("Este es el error qiuien c", error.message);
+    return res.status(error.statusCode || 500).json({
+      error: error.details,
+      message: error.message,
+      data: null,
+    });
+  }
+};
 
 const getSolicitudes = async (filters = { filterType: "Creacion" }) => {
   try {

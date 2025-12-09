@@ -5,5 +5,15 @@ const SERVICIO = require("./servicios.model");
 const VIAJE_AEREO = require("./viaje_aereo.model");
 const VUELO = require("./vuelos.model");
 const ITEM = require("./item.model");
+const SOLICITUDES = require("./solicitudes.model");
 
-module.exports = { SERVICIO, VIAJE_AEREO, BOOKING, SALDO, PAGO, VUELO, ITEM };
+module.exports = {
+  SERVICIO,
+  VIAJE_AEREO,
+  BOOKING,
+  SALDO,
+  PAGO,
+  VUELO,
+  ITEM,
+  SOLICITUDES,
+};

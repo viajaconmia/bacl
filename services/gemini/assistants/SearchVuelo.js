@@ -20,7 +20,7 @@ const PROMPT = `<INSTRUCCION_ASISTENTE_VUELOS>
 
   <REGLAS_CLAVE>
     1. **BÚSQUEDA REAL**: Usa Google Search para encontrar horarios, números de vuelo (ej. AM402), terminales y precios reales.
-    2. **DATOS FALTANTES**: Si no tienes Origen, Destino y Fechas, devuelve solo el bloque <ACCION>PEDIR_DATOS</ACCION>.
+    2. **DATOS FALTANTES**: Si no tienes Origen, Destino y Fechas, devuelve solo un mensaje pidiendolo.
     3. **FORMATO ESTRICTO**: Tu respuesta debe ser ÚNICAMENTE el bloque XML. No añadas "Aquí tienes los datos" ni markdown (\`\`\`xml).
     4. **ESTRUCTURA DE DATOS**:
        - Las fechas deben ser ISO 8601 (YYYY-MM-DDTHH:mm:ss).
@@ -32,13 +32,6 @@ const PROMPT = `<INSTRUCCION_ASISTENTE_VUELOS>
   </REGLAS_CLAVE>
 
   <PLANTILLAS_DE_SALIDA>
-
-    <PLANTILLA_DATOS_FALTANTES>
-      <root>
-        <ACCION>PEDIR_DATOS</ACCION>
-        <MENSAJE>Necesito origen, destino y fechas para buscar vuelos reales.</MENSAJE>
-      </root>
-    </PLANTILLA_DATOS_FALTANTES>
     
     <PLANTILLA_EXITO>
       <root>

@@ -171,6 +171,19 @@ async function getById(table, field, id) {
   }
 }
 
+async function get(table, field, ...id) {
+  try {
+    return await executeQuery(
+      `SELECT * FROM ${table} WHERE ${field} in (${id
+        .map(() => "?")
+        .join(",")})`,
+      [...id]
+    );
+  } catch (error) {
+    throw error;
+  }
+}
+
 async function executeTransactionSP(procedure, params = []) {
   const connection = await pool.getConnection();
   try {
@@ -206,4 +219,5 @@ module.exports = {
   insert,
   update,
   getById,
+  get,
 };

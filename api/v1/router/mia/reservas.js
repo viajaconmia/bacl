@@ -1,4 +1,5 @@
 const router = require("express").Router();
+const { executeQuery } = require("../../../../config/db");
 const controller = require("../../controller/reservas");
 const middleware = require("../../middleware/validateParams");
 
@@ -32,6 +33,21 @@ router.get(
   "/reservasConItemsSinPagar",
   controller.getReservasWithItemsSinPagarByAgente
 );
-
+router.get("/cotizaciones", async (req, res) => {
+  try {
+    const response = await executeQuery(
+      `SELECT * FROM vw_solicitud_cotizaciones;`
+    );
+    console.log(response);
+    res.status(200).json({ message: "done", data: response });
+  } catch (error) {
+    console.log(error.message);
+    return res.status(error.statusCode || 500).json({
+      error: error.details,
+      message: error.message,
+      data: null,
+    });
+  }
+});
 
 module.exports = router;
