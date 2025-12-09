@@ -486,7 +486,7 @@ const crearVuelo = async (req, res) => {
             id_viajero,
             flight_number,
             airline,
-            airline_code,
+            id_proveedor,
             departure_airport,
             departure_airport_code,
             departure_city,
@@ -507,8 +507,9 @@ const crearVuelo = async (req, res) => {
             id_usuario_creador,
             rate_type,
             comentarios,
-            fly_type
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+            fly_type,
+            id_intermediario
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
         await Promise.all(
           vuelos.map((vuelo) =>
@@ -539,6 +540,7 @@ const crearVuelo = async (req, res) => {
               vuelo.rate_type || null, // Puede ser NULL.
               vuelo.comentarios || null, // Puede ser NULL.
               vuelo.fly_type || null, // Puede ser NULL.
+              vuelo.intermediario || null,
             ])
           )
         );

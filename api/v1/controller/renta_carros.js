@@ -472,9 +472,10 @@ VALUES (?, ?, ?, ?)
 
         const insertRentaAutosQuery = `
         INSERT INTO renta_autos (
-        id_renta_autos,
+            id_renta_autos,
             nombre_proveedor,
             id_proveedor,
+            id_intermediario,
             codigo_renta_carro,
             descripcion_auto,
             edad,
@@ -519,7 +520,7 @@ VALUES (?, ?, ?, ?)
             is_operaciones_last_move,
             usuario_actualizador
         ) VALUES (
-            ?, ?, ?, ?, ?, 
+            ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, ?, 
             ?, ?, ?, ?, ?, 
@@ -534,6 +535,7 @@ VALUES (?, ?, ?, ?)
           id_renta_autos,
           payload.proveedor.nombre,
           payload.proveedor.id,
+          payload.intermediario.id,
           payload.codigo,
           payload.auto_descripcion,
           payload.edad,
