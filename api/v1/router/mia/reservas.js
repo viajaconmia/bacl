@@ -38,8 +38,33 @@ router.get("/cotizaciones", async (req, res) => {
     const response = await executeQuery(
       `SELECT * FROM vw_solicitud_cotizaciones;`
     );
-    console.log(response);
-    res.status(200).json({ message: "done", data: response });
+
+    const split_services = response.reduce((acc, curr) => {
+      acc = {
+        ...acc,
+        [curr.id_servicio]: acc[curr.id_servicio]
+          ? [...acc[curr.id_servicio], curr]
+          : [curr],
+      };
+      return acc;
+    }, {});
+
+    const agrupado = Object.values(split_services).map((arr) => ({
+      data: arr,
+      types: arr.reduce((acc, curr) => {
+        if (!curr?.objeto_gemini?.type) {
+          curr.objeto_gemini = { type: "hotel" };
+        }
+        acc = {
+          ...acc,
+          [curr.objeto_gemini.type]: acc[curr.objeto_gemini.type]
+            ? acc[curr.objeto_gemini.type] + 1
+            : 1,
+        };
+        return acc;
+      }, {}),
+    }));
+    res.status(200).json({ message: "done", data: agrupado });
   } catch (error) {
     console.log(error.message);
     return res.status(error.statusCode || 500).json({

@@ -16,6 +16,7 @@ const update = async (conn, item) => {
 };
 
 const get = async (...id) => {
+  console.log(id);
   return await db.get(schema.table, schema.id, ...id);
 };
 

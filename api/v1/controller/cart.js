@@ -195,9 +195,11 @@ const procesarServicio = async (req, res) => {
       );
 
     const data = await executeQuery(
-      `SELECT * FROM cart WHERE usuario_generador = ? and active = 1`,
+      `SELECT * FROM cart WHERE usuario_generador = ? and active = 1 and selected = 1`,
       [usuario_generador]
     );
+
+    console.log(data, "\n\n\n");
 
     const total = data.reduce((acc, curr) => acc + Number(curr.total), 0);
 
