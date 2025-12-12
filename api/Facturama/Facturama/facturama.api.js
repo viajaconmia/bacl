@@ -3,7 +3,9 @@ const fs = require("fs");
 const https = require("https");
 const axios = require("axios");
 
-const ca = fs.readFileSync(path.join(process.cwd(), "certs", "facturama.pem"));
+const ca = fs.readFileSync(
+  path.join(process.cwd(), "certs", "facturama.mx.crt")
+);
 console.log(ca.toString());
 
 // O "./certs/facturama.crt"
@@ -22,7 +24,7 @@ const { valuesFacturama } = require("../../../config/auth");
 // };
 
 let headers = {
-  httpsAgent: agent,
+  agent,
   headers: {
     "User-Agent": valuesFacturama.useragent,
     Authorization: `Basic ${valuesFacturama.token}`,
