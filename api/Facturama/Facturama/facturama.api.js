@@ -6,6 +6,8 @@ const axios = require("axios");
 const ca = fs.readFileSync(
   path.join(process.cwd(), "certs", "facturama.mx.crt")
 );
+console.log(ca.toString());
+
 // O "./certs/facturama.crt"
 
 const agent = new https.Agent({
