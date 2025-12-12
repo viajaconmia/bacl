@@ -876,6 +876,7 @@ const asignarFacturaItems = async (req, res) => {
 // };
 
 const asignarFacturaPagos = async (req, res) => {
+  
   // Helper para IDs si no usas uuidv4()
   const newId = (pfx) =>
     `${pfx}-${Date.now().toString(36)}-${Math.random()
@@ -986,7 +987,7 @@ const asignarFacturaPagos = async (req, res) => {
 
     // === (A) OBTENER ITEMS DE LAS FACTURAS con id_hospedaje (para mapear a id_servicio) ===
     const placeholdersFact = facturasOrden.map(() => "?").join(",");
-    const queryItems = `SELECT id_item, id_factura, saldo, id_hospedaje FROM items WHERE id_factura IN (${placeholdersFact}) ORDER BY id_factura ASC, id_item ASC;`;
+    const queryItems = `SELECT id_item, id_factura,id_relacion as id_hospedaje FROM items_facturas WHERE id_factura IN (${placeholdersFact}) ORDER BY id_factura ASC, id_item ASC;`;
     const itemsDeFacturas = await executeQuery(queryItems, facturasOrden);
     logQuery("SELECT items por facturas", queryItems, facturasOrden, itemsDeFacturas);
 
