@@ -38,6 +38,7 @@ const facturama = () => {
 
   // Función para hacer una solicitud GET
   const retrieve = async (path, id) => {
+    console.log(headers);
     try {
       const response = await axios.get(`${settings.url}${path}/${id}`, headers);
       return response.data;
