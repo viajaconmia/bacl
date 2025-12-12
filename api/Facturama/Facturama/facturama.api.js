@@ -3,9 +3,7 @@ const fs = require("fs");
 const https = require("https");
 const axios = require("axios");
 
-const ca = fs.readFileSync(
-  path.join(process.cwd(), "certs", "facturama.mx.crt")
-);
+const ca = fs.readFileSync(path.join(process.cwd(), "certs", "facturama.pem"));
 console.log(ca.toString());
 
 // O "./certs/facturama.crt"
