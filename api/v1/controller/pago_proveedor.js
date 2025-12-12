@@ -5,6 +5,26 @@ const {
 } = require("../../../config/db");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
 
+// Convierte valores "vacíos" a null (undefined, null, "", strings de puros espacios)
+const toNullableString = (value) => {
+  if (value === undefined || value === null) return null;
+  const str = String(value).trim();
+  return str === "" ? null : str;
+};
+
+// Convierte número (venza de CSV o frontend) a número o null
+// Opcional: elimina comas de miles: "1,234.56"
+const toNullableNumber = (value) => {
+  if (value === undefined || value === null) return null;
+
+  const str = String(value).replace(/,/g, "").trim();
+  if (str === "") return null;
+
+  const num = Number(str);
+  return isNaN(num) ? null : num;
+};
+
+
 const createSolicitud = async (req, res) => {
   try {
     const { solicitud } = req.body;
@@ -173,55 +193,70 @@ const createDispersion = async (req, res) => {
 
 const createPago = async (req, res) => {
   try {
-    // Obtener los datos del payload (según lo que envía el frontend)
-    const { frontendData, csvData, montos, codigo_dispersion, isMasivo, user } = req.body;
-    
-    // Si es modo individual (una sola inserción)
+    const {
+      frontendData = {},
+      csvData = [],
+      montos = {},
+      codigo_dispersion,
+      isMasivo,
+      user,
+    } = req.body || {};
+
+    // ============================
+    // MODO INDIVIDUAL
+    // ============================
     if (!isMasivo) {
       console.log("📥 Datos recibidos para pago individual:", req.body);
-      
-      // Usar datos del frontend y los montos
+
+      const montoPrimero = Object.values(montos || {})[0];
+
       const pagoData = {
         // Datos del frontend
         id_solicitud_proveedor: frontendData.id_solicitud_proveedor,
-        user_created: frontendData.user_created || 'system',
-        user_update: frontendData.user_update || 'system',
-        concepto: frontendData.concepto,
-        descripcion: frontendData.descripcion,
-        iva: parseFloat(frontendData.iva) || 0,
-        total: parseFloat(frontendData.total) || 0,
-        
+        user_created: frontendData.user_created || "system",
+        user_update: frontendData.user_update || "system",
+        concepto: toNullableString(frontendData.concepto),
+        descripcion: toNullableString(frontendData.descripcion),
+        iva: toNullableNumber(frontendData.iva),
+        total: toNullableNumber(frontendData.total),
+
         // Datos específicos para modo individual
         codigo_dispersion: codigo_dispersion || generarCodigoDispersion(),
-        monto: parseFloat(Object.values(montos)[0] || 0), // Tomar el primer monto
-        monto_pagado: parseFloat(Object.values(montos)[0] || 0),
-        
-        // Campos con valores por defecto
-        fecha_emision: frontendData.fecha_emision ? new Date(frontendData.fecha_emision) : new Date(),
+        monto: toNullableNumber(montoPrimero),
+        monto_pagado: toNullableNumber(montoPrimero),
+
+        // Campos con valores por defecto / fechas
+        fecha_emision: frontendData.fecha_emision
+          ? new Date(frontendData.fecha_emision)
+          : new Date(),
         fecha_pago: new Date(),
-        url_pdf: frontendData.url_pdf || null,
+        url_pdf: toNullableString(frontendData.url_pdf),
         numero_comprobante: `COMP-${Date.now()}`,
-        cuenta_origen: '', // Se pueden dejar vacíos o pedir en frontend
-        cuenta_destino: '',
-        moneda: 'MXN',
-        metodo_de_pago: 'Transferencia',
-        referencia_pago: '',
-        nombre_pagador: '',
-        rfc_pagador: '',
-        domicilio_pagador: '',
-        nombre_beneficiario: '',
-        domicilio_beneficiario: ''
+
+        // Cuentas y otros campos opcionales -> null si no vienen
+        cuenta_origen: toNullableString(frontendData.cuenta_origen),
+        cuenta_destino: toNullableString(frontendData.cuenta_destino),
+        moneda: toNullableString(frontendData.moneda) || "MXN",
+        metodo_de_pago:
+          toNullableString(frontendData.metodo_de_pago) || "Transferencia",
+        referencia_pago: toNullableString(frontendData.referencia_pago),
+        nombre_pagador: toNullableString(frontendData.nombre_pagador),
+        rfc_pagador: toNullableString(frontendData.rfc_pagador),
+        domicilio_pagador: toNullableString(frontendData.domicilio_pagador),
+        nombre_beneficiario: toNullableString(frontendData.nombre_beneficiario),
+        domicilio_beneficiario: toNullableString(
+          frontendData.domicilio_beneficiario
+        ),
       };
 
       // Validar campos requeridos para modo individual
       if (!pagoData.id_solicitud_proveedor) {
         return res.status(400).json({
           error: "Bad Request",
-          details: "El campo id_solicitud_proveedor es requerido"
+          details: "El campo id_solicitud_proveedor es requerido",
         });
       }
 
-      // Preparamos la consulta SQL para insertar los valores
       const query = `
         INSERT INTO pago_proveedores (
           id_solicitud_proveedor, codigo_dispersion, monto_pagado, fecha_pago,
@@ -256,20 +291,25 @@ const createPago = async (req, res) => {
         pagoData.domicilio_beneficiario,
         pagoData.descripcion,
         pagoData.iva,
-        pagoData.total
+        pagoData.total,
       ];
 
-      // Ejecutar la query para insertar el pago
-      const [result] = await db.executeQuery(query, values);
-      
-      const idPagoInsertado = result.insertId;
-      const idPagoDispersion = `PD-${String(idPagoInsertado).padStart(6, '0')}`;
-      
-      // Actualizar la tabla con el id_pago_dispersion
-      const updateQuery = `UPDATE pago_proveedores SET id_pago_dispersion = ? WHERE id_pago_proveedores = ?`;
-      await db.executeQuery(updateQuery, [idPagoDispersion, idPagoInsertado]);
+      // 👇 AQUÍ: ya NO destructuramos
+      const result = await executeQuery(query, values);
 
-      // Responder con éxito
+      const idPagoInsertado = result.insertId;
+      const idPagoDispersion = `PD-${String(idPagoInsertado).padStart(
+        6,
+        "0"
+      )}`;
+
+      const updateQuery = `
+        UPDATE pago_proveedores
+        SET id_pago_dispersion = ?
+        WHERE id_pago_proveedores = ?
+      `;
+      await executeQuery(updateQuery, [idPagoDispersion, idPagoInsertado]);
+
       return res.status(201).json({
         success: true,
         message: "Pago creado exitosamente",
@@ -279,68 +319,99 @@ const createPago = async (req, res) => {
           codigo_dispersion: pagoData.codigo_dispersion,
           numero_comprobante: pagoData.numero_comprobante,
           monto: pagoData.monto,
-          fecha_pago: pagoData.fecha_pago
-        }
+          fecha_pago: pagoData.fecha_pago,
+        },
       });
     }
 
-    // MODO MASIVO: Procesar múltiples inserciones del CSV
+    // ============================
+    // MODO MASIVO
+    // ============================
     if (isMasivo) {
+      if (!Array.isArray(csvData) || csvData.length === 0) {
+        return res.status(400).json({
+          error: "Bad Request",
+          details: "csvData debe ser un arreglo con al menos una fila",
+        });
+      }
+
       const resultados = [];
       const errores = [];
-      console.log(csvData, "🐨🐨🐨🐨🐨🐨🐨🐨");
 
-      // Procesar cada fila del CSV
+      console.log("🐨 csvData recibido en modo masivo:", csvData);
+
       for (let i = 0; i < csvData.length; i++) {
         try {
-          const csvRow = csvData[i];
-          
-          // Mapear nombres de columnas del CSV a los nombres de la base de datos
+          const csvRow = csvData[i] || {};
+
+          const baseUser = user || "system";
+
+          const userCreated =
+            frontendData.user_created && frontendData.user_created.trim() !== ""
+              ? `${frontendData.user_created},${baseUser}`.replace(/,+$/, "")
+              : baseUser;
+
+          const userUpdate =
+            frontendData.user_update && frontendData.user_update.trim() !== ""
+              ? `${frontendData.user_update},${baseUser}`.replace(/,+$/, "")
+              : baseUser;
+
           const pagoData = {
-            // Datos del frontend (comunes a todos)
-            id_pago_dispercion: csvRow["id_pago_dispersion"],
-            user_created: frontendData.user_created + `,` + user || 'system',
-            user_update: frontendData.user_update + `,` + user || 'system',
-            concepto: csvRow["Concepto"] || frontendData.concepto,
-            descripcion: csvRow["Descripcion"] || frontendData.descripcion,
-            
-            // Datos del CSV - mapeo de columnas
-            codigo_dispersion: csvRow["codigo_dispersion"] || csvRow["Codigo de dispersion"] || generarCodigoDispersion(),
-            monto_pagado: parseFloat(csvRow["Monto"] || csvRow["Total"] || "0"),
-            fecha_pago: csvRow["Fecha de pago"] ? parseFecha(csvRow["Fecha de pago"]) : new Date(),
-            numero_comprobante: csvRow["Numero de comprobante"] || `COMP-CSV-${Date.now()}-${i}`,
-            cuenta_origen: csvRow["Cuenta de origen"] || "",
-            cuenta_destino: csvRow["Cuenta de destino"] || "",
-            monto: parseFloat(csvRow["Monto"] || csvRow["Total"] || "0"),
-            moneda: csvRow["Moneda"] || 'MXN',
-            metodo_de_pago: csvRow["Metodo de pago"] || 'Transferencia',
-            referencia_pago: csvRow["Referencia de pago"] || "",
-            nombre_pagador: csvRow["Nombre del pagador"] || "",
-            rfc_pagador: csvRow["RFC del pagador"] || "",
-            domicilio_pagador: csvRow["Domicilio del pagador"] || "",
-            nombre_beneficiario: csvRow["Nombre del beneficiario"] || "",
-            domicilio_beneficiario: csvRow["Domicilio del beneficiario"] || "",
-            iva: parseFloat(csvRow["IVA"] || "0"),
-            total: parseFloat(csvRow["Total"] || csvRow["Monto"] || "0"),
-            
-            // Campos con valores por defecto
-            fecha_emision: csvRow["Fecha de emisión"] ? parseFecha(csvRow["Fecha de emisión"]) : new Date(),
-            url_pdf: null
+            id_pago_dispersion: toNullableString(csvRow["id_pago_dispersion"]),
+            user_created: userCreated,
+            user_update: userUpdate,
+
+            concepto:
+              toNullableString(csvRow["Concepto"]) ||
+              toNullableString(frontendData.concepto),
+            descripcion:
+              toNullableString(csvRow["Descripcion"]) ||
+              toNullableString(frontendData.descripcion),
+
+            codigo_dispersion:
+              toNullableString(csvRow["codigo_dispersion"]) ||
+              toNullableString(csvRow["Codigo de dispersion"]) ||
+              generarCodigoDispersion(),
+
+            monto_pagado: toNullableNumber(
+              csvRow["Monto"] || csvRow["Total"]
+            ),
+            fecha_pago: csvRow["Fecha de pago"]
+              ? parseFecha(csvRow["Fecha de pago"])
+              : new Date(),
+            numero_comprobante:
+              toNullableString(csvRow["Numero de comprobante"]) ||
+              `COMP-CSV-${Date.now()}-${i}`,
+            cuenta_origen: toNullableString(csvRow["Cuenta de origen"]),
+            cuenta_destino: toNullableString(csvRow["Cuenta de destino"]),
+            monto: toNullableNumber(csvRow["Monto"] || csvRow["Total"]),
+            moneda: toNullableString(csvRow["Moneda"]) || "MXN",
+            metodo_de_pago:
+              toNullableString(csvRow["Metodo de pago"]) || "Transferencia",
+            referencia_pago: toNullableString(csvRow["Referencia de pago"]),
+            nombre_pagador: toNullableString(csvRow["Nombre del pagador"]),
+            rfc_pagador: toNullableString(csvRow["RFC del pagador"]),
+            domicilio_pagador: toNullableString(
+              csvRow["Domicilio del pagador"]
+            ),
+            nombre_beneficiario: toNullableString(
+              csvRow["Nombre del beneficiario"]
+            ),
+            domicilio_beneficiario: toNullableString(
+              csvRow["Domicilio del beneficiario"]
+            ),
+            iva: toNullableNumber(csvRow["IVA"]),
+            total: toNullableNumber(csvRow["Total"] || csvRow["Monto"]),
+
+            fecha_emision: csvRow["Fecha de emisión"]
+              ? parseFecha(csvRow["Fecha de emisión"])
+              : new Date(),
+            url_pdf: null,
           };
 
-          // Validar campos requeridos para modo masivo
-          if (!pagoData.cuenta_destino || !pagoData.cuenta_origen) {
-            errores.push({
-              fila: i + 1,
-              error: "Las cuentas de origen y destino son requeridas",
-              datos: { cuenta_origen: pagoData.cuenta_origen, cuenta_destino: pagoData.cuenta_destino }
-            });
-            continue;
-          }
-
-          // Preparamos la consulta SQL para insertar los valores del CSV
           const query = `
-            INSERT INTO pago_proveedores (id_pago_dispersion, codigo_dispersion, monto_pagado, fecha_pago,
+            INSERT INTO pago_proveedores (
+              id_pago_dispersion, codigo_dispersion, monto_pagado, fecha_pago,
               url_pdf, user_update, user_created, fecha_emision, numero_comprobante,
               cuenta_origen, cuenta_destino, monto, moneda, concepto, metodo_de_pago,
               referencia_pago, nombre_pagador, rfc_pagador, domicilio_pagador,
@@ -349,7 +420,7 @@ const createPago = async (req, res) => {
           `;
 
           const values = [
-            pagoData.id_pago_dispercion,
+            pagoData.id_pago_dispersion,
             pagoData.codigo_dispersion,
             pagoData.monto_pagado,
             pagoData.fecha_pago,
@@ -372,18 +443,28 @@ const createPago = async (req, res) => {
             pagoData.domicilio_beneficiario,
             pagoData.descripcion,
             pagoData.iva,
-            pagoData.total
+            pagoData.total,
           ];
 
-          // Ejecutar la query para insertar el pago
-          const [result] = await executeQuery(query, values);
-          console.log("result", result);
+          // 👇 AQUÍ TAMBIÉN: sin destructuring
+          const result = await executeQuery(query, values);
+          console.log("result fila", i + 1, result);
 
           const idPagoInsertado = result.insertId;
-          const idPagoDispersion = `PD-${String(idPagoInsertado).padStart(6, '0')}`;
-          
-          const updateQuery = `UPDATE pago_proveedores SET id_pago_dispersion = ? WHERE id_pago_proveedores = ?`;
-          await executeQuery(updateQuery, [idPagoDispersion, idPagoInsertado]);
+          const idPagoDispersion = `PD-${String(idPagoInsertado).padStart(
+            6,
+            "0"
+          )}`;
+
+          const updateQuery = `
+            UPDATE pago_proveedores
+            SET id_pago_dispersion = ?
+            WHERE id_pago_proveedores = ?
+          `;
+          await executeQuery(updateQuery, [
+            idPagoDispersion,
+            idPagoInsertado,
+          ]);
 
           resultados.push({
             fila: i + 1,
@@ -392,65 +473,67 @@ const createPago = async (req, res) => {
             id_pago_dispersion: idPagoDispersion,
             codigo_dispersion: pagoData.codigo_dispersion,
             numero_comprobante: pagoData.numero_comprobante,
-            monto: pagoData.monto
+            monto: pagoData.monto,
           });
-
         } catch (error) {
+          console.error(`❌ Error en fila ${i + 1}:`, error);
           errores.push({
             fila: i + 1,
             error: error.message,
-            code: error.code
+            code: error.code,
           });
         }
       }
 
-      // Responder con resultados
       return res.status(201).json({
         success: true,
         message: `Procesamiento completado: ${resultados.length} pagos creados, ${errores.length} errores`,
         summary: {
           total_filas: csvData.length,
           exitosas: resultados.length,
-          errores: errores.length
+          errores: errores.length,
         },
-        resultados: resultados,
-        errores: errores.length > 0 ? errores : undefined
+        resultados,
+        errores: errores.length > 0 ? errores : undefined,
       });
     }
 
-    // Si no es ni individual ni masivo válido
+    // ============================
+    // Modo inválido
+    // ============================
     return res.status(400).json({
       error: "Bad Request",
-      details: "Datos inválidos. Verifique el modo de operación y los datos enviados."
+      details:
+        "Datos inválidos. Verifique el modo de operación (isMasivo) y los datos enviados.",
     });
-
   } catch (error) {
-    console.error("❌ Error en al momento de crear pago: ", error);
-    
-    // Manejar errores específicos de duplicados
-    if (error.code === 'ER_DUP_ENTRY') {
+    console.error("❌ Error al momento de crear pago: ", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
         error: "Conflict",
         details: "Ya existe un registro con estos datos",
-        field: error.message.match(/for key '(.+)'/)?.[1]
+        field: error.message.match(/for key '(.+)'/)?.[1],
       });
     }
-    
-    // Manejar errores de validación de datos
-    if (error.code === 'ER_DATA_TOO_LONG') {
+
+    if (error.code === "ER_DATA_TOO_LONG") {
       return res.status(400).json({
         error: "Bad Request",
-        details: "Algunos datos exceden la longitud permitida"
+        details: "Algunos datos exceden la longitud permitida",
       });
     }
-    
+
     return res.status(500).json({
       error: "Internal Server Error",
       details: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      stack:
+        process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 };
+
+
 
 // Función auxiliar para parsear fechas desde diferentes formatos
 function parseFecha(fechaString) {
