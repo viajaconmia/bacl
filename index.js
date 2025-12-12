@@ -58,9 +58,7 @@ const { SECRET_KEY } = require("./lib/constant");
 // Control de CORS
 const corsOptions = {
   origin: [
-    "http://localhost:5173",
     "https://viajaconmia.com",
-    "http://localhost:3000",
     "https://miaadmin.vercel.app",
     "https://mia-prueba.vercel.app",
     "https://admin-mia.vercel.app",
@@ -69,6 +67,8 @@ const corsOptions = {
     "https://admin.viajaconmia.com",
     "https://mia-git-pruebasmia-mias-projects-f396ca8b.vercel.app",
     "https://admin-mia-git-pruebasadmin-mias-projects-f396ca8b.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: [
