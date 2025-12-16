@@ -55,7 +55,7 @@ const createCombinada = async (req, res) => {
     console.log(resp);
     return res.status(201).json(resp.data.data);
   } catch (error) {
-    console.log("ERROR MANEJADO")
+    console.log("ERROR MANEJADO");
     console.log(error.response);
     res.status(500).json({
       error: "Error en el servidor",
@@ -177,11 +177,11 @@ const crearFacturaDesdeCarga = async (req, res) => {
     url_pdf,
     url_xml,
     items,
-    fecha_vencimiento
+    fecha_vencimiento,
   } = req.body;
   const id_factura = "fac-" + uuidv4();
 
-  console.log(items,"estos son los items 👌👌👌👌👌👌👌👌")
+  console.log(items, "estos son los items 👌👌👌👌👌👌👌👌");
 
   try {
     console.log("😒😒😒😒😒", req.body);
@@ -202,7 +202,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
       url_pdf,
       url_xml,
       items,
-      fecha_vencimiento
+      fecha_vencimiento,
     ]);
 
     if (!response) {
@@ -285,614 +285,41 @@ const asignarFacturaItems = async (req, res) => {
   }
 };
 
-// const asignarFacturaPagos = async (req, res) => {
-//   try {
-//     const { id_factura: facturasRaw, ejemplo_saldos: saldosRaw } =
-//       req.body || {};
-//     if (
-//       !facturasRaw ||
-//       (Array.isArray(facturasRaw) && facturasRaw.length === 0)
-//     ) {
-//       return res.status(400).json({
-//         error: "Debes enviar 'id_factura' con 1+ elementos (array o string).",
-//       });
-//     }
 
-//     // --- Normalizar arrays ---
-//     const facturasOrden = Array.isArray(facturasRaw)
-//       ? facturasRaw
-//       : [facturasRaw];
-
-//     let items = saldosRaw;
-//     if (!items) {
-//       return res
-//         .status(400)
-//         .json({ error: "Falta 'ejemplo_saldos' en el payload." });
-//     }
-//     if (typeof items === "string") {
-//       try {
-//         items = JSON.parse(items);
-//       } catch (e) {
-//         return res.status(400).json({
-//           error: "El campo 'ejemplo_saldos' no es un JSON válido",
-//           details: e.message,
-//         });
-//       }
-//     }
-//     if (!Array.isArray(items)) items = [items];
-
-//     // --- Traer saldos actuales de las facturas, conservando ORDEN ---
-//     const facturas = [];
-//     for (const idf of facturasOrden) {
-//       const r = await executeQuery(
-//         "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;",
-//         [idf]
-//       );
-//       if (!r?.length) {
-//         return res.status(404).json({ error: `Factura no encontrada: ${idf}` });
-//       }
-//       facturas.push({
-//         id_factura: r[0].id_factura,
-//         saldo: Number(r[0].saldo) || 0,
-//       });
-//     }
-
-//     // --- Consultar en bloque la vista para obtener saldo disponible por raw_id ---
-//     const rawIds = [...new Set(items.map((it) => String(it.id_saldo)))];
-//     const placeholders = rawIds.length>1 ? rawIds.map(() => "?").join(","):rawIds[0];
-//     const viewRows = rawIds.length
-//       ? await executeQuery(
-//           `SELECT raw_id, saldo FROM vw_pagos_prepago_facturables WHERE raw_id IN (${placeholders});`,
-//           rawIds
-//         )
-//       : [];
-//     console.log(rawIds,"pagoeeefeeee222eees")
-//     console.log(placeholders,"pagoeeeees")
-//     const disponiblePorRawId = new Map();
-//     for (const row of viewRows || []) {
-//       const rid = String(row.raw_id);
-//       const disp = Number(row.saldo);
-//       if (Number.isFinite(disp)) disponiblePorRawId.set(rid, Math.max(0, disp));
-//     }
-
-//     // --- Construir "pagos" a aplicar, usando SIEMPRE el saldo de la vista como tope ---
-//     // Si un id_saldo no aparece en la vista => disponible = 0 (se ignora)
-//     const creditos = items
-//       .map((it) => {
-//         const raw = String(it.id_saldo);
-//         const disponible = disponiblePorRawId.has(raw)
-//         ? Number(disponiblePorRawId.get(raw))
-//         : 0;
-//         console.log(disponible,"pagos")
-//         const isSaldoFavor = /^\d+$/.test(raw); // num puro => saldo a favor
-//         return { raw_id: raw, disponible, restante: disponible, isSaldoFavor };
-//       })
-//       .filter((c) => c.disponible > 0);
-//     console.log(creditos)
-//     if (creditos.length === 0) {
-//       return res.status(400).json({
-//         error: "No hay saldo disponible para aplicar (según la vista).",
-//         detalle: {
-//           solicitados: items.map((i) => ({ id_saldo: i.id_saldo })),
-//           encontrados_en_vista: viewRows.length,
-//         },
-//       });
-//     }
-
-//     // --- Aplicación secuencial: consumir factura[0] hasta 0, luego factura[1], etc. ---
-//     const appliedByFactura = new Map(); // id_factura -> suma aplicada
-//     const appliedByCredito = new Map(); // raw_id     -> suma aplicada
-
-//     let idxFactura = 0;
-
-//     for (const cred of creditos) {
-//       while (cred.restante > 0 && idxFactura < facturas.length) {
-//         // Saltar facturas agotadas
-//         while (
-//           idxFactura < facturas.length &&
-//           facturas[idxFactura].saldo <= 0
-//         ) {
-//           idxFactura++;
-//         }
-//         if (idxFactura >= facturas.length) break;
-
-//         const f = facturas[idxFactura];
-//         const aplicar = Math.min(f.saldo, cred.restante);
-
-//         if (aplicar <= 0) {
-//           idxFactura++;
-//           continue;
-//         }
-
-//         // Insertar en tabla puente con columnas correctas
-//         //   - isSaldoFavor => id_saldo_a_favor (= raw_id num), id_pago = NULL
-//         //   - no saldo a favor => id_pago (= raw_id string), id_saldo_a_favor = NULL
-//         const insertSQL = `
-//           INSERT INTO facturas_pagos_y_saldos (id_pago, id_saldo_a_favor, id_factura, monto)
-//           VALUES (?, ?, ?, ?);
-//         `;
-//         const id_pago = cred.isSaldoFavor ? null : cred.raw_id;
-//         const id_saldo_a_favor = cred.isSaldoFavor ? cred.raw_id : null;
-
-//         await executeQuery(insertSQL, [
-//           id_pago,
-//           id_saldo_a_favor,
-//           f.id_factura,
-//           aplicar,
-//         ]);
-
-//         // Actualizar saldos en memoria
-//         f.saldo -= aplicar;
-//         cred.restante -= aplicar;
-
-//         // Acumular totales para respuesta
-//         appliedByFactura.set(
-//           f.id_factura,
-//           (appliedByFactura.get(f.id_factura) || 0) + aplicar
-//         );
-//         appliedByCredito.set(
-//           cred.raw_id,
-//           (appliedByCredito.get(cred.raw_id) || 0) + aplicar
-//         );
-
-//         if (f.saldo <= 0) idxFactura++;
-//       }
-//     }
-
-//     // --- Persistir nuevos saldos de facturas ---
-//     for (const f of facturas) {
-//       await executeQuery(
-//         "UPDATE facturas SET saldo = ? WHERE id_factura = ?;",
-//         [f.saldo, f.id_factura]
-//       );
-//     }
-
-//     // --- Preparar respuesta ---
-//     const detalleFacturas = facturas.map((f) => ({
-//       id_factura: f.id_factura,
-//       aplicado: appliedByFactura.get(f.id_factura) || 0,
-//       saldo_final: f.saldo,
-//     }));
-
-//     const detalleCreditos = creditos.map((c) => ({
-//       raw_id: c.raw_id,
-//       tipo: c.isSaldoFavor ? "saldo_a_favor" : "pago",
-//       disponible: c.disponible,
-//       aplicado: appliedByCredito.get(c.raw_id) || 0,
-//       sin_aplicar: Math.max(
-//         0,
-//         c.disponible - (appliedByCredito.get(c.raw_id) || 0)
-//       ),
-//     }));
-
-//     const totalSinAplicar = detalleCreditos.reduce(
-//       (s, p) => s + p.sin_aplicar,
-//       0
-//     );
-
-//         //---------------------------------------------------------------------
-// // Agregar pagos a saldos y ajustar saldos
-
-//     // Opción 1: usando concatenación
-    
-//     const transaccion = `tra-${uuidv4()}`;
-    
-//     const consultas_facturas = `SELECT id_hospedaje FROM items WHERE id_factura in '${facturas.id_factura}'`;
-//     const query_pagos = `
-//               INSERT INTO pagos (
-//                 id_pago, id_servicio, id_saldo_a_favor, id_agente,
-//                 metodo_de_pago, fecha_pago, concepto, referencia,
-//                 currency, tipo_de_tarjeta, link_pago, last_digits, total,saldo_aplicado,transaccion,monto_transaccion
-//               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
-//             `;
-    
-
-//     console.log(viewRows)
-//     // Imprimir en consola
-//     console.log(facturas,"envios");
-//     console.log((consultas_facturas));
-
-
-//     return res.status(200).json({
-//       message:
-//         "Pagos/Saldos aplicados secuencialmente a las facturas usando saldo de la vista.",
-//       orden_facturas: facturasOrden,
-//       facturas: detalleFacturas,
-//       creditos: detalleCreditos,
-//       total_sin_aplicar: totalSinAplicar,
-//     });
-
-
-
-
-//   } catch (error) {
-//     console.error("Error en asignarFacturaPagos:", error);
-//     return res.status(500).json({
-//       error: "Error al asignar pagos a las facturas",
-//       details: error?.message || String(error),
-//     });
-//   }
-
-// };
-
-// const asignarFacturaPagos = async (req, res) => {
-//   // Helper para IDs si no usas uuidv4()
-//   const newId = (pfx) =>
-//     `${pfx}-${Date.now().toString(36)}-${Math.random()
-//       .toString(36)
-//       .slice(2, 10)}`;
-
-//   try {
-//     const {
-//       id_factura: facturasRaw,
-//       ejemplo_saldos: saldosRaw,
-//       id_agente = null,
-//       metodo_de_pago = "aplicacion_saldo",
-//       currency = "MXN",
-//       tipo_de_tarjeta = null,
-//       link_pago = null,
-//       last_digits = null,
-//       referencia = null,
-//       concepto = "Aplicación a facturas",
-//     } = req.body || {};
-
-//     if (!facturasRaw || (Array.isArray(facturasRaw) && facturasRaw.length === 0)) {
-//       return res.status(400).json({
-//         error: "Debes enviar 'id_factura' con 1+ elementos (array o string).",
-//       });
-//     }
-
-//     // --- Normalizar arrays ---
-//     const facturasOrden = Array.isArray(facturasRaw) ? facturasRaw : [facturasRaw];
-
-//     let itemsEntrada = saldosRaw;
-//     if (!itemsEntrada) {
-//       return res.status(400).json({ error: "Falta 'ejemplo_saldos' en el payload." });
-//     }
-//     if (typeof itemsEntrada === "string") {
-//       try {
-//         itemsEntrada = JSON.parse(itemsEntrada);
-//       } catch (e) {
-//         return res.status(400).json({
-//           error: "El campo 'ejemplo_saldos' no es un JSON válido",
-//           details: e.message,
-//         });
-//       }
-//     }
-//     if (!Array.isArray(itemsEntrada)) itemsEntrada = [itemsEntrada];
-
-//     // --- Traer saldos actuales de las facturas, conservando ORDEN ---
-//     const facturas = [];
-//     for (const idf of facturasOrden) {
-//       const r = await executeQuery(
-//         "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;",
-//         [idf]
-//       );
-//       if (!r?.length) {
-//         return res.status(404).json({ error: `Factura no encontrada: ${idf}` });
-//       }
-//       facturas.push({
-//         id_factura: r[0].id_factura,
-//         saldo: Number(r[0].saldo) || 0,
-//       });
-//     }
-
-//     // --- Consultar en bloque la vista para obtener saldo disponible por raw_id ---
-//     const rawIds = [...new Set(itemsEntrada.map((it) => String(it.id_saldo)))];
-//     const placeholdersRaw = rawIds.map(() => "?").join(",");
-//     const viewRows = rawIds.length
-//       ? await executeQuery(
-//           `SELECT raw_id, saldo FROM vw_pagos_prepago_facturables WHERE raw_id IN (${placeholdersRaw});`,
-//           rawIds
-//         )
-//       : [];
-
-//     const disponiblePorRawId = new Map();
-//     for (const row of viewRows || []) {
-//       const rid = String(row.raw_id);
-//       const disp = Number(row.saldo);
-//       if (Number.isFinite(disp)) disponiblePorRawId.set(rid, Math.max(0, disp));
-//     }
-
-//     // --- Construir créditos (topados por la vista) ---
-//     const creditos = itemsEntrada
-//       .map((it) => {
-//         const raw = String(it.id_saldo);
-//         const disponible = disponiblePorRawId.has(raw)
-//           ? Number(disponiblePorRawId.get(raw))
-//           : 0;
-//         const isSaldoFavor = /^\d+$/.test(raw); // num puro => saldo a favor
-//         return { raw_id: raw, disponible, restante: disponible, isSaldoFavor };
-//       })
-//       .filter((c) => c.disponible > 0);
-
-//     if (creditos.length === 0) {
-//       return res.status(400).json({
-//         error: "No hay saldo disponible para aplicar (según la vista).",
-//         detalle: {
-//           solicitados: itemsEntrada.map((i) => ({ id_saldo: i.id_saldo })),
-//           encontrados_en_vista: viewRows.length,
-//         },
-//       });
-//     }
-
-
-//     // --- Aplicación secuencial a facturas (resumen por factura y por crédito) ---
-//     const appliedByFactura = new Map(); // id_factura -> suma aplicada
-//     const appliedByCredito = new Map(); // raw_id     -> suma aplicada
-
-//     let idxFactura = 0;
-
-//     for (const cred of creditos) {
-//       while (cred.restante > 0 && idxFactura < facturas.length) {
-//         // Saltar facturas agotadas
-//         while (idxFactura < facturas.length && facturas[idxFactura].saldo <= 0) {
-//           idxFactura++;
-//         }
-//         if (idxFactura >= facturas.length) break;
-
-//         const f = facturas[idxFactura];
-//         const aplicar = Math.min(f.saldo, cred.restante);
-
-//         if (aplicar <= 0) {
-//           idxFactura++;
-//           continue;
-//         }
-
-//         // Vincular crédito-factura a nivel puente (trazabilidad)
-//         await executeQuery(
-//           `INSERT INTO facturas_pagos_y_saldos (id_pago, id_saldo_a_favor, id_factura, monto)
-//            VALUES (?, ?, ?, ?);`,
-//           [cred.isSaldoFavor ? null : cred.raw_id, cred.isSaldoFavor ? cred.raw_id : null, f.id_factura, aplicar]
-//         );
-
-//         // Actualizar saldos en memoria
-//         f.saldo -= aplicar;
-//         cred.restante -= aplicar;
-
-//         // Acumular totales para respuesta
-//         appliedByFactura.set(f.id_factura, (appliedByFactura.get(f.id_factura) || 0) + aplicar);
-//         appliedByCredito.set(cred.raw_id, (appliedByCredito.get(cred.raw_id) || 0) + aplicar);
-
-//         if (f.saldo <= 0) idxFactura++;
-//       }
-//     }
-
-//     // --- Persistir nuevos saldos de facturas ---
-//     for (const f of facturas) {
-//       await executeQuery("UPDATE facturas SET saldo = ? WHERE id_factura = ?;", [
-//         f.saldo,
-//         f.id_factura,
-//       ]);
-//     }
-
-//     // === (A) OBTENER ITEMS DE LAS FACTURAS (ordenables para repartir por ítem) ===
-//     const placeholdersFact = facturasOrden.map(() => "?").join(",");
-//     const itemsDeFacturas = await executeQuery(
-//       `SELECT id_item, id_factura, saldo
-//        FROM items
-//        WHERE id_factura IN (${placeholdersFact})
-//        ORDER BY id_factura ASC, id_item ASC;`,
-//       facturasOrden
-//     );
-
-//     const itemsHosp = await executeQuery(
-//       `SELECT id_factura, id_hospedaje
-//       FROM items
-//       WHERE id_factura IN (${placeholdersFact})`,
-//       facturasOrden
-//     );
-
-//     const hospedajesPorFactura = new Map();
-//     for (const row of itemsHosp) {
-//       if (!row?.id_hospedaje) continue;
-//       const k = String(row.id_factura);
-//       if (!hospedajesPorFactura.has(k)) hospedajesPorFactura.set(k, new Set());
-//       hospedajesPorFactura.get(k).add(String(row.id_hospedaje));
-//     }
-
-
-// // 2) Lista de hospedajes únicos
-// const allHospedajes = [...new Set(
-//   [].concat(...[...hospedajesPorFactura.values()].map(s => [...s]))
-// )];
-
-// let servicioPorHosp = new Map();
-// if (allHospedajes.length) {
-//   const phH = allHospedajes.map(() => "?").join(",");
-//   const reservasRows = await executeQuery(
-//     `SELECT id_hospedaje, id_servicio
-//      FROM vw_reservas_client
-//      WHERE id_hospedaje IN (${phH});`,
-//     allHospedajes
-//   );
-//   for (const r of reservasRows || []) {
-//     if (r?.id_hospedaje) {
-//       servicioPorHosp.set(String(r.id_hospedaje), r.id_servicio ?? null);
-//     }
-//   }
-// }
-
-// // 3) Reducimos a: factura -> (primer) id_servicio disponible
-// const servicioPorFactura = new Map();
-// for (const [idF, setHosp] of hospedajesPorFactura.entries()) {
-//   let elegido = null;
-//   for (const h of setHosp) {
-//     if (servicioPorHosp.has(h)) {
-//       elegido = servicioPorHosp.get(h);
-//       if (elegido != null) break;
-//     }
-//   }
-//   servicioPorFactura.set(idF, elegido); // puede ser null si no hay
-// }
-
-//     // Estructura: saldos pendientes por ítem (para repartir créditos a nivel ítem)
-//     const itemPendiente = itemsDeFacturas.map((it) => ({
-//       id_item: it.id_item,
-//       id_factura: it.id_factura,
-//       pendiente: Number(it.saldo) || 0,
-//     }));
-
-//     // === (B) CREAR REGISTROS EN "pagos" POR CADA raw_id CON APLICACIÓN > 0 ===
-//     const transaccion = `tra-${uuidv4()}`;
-//     const pagosCreados = new Map(); // raw_id -> id_pago
-
-//     for (const cred of creditos) {
-//       const aplicado = appliedByCredito.get(cred.raw_id) || 0;
-//       if (aplicado <= 0) continue;
-
-//       const id_pago = newId("pago");
-//       pagosCreados.set(cred.raw_id, id_pago);
-
-//       // Insert en pagos (saldo_aplicado = aplicado total de ese raw_id)
-//       await executeQuery(
-//         `INSERT INTO pagos (
-//           id_pago, id_servicio, id_saldo_a_favor, id_agente,
-//           metodo_de_pago, fecha_pago, concepto, referencia,
-//           currency, tipo_de_tarjeta, link_pago, last_digits, total, saldo_aplicado, transaccion, monto_transaccion
-//         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);`,
-//         [
-//           id_pago,                      // id_pago
-//           null,                         // id_servicio
-//           cred.isSaldoFavor ? cred.raw_id : null, // id_saldo_a_favor
-//           id_agente,                    // id_agente
-//           metodo_de_pago,               // metodo_de_pago
-//           new Date(),                   // fecha_pago
-//           concepto,                     // concepto
-//           transaccion,                  // referencia
-//           currency,                     // currency
-//           tipo_de_tarjeta,              // tipo_de_tarjeta
-//           link_pago,                    // link_pago
-//           last_digits,                  // last_digits
-//           aplicado,                     // total
-//           aplicado,                     // saldo_aplicado
-//           transaccion,                  // transaccion
-//           aplicado,                     // monto_transaccion
-//         ]
-//       );
-//     }
-
-//     // === (C) DISTRIBUIR A NIVEL ÍTEM Y LLENAR items_pagos ===
-//     // Para cada crédito (raw_id), repartimos lo aplicado entre los items pendientes
-//     const valuesIP = [];
-//     const paramsIP = [];
-
-//     for (const cred of creditos) {
-//       const aplicado = appliedByCredito.get(cred.raw_id) || 0;
-//       if (aplicado <= 0) continue;
-
-//       let porAplicar = aplicado;
-//       const id_pago = pagosCreados.get(cred.raw_id); // ya insertado arriba
-
-//       for (const it of itemPendiente) {
-//         if (porAplicar <= 0) break;
-//         if (it.pendiente <= 0) continue;
-
-//         const m = Math.min(it.pendiente, porAplicar);
-//         // push (id_item, id_pago, monto)
-//         valuesIP.push("(?, ?, ?)");
-//         paramsIP.push(it.id_item, id_pago, m);
-
-//         it.pendiente -= m;
-//         porAplicar -= m;
-//       }
-//     }
-
-//     if (valuesIP.length > 0) {
-//       const sqlIP = `INSERT INTO items_pagos (id_item, id_pago, monto) VALUES ${valuesIP.join(",")};`;
-//       await executeQuery(sqlIP, paramsIP);
-//     }
-
-//     // === (D) ACTUALIZAR saldos_a_favor (solo si el raw_id es numérico) ===
-//     for (const cred of creditos) {
-//       if (!cred.isSaldoFavor) continue;
-//       const aplicado = appliedByCredito.get(cred.raw_id) || 0;
-//       const disponible = cred.disponible || 0;
-//       const restante = Math.max(0, disponible - aplicado);
-//       const saldo_actual = restante;
-
-//       await executeQuery(
-//         `UPDATE saldos_a_favor
-//          SET saldo = ?,
-//              activo = CASE WHEN (?) <= 0 THEN 0 ELSE 1 END
-//          WHERE id_saldos = ?;`,
-//         [saldo_actual, saldo_actual, cred.raw_id]
-//       );
-//     }
-
-//     // === (E) OPCIONAL: obtener objetos completos de saldos por los raw_id recibidos ===
-//     // select * from saldos where id_saldo in (viewRows.raw_id...)
-//     let saldosFull = [];
-//     if (rawIds.length) {
-//       const ph = rawIds.map(() => "?").join(",");
-//       saldosFull = await executeQuery(
-//         `SELECT * FROM saldos WHERE id_saldo IN (${ph});`,
-//         rawIds
-//       );
-//     }
-
-//     // --- Confirmar transacción ---
-
-//     // --- Respuesta estructurada ---
-//     const detalleFacturas = facturas.map((f) => ({
-//       id_factura: f.id_factura,
-//       aplicado: appliedByFactura.get(f.id_factura) || 0,
-//       saldo_final: f.saldo,
-//     }));
-
-//     const detalleCreditos = creditos.map((c) => ({
-//       raw_id: c.raw_id,
-//       tipo: c.isSaldoFavor ? "saldo_a_favor" : "pago",
-//       disponible: c.disponible,
-//       aplicado: appliedByCredito.get(c.raw_id) || 0,
-//       sin_aplicar: Math.max(0, c.disponible - (appliedByCredito.get(c.raw_id) || 0)),
-//       id_pago: pagosCreados.get(c.raw_id) || null,
-//     }));
-
-//     return res.status(200).json({
-//       message:
-//         "Pagos/Saldos aplicados por orden a facturas e items; pagos e items_pagos insertados; saldos_a_favor actualizado.",
-//       orden_facturas: facturasOrden,
-//       facturas: detalleFacturas,
-//       creditos: detalleCreditos,
-//       items_afectados: itemPendiente.map(({ id_item, id_factura, pendiente }) => ({
-//         id_item,
-//         id_factura,
-//         saldo_pendiente_final: pendiente,
-//       })),
-//       saldos_full: saldosFull, // "objeto" de saldos solicitado
-//       transaccion,
-//     });
-//   } catch (error) {
-//     try {
-//       await executeQuery("ROLLBACK");
-//     } catch (_) {}
-//     console.error("Error en asignarFacturaPagos:", error);
-//     return res.status(500).json({
-//       error: "Error al asignar pagos a las facturas",
-//       details: error?.message || String(error),
-//     });
-//   }
-// };
-
-const asignarFacturaPagos = async (req, res) => {
-  
-  // Helper para IDs si no usas uuidv4()
+const asignarFacturaPagos2 = async (req, res) => {
   const newId = (pfx) =>
-    `${pfx}-${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2, 10)}`;
+    `${pfx}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
-  // Helper de logging
-  const logQuery = (label, sql, params, result) => {
-    console.log(`[SQL] ${label}\n  Query: ${sql}\n  Params:`, params);
-    if (result !== undefined) {
-      console.log(`  Result:`, result);
+  // Debug helpers
+  const ts = () => new Date().toISOString();
+  const step = (n, msg, obj) => {
+    console.log(`\n🟦 [${ts()}] STEP ${n} - ${msg}`);
+    if (obj !== undefined) {
+      try {
+        console.log(JSON.stringify(obj, null, 2));
+      } catch (e) {
+        console.log(obj);
+      }
     }
     console.log("------------------------------------------------------------");
   };
 
+  const logQuery = (label, sql, params, result) => {
+    console.log(`\n🟨 [${ts()}] [SQL] ${label}`);
+    console.log(`Query:\n${sql}`);
+    console.log("Params:", params);
+    if (result !== undefined) {
+      console.log("Result:", result);
+    }
+    console.log("------------------------------------------------------------");
+  };
+
+  // util para no spamear gigantes
+  const brief = (arr, max = 5) => (Array.isArray(arr) ? arr.slice(0, max) : arr);
+
   try {
+    step(0, "REQ.BODY recibido", req.body);
+
     const {
       id_factura: facturasRaw,
       ejemplo_saldos: saldosRaw,
@@ -902,38 +329,63 @@ const asignarFacturaPagos = async (req, res) => {
       tipo_de_tarjeta = null,
       link_pago = null,
       last_digits = null,
-      referencia = null, // usaremos 'transaccion' si viene null
+      referencia = null,
       concepto = "Aplicación a facturas",
     } = req.body || {};
 
+    step(1, "Payload normalizado (campos principales)", {
+      facturasRaw,
+      saldosRaw_type: typeof saldosRaw,
+      id_agente,
+      metodo_de_pago,
+      currency,
+      referencia,
+      concepto,
+    });
+
     if (!facturasRaw || (Array.isArray(facturasRaw) && facturasRaw.length === 0)) {
+      step(1.1, "ERROR: id_factura faltante/vacío");
       return res.status(400).json({
         error: "Debes enviar 'id_factura' con 1+ elementos (array o string).",
       });
     }
 
-    // --- Normalizar arrays ---
     const facturasOrden = Array.isArray(facturasRaw) ? facturasRaw : [facturasRaw];
 
     let itemsEntrada = saldosRaw;
     if (!itemsEntrada) {
+      step(1.2, "ERROR: ejemplo_saldos faltante");
       return res.status(400).json({ error: "Falta 'ejemplo_saldos' en el payload." });
     }
+
     if (typeof itemsEntrada === "string") {
+      step(1.3, "ejemplo_saldos venía como string, intentando JSON.parse...");
       try {
         itemsEntrada = JSON.parse(itemsEntrada);
       } catch (e) {
+        step(1.31, "ERROR: ejemplo_saldos string NO es JSON válido", { message: e.message });
         return res.status(400).json({
           error: "El campo 'ejemplo_saldos' no es un JSON válido",
           details: e.message,
         });
       }
     }
+
     if (!Array.isArray(itemsEntrada)) itemsEntrada = [itemsEntrada];
 
-    // --- Iniciar transacción ---
+    step(2, "facturasOrden + itemsEntrada (preview)", {
+      facturasOrden,
+      itemsEntrada_preview: brief(itemsEntrada, 10),
+      itemsEntrada_len: itemsEntrada.length,
+    });
 
-    // --- Traer saldos actuales de las facturas, conservando ORDEN ---
+    // (Opcional) transacción real
+    // await executeQuery("START TRANSACTION");
+    // step(2.1, "START TRANSACTION");
+
+    // =========================
+    // STEP 3: SELECT facturas
+    // =========================
     const facturas = [];
     for (const idf of facturasOrden) {
       const queryFactura = "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;";
@@ -941,17 +393,21 @@ const asignarFacturaPagos = async (req, res) => {
       logQuery("SELECT factura saldo", queryFactura, [idf], r);
 
       if (!r?.length) {
+        step(3.1, "ERROR: Factura no encontrada", { id_factura: idf });
         throw new Error(`Factura no encontrada: ${idf}`);
       }
-      facturas.push({
-        id_factura: r[0].id_factura,
-        saldo: Number(r[0].saldo) || 0,
-      });
-    }
-    console.log("[DBG] Facturas (saldo inicial):", facturas);
 
-    // --- Consultar en bloque la vista para obtener saldo disponible por raw_id ---
+      const f = { id_factura: r[0].id_factura, saldo: Number(r[0].saldo) || 0 };
+      facturas.push(f);
+    }
+    step(3.2, "Facturas (saldo inicial)", facturas);
+
+    // =========================
+    // STEP 4: SELECT vista saldos disponibles
+    // =========================
     const rawIds = [...new Set(itemsEntrada.map((it) => String(it.id_saldo)))];
+    step(4, "rawIds (unique)", rawIds);
+
     const placeholdersRaw = rawIds.map(() => "?").join(",");
     let viewRows = [];
     if (rawIds.length) {
@@ -959,6 +415,7 @@ const asignarFacturaPagos = async (req, res) => {
       viewRows = await executeQuery(queryVista, rawIds);
       logQuery("SELECT vista saldos disponibles", queryVista, rawIds, viewRows);
     }
+    step(4.1, "viewRows (preview)", brief(viewRows, 20));
 
     const disponiblePorRawId = new Map();
     for (const row of viewRows || []) {
@@ -966,60 +423,103 @@ const asignarFacturaPagos = async (req, res) => {
       const disp = Number(row.saldo);
       if (Number.isFinite(disp)) disponiblePorRawId.set(rid, Math.max(0, disp));
     }
+    step(4.2, "disponiblePorRawId (as array)", Array.from(disponiblePorRawId.entries()));
 
-    // --- Construir créditos (topados por la vista) ---
+    // =========================
+    // STEP 5: Construir créditos
+    // =========================
     const creditos = itemsEntrada
       .map((it) => {
         const raw = String(it.id_saldo);
-        const disponible = disponiblePorRawId.has(raw)
-          ? Number(disponiblePorRawId.get(raw))
-          : 0;
-        const isSaldoFavor = /^\d+$/.test(raw); // num puro => saldo a favor
+        const disponible = disponiblePorRawId.has(raw) ? Number(disponiblePorRawId.get(raw)) : 0;
+        const isSaldoFavor = /^\d+$/.test(raw);
         return { raw_id: raw, disponible, restante: disponible, isSaldoFavor };
       })
       .filter((c) => c.disponible > 0);
 
-    console.log("[DBG] Créditos filtrados (con saldo disponible):", creditos);
+    step(5, "creditos (con disponible>0)", creditos);
 
     if (creditos.length === 0) {
+      step(5.1, "ERROR: creditos vacío (no hay saldo disponible según vista)");
       throw new Error("No hay saldo disponible para aplicar (según la vista).");
     }
 
-    // === (A) OBTENER ITEMS DE LAS FACTURAS con id_hospedaje (para mapear a id_servicio) ===
+    // =========================
+    // STEP 6: SELECT items_facturas
+    // =========================
     const placeholdersFact = facturasOrden.map(() => "?").join(",");
-    const queryItems = `SELECT id_item, id_factura,id_relacion as id_hospedaje FROM items_facturas WHERE id_factura IN (${placeholdersFact}) ORDER BY id_factura ASC, id_item ASC;`;
+    const queryItems = `
+      SELECT id_item, id_factura, monto, id_relacion as id_hospedaje
+      FROM items_facturas
+      WHERE id_factura IN (${placeholdersFact})
+      ORDER BY id_factura ASC, id_item ASC;
+    `;
     const itemsDeFacturas = await executeQuery(queryItems, facturasOrden);
-    logQuery("SELECT items por facturas", queryItems, facturasOrden, itemsDeFacturas);
+    logQuery("SELECT items_facturas por facturas", queryItems, facturasOrden, itemsDeFacturas);
+    step(6.1, "itemsDeFacturas (preview)", brief(itemsDeFacturas, 20));
 
-    // Estructura: saldos pendientes por ítem (para repartir créditos a nivel ítem)
+    // ⚠️ DEBUG CRÍTICO: aquí estaba el bug (it.saldo no existe)
+    // Voy a imprimir qué llaves trae cada item
+    if (itemsDeFacturas?.length) {
+      step(6.2, "Keys del primer item_factura", Object.keys(itemsDeFacturas[0]));
+      step(6.3, "Primer item_factura completo", itemsDeFacturas[0]);
+    }
+
     const itemPendiente = (itemsDeFacturas || []).map((it) => ({
       id_item: it.id_item,
       id_factura: it.id_factura,
+
+      // ⚠️ AQUÍ EL DEBUG:
+      // Si en tu SELECT viene "monto", entonces it.saldo = undefined -> pendiente=0
+      pendiente_from_saldo: it.saldo,
+      pendiente_from_monto: it.monto,
+
+      // La que realmente usa el código actual:
       pendiente: Number(it.saldo) || 0,
+
       id_hospedaje: it.id_hospedaje ?? null,
     }));
-    console.log("[DBG] Items (pendiente inicial):", itemPendiente);
 
-    // === (A.1) Construir: factura -> set de id_hospedaje
-    const hospedajesPorFactura = new Map(); // id_factura -> Set(id_hospedaje)
+    step(6.4, "itemPendiente (preview + fuentes)", brief(itemPendiente, 30));
+
+    // Guardas para detectar el bug al vuelo
+    const sumPendiente = itemPendiente.reduce((a, x) => a + (Number(x.pendiente) || 0), 0);
+    const sumMonto = itemPendiente.reduce((a, x) => a + (Number(x.pendiente_from_monto) || 0), 0);
+    step(6.5, "SUMAS: pendiente(usado) vs monto(de DB)", { sumPendiente, sumMonto });
+
+    // =========================
+    // STEP 7: Map hospedaje -> servicio
+    // =========================
+    const hospedajesPorFactura = new Map();
     const setHospedajes = new Set();
+
     for (const it of itemPendiente) {
       if (!it.id_hospedaje) continue;
       setHospedajes.add(String(it.id_hospedaje));
-      if (!hospedajesPorFactura.has(it.id_factura)) {
-        hospedajesPorFactura.set(it.id_factura, new Set());
-      }
+      if (!hospedajesPorFactura.has(it.id_factura)) hospedajesPorFactura.set(it.id_factura, new Set());
       hospedajesPorFactura.get(it.id_factura).add(String(it.id_hospedaje));
     }
 
-    // === (A.2) Mapear id_hospedaje -> id_servicio desde la vista vw_reservas_client
+    step(7, "Hospedajes encontrados", {
+      hospedajes_unicos: Array.from(setHospedajes),
+      por_factura: Array.from(hospedajesPorFactura.entries()).map(([f, set]) => ({
+        id_factura: f,
+        hospedajes: Array.from(set),
+      })),
+    });
+
     const hospedajesUnicos = Array.from(setHospedajes);
-    const mapHospToServ = new Map(); // id_hospedaje -> id_servicio
+    const mapHospToServ = new Map();
     if (hospedajesUnicos.length) {
       const phHosp = hospedajesUnicos.map(() => "?").join(",");
-      const queryVistaReservas = `SELECT id_hospedaje, id_servicio FROM vw_reservas_client WHERE id_hospedaje IN (${phHosp});`;
+      const queryVistaReservas = `
+        SELECT id_hospedaje, id_servicio
+        FROM vw_reservas_client
+        WHERE id_hospedaje IN (${phHosp});
+      `;
       const rowsVista = await executeQuery(queryVistaReservas, hospedajesUnicos);
       logQuery("SELECT vw_reservas_client", queryVistaReservas, hospedajesUnicos, rowsVista);
+
       for (const r of rowsVista || []) {
         const h = String(r.id_hospedaje);
         const s = r.id_servicio ?? null;
@@ -1027,7 +527,6 @@ const asignarFacturaPagos = async (req, res) => {
       }
     }
 
-    // Helper: elegir id_servicio representativo respetando el orden de facturas
     const pickIdServicio = () => {
       for (const fId of facturasOrden) {
         const setH = hospedajesPorFactura.get(fId);
@@ -1038,57 +537,82 @@ const asignarFacturaPagos = async (req, res) => {
       }
       return null;
     };
+
     const id_servicio_representativo = pickIdServicio();
-    console.log("[DBG] id_servicio_representativo:", id_servicio_representativo);
+    step(7.1, "id_servicio_representativo + mapHospToServ", {
+      id_servicio_representativo,
+      mapHospToServ: Array.from(mapHospToServ.entries()),
+    });
 
-    // --- Plan de aplicación (separado por crédito -> por factura -> por ítem)
-    // 1) Aplicamos a nivel facturas para actualizar saldos en memoria y acumular totales por factura/credito
-    const appliedByFactura = new Map(); // id_factura -> suma aplicada
-    const appliedByCredito = new Map(); // raw_id     -> suma aplicada
+    // =========================
+    // STEP 8: Aplicar créditos a facturas (memoria)
+    // =========================
+    const appliedByFactura = new Map();
+    const appliedByCredito = new Map();
     let idxFactura = 0;
-
-    // Copia de trabajo de saldos de facturas
     const facturasWorking = facturas.map((f) => ({ ...f }));
 
+    step(8, "facturasWorking inicial", facturasWorking);
+
     for (const cred of creditos) {
+      step(8.1, "Procesando crédito", cred);
+
       while (cred.restante > 0 && idxFactura < facturasWorking.length) {
-        // Saltar facturas ya en cero
-        while (idxFactura < facturasWorking.length && facturasWorking[idxFactura].saldo <= 0) {
-          idxFactura++;
-        }
+        while (idxFactura < facturasWorking.length && facturasWorking[idxFactura].saldo <= 0) idxFactura++;
         if (idxFactura >= facturasWorking.length) break;
 
         const f = facturasWorking[idxFactura];
         const aplicar = Math.min(f.saldo, cred.restante);
+
+        step(8.2, "Aplicación parcial", {
+          idxFactura,
+          factura: f,
+          cred_raw: cred.raw_id,
+          cred_restante: cred.restante,
+          aplicar,
+        });
 
         if (aplicar <= 0) {
           idxFactura++;
           continue;
         }
 
-        // Actualizar saldos en memoria
         f.saldo -= aplicar;
         cred.restante -= aplicar;
 
-        // Acumular totales
         appliedByFactura.set(f.id_factura, (appliedByFactura.get(f.id_factura) || 0) + aplicar);
         appliedByCredito.set(cred.raw_id, (appliedByCredito.get(cred.raw_id) || 0) + aplicar);
 
         if (f.saldo <= 0) idxFactura++;
       }
+
+      step(8.3, "Crédito después de aplicar", {
+        raw_id: cred.raw_id,
+        restante_final: cred.restante,
+        aplicado_total: appliedByCredito.get(cred.raw_id) || 0,
+      });
     }
 
-    console.log("[DBG] Totales aplicados por factura:", Array.from(appliedByFactura.entries()));
-    console.log("[DBG] Totales aplicados por crédito:", Array.from(appliedByCredito.entries()));
-    console.log("[DBG] Saldos finales (memoria) de facturas:", facturasWorking);
+    step(8.4, "appliedByFactura / appliedByCredito / facturasWorking FINAL", {
+      appliedByFactura: Array.from(appliedByFactura.entries()),
+      appliedByCredito: Array.from(appliedByCredito.entries()),
+      facturasWorking,
+    });
 
-    // 2) Reparto a nivel ítem (para construir items_pagos)
-    // Para consistencia: iteramos créditos en orden, y para cada crédito recorremos items secuencialmente
-    const planItemsPagos = []; // {id_item, raw_id, monto}
+    // =========================
+    // STEP 9: Reparto a nivel ítem => planItemsPagos
+    // =========================
+    const planItemsPagos = [];
+
+    step(9, "itemPendiente antes de repartir (preview)", brief(itemPendiente, 30));
+
     for (const cred of creditos) {
       const aplicado = appliedByCredito.get(cred.raw_id) || 0;
       if (aplicado <= 0) continue;
+
       let porAplicar = aplicado;
+      step(9.1, "Repartiendo crédito a items", { raw_id: cred.raw_id, aplicado, porAplicar });
+
       for (const it of itemPendiente) {
         if (porAplicar <= 0) break;
         if (it.pendiente <= 0) continue;
@@ -1098,82 +622,138 @@ const asignarFacturaPagos = async (req, res) => {
 
         it.pendiente -= m;
         porAplicar -= m;
-      }
-    }
-    console.log("[DBG] Plan items_pagos:", planItemsPagos);
 
-    // 3) Crear pagos por crédito aplicado (>0)
+        step(9.2, "Asignación a item", {
+          id_item: it.id_item,
+          id_factura: it.id_factura,
+          asignado: m,
+          pendiente_restante_item: it.pendiente,
+          porAplicar_restante_credito: porAplicar,
+        });
+      }
+
+      step(9.3, "Fin crédito a items", { raw_id: cred.raw_id, porAplicar_sobrante: porAplicar });
+    }
+
+    step(9.4, "planItemsPagos FINAL (preview)", {
+      len: planItemsPagos.length,
+      preview: brief(planItemsPagos, 50),
+    });
+
+    if (planItemsPagos.length === 0) {
+      step(9.5, "ERROR CLAVE: planItemsPagos vacío => NO se insertará items_pagos", {
+        causa_probable:
+          "itemPendiente.pendiente quedó en 0 porque estás usando it.saldo pero tu SELECT trae monto. Cambia pendiente: Number(it.monto).",
+        sumPendiente,
+        sumMonto,
+      });
+      // aquí puedes throw si quieres forzar que truene y lo veas
+      // throw new Error("planItemsPagos vacío: no hay nada que insertar en items_pagos");
+    }
+
+    // =========================
+    // STEP 10: INSERT pagos
+    // =========================
     const transaccion = newId("tra");
-    const pagosCreados = new Map(); // raw_id -> id_pago
+    const pagosCreados = new Map();
+    step(10, "Transacción generada", { transaccion });
 
     for (const cred of creditos) {
       const aplicado = appliedByCredito.get(cred.raw_id) || 0;
       if (aplicado <= 0) continue;
 
-      const id_pago = newId("pago");
+      const id_pago = newId("pag");
       pagosCreados.set(cred.raw_id, id_pago);
 
       const id_saldo_a_favor_pago = cred.isSaldoFavor ? cred.raw_id : null;
       const referencia_pago = referencia ?? transaccion;
 
-      // fecha_pago = NOW() (evitar pasar Date)
       const queryInsertPagos = `
         INSERT INTO pagos (
-          id_pago, id_servicio, id_saldo_a_favor, id_agente, metodo_de_pago,
+          id_pago, id_servicio, id_saldo_a_favor, id_agente, metodo_pago,
           fecha_pago, concepto, referencia, currency, tipo_de_tarjeta,
           link_pago, last_digits, total, saldo_aplicado, transaccion, monto_transaccion
         )
         VALUES (?,?,?,?,?, NOW(), ?,?,?,?,?,?,?,?,?,?);
       `;
       const paramsPago = [
-        id_pago,                           // id_pago
-        id_servicio_representativo,        // id_servicio (de vw_reservas_client) o null
-        id_saldo_a_favor_pago,             // id_saldo_a_favor (solo si es saldo a favor)
-        id_agente,                         // id_agente
-        metodo_de_pago,                    // metodo_de_pago
-        concepto,                          // concepto
-        referencia_pago,                   // referencia
-        currency,                          // currency
-        tipo_de_tarjeta,                   // tipo_de_tarjeta
-        link_pago,                         // link_pago
-        last_digits,                       // last_digits
-        aplicado,                          // total
-        aplicado,                          // saldo_aplicado
-        transaccion,                       // transaccion
-        aplicado,                          // monto_transaccion
+        id_pago,
+        id_servicio_representativo,
+        id_saldo_a_favor_pago,
+        id_agente,
+        metodo_de_pago,
+        concepto,
+        referencia_pago,
+        currency,
+        tipo_de_tarjeta,
+        link_pago,
+        last_digits,
+        aplicado,
+        aplicado,
+        transaccion,
+        aplicado,
       ];
       const rPago = await executeQuery(queryInsertPagos, paramsPago);
       logQuery("INSERT pagos", queryInsertPagos, paramsPago, rPago);
-    }
-    console.log("[DBG] pagosCreados (raw_id -> id_pago):", Array.from(pagosCreados.entries()));
 
-    // 4) Insertar items_pagos usando el id_pago resultante por cada raw_id
+      step(10.1, "Pago creado para crédito", {
+        raw_id: cred.raw_id,
+        aplicado,
+        id_pago,
+        id_saldo_a_favor_pago,
+      });
+    }
+
+    step(10.2, "pagosCreados (raw_id -> id_pago)", Array.from(pagosCreados.entries()));
+
+    // =========================
+    // STEP 11: INSERT items_pagos bulk
+    // =========================
     if (planItemsPagos.length > 0) {
       const valuesIP = [];
       const paramsIP = [];
+
       for (const p of planItemsPagos) {
         const id_pago = pagosCreados.get(p.raw_id);
-        if (!id_pago) continue; // seguridad
+
+        // Si esto pasa mucho, significa que no se creó pago para ese crédito
+        if (!id_pago) {
+          step(11.1, "WARN: No existe id_pago para raw_id (saltando fila items_pagos)", p);
+          continue;
+        }
+
         valuesIP.push("(?, ?, ?)");
         paramsIP.push(p.id_item, id_pago, p.monto);
       }
+
+      step(11.2, "Preparando INSERT items_pagos", {
+        valuesIP_len: valuesIP.length,
+        paramsIP_len: paramsIP.length,
+        paramsIP_preview: brief(paramsIP, 30),
+      });
+
       if (valuesIP.length > 0) {
         const sqlIP = `INSERT INTO items_pagos (id_item, id_pago, monto) VALUES ${valuesIP.join(",")};`;
         const rIP = await executeQuery(sqlIP, paramsIP);
         logQuery("INSERT items_pagos (bulk)", sqlIP, paramsIP, rIP);
+        step(11.3, "INSERT items_pagos OK", rIP);
       } else {
-        console.log("[DBG] No hubo values para items_pagos (posible error de plan).");
+        step(11.4, "ERROR: valuesIP quedó vacío (no se insertó items_pagos)", {
+          causa_probable:
+            "pagosCreados no tenía id_pago para esos raw_id o planItemsPagos vacío o filtraste todo con !id_pago",
+          pagosCreados: Array.from(pagosCreados.entries()),
+          planItemsPagos_preview: brief(planItemsPagos, 50),
+        });
       }
+    } else {
+      step(11.5, "NO INSERT items_pagos porque planItemsPagos está vacío");
     }
 
-    // 5) Insertar facturas_pagos_y_saldos por factura y crédito:
-    //    - Si es saldo a favor => (id_pago=null, id_saldo_a_favor=raw_id)
-    //    - Si es pago         => (id_pago=id_pago generado, id_saldo_a_favor=null)
-    //    Para el monto por factura, usamos appliedByFactura[factura] pero debemos
-    //    distribuir por crédito. Para esto, generamos un reparto factura->ítems->crédito ya hecho.
-    //    Simplificación: recalculamos por factura sumando de planItemsPagos los montos de ítems de esa factura por cada crédito.
-    const montoFacturaCredito = new Map(); // key `${id_factura}|${raw_id}` -> monto
-    const facturaPorItem = new Map(itemPendiente.map(it => [it.id_item, it.id_factura]));
+    // =========================
+    // STEP 12: INSERT bridge facturas_pagos_y_saldos
+    // =========================
+    const montoFacturaCredito = new Map();
+    const facturaPorItem = new Map(itemPendiente.map((it) => [it.id_item, it.id_factura]));
 
     for (const p of planItemsPagos) {
       const id_factura = facturaPorItem.get(p.id_item);
@@ -1181,37 +761,49 @@ const asignarFacturaPagos = async (req, res) => {
       montoFacturaCredito.set(key, (montoFacturaCredito.get(key) || 0) + p.monto);
     }
 
-    const queryBridge = `INSERT INTO facturas_pagos_y_saldos (id_pago, id_saldo_a_favor, id_factura, monto) VALUES (?,?,?,?);`;
+    step(12, "montoFacturaCredito", Array.from(montoFacturaCredito.entries()));
+
+    const queryBridge = `
+      INSERT INTO facturas_pagos_y_saldos (id_pago, id_saldo_a_favor, id_factura, monto)
+      VALUES (?,?,?,?);
+    `;
+
     for (const [key, monto] of montoFacturaCredito.entries()) {
       const [id_factura, raw] = key.split("|");
-      const cred = creditos.find(c => c.raw_id === raw);
+      const cred = creditos.find((c) => c.raw_id === raw);
       if (!cred) continue;
+
       const id_pago_vinc = cred.isSaldoFavor ? null : pagosCreados.get(raw);
       const id_saldo_vinc = cred.isSaldoFavor ? raw : null;
 
       const paramsBridge = [id_pago_vinc, id_saldo_vinc, id_factura, monto];
+      console.log(queryBridge,paramsBridge,"🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽 parametros")
       const rBridge = await executeQuery(queryBridge, paramsBridge);
       logQuery("INSERT facturas_pagos_y_saldos", queryBridge, paramsBridge, rBridge);
     }
 
-    // 6) ACTUALIZAR saldos de facturas (con la copia final calculada)
-    for (let i = 0; i < facturasWorking.length; i++) {
-      const f = facturasWorking[i];
+    // =========================
+    // STEP 13: UPDATE facturas.saldo
+    // =========================
+    for (const f of facturasWorking) {
       const queryUpdateFactura = "UPDATE facturas SET saldo = ? WHERE id_factura = ?;";
       const rUF = await executeQuery(queryUpdateFactura, [f.saldo, f.id_factura]);
       logQuery("UPDATE facturas.saldo", queryUpdateFactura, [f.saldo, f.id_factura], rUF);
     }
 
-    // 7) ACTUALIZAR saldos de items (pendiente final)
-    //    Hacemos un UPDATE ... CASE para minimizar roundtrips
-    const itemsConCambio = itemPendiente.filter(it => Number.isFinite(it.pendiente));
+    // =========================
+    // STEP 14: UPDATE items (OJO: tu código actual actualiza items, no items_facturas)
+    // =========================
+    const itemsConCambio = itemPendiente.filter((it) => Number.isFinite(it.pendiente));
+    step(14, "itemsConCambio (preview)", brief(itemsConCambio, 20));
+
     if (itemsConCambio.length > 0) {
-      const ids = itemsConCambio.map(it => it.id_item);
-      const caseParts = itemsConCambio.map(it => `WHEN id_item = ? THEN ?`).join(" ");
+      const ids = itemsConCambio.map((it) => it.id_item);
+      const caseParts = itemsConCambio.map(() => `WHEN id_item = ? THEN ?`).join(" ");
+
       const paramsCase = [];
-      for (const it of itemsConCambio) {
-        paramsCase.push(it.id_item, it.pendiente);
-      }
+      for (const it of itemsConCambio) paramsCase.push(it.id_item, it.pendiente);
+
       const placeholdersItems = ids.map(() => "?").join(",");
       const sqlUpdateItems = `
         UPDATE items
@@ -1221,75 +813,42 @@ const asignarFacturaPagos = async (req, res) => {
       const paramsUpdateItems = [...paramsCase, ...ids];
       const rUI = await executeQuery(sqlUpdateItems, paramsUpdateItems);
       logQuery("UPDATE items.saldo (CASE bulk)", sqlUpdateItems, paramsUpdateItems, rUI);
-    } else {
-      console.log("[DBG] No hubo items a actualizar (posible ya en cero).");
     }
 
-    // 8) ACTUALIZAR saldos_a_favor (solo si el raw_id es numérico)
+    // =========================
+    // STEP 15: UPDATE saldos_a_favor
+    // =========================
     for (const cred of creditos) {
       if (!cred.isSaldoFavor) continue;
+
       const aplicado = appliedByCredito.get(cred.raw_id) || 0;
       const disponible = cred.disponible || 0;
       const restante = Math.max(0, disponible - aplicado);
-      const saldo_actual = restante;
 
       const queryUpdateSaldos = `
         UPDATE saldos_a_favor
         SET saldo = ?, activo = CASE WHEN (?) <= 0 THEN 0 ELSE 1 END
         WHERE id_saldos = ?;
       `;
-      const paramsUS = [saldo_actual, saldo_actual, cred.raw_id];
+      const paramsUS = [restante, restante, cred.raw_id];
       const rUS = await executeQuery(queryUpdateSaldos, paramsUS);
       logQuery("UPDATE saldos_a_favor", queryUpdateSaldos, paramsUS, rUS);
     }
 
-    // 9) (E) OPCIONAL: obtener objetos completos de saldos por los raw_id recibidos
-    let saldosFull = [];
-    if (rawIds.length) {
-      const ph = rawIds.map(() => "?").join(",");
-      const querySelectSaldosFull = `SELECT * FROM saldos WHERE id_saldo IN (${ph});`;
-      saldosFull = await executeQuery(querySelectSaldosFull, rawIds);
-      logQuery("SELECT saldos (full)", querySelectSaldosFull, rawIds, saldosFull);
-    }
-
-
-
-    // --- Respuesta estructurada ---
-    const detalleFacturas = facturasWorking.map((f) => ({
-      id_factura: f.id_factura,
-      aplicado: appliedByFactura.get(f.id_factura) || 0,
-      saldo_final: f.saldo,
-    }));
-
-    const detalleCreditos = creditos.map((c) => ({
-      raw_id: c.raw_id,
-      tipo: c.isSaldoFavor ? "saldo_a_favor" : "pago",
-      disponible: c.disponible,
-      aplicado: appliedByCredito.get(c.raw_id) || 0,
-      sin_aplicar: Math.max(0, c.disponible - (appliedByCredito.get(c.raw_id) || 0)),
-      id_pago: pagosCreados.get(c.raw_id) || null,
-    }));
-
-    const serviciosVinculados = {
-      id_servicio_representativo,
-      hospedajes_consultados: Array.from(setHospedajes),
-      hospedaje_a_servicio: Array.from(mapHospToServ.entries()).map(([h, s]) => ({ id_hospedaje: h, id_servicio: s })),
-    };
+    // (Opcional) COMMIT
+    // await executeQuery("COMMIT");
+    // step(16, "COMMIT");
 
     return res.status(200).json({
-      message:
-        "Pagos/Saldos aplicados; pagos, items_pagos y puente insertados; facturas/items/saldos_a_favor actualizados.",
-      orden_facturas: facturasOrden,
-      facturas: detalleFacturas,
-      creditos: detalleCreditos,
-      items_afectados: itemPendiente.map(({ id_item, id_factura, pendiente }) => ({
-        id_item,
-        id_factura,
-        saldo_pendiente_final: pendiente,
-      })),
-      saldos_full: saldosFull,
-      transaccion,
-      servicios_vinculados: serviciosVinculados,
+      message: "Debug completo impreso en consola (revisa logs).",
+      dbg: {
+        facturasOrden,
+        rawIds,
+        creditos,
+        sumPendiente,
+        sumMonto,
+        planItemsPagos_len: planItemsPagos.length,
+      },
     });
   } catch (error) {
     try {
@@ -1304,18 +863,991 @@ const asignarFacturaPagos = async (req, res) => {
   }
 };
 
+const asignarFacturaPagos = async (req, res) => {
+  // helpers
+// ============================================================
+// RECONCILIACIÓN: amarrar saldos entre credito_a_factura y credito_a_item
+// (solo para facturas que TIENEN items)
+// ============================================================
+const reconcileFacturaItemLinks = ({
+  credito_a_factura,
+  credito_a_item,
+  itemsDeFacturas,
+  toCents,
+  fromCents,
+  log,
+}) => {
+  // Mapa id_item -> id_factura
+  const itemToFactura = new Map();
+  // Facturas que tienen items
+  const facturasConItems = new Set();
+
+  for (const it of itemsDeFacturas || []) {
+    const id_item = String(it.id_item);
+    const id_factura = String(it.id_factura);
+    itemToFactura.set(id_item, id_factura);
+    facturasConItems.add(id_factura);
+  }
+
+  log("[LINK] facturasConItems", Array.from(facturasConItems));
+
+  // Normaliza credito_a_factura: 1 row por (factura|saldo)
+  const facMap = new Map(); // key: f|s -> cents
+  for (const r of credito_a_factura || []) {
+    const id_factura = String(r.id_factura);
+    const id_saldo = String(r.id_saldo);
+    const cents = toCents(r.monto_a_aplicar);
+    const k = `${id_factura}|${id_saldo}`;
+    facMap.set(k, (facMap.get(k) ?? 0) + cents);
+  }
+
+  // Normaliza credito_a_item: 1 row por (item|saldo)
+  const itemMap = new Map(); // key: item|saldo -> cents
+  for (const r of credito_a_item || []) {
+    const id_item = String(r.id_item);
+    const id_saldo = String(r.id_saldo);
+    const cents = toCents(r.monto_a_aplicar);
+    const k = `${id_item}|${id_saldo}`;
+    itemMap.set(k, (itemMap.get(k) ?? 0) + cents);
+  }
+
+  // Helpers para sets
+  const buildFacturaSets = () => {
+    const setFactura = new Map(); // id_factura -> Set(id_saldo)
+    for (const [k, cents] of facMap.entries()) {
+      if (cents <= 0) continue;
+      const [idf, ids] = k.split("|");
+      if (!facturasConItems.has(idf)) continue; // solo facturas con items
+      if (!setFactura.has(idf)) setFactura.set(idf, new Set());
+      setFactura.get(idf).add(ids);
+    }
+    return setFactura;
+  };
+
+  const buildItemSets = () => {
+    const setItems = new Map(); // id_factura -> Set(id_saldo)
+    for (const [k, cents] of itemMap.entries()) {
+      if (cents <= 0) continue;
+      const [id_item, id_saldo] = k.split("|");
+      const id_factura = itemToFactura.get(id_item);
+      if (!id_factura) continue;
+      if (!facturasConItems.has(id_factura)) continue;
+      if (!setItems.has(id_factura)) setItems.set(id_factura, new Set());
+      setItems.get(id_factura).add(id_saldo);
+    }
+    return setItems;
+  };
+
+  const ensureFacturaHasCent = (id_factura, id_saldo) => {
+    // +1 cent al target
+    const kTarget = `${id_factura}|${id_saldo}`;
+    facMap.set(kTarget, (facMap.get(kTarget) ?? 0) + 1);
+
+    // -1 cent de un donador (misma factura, otro saldo)
+    let donorKey = null;
+    for (const [k, cents] of facMap.entries()) {
+      if (cents <= 1) continue;
+      const [idf, ids] = k.split("|");
+      if (idf !== id_factura) continue;
+      if (ids === id_saldo) continue;
+      donorKey = k;
+      break;
+    }
+
+    if (!donorKey) {
+      // fallback: permitir donar del mismo saldo (si tenía >1) para no romper totales
+      const c = facMap.get(kTarget) ?? 0;
+      if (c > 1) donorKey = kTarget;
+    }
+
+    if (!donorKey) {
+      throw new Error(`[LINK] No hay donador para meter 1 centavo en FACTURA ${id_factura} con saldo ${id_saldo}`);
+    }
+
+    facMap.set(donorKey, (facMap.get(donorKey) ?? 0) - 1);
+    if ((facMap.get(donorKey) ?? 0) <= 0) facMap.delete(donorKey);
+
+    log("[LINK][FACTURA] +1 cent / -1 cent", { id_factura, id_saldo, donorKey });
+  };
+
+  const ensureItemHasCent = (id_factura, id_saldo) => {
+    // Elegir un item de esa factura que tenga "donador" para poder restar 1 centavo sin romper el item
+    const itemsFactura = [];
+    for (const [id_item, idf] of itemToFactura.entries()) {
+      if (idf === id_factura) itemsFactura.push(id_item);
+    }
+
+    // Encuentra item donde exista algún saldo != target con cents>1 (preferido)
+    let chosenItem = null;
+    let donorKey = null;
+
+    const findDonorInItem = (id_item, allowOneCent = false) => {
+      // retorna un key item|saldo donador distinto al target
+      for (const [k, cents] of itemMap.entries()) {
+        const [it, ids] = k.split("|");
+        if (it !== id_item) continue;
+        if (ids === id_saldo) continue;
+        if (cents > 1) return k;
+      }
+      if (allowOneCent) {
+        for (const [k, cents] of itemMap.entries()) {
+          const [it, ids] = k.split("|");
+          if (it !== id_item) continue;
+          if (ids === id_saldo) continue;
+          if (cents >= 1) return k;
+        }
+      }
+      return null;
+    };
+
+    for (const id_item of itemsFactura) {
+      const dk = findDonorInItem(id_item, false);
+      if (dk) {
+        chosenItem = id_item;
+        donorKey = dk;
+        break;
+      }
+    }
+
+    // fallback: permitir donador con 1 centavo (podría “desaparecer” ese saldo de ese item)
+    if (!chosenItem) {
+      for (const id_item of itemsFactura) {
+        const dk = findDonorInItem(id_item, true);
+        if (dk) {
+          chosenItem = id_item;
+          donorKey = dk;
+          break;
+        }
+      }
+    }
+
+    if (!chosenItem) {
+      throw new Error(`[LINK] No hay item/donador para meter 1 centavo en ITEMS de FACTURA ${id_factura} con saldo ${id_saldo}`);
+    }
+
+    // +1 cent al target en chosenItem
+    const kTarget = `${chosenItem}|${id_saldo}`;
+    itemMap.set(kTarget, (itemMap.get(kTarget) ?? 0) + 1);
+
+    // -1 cent al donador dentro del MISMO ITEM
+    itemMap.set(donorKey, (itemMap.get(donorKey) ?? 0) - 1);
+    if ((itemMap.get(donorKey) ?? 0) <= 0) itemMap.delete(donorKey);
+
+    log("[LINK][ITEM] +1 cent / -1 cent", { id_factura, chosenItem, id_saldo, donorKey });
+  };
+
+  // Iterar hasta estabilizar (por si un swap con 1 cent genera nuevas diferencias)
+  const MAX_IT = 25;
+  for (let it = 1; it <= MAX_IT; it++) {
+    const setFactura = buildFacturaSets();
+    const setItems = buildItemSets();
+
+    let changed = false;
+
+    for (const id_factura of facturasConItems) {
+      const sF = setFactura.get(id_factura) || new Set();
+      const sI = setItems.get(id_factura) || new Set();
+
+      const missingInFactura = [...sI].filter((s) => !sF.has(s));
+      const missingInItems = [...sF].filter((s) => !sI.has(s));
+
+      if (missingInFactura.length || missingInItems.length) {
+        log("[LINK] diferencias", { it, id_factura, missingInFactura, missingInItems });
+      }
+
+      // Si un saldo está en items pero no en factura => meter 1 cent a factura
+      for (const id_saldo of missingInFactura) {
+        ensureFacturaHasCent(id_factura, id_saldo);
+        changed = true;
+      }
+
+      // Si un saldo está en factura pero no en items => meter 1 cent a algún item de la factura
+      for (const id_saldo of missingInItems) {
+        ensureItemHasCent(id_factura, id_saldo);
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      log("[LINK] OK estable", { iterations: it });
+      break;
+    }
+
+    if (it === MAX_IT) {
+      log("[LINK][WARN] No estabilizó en el máximo de iteraciones", { MAX_IT });
+    }
+  }
+
+  // Reconstruir arrays finales en decimales
+  const creditoFacturaFinal = [];
+  for (const [k, cents] of facMap.entries()) {
+    if (cents <= 0) continue;
+    const [id_factura, id_saldo] = k.split("|");
+    creditoFacturaFinal.push({
+      id_factura,
+      id_saldo,
+      monto_a_aplicar: fromCents(cents),
+    });
+  }
+
+  const creditoItemFinal = [];
+  for (const [k, cents] of itemMap.entries()) {
+    if (cents <= 0) continue;
+    const [id_item, id_saldo] = k.split("|");
+    creditoItemFinal.push({
+      id_item,
+      id_saldo,
+      monto_a_aplicar: fromCents(cents),
+    });
+  }
+
+  // Debug final: sets por factura
+  const finalSetFactura = new Map();
+  for (const r of creditoFacturaFinal) {
+    if (!facturasConItems.has(String(r.id_factura))) continue;
+    if (!finalSetFactura.has(r.id_factura)) finalSetFactura.set(r.id_factura, new Set());
+    finalSetFactura.get(r.id_factura).add(String(r.id_saldo));
+  }
+  const finalSetItems = new Map();
+  for (const r of creditoItemFinal) {
+    const id_factura = itemToFactura.get(String(r.id_item));
+    if (!id_factura || !facturasConItems.has(id_factura)) continue;
+    if (!finalSetItems.has(id_factura)) finalSetItems.set(id_factura, new Set());
+    finalSetItems.get(id_factura).add(String(r.id_saldo));
+  }
+
+  log("[LINK] sets FINAL factura", Array.from(finalSetFactura.entries()).map(([f, s]) => [f, Array.from(s)]));
+  log("[LINK] sets FINAL items", Array.from(finalSetItems.entries()).map(([f, s]) => [f, Array.from(s)]));
+
+  return { creditoFacturaFinal, creditoItemFinal };
+};
+
+
+  const toCents = (n) => {
+    const x = Number(n ?? 0);
+    if (!Number.isFinite(x)) return 0;
+    return Math.round(x * 100);
+  };
+
+  
+    const newId = (pfx) =>
+    `${pfx}-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+  const fromCents = (c) => c / 100;
+    const transaccion = newId("tra");
+
+  const log = (label, data) => {
+    if (data !== undefined) console.log(`[LOG] ${label}`, data);
+    else console.log(`[LOG] ${label}`);
+    console.log("------------------------------------------------------------");
+  };
+
+  const logQuery = (label, sql, params, result) => {
+    console.log(`[SQL] ${label}\n  Query: ${sql}\n  Params:`, params);
+    if (result !== undefined) console.log(`  Result:`, result);
+    console.log("------------------------------------------------------------");
+  };
+
+  const briefLocal = (arr, n = 20) => (Array.isArray(arr) ? arr.slice(0, n) : arr);
+  let pendiente_items;
+  let pendiente_facturas;
+
+  // Best-fit: intenta cubrir completo; si no, agarra cualquiera con saldo > 0
+  const pickBest = (pool, need) => {
+    const full = pool.filter((p) => p.remaining >= need);
+    if (full.length) {
+      let best = full[0];
+      for (const c of full) if (c.remaining < best.remaining) best = c;
+      return { picked: best, mode: "full_cover_best_fit" };
+    }
+    const any = pool.find((p) => p.remaining > 0) || null;
+    return { picked: any, mode: "partial_any" };
+  };
+
+  try {
+    log("Pasos a iniciar (req.body)", req.body);
+
+    const {
+      id_factura: facturasRaw,
+      ejemplo_saldos: saldosRaw,
+      id_agente = null,
+      metodo_de_pago = "aplicacion_saldo",
+      currency = "MXN",
+      concepto = "aplicacion a facturas",
+    } = req.body || {};
+
+    // ---------
+    // Validaciones payload
+    // ---------
+    if (!facturasRaw || (Array.isArray(facturasRaw) && facturasRaw.length === 0)) {
+      log("ERROR id_factura faltante/vacío", { facturasRaw });
+      return res
+        .status(400)
+        .json({ error: "Debes enviar 'id_factura' con 1+ elementos (array o string)." });
+    }
+    const facturasOrden = Array.isArray(facturasRaw) ? facturasRaw : [facturasRaw];
+    log("facturasOrden normalizado", facturasOrden);
+
+    let itemsEntrada = saldosRaw;
+    if (!itemsEntrada) {
+      log("ERROR ejemplo_saldos faltante", { itemsEntrada });
+      return res.status(400).json({ error: "Falta 'ejemplo_saldos' en el payload." });
+    }
+
+    if (typeof itemsEntrada === "string") {
+      log("ejemplo_saldos venía string -> JSON.parse", itemsEntrada);
+      try {
+        itemsEntrada = JSON.parse(itemsEntrada);
+      } catch (e) {
+        log("ERROR JSON.parse(ejemplo_saldos)", { message: e.message });
+        return res
+          .status(400)
+          .json({ error: "El campo 'ejemplo_saldos' no es un JSON válido", details: e.message });
+      }
+    }
+    if (!Array.isArray(itemsEntrada)) itemsEntrada = [itemsEntrada];
+
+    log("itemsEntrada normalizado", {
+      length: itemsEntrada.length,
+      preview: briefLocal(itemsEntrada, 10),
+    });
+
+    // -----------------------------
+    // 1) Cargar facturas (totales por factura)
+    // -----------------------------
+    const facturas = [];
+    for (const idf of facturasOrden) {
+      const q = "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;";
+      const r = await executeQuery(q, [idf]);
+      logQuery("SELECT factura saldo", q, [idf], r);
+
+      if (!r?.length) {
+        log("ERROR: Factura no encontrada", { id_factura: idf });
+        return res.status(400).json({ error: `Factura no encontrada: ${idf}` });
+      }
+      const fSaldo = Number(r[0].saldo) || 0;
+
+      if (fSaldo <= 0) {
+        log("ERROR: Factura sin saldo por pagar (ya pagada o aplicada)", {
+          id_factura: idf,
+          saldo: fSaldo,
+        });
+        return res.status(400).json({
+          error: "No se puede aplicar pago: la factura ya fue pagada total o parcialmente (saldo <= 0).",
+          details: { id_factura: idf, saldo: fSaldo },
+        });
+      }
+
+      const f = { id_factura: String(r[0].id_factura), saldo: fSaldo };
+      facturas.push(f);
+
+      log("facturas.push", f);
+    }
+
+    const totalFacturasCents = facturas.reduce((acc, f) => acc + toCents(f.saldo), 0);
+    log("Facturas cargadas", { facturas, total_facturas: fromCents(totalFacturasCents) });
+
+    // -----------------------------
+    // 2) Vista de saldos disponibles (saldo y monto_por_facturar por raw_id)
+    // -----------------------------
+    const rawIds = [...new Set(itemsEntrada.map((it) => String(it.id_saldo)))];
+    const placeholdersRaw = rawIds.map(() => "?").join(",");
+    let viewRows = [];
+
+    if (rawIds.length) {
+      const q = `SELECT raw_id, saldo, monto_por_facturar
+                 FROM vw_pagos_prepago_facturables
+                 WHERE raw_id IN (${placeholdersRaw});`;
+      viewRows = await executeQuery(q, rawIds);
+      logQuery("SELECT vw_pagos_prepago_facturables", q, rawIds, viewRows);
+    }
+
+    const saldoVistaPorRaw = new Map(); // saldo real (para items)
+    const facturablePorRaw = new Map(); // monto_por_facturar (para validación aplicado)
+
+    for (const row of viewRows || []) {
+      const rid = String(row.raw_id);
+      const saldoC = Math.max(0, toCents(row.saldo));
+      const factC = Math.max(0, toCents(row.monto_por_facturar));
+      saldoVistaPorRaw.set(rid, saldoC);
+      facturablePorRaw.set(rid, factC);
+
+      log("[MAP] vista set", { rid, saldo: fromCents(saldoC), monto_por_facturar: fromCents(factC) });
+    }
+
+    // -----------------------------
+    // 3) Items de facturas (para asignación a items)
+    // -----------------------------
+    const placeholdersFact = facturasOrden.map(() => "?").join(",");
+    const qItems = `
+      SELECT id_item, id_factura, monto, id_relacion as id_hospedaje
+      FROM items_facturas
+      WHERE id_factura IN (${placeholdersFact})
+      ORDER BY id_factura ASC, id_item ASC;
+    `;
+    const itemsDeFacturas = await executeQuery(qItems, facturasOrden);
+    logQuery("SELECT items_facturas", qItems, facturasOrden, itemsDeFacturas);
+
+    // const qItem = `SELECT saldo from items where id_factura `
+    log("itemsDeFacturas (preview)", briefLocal(itemsDeFacturas, 50));
+
+    const totalItemsCents = (itemsDeFacturas || []).reduce((acc, it) => acc + toCents(it.monto), 0);
+    log("Total items", { total_items: fromCents(totalItemsCents) });
+
+    // ============================================================
+    // 4) Normalización de saldos de entrada + VALIDACIONES
+    // ============================================================
+    const saldosAplicados = (itemsEntrada || []).map((s) => {
+      const id_saldo = String(s.id_saldo);
+      const aplicado_cents = toCents(s.aplicado);
+
+      const montoFacturableCents = facturablePorRaw.get(id_saldo) ?? 0;
+      const saldoVistaCents = saldoVistaPorRaw.get(id_saldo) ?? 0;
+
+      // Para ITEMS: si aplicado > saldoVista -> usar saldoVista; si no, usar aplicado
+      const itemCapCents = Math.min(aplicado_cents, saldoVistaCents);
+
+      const obj = {
+        id_saldo,
+        aplicado_cents,
+        montoFacturableCents,
+        saldoVistaCents,
+        itemCapCents,
+      };
+
+      log("[SALDO] normalizado", {
+        id_saldo,
+        aplicado: fromCents(aplicado_cents),
+        monto_por_facturar: fromCents(montoFacturableCents),
+        saldo_vista: fromCents(saldoVistaCents),
+        item_cap: fromCents(itemCapCents),
+      });
+
+      return obj;
+    });
+
+    // (A) Validación por saldo: aplicado <= monto_por_facturar (siempre)
+    for (const s of saldosAplicados) {
+      if (s.aplicado_cents > s.montoFacturableCents) {
+        log("[ERROR] aplicado > monto_por_facturar", {
+          id_saldo: s.id_saldo,
+          aplicado: fromCents(s.aplicado_cents),
+          monto_por_facturar: fromCents(s.montoFacturableCents),
+        });
+
+        // return res.status(400).json({
+        //   error: "fondos insuficientes por favor recarga la pagina",
+        //   details: {
+        //     id_saldo: s.id_saldo,
+        //     aplicado: fromCents(s.aplicado_cents),
+        //     monto_por_facturar: fromCents(s.montoFacturableCents),
+        //   },
+        // });
+      }
+    }
+
+    // (B) Validación facturas: total aplicado debe cubrir EXACTO total facturas
+    const totalAplicadoCents = saldosAplicados.reduce((acc, s) => acc + s.aplicado_cents, 0);
+    const diferencia = fromCents(totalFacturasCents - totalAplicadoCents);
+    log("Totales aplicado vs facturas", {
+      total_aplicado: fromCents(totalAplicadoCents),
+      total_facturas: fromCents(totalFacturasCents),
+      diferencia: fromCents(totalFacturasCents - totalAplicadoCents),
+    });
+
+    // if (totalAplicadoCents !== totalFacturasCents) {
+    //   return res.status(400).json({
+    //     error: "El monto aplicado no cubre el total de las facturas",
+    //     details: {
+    //       total_aplicado: fromCents(totalAplicadoCents),
+    //       total_facturas: fromCents(totalFacturasCents),
+    //       diferencia: fromCents(totalFacturasCents - totalAplicadoCents),
+    //     },
+    //   });
+    // }
+
+    // (C) Validación items: suma de min(aplicado, saldoVista) >= total items
+    const totalItemCapCents = saldosAplicados.reduce((acc, s) => acc + s.itemCapCents, 0);
+    log("Totales items (cap vs need)", {
+      total_item_cap: fromCents(totalItemCapCents),
+      total_items: fromCents(totalItemsCents),
+      diferencia: fromCents(totalItemsCents - totalItemCapCents),
+    });
+
+    // if (totalItemsCents > 0 && totalItemCapCents < totalItemsCents) {
+    //   return res.status(400).json({
+    //     error: "fondos insuficientes por favor recarga la pagina",
+    //     details: {
+    //       motivo: "La suma de min(aplicado, saldo) no cubre el total de items",
+    //       total_item_cap: fromCents(totalItemCapCents),
+    //       total_items: fromCents(totalItemsCents),
+    //       faltante: fromCents(totalItemsCents - totalItemCapCents),
+    //     },
+    //   });
+    // }
+
+    // ============================================================
+    // 5) ASIGNACIÓN A FACTURAS (solo con aplicado)
+    // ============================================================
+    const poolFactura = saldosAplicados
+      .filter((s) => s.aplicado_cents > 0)
+      .map((s) => ({ id_saldo: s.id_saldo, remaining: s.aplicado_cents }));
+
+    log(
+      "poolFactura inicial (remaining=aplicado)",
+      poolFactura.map((p) => ({ id_saldo: p.id_saldo, remaining: fromCents(p.remaining) }))
+    );
+
+    const credito_a_factura = [];
+
+    for (const f of facturas) {
+      let need = toCents(f.saldo);
+      log("[FACTURA] start", { id_factura: f.id_factura, need: fromCents(need) });
+
+      while (need > 0) {
+        const { picked, mode } = pickBest(poolFactura, need);
+
+        log("[FACTURA] pickBest", {
+          id_factura: f.id_factura,
+          mode,
+          need: fromCents(need),
+          picked: picked ? { id_saldo: picked.id_saldo, remaining: fromCents(picked.remaining) } : null,
+        });
+
+        if (!picked || picked.remaining <= 0) {
+          pendiente_facturas = need
+          break
+        }
+
+        const take = Math.min(need, picked.remaining);
+
+        credito_a_factura.push({
+          id_factura: f.id_factura,
+          id_saldo: picked.id_saldo,
+          monto_a_aplicar: fromCents(take),
+        });
+
+        log("[FACTURA] push", {
+          id_factura: f.id_factura,
+          id_saldo: picked.id_saldo,
+          take: fromCents(take),
+        });
+
+        picked.remaining -= take;
+        need -= take;
+
+        log("[FACTURA] after", {
+          id_factura: f.id_factura,
+          id_saldo: picked.id_saldo,
+          remaining: fromCents(picked.remaining),
+          need: fromCents(need),
+        });
+      }
+    }
+
+    log("credito_a_factura final", credito_a_factura);
+
+    // ============================================================
+    // 6) ASIGNACIÓN A ITEMS (capado por saldoVista: min(aplicado, saldoVista))
+    // ============================================================
+    const poolItem = saldosAplicados
+      .filter((s) => s.itemCapCents > 0)
+      .map((s) => ({ id_saldo: s.id_saldo, remaining: s.itemCapCents }))
+      .sort((a, b) => b.remaining - a.remaining);
+
+    log(
+      "poolItem inicial (remaining=min(aplicado,saldoVista))",
+      poolItem.map((p) => ({ id_saldo: p.id_saldo, remaining: fromCents(p.remaining) }))
+    );
+
+    const credito_a_item = [];
+
+    for (const it of itemsDeFacturas || []) {
+      const id_item = String(it.id_item);
+      let need = toCents(it.monto);
+
+      log("[ITEM] start", { id_item, id_factura: it.id_factura, need: fromCents(need) });
+
+      while (need > 0) {
+        const { picked, mode } = pickBest(poolItem, need);
+
+        log("[ITEM] pickBest", {
+          id_item,
+          mode,
+          need: fromCents(need),
+          picked: picked ? { id_saldo: picked.id_saldo, remaining: fromCents(picked.remaining) } : null,
+        });
+
+        if (!picked || picked.remaining <= 0) {
+          pendiente_items = need
+          break
+        }
+
+        const take = Math.min(need, picked.remaining);
+
+        credito_a_item.push({
+          id_item,
+          id_saldo: picked.id_saldo,
+          monto_a_aplicar: fromCents(take),
+        });
+
+        log("[ITEM] push", { id_item, id_saldo: picked.id_saldo, take: fromCents(take) });
+
+        picked.remaining -= take;
+        need -= take;
+
+        log("[ITEM] after", {
+          id_item,
+          id_saldo: picked.id_saldo,
+          remaining: fromCents(picked.remaining),
+          need: fromCents(need),
+        });
+      }
+    }
+
+    log("credito_a_item final", credito_a_item);
+
+    // ============================================================
+// 6.5) AMARRE saldo<->factura<->items (regla del centavo)
+// ============================================================
+try {
+  const { creditoFacturaFinal, creditoItemFinal } = reconcileFacturaItemLinks({
+    credito_a_factura,
+    credito_a_item,
+    itemsDeFacturas,
+    toCents,
+    fromCents,
+    log,
+  });
+
+  // Sobrescribe para que TODO lo de inserts/bridges/updates use los reconciliados
+  credito_a_factura.length = 0;
+  credito_a_factura.push(...creditoFacturaFinal);
+
+  credito_a_item.length = 0;
+  credito_a_item.push(...creditoItemFinal);
+
+  log("[LINK] credito_a_factura reconciliado", briefLocal(credito_a_factura, 50));
+  log("[LINK] credito_a_item reconciliado", briefLocal(credito_a_item, 50));
+} catch (e) {
+  log("[LINK][ERROR] Reconciliación falló", { message: e.message });
+  return res.status(400).json({
+    error: "No se pudo amarrar saldos entre items y facturas (regla del centavo)",
+    details: e.message,
+  });
+}
+
+
+    // ============================================================
+    // 7) INSERTS en pagos usando credito_a_item
+    // ============================================================
+// ============================================================
+// 7) INSERTS en pagos + items_pagos usando credito_a_item
+// ============================================================
+
+const sqlIP = `INSERT INTO items_pagos (id_item, id_pago, monto) VALUES (?,?,?);`;
+
+const queryInsertPagos = `
+  INSERT INTO pagos (
+    id_pago, id_servicio, id_saldo_a_favor, id_agente, metodo_de_pago,
+    fecha_pago, concepto, referencia, currency, tipo_de_tarjeta,
+    link_pago, last_digits, total, saldo_aplicado, transaccion, monto_transaccion
+  )
+  VALUES (?,?,?,?,?, NOW(), ?,?,?,?,?,?,?,?,?,?);
+`;
+
+// Bridge facturas/saldos (id_pago = NULL)
+const queryBridge = `
+  INSERT INTO facturas_pagos_y_saldos (id_pago, id_saldo_a_favor, id_factura, monto)
+  VALUES (?,?,?,?);
+`;
+
+// Updates
+const queryUpdateFactura = "UPDATE facturas SET saldo = ? WHERE id_factura = ?;";
+const queryUpdateSaldoAFavor = `
+  UPDATE saldos_a_favor
+  SET saldo = GREATEST(0, saldo - ?)
+  WHERE id_saldos = ?;
+`;
+
+// --------------------------
+// Mapas auxiliares
+// --------------------------
+
+// id_item -> id_hospedaje (ya lo tienes en itemsDeFacturas)
+const itemToHospedaje = new Map();
+for (const it of itemsDeFacturas || []) {
+  itemToHospedaje.set(String(it.id_item), String(it.id_hospedaje));
+}
+log("[PAGOS] itemToHospedaje (preview)", briefLocal(Array.from(itemToHospedaje.entries()), 20));
+
+// hospedajes únicos (de credito_a_item)
+const hospedajesUnicos = [
+  ...new Set(
+    (credito_a_item || [])
+      .map((row) => itemToHospedaje.get(String(row.id_item)))
+      .filter(Boolean)
+      .map(String)
+  ),
+];
+log("[PAGOS] hospedajesUnicos", hospedajesUnicos);
+
+// id_hospedaje -> id_servicio (vw_reservas_client)
+const hospToServicio = new Map();
+if (hospedajesUnicos.length) {
+  const phHosp = hospedajesUnicos.map(() => "?").join(",");
+  const queryVistaReservas = `
+    SELECT id_hospedaje, id_servicio
+    FROM vw_reservas_client
+    WHERE id_hospedaje IN (${phHosp});
+  `;
+  const rowsVista = await executeQuery(queryVistaReservas, hospedajesUnicos);
+  logQuery("SELECT vw_reservas_client", queryVistaReservas, hospedajesUnicos, rowsVista);
+
+  for (const r of rowsVista || []) {
+    const h = String(r.id_hospedaje);
+    const s = r.id_servicio ? String(r.id_servicio) : null;
+    if (!hospToServicio.has(h) && s) hospToServicio.set(h, s);
+  }
+}
+log("[PAGOS] hospToServicio (preview)", briefLocal(Array.from(hospToServicio.entries()), 20));
+
+// Metadata por saldo (saldos_a_favor)
+const saldosIdsUnicos = [...new Set((credito_a_item || []).map((r) => String(r.id_saldo)))];
+log("[PAGOS] saldosIdsUnicos", saldosIdsUnicos);
+
+const saldoInfoById = new Map();
+if (saldosIdsUnicos.length) {
+  const phSaldo = saldosIdsUnicos.map(() => "?").join(",");
+  const querySaldoInfo = `
+    SELECT
+      id_saldos,
+      metodo_pago,
+      concepto,
+      referencia,
+      currency,
+      tipo_tarjeta,
+      link_stripe,
+      ult_digits
+    FROM saldos_a_favor
+    WHERE id_saldos IN (${phSaldo});
+  `;
+  const rowsSaldoInfo = await executeQuery(querySaldoInfo, saldosIdsUnicos);
+  logQuery("SELECT saldos_a_favor (metadata)", querySaldoInfo, saldosIdsUnicos, rowsSaldoInfo);
+
+  for (const r of rowsSaldoInfo || []) {
+    saldoInfoById.set(String(r.id_saldos), {
+      metodo_de_pago: r.metodo_de_pago ?? metodo_de_pago ?? null,
+      concepto: r.concepto ?? concepto ?? null,
+      referencia: r.referencia ?? null,
+      currency: r.currency ?? currency ?? null,
+      tipo_de_tarjeta: r.tipo_de_tarjeta ?? null,
+      link_pago: r.link_pago ?? null,
+      last_digits: r.last_digits ?? null,
+    });
+  }
+}
+log("[PAGOS] saldoInfoById (preview)", briefLocal(Array.from(saldoInfoById.entries()), 10));
+
+// Acumulador para restar saldo en saldos_a_favor (por id_saldo) en CENTS
+const restarPorSaldoCents = new Map();
+
+// --------------------------
+// Inserts por credito_a_item
+// --------------------------
+let insertedPagos = 0;
+let insertedItemsPagos = 0;
+
+for (const row of credito_a_item || []) {
+  const id_item = String(row.id_item);
+  const id_saldo_a_favor_pago = String(row.id_saldo);
+
+  const id_hospedaje = itemToHospedaje.get(id_item) || null;
+  const id_servicio_representativo = id_hospedaje ? hospToServicio.get(String(id_hospedaje)) || null : null;
+
+  const aplicado_cents = toCents(row.monto_a_aplicar);
+  const aplicado = fromCents(aplicado_cents);
+
+  const meta = saldoInfoById.get(id_saldo_a_favor_pago) || {
+    metodo_de_pago: metodo_de_pago ?? null,
+    concepto: concepto ?? null,
+    referencia: null,
+    currency: currency ?? null,
+    tipo_de_tarjeta: null,
+    link_pago: null,
+    last_digits: null,
+  };
+
+  if (!id_servicio_representativo) {
+    log("[PAGOS][WARN] No se encontró id_servicio para id_item", {
+      id_item,
+      id_hospedaje,
+      id_saldo: id_saldo_a_favor_pago,
+    });
+    // Si quieres HARD FAIL:
+    // return res.status(400).json({ error: "No se encontró id_servicio para un item", details: { id_item, id_hospedaje } });
+  }
+
+  // 👇 id_pago debe ser único por insert (usa tu generador actual)
+  const id_pago = newId("pag"); // <- YA EXISTE EN TU PROYECTO (no lo estoy definiendo)
+
+  const paramsPago = [
+    id_pago,
+    id_servicio_representativo,
+    id_saldo_a_favor_pago,
+    id_agente,
+    meta.metodo_de_pago,
+    meta.concepto,
+    meta.referencia,
+    meta.currency,
+    meta.tipo_de_tarjeta,
+    meta.link_pago,
+    meta.last_digits,
+    aplicado,       // total
+    aplicado,       // saldo_aplicado
+    transaccion,    // ya la generas tú
+    aplicado,       // monto_transaccion
+  ];
+
+  log("[PAGOS] INSERT pagos (params)", {
+    id_pago,
+    id_item,
+    id_hospedaje,
+    id_servicio_representativo,
+    id_saldo_a_favor_pago,
+    aplicado,
+    meta,
+    transaccion,
+  });
+
+  const rPago = await executeQuery(queryInsertPagos, paramsPago);
+  logQuery("INSERT pagos", queryInsertPagos, paramsPago, rPago);
+  insertedPagos += 1;
+
+  // INSERT items_pagos con el id_pago recién insertado
+  const paramsIP = [id_item, id_pago, aplicado];
+  log("[PAGOS] INSERT items_pagos (params)", { id_item, id_pago, monto: aplicado });
+
+  const rIP = await executeQuery(sqlIP, paramsIP);
+  logQuery("INSERT items_pagos", sqlIP, paramsIP, rIP);
+  insertedItemsPagos += 1;
+
+  // acumular para update saldos_a_favor
+  const prev = restarPorSaldoCents.get(id_saldo_a_favor_pago) ?? 0;
+  restarPorSaldoCents.set(id_saldo_a_favor_pago, prev + aplicado_cents);
+
+  log("[PAGOS] restarPorSaldoCents.update", {
+    id_saldo: id_saldo_a_favor_pago,
+    prev: fromCents(prev),
+    add: fromCents(aplicado_cents),
+    nuevo: fromCents(prev + aplicado_cents),
+  });
+}
+
+log("[PAGOS] Inserts completados", { insertedPagos, insertedItemsPagos });
+
+// ============================================================
+// 8) INSERT bridge facturas_pagos_y_saldos con credito_a_factura
+//    id_pago = NULL (como pediste)
+// ============================================================
+let insertedBridge = 0;
+
+for (const row of credito_a_factura || []) {
+  const id_factura = String(row.id_factura);
+  const id_saldo = String(row.id_saldo);
+  const monto_cents = toCents(row.monto_a_aplicar);
+  const monto = fromCents(monto_cents);
+
+  const paramsBridge = [null, id_saldo, id_factura, monto];
+
+  log("[BRIDGE] INSERT facturas_pagos_y_saldos (params)", {
+    id_pago: null,
+    id_saldo,
+    id_factura,
+    monto,
+  });
+
+  const rB = await executeQuery(queryBridge, paramsBridge);
+  logQuery("INSERT facturas_pagos_y_saldos", queryBridge, paramsBridge, rB);
+  insertedBridge += 1;
+}
+
+log("[BRIDGE] Inserciones completadas", { insertedBridge });
+
+// ============================================================
+// 9) UPDATE facturas -> saldo = 0
+// ============================================================
+let updatedFacturas = 0;
+
+for (const f of facturas || []) {
+  const id_factura = String(f.id_factura);
+
+  const paramsUF = [pendiente_facturas, id_factura];
+  log("[FACTURA] UPDATE saldo=0 (params)", { id_factura, pendiente_facturas});
+
+  const rUF = await executeQuery(queryUpdateFactura, paramsUF);
+  logQuery("UPDATE facturas", queryUpdateFactura, paramsUF, rUF);
+
+  updatedFacturas += 1;
+}
+
+log("[FACTURA] Updates completados", { updatedFacturas });
+
+// ============================================================
+// 10) UPDATE saldos_a_favor -> restar lo insertado en pagos (por id_saldo)
+// ============================================================
+let updatedSaldos = 0;
+
+for (const [id_saldo, centsToSub] of restarPorSaldoCents.entries()) {
+  const montoSub = fromCents(centsToSub);
+
+  const paramsUS = [montoSub, id_saldo];
+
+  log("[SALDO] UPDATE saldos_a_favor restar (params)", {
+    id_saldo,
+    restar: montoSub,
+  });
+
+  const rUS = await executeQuery(queryUpdateSaldoAFavor, paramsUS);
+  logQuery("UPDATE saldos_a_favor", queryUpdateSaldoAFavor, paramsUS, rUS);
+
+  updatedSaldos += 1;
+}
+
+log("[SALDO] Updates completados", { updatedSaldos });
+
+    return res.status(200).json({
+      ok: true,
+      facturas,
+      totals: {
+        total_facturas: fromCents(totalFacturasCents),
+        total_aplicado: fromCents(totalAplicadoCents),
+        total_items: fromCents(totalItemsCents),
+        total_item_cap: fromCents(totalItemCapCents),
+      },
+      credito_a_factura,
+      credito_a_item,
+    });
+  } catch (error) {
+    console.error("[ERROR] asignarFacturaPagos", error);
+    return res.status(500).json({ error: "algo salio mal", details: error?.message });
+  }
+};
+
 
 const filtrarFacturas = async (req, res) => {
-  const { estatusFactura, id_factura,id_cliente,cliente,uuid,rfc} = req.body;
+  const { estatusFactura, id_factura, id_cliente, cliente, uuid, rfc } =
+    req.body;
   try {
-    console.log(estatusFactura)
+    console.log(estatusFactura);
     const result = await executeSP("sp_filtrar_facturas", [
       estatusFactura || null,
       id_factura || null,
       id_cliente || null,
       cliente || null,
       uuid || null,
-      rfc || null
+      rfc || null,
     ]);
     if (!result) {
       return res.status(404).json({
@@ -1706,7 +2238,7 @@ const crearFacturaMultiplesPagos = async (req, res) => {
 
   // ¿La factura ya viene completa en el body?
   const fb = facturaBody || {};
-  console.log("😁😁😁😁😁😁😁😁😁😁🤣🤣🤣🤣🤣", )
+  console.log("😁😁😁😁😁😁😁😁😁😁🤣🤣🤣🤣🤣");
 
   const bodyTieneFactura =
     Boolean(fb.fecha_emision) &&
@@ -1834,15 +2366,15 @@ const crearFacturaMultiplesPagos = async (req, res) => {
 
     await runTransaction(async (connection) => {
       try {
-        let generador = rowFactura.usuario_creador
-        let origen = 0
+        let generador = rowFactura.usuario_creador;
+        let origen = 0;
         if (!rowFactura.usuario_creador) {
-          generador = rowFactura.id_agente
-          origen = 1
+          generador = rowFactura.id_agente;
+          origen = 1;
         }
-        
-                console.log("😁😁😁😁😁😁😁😁😁😁🤣🤣🤣🤣🤣", rowFactura)
-        console.log("😁😁😁😁😁😁😁😁😁😁🤣🤣🤣🤣🤣, generados", generador)
+
+        console.log("😁😁😁😁😁😁😁😁😁😁🤣🤣🤣🤣🤣", rowFactura);
+        console.log("😁😁😁😁😁😁😁😁😁😁🤣🤣🤣🤣🤣, generados", generador);
         const [r1] = await connection.query(insertFacturaSQL, [
           id_factura,
           rowFactura.fecha_emision,
@@ -1979,7 +2511,7 @@ const getFullDetalles = async (req, res) => {
         required: ["id_agente", "id_buscar (≥1 id)"],
       });
     }
- 
+
     // Detectar tipo por prefijo usando el primer id
     const first = ids[0].toLowerCase();
     let tipo = "pago";
@@ -2090,7 +2622,7 @@ module.exports = {
   asignarURLS_factura,
   getfacturasPagoPendiente,
   asignarFacturaPagos,
-  getfacturasPagoPendienteByAgente
+  getfacturasPagoPendienteByAgente,
 };
 
 //ya quedo "#$%&/()="
