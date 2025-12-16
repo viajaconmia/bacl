@@ -145,7 +145,7 @@ async function crear_pago_desde_wallet(
 ) {
   console.log("💳 [WALLET] Iniciando crear_pago_desde_wallet");
   console.log("🚓🚓🚓 saldos_aplicados:", saldos_aplicados);
-  
+
   if (!Array.isArray(saldos_aplicados) || saldos_aplicados.length === 0) {
     console.log("💳 [WALLET] No hay saldos_aplicados válidos. Omitiendo pago.");
     return null;
@@ -153,7 +153,7 @@ async function crear_pago_desde_wallet(
 
   // ✅ VALIDACIÓN: Corroborar que los saldos enviados desde front existan en BD
   console.log("💳 [WALLET] Iniciando validación de saldos en BD...");
-  
+
   const ids_saldos = saldos_aplicados
     .map((s) => s?.id_saldos)
     .filter(Boolean)
@@ -183,7 +183,7 @@ async function crear_pago_desde_wallet(
 
   // Validar que cada saldo coincida y tenga disponibilidad
   const saldos_bd_map = new Map(saldos_bd.map((s) => [String(s.id_saldos), s]));
-  
+
   for (const saldo_front of saldos_aplicados) {
     const id_saldo = String(saldo_front.id_saldos);
     const saldo_bd = saldos_bd_map.get(id_saldo);
@@ -215,7 +215,9 @@ async function crear_pago_desde_wallet(
     );
   }
 
-  console.log("✅ [WALLET] Todas las validaciones de saldos pasaron correctamente.");
+  console.log(
+    "✅ [WALLET] Todas las validaciones de saldos pasaron correctamente."
+  );
 
   if (monto_total <= 0) {
     console.log("💳 [WALLET] Monto total <= 0. No se crea pago.");
@@ -250,7 +252,7 @@ async function crear_pago_desde_wallet(
 
   await connection.execute(insert, params);
   console.log(`💳 [WALLET] Pago creado: ${id_pago} por ${monto_total}`);
-  
+
   return id_pago;
 }
 
@@ -950,7 +952,7 @@ async function caso_base_tolerante({
       estado,
       ...(check_in?.current ? { check_in: check_in.current } : {}),
       ...(check_out?.current ? { check_out: check_out.current } : {}),
-      costo_total
+      costo_total,
     });
 
     if (Number.isFinite(total)) {
@@ -1113,10 +1115,10 @@ const editar_reserva_definitivo = async (req, res) => {
       const haySaldos = Array.isArray(saldos) && saldos.length > 0;
       const restanteNum = toNumber(restante, NaN);
       let item_ajuste = null;
-      let delta_precio_venta=0;
-      let monto_restante_a_credito=0;
-      let cambia_precio_de_venta=false; 
-      let tipo_pago_original= null;
+      let delta_precio_venta = 0;
+      let monto_restante_a_credito = 0;
+      let cambia_precio_de_venta = false;
+      let tipo_pago_original = null;
       let debeProcesarMonetario =
         hayCambioPrecio ||
         (hayCambioNoches && hayCambioPrecio) ||
@@ -1201,7 +1203,7 @@ const editar_reserva_definitivo = async (req, res) => {
                     : check_in?.current;
 
                 // pasar precio 0 para que el item nuevo tenga total 0
-                 items_nuevos = await Item.agregar_nuevas_noches(
+                items_nuevos = await Item.agregar_nuevas_noches(
                   connection,
                   metadata.id_hospedaje,
                   fecha_ultima,
@@ -1290,7 +1292,7 @@ const editar_reserva_definitivo = async (req, res) => {
       );
 
       // PASO 2: Monetario
-      let estado_fiscal
+      let estado_fiscal;
       let saldos_filtrados = [];
       let items_nuevos = [];
       if (debeProcesarMonetario) {
@@ -1305,8 +1307,8 @@ const editar_reserva_definitivo = async (req, res) => {
             ? noches.before
             : toNumber(noches?.before, NaN));
 
-         cambia_precio_de_venta = Calculo.cambia_precio_de_venta(venta);
-         delta_precio_venta =
+        cambia_precio_de_venta = Calculo.cambia_precio_de_venta(venta);
+        delta_precio_venta =
           (Number.isFinite(venta?.current?.total)
             ? venta.current.total
             : toNumber(venta?.current?.total, 0)) -
@@ -1323,7 +1325,7 @@ const editar_reserva_definitivo = async (req, res) => {
           TASA_IVA_DECIMAL,
         });
 
-         tipo_pago_original = await get_payment_type(
+        tipo_pago_original = await get_payment_type(
           metadata.id_solicitud,
           metadata.id_servicio
         );
@@ -1332,12 +1334,9 @@ const editar_reserva_definitivo = async (req, res) => {
           connection,
           metadata.id_servicio
         );
-        console.log(
-          "🧾 [FISCAL] Estado fiscal de la reserva:",
-          estado_fiscal
-        );
+        console.log("🧾 [FISCAL] Estado fiscal de la reserva:", estado_fiscal);
 
-         saldos_aplicados = Array.isArray(saldos)
+        saldos_aplicados = Array.isArray(saldos)
           ? saldos.filter(
               (s) => s.usado === true && parseFloat(s.saldo_usado || 0) > 0
             )
@@ -1347,7 +1346,7 @@ const editar_reserva_definitivo = async (req, res) => {
         const { saldos_filtrados, facturas_wallet } =
           await are_invoiced_payments({ saldos: saldos_aplicados });
 
-         monto_restante_a_credito = Number.isFinite(restanteNum)
+        monto_restante_a_credito = Number.isFinite(restanteNum)
           ? Math.max(restanteNum, 0)
           : 0;
         console.log(
@@ -1505,96 +1504,114 @@ const editar_reserva_definitivo = async (req, res) => {
         }
       }
 
-   // === HERENCIA FISCAL (reserva facturada y/o wallets facturados) ===
-try {
-  const hayReservaFacturada = !!estado_fiscal?.es_facturada;
-  const haySaldosFacturados = saldos_filtrados.length > 0;
+      // === HERENCIA FISCAL (reserva facturada y/o wallets facturados) ===
+      try {
+        const hayReservaFacturada = !!estado_fiscal?.es_facturada;
+        const haySaldosFacturados = saldos_filtrados.length > 0;
 
-  // Items a fiscalizar: noches nuevas + ajuste positivo
-  const items_para_fiscal = [
-    ...(Array.isArray(items_nuevos) ? items_nuevos : []),
-    ...(item_ajuste ? [item_ajuste] : []),
-  ];
+        // Items a fiscalizar: noches nuevas + ajuste positivo
+        const items_para_fiscal = [
+          ...(Array.isArray(items_nuevos) ? items_nuevos : []),
+          ...(item_ajuste ? [item_ajuste] : []),
+        ];
 
-  if ((hayReservaFacturada || haySaldosFacturados) && items_para_fiscal.length > 0) {
-    
-    // ================================================
-    // 🛠 FIX REAL DE ESPACIO FISCAL DISPONIBLE
-    // ================================================
-    const facturas_disponibles_final = Array.isArray(estado_fiscal?.facturas)
-      ? estado_fiscal.facturas.map((f) => {
-          const total = Number(f.total || 0);
-          const facturado = Number(f.monto_reserva_facturado || 0);
+        if (
+          (hayReservaFacturada || haySaldosFacturados) &&
+          items_para_fiscal.length > 0
+        ) {
+          // ================================================
+          // 🛠 FIX REAL DE ESPACIO FISCAL DISPONIBLE
+          // ================================================
+          const facturas_disponibles_final = Array.isArray(
+            estado_fiscal?.facturas
+          )
+            ? estado_fiscal.facturas.map((f) => {
+                const total = Number(f.total || 0);
+                const facturado = Number(f.monto_reserva_facturado || 0);
 
-          // Espacio fiscal REAL disponible
-          const espacioDisponible = Math.max(total - facturado, 0);
+                // Espacio fiscal REAL disponible
+                const espacioDisponible = Math.max(total - facturado, 0);
 
-          return {
-            id_factura: String(f.id_factura),
-            saldo_interpretado_para_items: espacioDisponible,
-          };
-        })
-      : [];
+                return {
+                  id_factura: String(f.id_factura),
+                  saldo_interpretado_para_items: espacioDisponible,
+                };
+              })
+            : [];
 
-    console.log("🧾[FISCAL][FIX] facturas_disponibles_final =", facturas_disponibles_final);
+          console.log(
+            "🧾[FISCAL][FIX] facturas_disponibles_final =",
+            facturas_disponibles_final
+          );
 
-    // Calcular total de espacio REAL disponible
-    const totalSaldoDisponible = facturas_disponibles_final.reduce(
-      (acc, f) => acc + Number(f.saldo_interpretado_para_items || 0),
-      0
-    );
+          // Calcular total de espacio REAL disponible
+          const totalSaldoDisponible = facturas_disponibles_final.reduce(
+            (acc, f) => acc + Number(f.saldo_interpretado_para_items || 0),
+            0
+          );
 
-    console.log("🧾[FISCAL][FIX] totalSaldoDisponible (REAL) =", totalSaldoDisponible);
+          console.log(
+            "🧾[FISCAL][FIX] totalSaldoDisponible (REAL) =",
+            totalSaldoDisponible
+          );
 
-    // ================================================
-    // 🛡 BLOQUEADOR: si no hay espacio → NO asociar incremento
-    // ================================================
-    if (totalSaldoDisponible <= 0.009) {
-      console.warn(
-        "🧾[FISCAL][FIX] 0 de espacio fiscal → NO se asociará el incremento a facturas."
-      );
-      facturas_disponibles_final.length = 0;
-    }
+          // ================================================
+          // 🛡 BLOQUEADOR: si no hay espacio → NO asociar incremento
+          // ================================================
+          if (totalSaldoDisponible <= 0.009) {
+            console.warn(
+              "🧾[FISCAL][FIX] 0 de espacio fiscal → NO se asociará el incremento a facturas."
+            );
+            facturas_disponibles_final.length = 0;
+          }
 
-    // ================================================
-    // EJECUCIÓN DE HERENCIA FISCAL SI QUEDA ESPACIO
-    // ================================================
-    if (facturas_disponibles_final.length === 0) {
-      console.warn("🧾[FISCAL] No hay facturas disponibles (después del FIX). Se omite herencia fiscal.");
-    } else {
-      console.log(
-        "🧾[FISCAL] Ejecutando herencia fiscal para items:",
-        items_para_fiscal.map((i) => i.id_item),
-        "con facturas:",
-        facturas_disponibles_final.map((f) => `${f.id_factura}:${f.saldo_interpretado_para_items}`)
-      );
+          // ================================================
+          // EJECUCIÓN DE HERENCIA FISCAL SI QUEDA ESPACIO
+          // ================================================
+          if (facturas_disponibles_final.length === 0) {
+            console.warn(
+              "🧾[FISCAL] No hay facturas disponibles (después del FIX). Se omite herencia fiscal."
+            );
+          } else {
+            console.log(
+              "🧾[FISCAL] Ejecutando herencia fiscal para items:",
+              items_para_fiscal.map((i) => i.id_item),
+              "con facturas:",
+              facturas_disponibles_final.map(
+                (f) => `${f.id_factura}:${f.saldo_interpretado_para_items}`
+              )
+            );
 
-      await asociar_factura_items_logica(
-        connection,
-        metadata.id_hospedaje,
-        items_para_fiscal,
-        facturas_disponibles_final
-      );
+            await asociar_factura_items_logica(
+              connection,
+              metadata.id_hospedaje,
+              items_para_fiscal,
+              facturas_disponibles_final
+            );
 
-      console.log(
-        "🧾[FISCAL] Herencia fiscal completada para",
-        items_para_fiscal.length,
-        "items."
-      );
-    }
-
-  } else {
-    console.log("🧾[FISCAL] No se ejecuta herencia fiscal. Condiciones:", {
-      hayReservaFacturada,
-      haySaldosFacturados,
-      items_para_fiscal: items_para_fiscal.length,
-    });
-  }
-} catch (e) {
-  console.error("🧾[FISCAL][ERROR] Falló herencia fiscal:", e?.message || e);
-  throw e; // rollback
-}
-
+            console.log(
+              "🧾[FISCAL] Herencia fiscal completada para",
+              items_para_fiscal.length,
+              "items."
+            );
+          }
+        } else {
+          console.log(
+            "🧾[FISCAL] No se ejecuta herencia fiscal. Condiciones:",
+            {
+              hayReservaFacturada,
+              haySaldosFacturados,
+              items_para_fiscal: items_para_fiscal.length,
+            }
+          );
+        }
+      } catch (e) {
+        console.error(
+          "🧾[FISCAL][ERROR] Falló herencia fiscal:",
+          e?.message || e
+        );
+        throw e; // rollback
+      }
 
       // 2) PAGOS – WALLET / CRÉDITO
       if (
@@ -1954,4 +1971,20 @@ try {
   }
 };
 
-module.exports = { editar_reserva_definitivo };
+const obtener = async (req, res) => {
+  try {
+    const response = await executeQuery(
+      `SELECT * FROM vw_new_reservas ORDER BY created_at desc LIMIT 0,10`
+      // [0, 10]
+    );
+    res.status(200).json({ message: "obtenido bien", data: response });
+  } catch (error) {
+    res.status(error.status || error.statusCode || 500).json({
+      message: error.message || "Error al obtenr los datos",
+      error,
+      data: null,
+    });
+  }
+};
+
+module.exports = { editar_reserva_definitivo, obtener };
