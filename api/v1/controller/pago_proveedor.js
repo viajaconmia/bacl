@@ -24,7 +24,6 @@ const toNullableNumber = (value) => {
   return isNaN(num) ? null : num;
 };
 
-
 const createSolicitud = async (req, res) => {
   try {
     const { solicitud } = req.body;
@@ -42,8 +41,8 @@ const createSolicitud = async (req, res) => {
     console.log("📥 Datos recibidos:", solicitud);
 
     if (paymentType !== "credit") {
-      const estado_pago = paymentStatus; 
-      
+      const estado_pago = paymentStatus;
+
       if (paymentMethod === "transfer") {
         const parametros = [
           monto_a_pagar,
@@ -54,9 +53,9 @@ const createSolicitud = async (req, res) => {
           comments,
           id_hospedaje,
           date,
-          estado_pago // Usamos el valor mapeado
+          estado_pago, // Usamos el valor mapeado
         ];
-        
+
         response = await executeSP(
           STORED_PROCEDURE.POST.SOLICITUD_PAGO_PROVEEDOR,
           parametros
@@ -71,25 +70,32 @@ const createSolicitud = async (req, res) => {
           comments,
           id_hospedaje,
           date,
-          estado_pago // Usamos el valor mapeado
+          estado_pago, // Usamos el valor mapeado
         ];
-        console.log("parametrossss",parametros)
+        console.log("parametrossss", parametros);
         response = await executeSP(
           STORED_PROCEDURE.POST.SOLICITUD_PAGO_PROVEEDOR,
           parametros
         );
       }
     }
-    
+
     res.status(200).json({
       message: "Solicitud procesada con éxito",
       ok: true,
-      data: solicitud
+      data: solicitud,
     });
-    
   } catch (error) {
     console.error("❌ Error:", error);
-    res.status(500).json({ error: "Internal Server Error", details: error.message });
+    if (error.message == "El hospedaje que tratas de agregar ya existe") {
+      return res.status(200).json({
+        message: "La reserva ya fue guardada, se estan creando mas",
+        details: { message: "se estan generando mas, pero puedes continuar" },
+      });
+    }
+    res
+      .status(500)
+      .json({ error: "Internal Server Error", details: error.message });
   }
 };
 
@@ -100,7 +106,9 @@ const createDispersion = async (req, res) => {
     const { id_dispersion, solicitudes } = req.body;
 
     if (!id_dispersion) {
-      return res.status(400).json({ ok: false, message: "id_dispersion es requerido" });
+      return res
+        .status(400)
+        .json({ ok: false, message: "id_dispersion es requerido" });
     }
 
     if (!Array.isArray(solicitudes) || solicitudes.length === 0) {
@@ -135,7 +143,10 @@ const createDispersion = async (req, res) => {
 
     // Mapa: id_solicitud_proveedor -> saldo
     const saldoMap = new Map(
-      (saldoRows || []).map((r) => [String(r.id_solicitud_proveedor), Number(r.saldo ?? 0)])
+      (saldoRows || []).map((r) => [
+        String(r.id_solicitud_proveedor),
+        Number(r.saldo ?? 0),
+      ])
     );
 
     // 3) Validamos que existan todos los saldos
@@ -143,7 +154,8 @@ const createDispersion = async (req, res) => {
     if (faltantes.length > 0) {
       return res.status(400).json({
         ok: false,
-        message: "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
+        message:
+          "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
         faltantes,
       });
     }
@@ -154,12 +166,12 @@ const createDispersion = async (req, res) => {
       const saldoDb = Number(saldoMap.get(idSol) ?? 0);
 
       return [
-        idSol,        // id_solicitud_proveedor
-        saldoDb,      // monto_solicitado  <-- sale de solicitudes_pago_proveedor.saldo
-        saldoDb,      // saldo             <-- igual
-        0,            // monto_pagado
-        id_dispersion,// codigo_dispersion
-        null,         // fecha_pago
+        idSol, // id_solicitud_proveedor
+        saldoDb, // monto_solicitado  <-- sale de solicitudes_pago_proveedor.saldo
+        saldoDb, // saldo             <-- igual
+        0, // monto_pagado
+        id_dispersion, // codigo_dispersion
+        null, // fecha_pago
       ];
     });
 
@@ -185,7 +197,9 @@ const createDispersion = async (req, res) => {
       FROM dispersion_pagos_proveedor
       WHERE codigo_dispersion = ? ;
     `;
-    const lastInsertIdResult = await executeQuery(lastInsertIdQuery, [id_dispersion]);
+    const lastInsertIdResult = await executeQuery(lastInsertIdQuery, [
+      id_dispersion,
+    ]);
 
     const id_pagos = lastInsertIdResult.map((row) =>
       String(row.id_dispersion_pagos_proveedor)
@@ -459,20 +473,24 @@ const createPago = async (req, res) => {
           const baseUser = user || "system";
 
           const userCreated =
-            frontendData.user_created && String(frontendData.user_created).trim() !== ""
+            frontendData.user_created &&
+            String(frontendData.user_created).trim() !== ""
               ? `${frontendData.user_created},${baseUser}`.replace(/,+$/, "")
               : baseUser;
 
           const userUpdate =
-            frontendData.user_update && String(frontendData.user_update).trim() !== ""
+            frontendData.user_update &&
+            String(frontendData.user_update).trim() !== ""
               ? `${frontendData.user_update},${baseUser}`.replace(/,+$/, "")
               : baseUser;
 
           // Lo que llega en tu CSV
           const pagoData = {
             id_pago_dispersion: toIntOrNull(csvRow.id_dispersion), // "105" -> 105
-            codigo_dispersion: toNull(csvRow.codigo_dispersion),   // "D1EHVX2W"
-            referencia_pago: toNull(csvRow["Referencia Ampliada"]) || toNull(csvRow["Referencia"]),
+            codigo_dispersion: toNull(csvRow.codigo_dispersion), // "D1EHVX2W"
+            referencia_pago:
+              toNull(csvRow["Referencia Ampliada"]) ||
+              toNull(csvRow["Referencia"]),
 
             // montos vienen en Cargo
             monto: toDecOrNull(csvRow["Cargo"]),
@@ -480,8 +498,10 @@ const createPago = async (req, res) => {
             total: toDecOrNull(csvRow["Cargo"]),
             iva: toDecOrNull(csvRow["IVA"]),
 
-            concepto: toNull(csvRow["Concepto"]) || toNull(frontendData.concepto),
-            descripcion: toNull(csvRow["Descripcion"]) || toNull(frontendData.descripcion),
+            concepto:
+              toNull(csvRow["Concepto"]) || toNull(frontendData.concepto),
+            descripcion:
+              toNull(csvRow["Descripcion"]) || toNull(frontendData.descripcion),
 
             fecha_pago: csvRow["Fecha Operación"]
               ? parseFechaSafe(csvRow["Fecha Operación"])
@@ -489,7 +509,9 @@ const createPago = async (req, res) => {
 
             fecha_emision: new Date(),
             url_pdf: null,
-            numero_comprobante: toNull(csvRow["Numero de comprobante"]) || `COMP-CSV-${Date.now()}-${i}`,
+            numero_comprobante:
+              toNull(csvRow["Numero de comprobante"]) ||
+              `COMP-CSV-${Date.now()}-${i}`,
 
             cuenta_origen: toNull(csvRow["Cuenta de origen"]),
             cuenta_destino: toNull(csvRow["Cuenta de destino"]),
@@ -501,20 +523,26 @@ const createPago = async (req, res) => {
             rfc_pagador: toNull(csvRow["RFC del pagador"]),
             domicilio_pagador: toNull(csvRow["Domicilio del pagador"]),
             nombre_beneficiario: toNull(csvRow["Nombre del beneficiario"]),
-            domicilio_beneficiario: toNull(csvRow["Domicilio del beneficiario"]),
+            domicilio_beneficiario: toNull(
+              csvRow["Domicilio del beneficiario"]
+            ),
 
             user_created: userCreated,
             user_update: userUpdate,
           };
 
           if (!pagoData.id_pago_dispersion) {
-            throw new Error(`id_dispersion inválido: "${csvRow.id_dispersion}"`);
+            throw new Error(
+              `id_dispersion inválido: "${csvRow.id_dispersion}"`
+            );
           }
           if (!pagoData.codigo_dispersion) {
             throw new Error(`codigo_dispersion no encontrado en fila ${i + 1}`);
           }
           if (!pagoData.monto_pagado || pagoData.monto_pagado <= 0) {
-            throw new Error(`Cargo inválido en fila ${i + 1}: "${csvRow["Cargo"]}"`);
+            throw new Error(
+              `Cargo inválido en fila ${i + 1}: "${csvRow["Cargo"]}"`
+            );
           }
 
           // 1) Insert pago_proveedores
@@ -648,19 +676,18 @@ const createPago = async (req, res) => {
   }
 };
 
-
 // Función auxiliar para parsear fechas desde diferentes formatos
 function parseFecha(fechaString) {
   if (!fechaString) return new Date();
-  
+
   // Intentar diferentes formatos de fecha
   const fecha = new Date(fechaString);
-  
+
   // Si la fecha es inválida, retornar fecha actual
   if (isNaN(fecha.getTime())) {
     return new Date();
   }
-  
+
   return fecha;
 }
 
@@ -668,16 +695,18 @@ function parseFecha(fechaString) {
 function generarCodigoDispersion() {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 1000);
-  return `DISP-${timestamp}-${random.toString().padStart(3, '0')}`;
+  return `DISP-${timestamp}-${random.toString().padStart(3, "0")}`;
 }
 
 const getSolicitudes = async (req, res) => {
   try {
-    const spRows = await executeSP(STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR);
+    const spRows = await executeSP(
+      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR
+    );
 
     const ids = spRows
-      .map(r => r.id_solicitud_proveedor)
-      .filter(id => id !== null && id !== undefined);
+      .map((r) => r.id_solicitud_proveedor)
+      .filter((id) => id !== null && id !== undefined);
 
     let pagosRaw = [];
     let facturasRaw = [];
@@ -686,8 +715,8 @@ const getSolicitudes = async (req, res) => {
       const placeholders = ids.map(() => "?").join(",");
 
       // pagosRaw = await executeQuery(
-      //   `SELECT 
-      //      ps.*, 
+      //   `SELECT
+      //      ps.*,
       //      pp.id_pago_proveedor       AS pago_id_pago_proveedor,
       //      pp.monto_pagado            AS pago_monto_pagado,
       //      pp.forma_pago_ejecutada    AS pago_forma_pago_ejecutada,
@@ -703,14 +732,13 @@ const getSolicitudes = async (req, res) => {
       //      pp.actualizado_en          AS pago_actualizado_en,
       //      pp.estado_pago             AS pago_estado_pago
       //    FROM pagos_solicitudes ps
-      //    LEFT JOIN pagos_proveedor pp 
+      //    LEFT JOIN pagos_proveedor pp
       //      ON pp.id_pago_proveedor = ps.id_pago_proveedor
       //    WHERE ps.id_solicitud_proveedor IN (${placeholders});`,
       //   ids
       // );
 
       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
-
 
       facturasRaw = await executeQuery(
         `SELECT 
@@ -735,11 +763,11 @@ const getSolicitudes = async (req, res) => {
 
     const pagosBySolicitud = pagosRaw.reduce((acc, row) => {
       const key = String(row.id_solicitud_proveedor);
-      (acc[key] ||= []).push(row.dispersiones_json,row.pagos_json);
+      (acc[key] ||= []).push(row.dispersiones_json, row.pagos_json);
       return acc;
     }, {});
 
-    console.log(pagosBySolicitud,"◾◾◾◾◾◾◾◾◾◾◾")
+    console.log(pagosBySolicitud, "◾◾◾◾◾◾◾◾◾◾◾");
 
     const facturasBySolicitud = facturasRaw.reduce((acc, row) => {
       const key = String(row.id_solicitud_proveedor);
@@ -747,87 +775,84 @@ const getSolicitudes = async (req, res) => {
       return acc;
     }, {});
 
-    const data = spRows.map(({
-      id_solicitud_proveedor,
-      fecha_solicitud,
-      monto_solicitado,
-      saldo,
-      forma_pago_solicitada,
-      id_tarjeta_solicitada,
-      usuario_solicitante,
-      usuario_generador,
-      comentarios,
-      estado_solicitud,
-      estado_facturacion,
-      ultimos_4,
-      banco_emisor,
-      tipo_tarjeta,
-      rfc,
-      razon_social,
-      estatus_pagos,
-      ...rest
-    }) => {
-      const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
-      const facturas = facturasBySolicitud[String(id_solicitud_proveedor)] ?? [];
-
-      const estaPagada =
-        estatus_pagos === "pagado" ||
-        pagos.some(p => p.pago_estado_pago === "pagado" || p.saldo == 0);
-
-      let filtro_pago = "todos";
-
-      if (saldo == 0.00) {
-        filtro_pago = "pagada";
-        console.log("pagada 😘😘😘😘😘😘😘😘😘😘", saldo)
-      } else if (forma_pago_solicitada === "transfer") {
-        filtro_pago = "spei_solicitado";
-      } else if (forma_pago_solicitada === "card") {
-        filtro_pago = "pago_tdc";
-      } else if (forma_pago_solicitada === "link") {
-        filtro_pago = "cupon_enviado";
-      }
-
-      return {
-        ...rest,
+    const data = spRows.map(
+      ({
+        id_solicitud_proveedor,
+        fecha_solicitud,
+        monto_solicitado,
+        saldo,
+        forma_pago_solicitada,
+        id_tarjeta_solicitada,
+        usuario_solicitante,
+        usuario_generador,
+        comentarios,
+        estado_solicitud,
+        estado_facturacion,
+        ultimos_4,
+        banco_emisor,
+        tipo_tarjeta,
+        rfc,
+        razon_social,
         estatus_pagos,
-        filtro_pago,
-        solicitud_proveedor: {
-          id_solicitud_proveedor,
-          fecha_solicitud,
-          monto_solicitado,
-          saldo,
-          forma_pago_solicitada,
-          id_tarjeta_solicitada,
-          usuario_solicitante,
-          usuario_generador,
-          comentarios,
-          estado_solicitud,
-          estado_facturacion,
-        },
-        tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
-        proveedor: { rfc, razon_social },
-        pagos,
-        facturas,
-      };
-    });
+        ...rest
+      }) => {
+        const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
+        const facturas =
+          facturasBySolicitud[String(id_solicitud_proveedor)] ?? [];
+
+        const estaPagada =
+          estatus_pagos === "pagado" ||
+          pagos.some((p) => p.pago_estado_pago === "pagado" || p.saldo == 0);
+
+        let filtro_pago = "todos";
+
+        if (saldo == 0.0) {
+          filtro_pago = "pagada";
+          console.log("pagada 😘😘😘😘😘😘😘😘😘😘", saldo);
+        } else if (forma_pago_solicitada === "transfer") {
+          filtro_pago = "spei_solicitado";
+        } else if (forma_pago_solicitada === "card") {
+          filtro_pago = "pago_tdc";
+        } else if (forma_pago_solicitada === "link") {
+          filtro_pago = "cupon_enviado";
+        }
+
+        return {
+          ...rest,
+          estatus_pagos,
+          filtro_pago,
+          solicitud_proveedor: {
+            id_solicitud_proveedor,
+            fecha_solicitud,
+            monto_solicitado,
+            saldo,
+            forma_pago_solicitada,
+            id_tarjeta_solicitada,
+            usuario_solicitante,
+            usuario_generador,
+            comentarios,
+            estado_solicitud,
+            estado_facturacion,
+          },
+          tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
+          proveedor: { rfc, razon_social },
+          pagos,
+          facturas,
+        };
+      }
+    );
 
     const todos = data;
     const spei_solicitado = data.filter(
-      d => d.filtro_pago === "spei_solicitado"
+      (d) => d.filtro_pago === "spei_solicitado"
     );
-    const pago_tdc = data.filter(
-      d => d.filtro_pago === "pago_tdc"
-    );
-    const cupon_enviado = data.filter(
-      d => d.filtro_pago === "cupon_enviado"
-    );
-    const pagada = data.filter(
-      d => d.filtro_pago === "pagada"
-    );
+    const pago_tdc = data.filter((d) => d.filtro_pago === "pago_tdc");
+    const cupon_enviado = data.filter((d) => d.filtro_pago === "cupon_enviado");
+    const pagada = data.filter((d) => d.filtro_pago === "pagada");
     res.set({
       "Cache-Control": "no-store",
-      "Pragma": "no-cache",
-      "Expires": "0"
+      Pragma: "no-cache",
+      Expires: "0",
     });
 
     res.status(200).json({
@@ -841,7 +866,6 @@ const getSolicitudes = async (req, res) => {
         pagada,
       },
     });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Internal Server Error", details: error });
@@ -852,5 +876,5 @@ module.exports = {
   createSolicitud,
   getSolicitudes,
   createDispersion,
-  createPago
+  createPago,
 };

@@ -66,6 +66,7 @@ const filtro_solicitudes_y_reservas = async (req, res) => {
     filterType,
     //markup_end,
     //markup_start,
+    id_solicitud,
   } = req.body;
   const status_dic = {
     Confirmada: "Confirmada",
@@ -98,7 +99,9 @@ const filtro_solicitudes_y_reservas = async (req, res) => {
       // markup_start,
       // markup_end,
       p_criterio || 1,
+      id_solicitud || null,
     ]);
+
     req.context.logStep("parametros enviados al SP", {
       codigo_reservacion,
       client,
