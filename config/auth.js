@@ -14,10 +14,11 @@ const API_SENDGRID = process.env.API_SENDGRID;
 
 const SERVICE_ROLE_KEY_SPB = process.env.SERVICE_ROLE_KEY_SPB;
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  SERVICE_ROLE_KEY_SPB // 👈 aquí va la Service Role Key
-);
+// const supabase = createClient(
+//   process.env.SUPABASE_URL || "",
+//   SERVICE_ROLE_KEY_SPB // 👈 aquí va la Service Role Key
+// );
+const supabase = ""
 
 module.exports = {
   API_KEY,
