@@ -1986,5 +1986,30 @@ const obtener = async (req, res) => {
     });
   }
 };
+const cancelarBooking = async (req, res) => {
+  const { id_booking } = req.body;
+  const cancelar = async (conn, id_booking) => {
+    try {
+      conn.execute(
+        `UPDATE bookings SET estado = "Cancelada" WHERE id_booking = ?`,
+        [id_booking]
+      );
+    } catch (error) {
+      throw error;
+    }
+  };
+  try {
+    const response = await runTransaction(async (conn) => {
+      await cancelar(conn, id_booking);
+    });
+    res.status(200).json({ message: "obtenido bien", data: { response } });
+  } catch (error) {
+    res.status(error.status || error.statusCode || 500).json({
+      message: error.message || "Error al obtenr los datos",
+      error,
+      data: null,
+    });
+  }
+};
 
-module.exports = { editar_reserva_definitivo, obtener };
+module.exports = { editar_reserva_definitivo, obtener, cancelarBooking };

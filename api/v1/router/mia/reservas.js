@@ -6,6 +6,7 @@ const controller_v2 = require("../../../../v2/controller/reservas.controller");
 const requiredParamsToCreate = [];
 router.get("/detallesConexion", controller.getDetallesConexionReservas);
 router.put("/nuevo-editar-reserva", controller_v2.editar_reserva_definitivo);
+router.put("/cancelar", controller_v2.cancelarBooking);
 /*router.put(
   "/",
   //middleware.validateParams(requiredParamsToCreate),
