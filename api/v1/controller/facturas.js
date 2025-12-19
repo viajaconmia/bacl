@@ -117,7 +117,8 @@ const getfacturasPagoPendiente = async (req, res) => {
 
 const getfacturasPagoPendienteByAgente = async (req, res) => {
   try {
-    const { id_agente } = req.query;
+    const { id_agente } = req.body;
+    console.log("id_agente", id_agente, "body", req.body);
     let solicitudes = await model.facturasPagoPendiente(id_agente);
     res.status(200).json(solicitudes);
   } catch (error) {
@@ -864,11 +865,7 @@ const asignarFacturaPagos2 = async (req, res) => {
 };
 
 const asignarFacturaPagos = async (req, res) => {
-  // helpers
-// ============================================================
-// RECONCILIACIÓN: amarrar saldos entre credito_a_factura y credito_a_item
-// (solo para facturas que TIENEN items)
-// ============================================================
+
 const reconcileFacturaItemLinks = ({
   credito_a_factura,
   credito_a_item,
