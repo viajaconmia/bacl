@@ -1972,18 +1972,29 @@ const editar_reserva_definitivo = async (req, res) => {
 };
 
 const obtener = async (req, res) => {
+  let { page = 0, length = 20 } = req.query;
+
+  page = Number(page);
+  length = Number(length);
+
+  if (!Number.isInteger(page) || !Number.isInteger(length) || length <= 0) {
+    return res.status(400).json({ message: "Parámetros inválidos" });
+  }
+
+  const offset = page * length;
+
+  const sql = `
+    SELECT *
+    FROM vw_new_reservas
+    ORDER BY created_at DESC
+    LIMIT ${offset}, ${length}
+  `;
+
   try {
-    const response = await executeQuery(
-      `SELECT * FROM vw_new_reservas ORDER BY created_at desc LIMIT 0,10`
-      // [0, 10]
-    );
-    res.status(200).json({ message: "obtenido bien", data: response });
+    const response = await executeQuery(sql);
+    res.status(200).json({ message: "ok", data: response });
   } catch (error) {
-    res.status(error.status || error.statusCode || 500).json({
-      message: error.message || "Error al obtenr los datos",
-      error,
-      data: null,
-    });
+    res.status(500).json({ error });
   }
 };
 const cancelarBooking = async (req, res) => {

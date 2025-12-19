@@ -16,7 +16,7 @@ const SERVICE_ROLE_KEY_SPB = process.env.SERVICE_ROLE_KEY_SPB;
 
 const supabase = createClient(
   process.env.SUPABASE_URL || "",
-  SERVICE_ROLE_KEY_SPB // 👈 aquí va la Service Role Key
+  SERVICE_ROLE_KEY_SPB
 );
 
 module.exports = {
