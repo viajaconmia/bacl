@@ -135,8 +135,66 @@ const filtro_solicitudes_y_reservas = async (req, res) => {
     console.error("Error en filtro_solicitudes_y_reservas:", error);
   }
 };
+const get_all_facturas = async (req, res) => {
+  try {
+    req.context.logStep("Llegando al endpoint de sp_get_reservas_filtradas");
+
+    // 1. Extracción segura de parámetros
+    // Nota: Verifica si id_client viene como objeto o si user_id está directo en req.body
+    const user_id = req.body.id_client?.user_id || req.body.user_id;
+    const tipo_reserva = req.body.tipo;
+    
+    // Variables para el filtrado posterior (deben venir del request o definir valores por defecto)
+    const restringido = req.body.restringido || false;
+    const usuario_creador = req.body.usuario_creador;
+
+    console.log("user_id recibido:", user_id);
+
+    // 2. Validación de parámetros obligatorios
+    if (!user_id) {
+      throw new CustomError(
+        "Falta el parámetro user_id",
+        400,
+        "ERROR_MISSING_PARAMETER",
+        null
+      );
+    }
+
+    // 3. Ejecución del SP
+    // Asegúrate de que executeSP devuelva directamente el array de resultados
+    let result = await executeSP("sp_get_reservas_filtradas", [
+      user_id,
+      tipo_reserva,
+      "confirmada"
+    ]);
+
+    // 4. Filtrado lógico en el Backend (si es necesario)
+    if (restringido && usuario_creador) {
+      result = result.filter((item) => item.usuario_creador === usuario_creador);
+    }
+
+    // 5. Respuesta exitosa
+    return res.status(200).json({
+      status: "success",
+      message: "Reservas obtenidas correctamente",
+      data: result,
+    });
+
+  } catch (error) {
+    req.context.logStep("Error en la ejecución del SP", error);
+    console.error("Detalle del error:", error);
+
+    // 6. Manejo de errores centralizado
+    return res.status(error.statusCode || 500).json({
+      error: error.code || "INTERNAL_SERVER_ERROR",
+      message: error.message || "Error interno del servidor",
+      data: null,
+    });
+  }
+};
 
 module.exports = {
   get_reservasClient_by_id_agente,
   filtro_solicitudes_y_reservas, //REPETIDO POR EMERGENCIA
+  get_all_facturas
 };

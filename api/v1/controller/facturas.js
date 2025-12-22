@@ -117,7 +117,8 @@ const getfacturasPagoPendiente = async (req, res) => {
 
 const getfacturasPagoPendienteByAgente = async (req, res) => {
   try {
-    const { id_agente } = req.query;
+    const  id_agente  = req.body.id_agente;
+    console.log(id_agente,"campos ")
     let solicitudes = await model.facturasPagoPendiente(id_agente);
     res.status(200).json(solicitudes);
   } catch (error) {
@@ -1349,23 +1350,13 @@ const reconcileFacturaItemLinks = ({
 
     // (B) Validación facturas: total aplicado debe cubrir EXACTO total facturas
     const totalAplicadoCents = saldosAplicados.reduce((acc, s) => acc + s.aplicado_cents, 0);
-    const diferencia = fromCents(totalFacturasCents - totalAplicadoCents);
+    let diferencia = fromCents(totalFacturasCents - totalAplicadoCents);
     log("Totales aplicado vs facturas", {
       total_aplicado: fromCents(totalAplicadoCents),
       total_facturas: fromCents(totalFacturasCents),
       diferencia: fromCents(totalFacturasCents - totalAplicadoCents),
     });
 
-    // if (totalAplicadoCents !== totalFacturasCents) {
-    //   return res.status(400).json({
-    //     error: "El monto aplicado no cubre el total de las facturas",
-    //     details: {
-    //       total_aplicado: fromCents(totalAplicadoCents),
-    //       total_facturas: fromCents(totalFacturasCents),
-    //       diferencia: fromCents(totalFacturasCents - totalAplicadoCents),
-    //     },
-    //   });
-    // }
 
     // (C) Validación items: suma de min(aplicado, saldoVista) >= total items
     const totalItemCapCents = saldosAplicados.reduce((acc, s) => acc + s.itemCapCents, 0);
@@ -1417,6 +1408,7 @@ const reconcileFacturaItemLinks = ({
 
         if (!picked || picked.remaining <= 0) {
           pendiente_facturas = need
+          diferencia = need
           break
         }
 
@@ -1783,8 +1775,9 @@ let updatedFacturas = 0;
 for (const f of facturas || []) {
   const id_factura = String(f.id_factura);
 
-  const paramsUF = [pendiente_facturas, id_factura];
-  log("[FACTURA] UPDATE saldo=0 (params)", { id_factura, pendiente_facturas});
+  diferencia = diferencia/100
+  const paramsUF = [diferencia, id_factura];
+  log("[FACTURA] UPDATE saldo=0 (params)", { id_factura, diferencia});
 
   const rUF = await executeQuery(queryUpdateFactura, paramsUF);
   logQuery("UPDATE facturas", queryUpdateFactura, paramsUF, rUF);
@@ -1866,63 +1859,6 @@ const filtrarFacturas = async (req, res) => {
     });
   }
 };
-// Este es el endpoint para el caso 1a1
-// const crearFacturaDesdeCargaPagos = async(req,res)=>{
-//   const { fecha_emision, estado, usuario_creador, id_agente, total, subtotal, impuestos, saldo, rfc, id_empresa, uuid_factura, rfc_emisor, url_pdf, url_xml , raw_id
-//   } = req.body;
-// // de una validamos el tipo de pago
-
-//   const id_factura = "fac-"+uuidv4();
-//   const query = `INSERT INTO facturas (id_factura, fecha_emision, estado, usuario_creador, id_agente, total, subtotal, impuestos, saldo, rfc, id_empresa, uuid_factura, rfc_emisor, url_pdf, url_xml)
-//                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-// if (raw_id.toString().includes("pag-")) {
-//   var id = 'id_pago';
-// } else {
-//   var id = 'id_saldo_a_favor';
-// }
-// const query2 = `INSERT INTO facturas_pagos_y_saldos (${id}, id_factura, monto)
-//                  VALUES (?, ?, ?)`;
-//   try {
-//     runTransaction(async (connection) => {
-//       const [result] = await connection.query(query, [
-//         id_factura,
-//         fecha_emision,
-//         estado,
-//         usuario_creador,
-//         id_agente,
-//         total,
-//         subtotal,
-//         impuestos,
-//         saldo,
-//         rfc,
-//         id_empresa,
-//         uuid_factura,
-//         rfc_emisor,
-//         url_pdf,
-//         url_xml
-//       ]);
-//       if (result.affectedRows === 0) {
-//         throw new Error("No se pudo crear la factura desde carga");
-//       }
-//       const [result2] = await connection.query(query2, [
-//         raw_id,
-//         id_factura,
-//         total
-//       ]);
-//       if (result2.affectedRows === 0) {
-//         throw new Error("No se pudo asignar el pago o saldo a favor a la factura");
-//       }
-//       res.status(201).json({
-//         message: "Factura creada correctamente desde carga con pago o saldo a favor",
-//         data: { id_factura, raw_id }
-//       });
-//     });
-//   } catch (error) {
-//     res.status(500).json({
-//       error: "Error al crear factura desde carga con pago o saldo a favor",
-//   })
-// }
-// }
 
 const get_agente_facturas = async (req, res) => {
   const { id_agente } = req.query;
