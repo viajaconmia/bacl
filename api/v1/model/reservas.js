@@ -1,4 +1,8 @@
-const { executeQuery, executeTransaction,executeSP2 } = require("../../../config/db");
+const {
+  executeQuery,
+  executeTransaction,
+  executeSP2,
+} = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 const { sumarDias } = require("../../../lib/utils/calculates");
 
@@ -482,9 +486,12 @@ const asignarFacturasItems = async (req, res) => {
     // Normalizar/parsear
     let arrItems = items;
     if (typeof arrItems === "string") {
-      try { arrItems = JSON.parse(arrItems); }
-      catch (e) {
-        return res.status(400).json({ error: "items no es JSON válido", details: e.message });
+      try {
+        arrItems = JSON.parse(arrItems);
+      } catch (e) {
+        return res
+          .status(400)
+          .json({ error: "items no es JSON válido", details: e.message });
       }
     }
     if (!Array.isArray(arrItems)) arrItems = [arrItems];
@@ -492,10 +499,12 @@ const asignarFacturasItems = async (req, res) => {
     // Log de entrada
     console.log("🧩 sp_asignar_facturas_de_pagos_a_items INPUT:");
     console.log("   id_saldo:", id_saldo);
-    console.table(arrItems.map(i => ({
-      id_item: i.id_item || i,
-      total: Number(i.total ?? i.monto ?? i.max ?? 0)
-    })));
+    console.table(
+      arrItems.map((i) => ({
+        id_item: i.id_item || i,
+        total: Number(i.total ?? i.monto ?? i.max ?? 0),
+      }))
+    );
 
     // Llamada al SP (envía el array como JSON)
     const result = await executeQuery(
@@ -511,17 +520,19 @@ const asignarFacturasItems = async (req, res) => {
       message: "SP ejecutado correctamente",
       id_saldo,
       items: arrItems,
-      resultado: result
+      resultado: result,
     });
   } catch (error) {
     console.error("❌ Error en asignarFacturasItems:", error);
-    return res.status(500).json({ error: "Error al ejecutar el SP", details: error?.message || String(error) });
+    return res.status(500).json({
+      error: "Error al ejecutar el SP",
+      details: error?.message || String(error),
+    });
   }
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
-
-  const { ejemplo_saldos = [], usuarioCreador } = reserva;
+  const { ejemplo_saldos = [], usuarioCreador, user } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
 
   const agentes = await executeQuery(
@@ -598,8 +609,8 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               id_booking, id_servicio, check_in, check_out, 
               total, subtotal, impuestos, estado, 
               costo_total, costo_subtotal, costo_impuestos, 
-              fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+              fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud, usuario_creador
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?);
           `;
           const params_bookings = [
             id_booking,
@@ -616,6 +627,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             null,
             null,
             id_solicitud,
+            user.id,
           ];
           await connection.execute(query_bookings, params_bookings);
 
@@ -810,11 +822,11 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               "credito",
             ];
             await connection.execute(queryCredito, paramsCredito);
-            
           } else if (bandera === 1) {
             console.log(
               "Procesando bandera 1 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:",
-              itemsConIdAnadido,"acabo"
+              itemsConIdAnadido,
+              "acabo"
             );
             // Wallet: validar saldos y generar pagos (SIN relación)
             // const ejemplo_saldos = [
@@ -971,35 +983,43 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           );
 
           /* ======== RELACIONAR FACTURAS ⇄ ITEMS por SALDO (SP) ======== */
-// Construir payload de items: { id_item, total } usando venta.total
-const itemsParaSP = (itemsConIdAnadido || []).map(it => ({
-  id_item: String(it.id_item),
-  total: Number(it?.venta?.total ?? 0),
-})).filter(x => x.id_item && Number.isFinite(x.total) && x.total > 0);
+          // Construir payload de items: { id_item, total } usando venta.total
+          const itemsParaSP = (itemsConIdAnadido || [])
+            .map((it) => ({
+              id_item: String(it.id_item),
+              total: Number(it?.venta?.total ?? 0),
+            }))
+            .filter(
+              (x) => x.id_item && Number.isFinite(x.total) && x.total > 0
+            );
 
-console.log("🧾 Items para SP (tope por item):");
-console.table(itemsParaSP);
+          console.log("🧾 Items para SP (tope por item):");
+          console.table(itemsParaSP);
 
-// Llamar el SP por cada saldo usado en la reserva
-for (const saldo of ejemplo_saldos) {
-  const idSaldo = Number(saldo.id_saldo);
-  console.log(`🚀 CALL sp_asignar_facturas_de_pagos_a_items(${idSaldo}, items[])`);
+          // Llamar el SP por cada saldo usado en la reserva
+          for (const saldo of ejemplo_saldos) {
+            const idSaldo = Number(saldo.id_saldo);
+            console.log(
+              `🚀 CALL sp_asignar_facturas_de_pagos_a_items(${idSaldo}, items[])`
+            );
 
-  try {
-    const spResult = await connection.execute(
-      "CALL sp_asignar_facturas_de_pagos_a_items(?, ?)",
-      [idSaldo, JSON.stringify(itemsParaSP)]
-    );
+            try {
+              const spResult = await connection.execute(
+                "CALL sp_asignar_facturas_de_pagos_a_items(?, ?)",
+                [idSaldo, JSON.stringify(itemsParaSP)]
+              );
 
-    console.log("📦 Resultado del SP (primer set):");
-    console.dir(spResult?.[0], { depth: null });
-  } catch (e) {
-    console.error(`❌ Error al ejecutar SP para id_saldo=${idSaldo}:`, e.message);
-    throw e; // re-lanza para que la transacción haga rollback
-  }
-}
-/* ======== FIN RELACIONAR FACTURAS ⇄ ITEMS ======== */
-
+              console.log("📦 Resultado del SP (primer set):");
+              console.dir(spResult?.[0], { depth: null });
+            } catch (e) {
+              console.error(
+                `❌ Error al ejecutar SP para id_saldo=${idSaldo}:`,
+                e.message
+              );
+              throw e; // re-lanza para que la transacción haga rollback
+            }
+          }
+          /* ======== FIN RELACIONAR FACTURAS ⇄ ITEMS ======== */
 
           return {
             message: "Reserva procesada exitosamente",
@@ -1148,83 +1168,61 @@ ORDER BY s.created_at DESC;`;
 
 const getReservaAllFacturacion = async () => {
   try {
-    const query = `SELECT
-  ad.id_agente as id_usuario_generador,
-  rc.id_servicio,
-  rc.status_reserva           AS estado_reserva,
-  rc.created_at_reserva       AS created_at,
-  rc.id_solicitud,
-  rc.id_viajero_reserva       AS id_viajero,
-  rc.hotel_reserva            AS hotel,
-  rc.check_in,
-  rc.check_out,
-  rc.tipo_cuarto              AS room,
-  rc.total,
-  rc.nombre_viajero_reservacion AS nombre_viajero,
-  rc.id_booking,
-  rc.updated_at,
-  rc.costo_total,
-  rc.id_hospedaje,
-  rc.comments,
-  rc.codigo_reservacion_hotel,
-  GROUP_CONCAT(DISTINCT rc.id_pago     SEPARATOR ',') AS id_pago,
-  GROUP_CONCAT(DISTINCT rc.id_credito  SEPARATOR ',') AS id_credito,
-  ad.nombre        AS nombre_agente_completo,
-  ad.correo,
-  ad.telefono,
-  ad.razon_social,
-  ad.rfc,
-  ad.tipo_persona,
-  (
-    SELECT JSON_ARRAYAGG(
-             JSON_OBJECT(
-               'id_item', i.id_item,
-               'fecha_uso', i.fecha_uso,
-               'total', i.total,
-               'subtotal', i.subtotal,
-               'impuestos', i.impuestos,
-               'costo_total', i.costo_total,
-               'costo_subtotal', i.costo_subtotal,
-               'costo_impuestos', i.costo_impuestos,
-               'saldo', i.saldo,
-               'is_facturado', i.is_facturado,
-               'id_factura', i.id_factura
+        const query = `SELECT
+    v.id_agente                      AS id_usuario_generador,
+    v.id_servicio,
+    v.status_reserva                 AS estado_reserva,
+    v.created_at_reserva             AS created_at,
+    v.id_solicitud,
+    v.id_viajero_reserva             AS id_viajero,
+    v.hotel_reserva                  AS hotel,
+    v.check_in,
+    v.check_out,
+    v.room,
+    v.tipo_cuarto,
+    v.total,
+    v.nombre_viajero_reservacion     AS nombre_viajero,
+    v.id_booking,
+    v.updated_at,
+    v.costo_total,
+    v.id_hospedaje,
+    v.comments,
+    v.codigo_reservacion_hotel,
+    v.id_pago,
+    v.id_credito,
+    v.nombre_cliente                 AS nombre_agente_completo,
+    v.correo,
+    v.telefono,
+    v.razon_social,
+    v.rfc,
+    v.tipo_persona,
+
+    -- === ITEMS generados igual que en tu query anterior ===
+    (
+      SELECT JSON_ARRAYAGG(
+               JSON_OBJECT(
+                 'id_item',       i.id_item,
+                 'fecha_uso',     i.fecha_uso,
+                 'total',         i.total,
+                 'subtotal',      i.subtotal,
+                 'impuestos',     i.impuestos,
+                 'costo_total',   i.costo_total,
+                 'costo_subtotal',i.costo_subtotal,
+                 'costo_impuestos',i.costo_impuestos,
+                 'saldo',         i.saldo,
+                 'is_facturado',  i.is_facturado,
+                 'id_factura',    i.id_factura
+               )
              )
-             -- ORDER BY i.fecha_uso
-           )
-    FROM items i
-    WHERE i.id_hospedaje = h.id_hospedaje
-  ) AS items
-FROM vw_reservas_client rc
-LEFT JOIN agente_details ad ON ad.id_agente = rc.id_agente
-LEFT JOIN hospedajes h
-       ON h.id_hospedaje = rc.id_hospedaje
-WHERE rc.status_reserva = 'Confirmada' AND rc.id_credito is not null
-GROUP BY
-  rc.id_hospedaje,
-  rc.id_servicio,
-  rc.status_reserva,
-  rc.created_at_reserva,
-  rc.id_solicitud,
-  rc.id_viajero_reserva,
-  rc.hotel_reserva,
-  rc.check_in,
-  rc.check_out,
-  rc.tipo_cuarto,
-  rc.total,
-  rc.nombre_viajero_reservacion,
-  rc.id_booking,
-  rc.updated_at,
-  rc.costo_total,
-  rc.comments,
-  rc.codigo_reservacion_hotel,
-  ad.nombre,
-  ad.correo,
-  ad.telefono,
-  ad.razon_social,
-  ad.rfc,
-  ad.tipo_persona
-ORDER BY rc.created_at_reserva DESC`;
+      FROM items i
+      WHERE i.id_hospedaje = v.id_hospedaje
+    ) AS items
+
+FROM vw_reservas_a_credito_sin_facturas v
+
+ORDER BY v.created_at_reserva DESC;
+`;
+
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);
@@ -2119,7 +2117,7 @@ const insertarReserva = async ({ reserva }) => {
             [solicitud.id_servicio]
           );
 
-const esWalletPrepagado = walletPagos.length > 0;
+          const esWalletPrepagado = walletPagos.length > 0;
 
           if (esWalletPrepagado && itemsConIdAnadido.length > 0) {
             console.log("Procesando pago con wallet prepagado");
@@ -2223,7 +2221,7 @@ const esWalletPrepagado = walletPagos.length > 0;
               }
             }
 
-  console.log("\nAsignaciones finales:", asignaciones);
+            console.log("\nAsignaciones finales:", asignaciones);
 
             // 4) Insertar en items_pagos (ya en pesos)
             if (asignaciones.length > 0) {
@@ -2238,17 +2236,19 @@ const esWalletPrepagado = walletPagos.length > 0;
                 fromCents(a.monto_cents).toFixed(2),
               ]);
 
-    await connection.execute(queryItemsPagos, paramsItemsPagos);
-    console.log(`Insertados ${asignaciones.length} registros en items_pagos`);
-  }
-} else {
-  // ===== LÓGICA ORIGINAL PARA PAGO NORMAL =====
-  console.log("Procesando pago normal (contado/credito)");
+              await connection.execute(queryItemsPagos, paramsItemsPagos);
+              console.log(
+                `Insertados ${asignaciones.length} registros en items_pagos`
+              );
+            }
+          } else {
+            // ===== LÓGICA ORIGINAL PARA PAGO NORMAL =====
+            console.log("Procesando pago normal (contado/credito)");
 
-  const [rowsContado] = await connection.execute(
-    `SELECT id_pago FROM pagos WHERE id_servicio = ? LIMIT 1`,
-    [solicitud.id_servicio]
-  );
+            const [rowsContado] = await connection.execute(
+              `SELECT id_pago FROM pagos WHERE id_servicio = ? LIMIT 1`,
+              [solicitud.id_servicio]
+            );
 
             if (rowsContado.length > 0 && itemsConIdAnadido.length > 0) {
               const id_pago = rowsContado[0].id_pago;
@@ -2265,18 +2265,20 @@ const esWalletPrepagado = walletPagos.length > 0;
                 ]
               );
 
-    await connection.execute(query_items_pagos, params_items_pagos);
-  } else {
-    const [rowsCredito] = await connection.execute(
-      `SELECT id_credito FROM pagos_credito WHERE id_servicio = ? LIMIT 1`,
-      [solicitud.id_servicio]
-    );
+              await connection.execute(query_items_pagos, params_items_pagos);
+            } else {
+              const [rowsCredito] = await connection.execute(
+                `SELECT id_credito FROM pagos_credito WHERE id_servicio = ? LIMIT 1`,
+                [solicitud.id_servicio]
+              );
 
-    if (rowsCredito.length === 0) {
-      throw new Error(`No se encontró pago para el servicio ${solicitud.id_servicio}`);
-    }
-  }
-}
+              if (rowsCredito.length === 0) {
+                throw new Error(
+                  `No se encontró pago para el servicio ${solicitud.id_servicio}`
+                );
+              }
+            }
+          }
 
           // Actualizar estado de solicitud y servicio
           let estado =

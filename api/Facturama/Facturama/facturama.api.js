@@ -1,4 +1,19 @@
+const path = require("path");
+const fs = require("fs");
+const https = require("https");
 const axios = require("axios");
+
+const ca = fs.readFileSync(
+  path.join(process.cwd(), "certs", "facturama.mx.crt")
+);
+console.log(ca.toString());
+
+// O "./certs/facturama.crt"
+
+const agent = new https.Agent({
+  ca,
+  rejectUnauthorized: true,
+});
 
 const { valuesFacturama } = require("../../../config/auth");
 
@@ -9,6 +24,7 @@ const { valuesFacturama } = require("../../../config/auth");
 // };
 
 let headers = {
+  agent,
   headers: {
     "User-Agent": valuesFacturama.useragent,
     Authorization: `Basic ${valuesFacturama.token}`,
@@ -24,6 +40,7 @@ const facturama = () => {
 
   // Función para hacer una solicitud GET
   const retrieve = async (path, id) => {
+    console.log(headers);
     try {
       const response = await axios.get(`${settings.url}${path}/${id}`, headers);
       return response.data;

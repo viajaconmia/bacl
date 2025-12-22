@@ -193,7 +193,7 @@ const readSaldoByAgente = async (req, res) => {
   sf.comentario,
   sf.link_stripe,
   sf.is_facturable,
-  sf.is_descuento,
+  sf.is_wallet_credito,
   sf.comprobante,
   sf.activo,
   sf.numero_autorizacion,
@@ -270,7 +270,7 @@ const createNewSaldo = async (req, res) => {
       data.comentario || null, // p_comentario
       data.link_stripe || null, // p_link_stripe
       data.is_facturable ?? false, // p_is_facturable
-      data.descuento_aplicable ?? false, // p_is_descuento
+      data.is_wallet_credito ?? false, // p_is_descuento
       null, // p_comprobante
       data.ult_digits || null, // p_ult_digits
       data.numero_autorizacion || null, // p_numero_autorizacion
@@ -358,6 +358,38 @@ const update_saldo_by_id = async (req, res) => {
   }
 };
 
+const facturas_pagos_y_saldos = async (req, res) => {
+  try {
+    const info = req.body || {};
+    const idSaldo = info.id_saldo;
+
+    if (idSaldo === undefined || idSaldo === null || String(idSaldo).trim() === "") {
+      return res.status(400).json({ ok: false, msg: "Falta id_saldo" });
+    }
+
+    // OJO: en la vista el id viene como raw_id (string)
+    // y para saldos_a_favor es tipo_pago = 'Wallet'
+    const rows = await executeQuery(
+      `
+      SELECT monto_por_facturar
+      FROM vw_pagos_prepago_facturables
+      WHERE tipo_pago = 'Wallet'
+        AND raw_id = ?
+      `,
+      [String(idSaldo)]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ ok: false, msg: "Saldo no encontrado en la vista" });
+    }
+
+    return res.json({ ok: true, data: rows[0] });
+  } catch (error) {
+    console.error("facturas_pagos_y_saldos error:", error);
+    return res.status(500).json({ ok: false, msg: "Error interno", error: String(error?.message || error) });
+  }
+};
+
 module.exports = {
   create,
   read,
@@ -367,4 +399,5 @@ module.exports = {
   saldosAgrupadosPorMetodoPorIdClient,
   saldosByType,
   getStripeInfo,
+  facturas_pagos_y_saldos,
 };

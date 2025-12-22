@@ -6,6 +6,7 @@ const cookieParser = require("cookie-parser");
 const PORT = process.env.PORT || 3001;
 /**de aqui para abajo */
 require("dotenv").config();
+const { errorHandler } = require("./middleware/errorHandler");
 
 // const Stripe = require("stripe");
 // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
@@ -45,8 +46,6 @@ require("dotenv").config();
 // const { SECRET_KEY } = require("./lib/constant");
 /** aqui*/
 
-const { errorHandler } = require("./middleware/errorHandler");
-
 const { checkApiKey } = require("./middleware/auth");
 const v1Router = require("./api/v1/router/general");
 const cors = require("cors");
@@ -59,9 +58,7 @@ const requestContext = require("./middleware/requestContext");
 // Control de CORS
 const corsOptions = {
   origin: [
-    "http://localhost:5173",
     "https://viajaconmia.com",
-    "http://localhost:3000",
     "https://miaadmin.vercel.app",
     "https://mia-prueba.vercel.app",
     "https://admin-mia.vercel.app",
@@ -70,6 +67,8 @@ const corsOptions = {
     "https://admin.viajaconmia.com",
     "https://mia-git-pruebasmia-mias-projects-f396ca8b.vercel.app",
     "https://admin-mia-git-pruebasadmin-mias-projects-f396ca8b.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
   allowedHeaders: [
@@ -104,6 +103,32 @@ app.use((req, res, next) => {
   res.set("Cache-Control", "no-store");
   res.set("Pragma", "no-cache");
   res.set("Expires", "0");
+  next();
+});
+
+app.use((req, res, next) => {
+  const token = req.cookies["access-token"];
+  req.session = { user: null };
+  if (token) {
+    try {
+      const session = jwt.verify(token, SECRET_KEY);
+      req.session.user = session;
+    } catch (error) {
+      console.log(error);
+      if (error.message == "jwt expired")
+        error.message = "sesion expirada, inicia sesión nuevamente";
+      res
+        .status(500)
+        .clearCookie("access-token")
+        .json({
+          message: error.message || "Error al salir",
+          error,
+          data: null,
+        });
+      return;
+    }
+  }
+  console.log(req.session);
   next();
 });
 

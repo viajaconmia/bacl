@@ -2,6 +2,7 @@ const {
   executeQuery,
   executeTransaction,
   runTransaction,
+  executeSP2,
 } = require("../../../config/db");
 const { CustomError } = require("../../../middleware/errorHandler");
 const { crearCfdi } = require("./facturamaModel");
@@ -45,7 +46,11 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         console.log(cfdi);
         response_factura = await crearCfdi(req, cfdi);
       } catch (error) {
-        console.error("Error al crear CFDI:", error.response.data);
+        console.error(
+          "Error al crear CFDI:",
+          error.response.data,
+          error.response
+        );
         throw new CustomError(
           error.response.data.Message || "Error al crear la factura",
           500,
@@ -131,11 +136,14 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
     JSON.stringify({ cfdi, info_user })
   );
   try {
-    const { id_solicitud, id_user, id_items, datos_empresa } = info_user;
+    const { id_solicitud, id_user, id_items, datos_empresa, items_facturados } =
+      info_user;
     const solicitudesArray = Array.isArray(id_solicitud)
       ? id_solicitud
       : [id_solicitud];
-    const itemsArray = Array.isArray(id_items) ? id_items : [id_items];
+    const itemsArray = Array.isArray(items_facturados)
+      ? items_facturados
+      : [items_facturados];
 
     // 0. Calcular totales
     const { total, subtotal, impuestos } = cfdi.Items.reduce(
@@ -193,20 +201,39 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
           //fecha de vencimiento
           info_user.fecha_vencimiento,
           total,
-          id_user
+          id_user,
         ]);
 
         // 4. Actualizar solo los items seleccionados
-        const updateItemsSql = `
-        UPDATE items
-        SET id_factura = ?,
-        is_facturado = 1
-        WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
-        `;
-        const resultados_items = await conn.execute(updateItemsSql, [
-          id_factura,
-          ...itemsArray,
-        ]);
+        // const updateItemsSql = `
+        // UPDATE items
+        // SET id_factura = ?,
+        // is_facturado = 1
+        // WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
+        // `;
+        // const resultados_items = await conn.execute(updateItemsSql, [
+        //   id_factura,
+        //   ...itemsArray,
+        // ]);
+        // 4 NUEVO: Insertar en items factura
+        const numberOfItems = itemsArray.length;
+        console.log("ITEMSSS", itemsArray);
+        const insertItemsFacturasQuery = `
+        insert into items_facturas (id_factura,id_relacion,id_item,monto) values(?,?,?,?);`;
+        for (let i = 0; i < numberOfItems; i++) {
+          console.log(
+            "😎😎😎😎😎😎😎😎😎😎😎😎😎🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬",
+            itemsArray[i].id_hospedaje,
+            itemsArray[i].id_item,
+            total / numberOfItems
+          );
+          await conn.execute(insertItemsFacturasQuery, [
+            id_factura,
+            itemsArray[i].id_hospedaje,
+            itemsArray[i].id_item,
+            total / numberOfItems,
+          ]);
+        }
 
         // 5. Insertar registros en facturas_pagos
         /* const resultados_pagos = await conn.execute( LO COMENTO POR SI ACASO
@@ -779,6 +806,16 @@ ORDER BY vf.uuid_factura, vf.fecha_emision;`;
   }
 };
 
+const facturasPagoPendiente= async (id_agente) =>{
+  try {
+
+    const response = await executeSP2('sp_get_facturas_pendientes_por_agente',[id_agente])
+    return response;
+  } catch (error) {
+    throw error;
+  }
+}
+
 const getDetailsFactura = async (id_factura) => {
   try {
     const query = `select count(*) AS noches_facturadas, i.*, h.*, b.total as total_booking, b.subtotal as subtotal_booking, b.impuestos as impuestos_booking from items i 
@@ -860,4 +897,5 @@ module.exports = {
   getDetailsFactura,
   isFacturada,
   crearFacturaEmi,
+  facturasPagoPendiente
 };

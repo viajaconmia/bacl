@@ -2,15 +2,18 @@ const router = require("express").Router();
 const { executeQuery } = require("../../../../config/db");
 const controller = require("../../controller/reservas");
 const middleware = require("../../middleware/validateParams");
+const controller_v2 = require("../../../../v2/controller/reservas.controller");
 
 const requiredParamsToCreate = [];
 router.get("/detallesConexion", controller.getDetallesConexionReservas);
-router.put(
+router.put("/nuevo-editar-reserva", controller_v2.editar_reserva_definitivo);
+router.put("/cancelar", controller_v2.cancelarBooking);
+/*router.put(
   "/",
   //middleware.validateParams(requiredParamsToCreate),
   // controller.updateReserva //se vovio el original era updateReserva
   controller.updateReserva2
-);
+);*/
 router.post(
   "/operaciones",
   middleware.validateParams(requiredParamsToCreate),
@@ -33,6 +36,7 @@ router.get(
   "/reservasConItemsSinPagar",
   controller.getReservasWithItemsSinPagarByAgente
 );
+
 router.get("/cotizaciones", async (req, res) => {
   try {
     const response = await executeQuery(

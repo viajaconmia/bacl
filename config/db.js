@@ -132,6 +132,9 @@ async function runTransaction(callback) {
 async function insert(connection, schema, obj) {
   Validacion.requiredColumns(schema.required, obj);
   const propiedades = Formato.propiedades(schema.columnas, obj);
+  console.log("\n\n\n\n\n");
+  console.log(obj);
+  console.log(propiedades);
 
   const query = `INSERT INTO ${schema.table} (${propiedades
     .map((p) => p.key)
