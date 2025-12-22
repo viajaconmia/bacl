@@ -54,6 +54,7 @@ const morgan = require("morgan");
 // Logger y trazabilidad
 const logger = require("./api/v1/utils/logger");
 const requestContext = require("./middleware/requestContext");
+const { createTicketZoho } = require("./services/zoho/tickets");
 
 // Control de CORS
 const corsOptions = {
@@ -131,6 +132,10 @@ app.use((req, res, next) => {
   console.log(req.session);
   next();
 });
+
+(async () => {
+  createTicketZoho({ subject });
+})();
 
 // 6. Rutas de la API v1 (protegidas)
 app.use(
