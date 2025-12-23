@@ -1,4 +1,4 @@
-const { getAccessToken } = require("./index");
+const { getAccessToken } = require("./config");
 
 /**
  * Crea un ticket en Zoho Desk usando la API de tickets.
@@ -35,10 +35,11 @@ const createTicketZoho = async ({
   contactId,
   priority = "High",
   status = "Open",
+  email = null,
 }) => {
   try {
-    if (!departmentId || !contactId) {
-      throw new Error("departmentId y contactId son obligatorios");
+    if (!departmentId || !(contactId || email)) {
+      throw new Error("departmentId y (contactId o email) son obligatorios");
     }
 
     const ticket_info = {
@@ -48,6 +49,8 @@ const createTicketZoho = async ({
       contactId,
       priority,
       status,
+      // channel: "Email",
+      email,
     };
 
     const access_token = await getAccessToken();
@@ -69,6 +72,35 @@ const createTicketZoho = async ({
   }
 };
 
+async function getTicketZoho(ticketId) {
+  if (!ticketId) throw new Error("Falta el id del ticket");
+
+  let accessToken = await getAccessToken();
+  const url = `https://desk.zoho.com/api/v1/tickets/${ticketId}`;
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error: ${response.statusText}`);
+    }
+
+    const ticketData = await response.json();
+
+    return ticketData;
+  } catch (error) {
+    console.error("Error al obtener el ticket:", error);
+    throw error;
+  }
+}
+
 module.exports = {
   createTicketZoho,
+  getTicketZoho,
 };

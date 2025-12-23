@@ -54,7 +54,13 @@ const morgan = require("morgan");
 // Logger y trazabilidad
 const logger = require("./api/v1/utils/logger");
 const requestContext = require("./middleware/requestContext");
-const { createTicketZoho } = require("./services/zoho/tickets");
+const {
+  createContact,
+  getContacts,
+  getByEmail,
+} = require("./services/zoho/contacts");
+const { DEPARTMENTS } = require("./lib/constant");
+const { subirTicketSolicitudZoho } = require("./services/zoho");
 
 // Control de CORS
 const corsOptions = {
@@ -133,10 +139,6 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
-  createTicketZoho({ subject });
-})();
-
 // 6. Rutas de la API v1 (protegidas)
 app.use(
   "/v1",
@@ -147,6 +149,19 @@ app.use(
   },
   v1Router
 );
+
+app.get("/probando", async (req, res) => {
+  try {
+    const { id } = req.query;
+    const response = await subirTicketSolicitudZoho({
+      id,
+    });
+    return res.json(response);
+  } catch (error) {
+    console.error("Error creando ticket de prueba:", error);
+    return res.json({ message: "Error creando ticket de prueba", error });
+  }
+});
 
 // Ruta pública raíz
 app.get("/", (req, res) =>
