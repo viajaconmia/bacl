@@ -1,5 +1,7 @@
 const { getByEmail } = require("./contacts");
 const { executeQuery } = require("../../config/db");
+const { DEPARTMENTS } = require("../../lib/constant");
+const { createTicketZoho } = require("./tickets");
 
 const subirTicketSolicitudZoho = async ({ id }) => {
   if (!id) throw new Error("Falta el id del cliente");
@@ -10,30 +12,35 @@ const subirTicketSolicitudZoho = async ({ id }) => {
   );
 
   if (!agente) throw new Error("No se encontró el agente");
+  if (!agente.correo) throw new Error("No se encontró el email del agente");
 
-  if (!agente.email) throw new Error("No se encontró el email del agente");
+  let user;
+  user = await getByEmail(agente.correo);
+  console.log(user);
+  if (!user)
+    user = await createContact({
+      email: agente.correo,
+      firstName:
+        [agente.primer_nombre, agente.segundo_nombre]
+          .filter(Boolean)
+          .join(" ")
+          .replaceAll("  ", " ")
+          .trim() || "",
+      lastName:
+        [agente.apellido_paterno, agente.apellido_materno]
+          .filter(Boolean)
+          .join(" ")
+          .replaceAll("  ", " ")
+          .trim() || "",
+    });
 
-  // const { page } = req.query;
-  // await createTicketZoho({
-  //   // email: "luisacast.29@gmail.com",
-  //   contactId: "603403000000819002",
-  //   departmentId: DEPARTMENTS.IA,
-  //   subject: "PRUEBA",
-  //   description: "Creacion de ticket desde API",
-  // });
-  // const ticket = await getTicketZoho("603403000036487303");
-  // console.log("Ticket de prueba obtenido:", ticket);
-  // const contacts = await createContact({
-  //   email: "luisacast.29@gmail.com",
-  //   firstName: "Angel",
-  //   lastName: "Castañon",
-  // });
-
-  return agente;
-
-  // let user;
-  // user = await getByEmail(email);
-  // if (!user) user = await createContact({email, firstName:"", lastName:"Desconocido"});
+  await createTicketZoho({
+    contactId: user.id,
+    departmentId: DEPARTMENTS.IA,
+    subject: "prueba" || `Solicitud de cotización - Agente: ${agente.nombre}`,
+    description: "Creacion de ticket desde API",
+  });
+  return user;
 };
 
 module.exports = {

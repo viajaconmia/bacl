@@ -6,6 +6,8 @@ const cookieParser = require("cookie-parser");
 const PORT = process.env.PORT || 3001;
 /**de aqui para abajo */
 require("dotenv").config();
+const jwt = require("jsonwebtoken");
+const { SECRET_KEY } = require("./lib/constant");
 const { errorHandler } = require("./middleware/errorHandler");
 
 // const Stripe = require("stripe");
@@ -44,14 +46,12 @@ const { errorHandler } = require("./middleware/errorHandler");
 //   res.status(200).json({ received: true });
 // });
 // const { SECRET_KEY } = require("./lib/constant");
-/** aqui*/
 
 const { checkApiKey } = require("./middleware/auth");
 const v1Router = require("./api/v1/router/general");
 const cors = require("cors");
 const morgan = require("morgan");
 
-// Logger y trazabilidad
 const logger = require("./api/v1/utils/logger");
 const requestContext = require("./middleware/requestContext");
 const {
@@ -135,7 +135,7 @@ app.use((req, res, next) => {
       return;
     }
   }
-  console.log(req.session);
+  // console.log(req.session);
   next();
 });
 
@@ -156,7 +156,7 @@ app.get("/probando", async (req, res) => {
     const response = await subirTicketSolicitudZoho({
       id,
     });
-    return res.json(response);
+    return res.status(200).json(response);
   } catch (error) {
     console.error("Error creando ticket de prueba:", error);
     return res.json({ message: "Error creando ticket de prueba", error });
