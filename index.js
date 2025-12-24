@@ -4,6 +4,8 @@ const express = require("express");
 const app = express();
 const cookieParser = require("cookie-parser");
 const PORT = process.env.PORT || 3001;
+const jwt = require("jsonwebtoken")
+const {SECRET_KEY} = require("./lib/constant/index")
 /**de aqui para abajo */
 require("dotenv").config();
 const jwt = require("jsonwebtoken");

@@ -29,6 +29,7 @@ router.delete("/", controller.deleteViajeroById);
 
 /* ESTE ES EL NUEVO QUE FUNCIONA EN ADMIN EN EL SERVICE DE VIAJEROS*/
 router.get("/by-agente", async (req, res) => {
+  console.log("🔽🔽🔽🔽🔽🔽🔽🔽🔽🤬🤬🤬🤬🤬🤬🤬",req.query)
   try {
     const { id } = req.query;
     const query = `
