@@ -100,20 +100,6 @@ const createSolicitudes = async (body) => {
               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             `;
         try {
-          console.log([
-            id_solicitud,
-            tipo,
-            id_proveedor_gemini,
-            JSON.stringify(s),
-            s.total,
-            s.status,
-            s.usuario_creador ?? null,
-            s.hotel || null,
-            s.id_viajero,
-            s.check_in,
-            s.check_out,
-            s.room || null,
-          ]);
           await connection.execute(q_insert_solicitud, [
             id_solicitud,
             tipo,

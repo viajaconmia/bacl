@@ -199,40 +199,49 @@ const procesarServicio = async (req, res) => {
       [usuario_generador]
     );
 
+    const solicitudes = await executeQuery(
+      `SELECT * FROM solicitudes WHERE id_solicitud in (${data
+        .map((_) => "?")
+        .join(",")})`,
+      data.map((i) => i.id_solicitud)
+    );
+    // const aqui jalo con las solicitudes los datos para el ticket
+
     console.log(data, "\n\n\n");
+    console.log(solicitudes.map((i) => i.data_gemini.item));
 
     const total = data.reduce((acc, curr) => acc + Number(curr.total), 0);
 
-    await runTransaction(async (conn) => {
-      try {
-        const [servicio] = await db.SERVICIO.create(conn, {
-          total,
-          is_cotizacion: true,
-          id_agente,
-        });
+    // await runTransaction(async (conn) => {
+    //   try {
+    //     const [servicio] = await db.SERVICIO.create(conn, {
+    //       total,
+    //       is_cotizacion: true,
+    //       id_agente,
+    //     });
 
-        const ids_solicitudes = data.map((cart) => cart.id_solicitud);
-        const solicitudes = await db.SOLICITUDES.get(...ids_solicitudes);
+    //     const ids_solicitudes = data.map((cart) => cart.id_solicitud);
+    //     const solicitudes = await db.SOLICITUDES.get(...ids_solicitudes);
 
-        Promise.all(
-          solicitudes.map(
-            async (solicitud) =>
-              await db.SOLICITUDES.update(conn, {
-                id_servicio: servicio.id_servicio,
-                id_solicitud: solicitud.id_solicitud,
-              })
-          )
-        );
+    //     Promise.all(
+    //       solicitudes.map(
+    //         async (solicitud) =>
+    //           await db.SOLICITUDES.update(conn, {
+    //             id_servicio: servicio.id_servicio,
+    //             id_solicitud: solicitud.id_solicitud,
+    //           })
+    //       )
+    //     );
 
-        const query = `UPDATE cart SET active = ? WHERE id = ?`;
-        Promise.all(
-          data.map(async (cart) => await conn.execute(query, [false, cart.id]))
-        );
-      } catch (error) {
-        console.error(error);
-        throw error;
-      }
-    });
+    //     const query = `UPDATE cart SET active = ? WHERE id = ?`;
+    //     Promise.all(
+    //       data.map(async (cart) => await conn.execute(query, [false, cart.id]))
+    //     );
+    //   } catch (error) {
+    //     console.error(error);
+    //     throw error;
+    //   }
+    // });
 
     res.status(200).json({
       message: "Item actualizado con exito",
