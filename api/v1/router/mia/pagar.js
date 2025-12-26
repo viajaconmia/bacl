@@ -12,7 +12,7 @@ router.get("/", async (req, res) => {
     res.status(200).json(
       response.map((tarjeta) => ({
         ...tarjeta,
-        activa: Boolean(tarjeta.activa),
+        activa: Boolean(tarjeta.activa), 
       }))
     );
   } catch (error) {
@@ -25,8 +25,6 @@ router.get("/", async (req, res) => {
     });
   }
 });
-
-
 
 
 router.get("/:id", async (req, res) => {
