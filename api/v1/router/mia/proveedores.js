@@ -6,7 +6,8 @@ router.get("/detalles", controller.getDetalles); // obtiene los datos fiscales d
 router.post("/", controller.createProveedor);
 router.post("/sucursal", controller.crearSucursal);
 router.get("/sucursal", controller.getSucursales);
-router.put("editar_proveedor", controller.putEditar);
-router.put("editar_cuenta", controller.putEditarCuenta);
+router.put("/editar_proveedor", controller.putEditar);
+router.put("/editar_cuenta", controller.putEditarCuenta);
+router.post("/crear_cuenta",controller.postCrearCuenta);
 
 module.exports = router;
