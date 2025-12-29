@@ -36,6 +36,19 @@ const getSucursales = async (req, res) => {
   }
 };
 
+const getDetalles = async(req,res)=>{
+  try {
+    const { id_proveedor } = req.query;
+    const sucursales = await executeQuery(`SELECT * FROM proveedores_datos_fiscales where id_proveedor =?`[id_proveedor]);
+    res.status(200).json({ message: "", data: sucursales });
+  } catch (error) {
+    console.log(error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message, data: null, error });
+  }
+}
+
 const createProveedor = async (req, res) => {
   try {
     const { nombre, pais, rfc, telefono, email, sitio_web, type } = req.body;
@@ -121,10 +134,24 @@ const crearSucursal = async (req, res) => {
       .json({ message: error.message, data: null, error });
   }
 };
+const putEditar = async (req,res) =>{
+try {
+  
+} catch (error) {
+  
+}
+}
+
+const putEditarCuenta = async (req,res) =>{
+
+}
 
 module.exports = {
   getProveedores,
   createProveedor,
   crearSucursal,
   getSucursales,
+  getDetalles,
+  putEditar,
+  putEditarCuenta,
 };
