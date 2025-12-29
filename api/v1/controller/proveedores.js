@@ -3,10 +3,18 @@ const { executeQuery } = require("../../../config/db");
 const getProveedores = async (req, res) => {
   try {
     const { type } = req.query;
-    const proveedores = await executeQuery(
+        let proveedores
+    if (type != null) {
+      proveedores = await executeQuery(
       `SELECT * FROM proveedores where type = ?`,
       [type]
+      );
+    }else{
+      proveedores = await executeQuery(
+      `SELECT * FROM proveedores`,
+      
     );
+    }
     res.status(200).json({ message: "", data: proveedores });
   } catch (error) {
     console.log(error);
@@ -50,20 +58,11 @@ const createProveedor = async (req, res) => {
         type || null,
       ]
     );
-    let proveedores
-    if (type != null) {
-      proveedores = await executeQuery(
+
+    const proveedores = await executeQuery(
       `SELECT * FROM proveedores where type = ?`,
       [type]
-      );
-    }else{
-      proveedores = await executeQuery(
-      `SELECT * FROM proveedores`,
-      
     );
-    }
-
-    
     res.status(200).json({ message: "Creado con exito", data: proveedores });
   } catch (error) {
     console.log(error);
