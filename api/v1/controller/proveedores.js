@@ -50,11 +50,20 @@ const createProveedor = async (req, res) => {
         type || null,
       ]
     );
-
-    const proveedores = await executeQuery(
+    let proveedores
+    if (type != null) {
+      proveedores = await executeQuery(
       `SELECT * FROM proveedores where type = ?`,
       [type]
+      );
+    }else{
+      proveedores = await executeQuery(
+      `SELECT * FROM proveedores`,
+      
     );
+    }
+
+    
     res.status(200).json({ message: "Creado con exito", data: proveedores });
   } catch (error) {
     console.log(error);

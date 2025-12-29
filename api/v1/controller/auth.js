@@ -84,7 +84,7 @@ const newCreateAgente = async (req, res) => {
     const newAgente = await executeSP("sp_crear_agente", [
       stripe_client.id,
       body.id_agente,
-      id_empresa,
+      id_empresa, 
       id_viajero,
       body.nombre_completo, //body.nombre_completo
       body.primer_nombre,

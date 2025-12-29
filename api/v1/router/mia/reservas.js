@@ -39,8 +39,13 @@ router.get(
 
 router.get("/cotizaciones", async (req, res) => {
   try {
+    const { servicio } = req.query;
+    console.log(servicio);
     const response = await executeQuery(
-      `SELECT * FROM vw_solicitud_cotizaciones;`
+      `SELECT * FROM vw_solicitud_cotizaciones ${
+        servicio ? "WHERE id_servicio = ?" : ""
+      }`,
+      servicio ? [servicio] : []
     );
 
     const split_services = response.reduce((acc, curr) => {
