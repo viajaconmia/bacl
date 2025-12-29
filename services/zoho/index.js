@@ -1,9 +1,9 @@
-const { getByEmail } = require("./contacts");
+const { getByEmail, createContact } = require("./contacts");
 const { executeQuery } = require("../../config/db");
 const { DEPARTMENTS } = require("../../lib/constant");
 const { createTicketZoho } = require("./tickets");
 
-const subirTicketSolicitudZoho = async ({ id }) => {
+const subirTicketSolicitudZoho = async ({ id, servicio }) => {
   if (!id) throw new Error("Falta el id del cliente");
 
   const [agente] = await executeQuery(
@@ -37,8 +37,10 @@ const subirTicketSolicitudZoho = async ({ id }) => {
   await createTicketZoho({
     contactId: user.id,
     departmentId: DEPARTMENTS.IA,
-    subject: "prueba" || `Solicitud de cotización - Agente: ${agente.nombre}`,
-    description: "Creacion de ticket desde API",
+    subject:
+      "prueba" ||
+      `SPRUEBAAAAAAAAAAAA: solicitud de cotización - Agente: ${agente.nombre}`,
+    description: `<a href="http://localhost:3000/dashboard/solicitudes/cotizaciones?service=${servicio}">http://localhost:3000/dashboard/solicitudes/cotizaciones?service=${servicio}</a>`,
   });
   return user;
 };

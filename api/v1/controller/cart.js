@@ -1,6 +1,7 @@
 const { executeQuery, runTransaction } = require("../../../config/db");
 const { calcularNoches } = require("../../../lib/utils/calculates");
 const { CustomError } = require("../../../middleware/errorHandler");
+const { subirTicketSolicitudZoho } = require("../../../services/zoho");
 const db = require("../../../v2/model/db.model");
 
 /****************+ GET ********************* */
@@ -212,36 +213,41 @@ const procesarServicio = async (req, res) => {
 
     const total = data.reduce((acc, curr) => acc + Number(curr.total), 0);
 
-    // await runTransaction(async (conn) => {
-    //   try {
-    //     const [servicio] = await db.SERVICIO.create(conn, {
-    //       total,
-    //       is_cotizacion: true,
-    //       id_agente,
-    //     });
+    await runTransaction(async (conn) => {
+      try {
+        const [servicio] = await db.SERVICIO.create(conn, {
+          total,
+          is_cotizacion: true,
+          id_agente,
+        });
 
-    //     const ids_solicitudes = data.map((cart) => cart.id_solicitud);
-    //     const solicitudes = await db.SOLICITUDES.get(...ids_solicitudes);
+        const ids_solicitudes = data.map((cart) => cart.id_solicitud);
+        const solicitudes = await db.SOLICITUDES.get(...ids_solicitudes);
 
-    //     Promise.all(
-    //       solicitudes.map(
-    //         async (solicitud) =>
-    //           await db.SOLICITUDES.update(conn, {
-    //             id_servicio: servicio.id_servicio,
-    //             id_solicitud: solicitud.id_solicitud,
-    //           })
-    //       )
-    //     );
+        Promise.all(
+          solicitudes.map(
+            async (solicitud) =>
+              await db.SOLICITUDES.update(conn, {
+                id_servicio: servicio.id_servicio,
+                id_solicitud: solicitud.id_solicitud,
+              })
+          )
+        );
 
-    //     const query = `UPDATE cart SET active = ? WHERE id = ?`;
-    //     Promise.all(
-    //       data.map(async (cart) => await conn.execute(query, [false, cart.id]))
-    //     );
-    //   } catch (error) {
-    //     console.error(error);
-    //     throw error;
-    //   }
-    // });
+        await subirTicketSolicitudZoho({
+          id: id_agente,
+          servicio: servicio.id_servicio,
+        });
+
+        const query = `UPDATE cart SET active = ? WHERE id = ?`;
+        Promise.all(
+          data.map(async (cart) => await conn.execute(query, [false, cart.id]))
+        );
+      } catch (error) {
+        console.error(error);
+        throw error;
+      }
+    });
 
     res.status(200).json({
       message: "Item actualizado con exito",
