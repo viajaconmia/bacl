@@ -3,22 +3,19 @@ const { executeQuery } = require("../../../config/db");
 const getProveedores = async (req, res) => {
   try {
     const { type, id } = req.query;
-        let proveedores
+    let proveedores;
     if (type != null) {
       proveedores = await executeQuery(
-      `SELECT * FROM proveedores where type = ?`,
-      [type]
+        `SELECT * FROM proveedores where type = ?`,
+        [type]
       );
-    }else if (id != null){
-proveedores = await executeQuery(
-      `SELECT * FROM proveedores where id = ?`,
-      [id]
-      );
-    }else{
+    } else if (id != null) {
       proveedores = await executeQuery(
-      `SELECT * FROM proveedores`,
-      
-    );
+        `SELECT * FROM proveedores where id = ?`,
+        [id]
+      );
+    } else {
+      proveedores = await executeQuery(`SELECT * FROM proveedores`);
     }
     res.status(200).json({ message: "", data: proveedores });
   } catch (error) {
@@ -41,10 +38,13 @@ const getSucursales = async (req, res) => {
   }
 };
 
-const getDetalles = async(req,res)=>{
+const getDetalles = async (req, res) => {
   try {
     const { id_proveedor } = req.query;
-    const sucursales = await executeQuery(`SELECT * FROM proveedores_datos_fiscales where id_proveedor =?`[id_proveedor]);
+    const sucursales = await executeQuery(
+      `SELECT * FROM proveedores_datos_fiscales where id_proveedor =?`,
+      [id_proveedor]
+    );
     res.status(200).json({ message: "", data: sucursales });
   } catch (error) {
     console.log(error);
@@ -52,7 +52,7 @@ const getDetalles = async(req,res)=>{
       .status(error.statusCode || 500)
       .json({ message: error.message, data: null, error });
   }
-}
+};
 
 const createProveedor = async (req, res) => {
   try {
@@ -240,9 +240,7 @@ const putEditar = async (req, res) => {
   }
 };
 
-const putEditarCuenta = async (req,res) =>{
-
-}
+const putEditarCuenta = async (req, res) => {};
 
 module.exports = {
   getProveedores,
