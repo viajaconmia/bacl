@@ -42,8 +42,9 @@ const getDetalles = async (req, res) => {
   try {
     const { id_proveedor } = req.query;
     const sucursales = await executeQuery(
-      `SELECT * FROM proveedores_datos_fiscales where id_proveedor =?`,
-      [id_proveedor]
+      `SELECT * FROM proveedores_datos_fiscales where id_proveedor =?`[
+        id_proveedor
+      ]
     );
     res.status(200).json({ message: "", data: sucursales });
   } catch (error) {
@@ -250,4 +251,5 @@ module.exports = {
   getDetalles,
   putEditar,
   putEditarCuenta,
+  // postCrearCuenta,
 };
