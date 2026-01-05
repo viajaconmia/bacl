@@ -7,6 +7,8 @@ const model = require("../model/saldos");
 
 const create = async (req, res) => {
   try {
+    console.log("viendo si jala", req.session);
+    console.log("SUFUCKINGCHET");
     const response = await model.createSaldo(req.body);
     res
       .status(201)
@@ -225,8 +227,11 @@ LEFT JOIN vw_pagos_prepago_facturables AS v
 };
 
 const createNewSaldo = async (req, res) => {
+  const { user } = req.session;
   const data = req.body;
   try {
+    if (!user) throw new Error("No tienes cuenta");
+
     console.log("Datos recibidos para crear saldo a favor:", data);
     if (
       !data.id_cliente ||
@@ -275,6 +280,7 @@ const createNewSaldo = async (req, res) => {
       data.ult_digits || null, // p_ult_digits
       data.numero_autorizacion || null, // p_numero_autorizacion
       data.banco_tarjeta || null, // p_banco_tarjeta
+      user.id,
     ];
     console.log("Valores para el stored procedure:", values);
     const response = await executeTransactionSP(
@@ -311,11 +317,11 @@ const update_saldo_by_id = async (req, res) => {
     ult_digits,
     numero_autorizacion,
     banco_tarjeta,
-    is_cancelado
+    is_cancelado,
   } = req.body;
 
   console.log("Datos recibidos para actualizar saldo a favor:", req.body);
-  
+
   try {
     const result = await executeTransactionSP(
       STORED_PROCEDURE.PATCH.ACTUALIZA_SALDO_A_FAVOR,
@@ -339,7 +345,7 @@ const update_saldo_by_id = async (req, res) => {
         ult_digits,
         numero_autorizacion,
         banco_tarjeta,
-        is_cancelado
+        is_cancelado,
       ]
     );
     console.log("Resultado de la actualización:", result);
@@ -363,7 +369,11 @@ const facturas_pagos_y_saldos = async (req, res) => {
     const info = req.body || {};
     const idSaldo = info.id_saldo;
 
-    if (idSaldo === undefined || idSaldo === null || String(idSaldo).trim() === "") {
+    if (
+      idSaldo === undefined ||
+      idSaldo === null ||
+      String(idSaldo).trim() === ""
+    ) {
       return res.status(400).json({ ok: false, msg: "Falta id_saldo" });
     }
 
@@ -380,13 +390,19 @@ const facturas_pagos_y_saldos = async (req, res) => {
     );
 
     if (!rows || rows.length === 0) {
-      return res.status(404).json({ ok: false, msg: "Saldo no encontrado en la vista" });
+      return res
+        .status(404)
+        .json({ ok: false, msg: "Saldo no encontrado en la vista" });
     }
 
     return res.json({ ok: true, data: rows[0] });
   } catch (error) {
     console.error("facturas_pagos_y_saldos error:", error);
-    return res.status(500).json({ ok: false, msg: "Error interno", error: String(error?.message || error) });
+    return res.status(500).json({
+      ok: false,
+      msg: "Error interno",
+      error: String(error?.message || error),
+    });
   }
 };
 
