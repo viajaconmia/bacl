@@ -89,6 +89,60 @@ const createProveedor = async (req, res) => {
       .json({ message: error.message, data: null, error });
   }
 };
+
+const createDatosFiscales = async (req, res) => {
+  try {
+    const { rfc, titular, alias, id_proveedor, cuenta, banco } = req.body;
+
+    // Validaciones básicas de campos obligatorios (NOT NULL en tu tabla)
+    if (!rfc || !rfc.trim()) throw new Error("El RFC es obligatorio");
+    if (!cuenta || !cuenta.trim()) throw new Error("La cuenta es obligatoria");
+    if (!id_proveedor) throw new Error("El ID de proveedor es obligatorio");
+
+    // 1. Verificar si ya existe el RFC (porque es UNIQUE en tu tabla)
+    const [existente] = await executeQuery(
+      `SELECT * FROM proveedores_datos_fiscales WHERE RFC = ?`,
+      [rfc.trim().toUpperCase()]
+    );
+
+    if (existente) {
+      throw new Error("Ya existe un registro fiscal con este RFC");
+    }
+
+    // 2. Insertar los nuevos datos fiscales
+    // Nota: Uso los nombres de columnas exactos de tu CREATE TABLE (RFC, TITULAR, ALIAS, etc.)
+    await executeQuery(
+      `INSERT INTO proveedores_datos_fiscales (RFC, TITULAR, ALIAS, ID_PROVEEDOR, CUENTA, BANCO) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        rfc.trim().toUpperCase(),
+        titular ? titular.toUpperCase() : null,
+        alias || null,
+        id_proveedor,
+        cuenta.trim(),
+        banco ? banco.toUpperCase() : null,
+      ]
+    );
+
+    // 3. Obtener todos los datos fiscales de ese proveedor para refrescar la tabla en el frontend
+    const datosActualizados = await executeQuery(
+      `SELECT * FROM proveedores_datos_fiscales WHERE ID_PROVEEDOR = ?`,
+      [id_proveedor]
+    );
+
+    res.status(200).json({
+      message: "Datos fiscales registrados con éxito",
+      data: datosActualizados,
+    });
+  } catch (error) {
+    console.error("Error en createDatosFiscales:", error);
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error interno del servidor",
+      data: null,
+    });
+  }
+};
+
 const crearSucursal = async (req, res) => {
   try {
     const {
@@ -153,19 +207,32 @@ const putEditar = async (req, res) => {
 
     // Campos permitidos (whitelist) para evitar que intenten actualizar columnas no deseadas
     const allowedFields = new Set([
-      "nombre",
-      "pais",
-      "telefono",
-      "email",
-      "sitio_web",
+      "proveedor",
       "type",
-      "tarifas",
-      "cobertura",
+      "imagen",
+      "convenio",
+      "negociacion",
+      "vigencia_convenio",
+      "estatus",
+      "internacional",
+      "notas_internacional",
       "bilingue",
-      "extranjero",
-      "credito",
-      "nombre_contacto",
-      // "creado_en" normalmente NO se edita; si quieres permitirlo, agrégalo aquí
+      "notas_bilingue",
+      "notas_proveedor",
+      "estado",
+      "ciudad",
+      "codigo_postal",
+      "pais",
+      "calle",
+      "numero",
+      "colonia",
+      "municipio",
+      "contactos_convenio",
+      "formas_solicitar_disponibilidad",
+      "formas_reservar",
+      "notas_pagos",
+      "notas_tipo_pago",
+      "tipo_pago",
     ]);
 
     // Body -> construir SET dinámico con solo campos permitidos y definidos
@@ -240,7 +307,52 @@ const putEditar = async (req, res) => {
   }
 };
 
-const putEditarCuenta = async (req, res) => {};
+const updateDatosFiscales = async (req, res) => {
+  try {
+    const { id, rfc, titular, alias, cuenta, banco, id_proveedor } = req.body;
+
+    if (!id) throw new Error("ID de registro no proporcionado");
+
+    // 1. Validar si el RFC ya existe en OTRO registro (para evitar conflictos de UNIQUE)
+    const [existente] = await executeQuery(
+      `SELECT * FROM proveedores_datos_fiscales WHERE RFC = ? AND ID != ?`,
+      [rfc.trim().toUpperCase(), id]
+    );
+
+    if (existente) {
+      throw new Error("El RFC ya está registrado en otra cuenta");
+    }
+
+    // 2. Actualizar el registro
+    await executeQuery(
+      `UPDATE proveedores_datos_fiscales 
+       SET RFC = ?, TITULAR = ?, ALIAS = ?, CUENTA = ?, BANCO = ? 
+       WHERE ID = ?`,
+      [
+        rfc.trim().toUpperCase(),
+        titular ? titular.toUpperCase() : null,
+        alias || null,
+        cuenta.trim(),
+        banco ? banco.toUpperCase() : null,
+        id,
+      ]
+    );
+
+    // 3. Retornar la lista actualizada de este proveedor para refrescar la UI
+    const datosActualizados = await executeQuery(
+      `SELECT * FROM proveedores_datos_fiscales WHERE ID_PROVEEDOR = ?`,
+      [id_proveedor]
+    );
+
+    res.status(200).json({
+      message: "Datos fiscales actualizados con éxito",
+      data: datosActualizados,
+    });
+  } catch (error) {
+    console.error("Error en updateDatosFiscales:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
 
 module.exports = {
   getProveedores,
@@ -249,6 +361,6 @@ module.exports = {
   getSucursales,
   getDetalles,
   putEditar,
-  putEditarCuenta,
-  // postCrearCuenta,
+  updateDatosFiscales,
+  createDatosFiscales,
 };
