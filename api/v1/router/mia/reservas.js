@@ -18,6 +18,11 @@ router.post(
   middleware.validateParams(requiredParamsToCreate),
   controller.createFromOperaciones
 );
+
+router.put(
+  "/validacion_codigo",controller.validateCodigo
+);
+
 router.post(
   "/",
   middleware.validateParams(requiredParamsToCreate),

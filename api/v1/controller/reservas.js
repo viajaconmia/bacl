@@ -1587,6 +1587,45 @@ const actualizarPrecioVenta = async (req, res) => {
   }
 };
 
+const validateCodigo = async (req, res) => {
+  try {
+    // Acepta el código por body o query (para que te funcione en ambos casos)
+    const codigo =
+      (req.body?.codigo_reservacion_hotel ?? req.query?.codigo_reservacion_hotel ?? "")
+        .toString()
+        .trim();
+
+    if (!codigo) {
+      return res.status(400).json({
+        ok: false,
+        message: "Falta codigo_reservacion_hotel",
+      });
+    }
+
+    const exists = await model.existsCodigoReservacionHotel(codigo);
+
+    if (exists) {
+      return res.status(409).json({
+        ok: false,
+        exists: true,
+        message: "Ya existe",
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      exists: false,
+      message: "OK",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message,
+    });
+  }
+};
+
 const getReservasWithIAtemsByidAgente = async (req, res) => {
   console.log("ESTE ENDPOINT SOLO TRAE RESERVAS CON ITEMS SIN FACTURAR");
   const { id_agente } = req.query;
@@ -1671,4 +1710,5 @@ module.exports = {
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
   getDetallesConexionReservas,
+  validateCodigo,
 };
