@@ -48,6 +48,6 @@ router.post(
   "/getfacturasPagoPendienteByAgente",
   controller.getfacturasPagoPendienteByAgente
 );
-
 router.put("/documentos", controller.updateDocumentosFacturas);
+router.post("/detalles_facturas", controller.getFacturasDetalles);
 module.exports = router;

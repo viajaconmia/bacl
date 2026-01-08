@@ -127,6 +127,131 @@ const getfacturasPagoPendienteByAgente = async (req, res) => {
   }
 };
 
+const getFacturasDetalles = async (req, res) => {
+  try {
+    console.log("📦 recibido get_detalles_factura (normalizando a JSON array)");
+
+    // Acepta: ?id_buscar=..., ?id_factura=..., o body { id_buscar / id_factura }
+    const rawBuscar =
+      req.query.id_factura ??
+      req.query.id_buscar ??
+      req.query?.id_raw ??
+      req.body?.id_factura ??
+      req.body?.id_buscar ??
+      req.body?.id_raw ??
+      "";
+
+    // --- Normalizar a JSON array de strings ---
+    const toJsonArrayString = (input) => {
+      if (Array.isArray(input)) {
+        const arr = input
+          .map((v) => (v == null ? "" : String(v).trim()))
+          .filter(Boolean);
+        return JSON.stringify(arr);
+      }
+
+      const s = String(input).trim();
+      if (!s) return "[]";
+
+      // ¿Ya es JSON?
+      try {
+        const parsed = JSON.parse(s);
+
+        // Si ya es array JSON
+        if (Array.isArray(parsed)) {
+          const arr = parsed
+            .map((v) => (v == null ? "" : String(v).trim()))
+            .filter(Boolean);
+          return JSON.stringify(arr);
+        }
+
+        // Si es object JSON: soportar {id_factura: "..."} o {id_facturas:[...]}
+        if (parsed && typeof parsed === "object") {
+          const arrCandidate = Array.isArray(parsed.id_facturas)
+            ? parsed.id_facturas
+            : parsed.id_factura != null
+            ? [parsed.id_factura]
+            : [parsed];
+
+          const arr = arrCandidate
+            .map((v) => (v == null ? "" : String(v).trim()))
+            .filter(Boolean);
+
+          return JSON.stringify(arr);
+        }
+
+        // Si es escalar JSON (número o string)
+        return JSON.stringify([String(parsed).trim()].filter(Boolean));
+      } catch {
+        // No es JSON: soportar CSV o escalar simple
+        if (s.includes(",")) {
+          const arr = s
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean);
+          return JSON.stringify(arr);
+        }
+        return JSON.stringify([s]);
+      }
+    };
+
+    const p_payload = toJsonArrayString(rawBuscar);
+    const ids = JSON.parse(p_payload);
+
+    if (!ids || ids.length === 0) {
+      return res.status(400).json({
+        message: "Falta id_factura / id_buscar (≥1 id)",
+        required: ["id_factura (o id_buscar)"],
+        example: '?id_factura=fac-123 OR ?id_factura=["fac-1","fac-2"]',
+      });
+    }
+
+    // (Opcional) validar prefijo, si quieres forzar que sean fac-...
+    // const invalid = ids.find(x => !String(x).toLowerCase().startsWith("fac"));
+    // if (invalid) { ... }
+
+    // --- Llamada al SP ---
+    // sp_factura_detalles(IN p_payload LONGTEXT)
+    const sets = await executeSP2("sp_factura_detalles", [p_payload], {
+      allSets: true,
+    });
+
+    const safe = (i) => (Array.isArray(sets?.[i]) ? sets[i] : []);
+
+    // Contrato del SP (como lo dejamos):
+    // 0: pagos.*
+    // 1: saldos_a_favor.*
+    // 2: reservas (vw_reservas_client...)
+    const pagos = safe(0);
+    const saldos = safe(1);
+    const reservas = safe(2);
+
+    if (pagos.length === 0 && saldos.length === 0 && reservas.length === 0) {
+      return res.status(404).json({
+        message: "No se encontraron detalles para la(s) factura(s) indicada(s)",
+        error: "NOT_FOUND",
+        data: { ids, pagos: [], saldos: [], reservas: [] },
+      });
+    }
+
+    return res.status(200).json({
+      message: "Consulta exitosa",
+      tipo_origen: "factura",
+      id_origen: ids,
+      pagos,
+      saldos,
+      reservas,
+    });
+  } catch (error) {
+    console.error("get_detalles_factura error:", error);
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Error en el servidor",
+      error: error.code || error.name || "ERROR_BACK",
+      data: null,
+    });
+  }
+};
+
 const readDetailsFactura = async (req, res) => {
   try {
     const { id_factura } = req.query;
@@ -2813,6 +2938,7 @@ module.exports = {
   asignarFacturaPagos,
   getfacturasPagoPendienteByAgente,
   updateDocumentosFacturas,
+  getFacturasDetalles,
 };
 
 //ya quedo "#$%&/()="

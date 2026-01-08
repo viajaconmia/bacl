@@ -40,6 +40,8 @@ router.get(
   "/reservasConItemsSinPagar",
   controller.getReservasWithItemsSinPagarByAgente
 );
+
+router.get("/detalles_reservas",controller.detalles_reservas)
 router.get("/services", controller_v2.obtener);
 
 module.exports = router;
