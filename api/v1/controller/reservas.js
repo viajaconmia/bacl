@@ -1744,12 +1744,14 @@ const detalles_reservas = async (req,res)=>{
 
     return res.status(200).json({
       message: "Consulta exitosa",
-      tipo_origen: "hospedaje",
+      data:{
+        tipo_origen: "hospedaje",
       id_origen: ids,
       pagos,
       saldos,
       facturas,
       resumen,
+      }
     });
   } catch (error) {
     console.error("get_detalles_hospedaje error:", error);

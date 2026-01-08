@@ -239,11 +239,13 @@ const getFacturasDetalles = async (req,res)=>{
 
     return res.status(200).json({
       message: "Consulta exitosa",
-      tipo_origen: "factura",
+      data:{
+        tipo_origen: "factura",
       id_origen: ids,
       pagos,
       saldos,
       reservas,
+      }
     });
   } catch (error) {
     console.error("get_detalles_factura error:", error);

@@ -42,6 +42,6 @@ router.get("/getDetailsFactura", controller.readDetailsFactura);
 router.delete("/delete/:id", controller.deleteFacturas);
 router.post("/asignarURLS_factura", controller.asignarURLS_factura); 
 router.post("/getfacturasPagoPendienteByAgente",controller.getfacturasPagoPendienteByAgente)
-router.post("/detalles_facturas",controller.getFacturasDetalles)
+router.get("/detalles_facturas",controller.getFacturasDetalles)
 module.exports = router;
-  
+   
