@@ -19,28 +19,35 @@ router.post(
   controller.createEmi
 );
 
-router.get("/detallesConexion",controller.getDetallesConexionesFactura);
+router.get("/detallesConexion", controller.getDetallesConexionesFactura);
 
 router.get("/getfulldetalles", controller.getFullDetalles);
 
-router.get(
-  "/get_agente_facturas",
-  controller.get_agente_facturas,
-);
+router.get("/get_agente_facturas", controller.get_agente_facturas);
 
-router.post("/crearFacturaDesdeCargaPagos", controller.crearFacturaDesdeCargaPagos);
+router.post(
+  "/crearFacturaDesdeCargaPagos",
+  controller.crearFacturaDesdeCargaPagos
+);
 router.post("/CrearFacturaDesdeCarga", controller.crearFacturaDesdeCarga);
-router.post("/CrearFacturasMultiplesPagos", controller.crearFacturaMultiplesPagos);
+router.post(
+  "/CrearFacturasMultiplesPagos",
+  controller.crearFacturaMultiplesPagos
+);
 router.patch("/AsignarFacturaItems", controller.asignarFacturaItems);
 router.patch("/AsignarFacturaPagos", controller.asignarFacturaPagos);
 router.get("/getFacturas", controller.readAllFacturas);
 router.get("/isFacturada/:id", controller.isFacturada);
 router.get("/consultas", controller.readConsultas);
 router.get("/consultasAll", controller.readAllConsultas);
-router.get("/getfacturasPagoPendiente",controller.getfacturasPagoPendiente)
+router.get("/getfacturasPagoPendiente", controller.getfacturasPagoPendiente);
 router.get("/getDetailsFactura", controller.readDetailsFactura);
 router.delete("/delete/:id", controller.deleteFacturas);
-router.post("/asignarURLS_factura", controller.asignarURLS_factura); 
-router.post("/getfacturasPagoPendienteByAgente",controller.getfacturasPagoPendienteByAgente)
+router.post("/asignarURLS_factura", controller.asignarURLS_factura);
+router.post(
+  "/getfacturasPagoPendienteByAgente",
+  controller.getfacturasPagoPendienteByAgente
+);
+
+router.put("/documentos", controller.updateDocumentosFacturas);
 module.exports = router;
-  
