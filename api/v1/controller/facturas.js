@@ -135,6 +135,7 @@ const getFacturasDetalles = async (req,res)=>{
     const rawBuscar =
       req.query.id_factura ??
       req.query.id_buscar ??
+      req.query?.id_raw ??
       req.body?.id_factura ??
       req.body?.id_buscar ??
       req.body?.id_raw ??
