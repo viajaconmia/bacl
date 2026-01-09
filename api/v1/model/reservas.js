@@ -651,7 +651,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             precio_desayuno = t.precio_desayuno ?? null;
             incluye_desayuno = t.incluye_desayuno ?? null;
           }
-
+          
           const query_hospedaje = `
             INSERT INTO hospedajes (
               id_hospedaje, id_booking, nombre_hotel, cadena_hotel, 
@@ -1053,6 +1053,30 @@ const getReserva = async () => {
     return response; // Retorna el resultado de la ejecución
   } catch (error) {
     throw error; // Lanza el error para que puedas manejarlo donde llames la función
+  }
+};
+
+const existsCodigoReservacionHotel = async (codigo_reservacion_hotel) => {
+  try {
+    const query = `
+      SELECT 1
+      FROM vw_reservas_client
+      WHERE codigo_reservacion_hotel = ?
+        AND (
+          status_reserva IS NULL
+          OR LOWER(TRIM(status_reserva)) NOT IN ('cancelada', 'canceled')
+        )
+        AND (
+          status_solicitud IS NULL
+          OR LOWER(TRIM(status_solicitud)) NOT IN ('cancelada', 'canceled')
+        )
+      LIMIT 1;
+    `;
+
+    const rows = await executeQuery(query, [codigo_reservacion_hotel]);
+    return Array.isArray(rows) && rows.length > 0;
+  } catch (error) {
+    throw error;
   }
 };
 
@@ -2349,6 +2373,7 @@ module.exports = {
   editarReserva,
   insertarReservaOperaciones,
   getReservaAllFacturacion,
+  existsCodigoReservacionHotel,
 };
 
 function agruparDatos(data) {

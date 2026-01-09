@@ -2117,6 +2117,99 @@ const getDetallesConexionesPagos = async (req, res) => {
   }
 };
 
+const get_detalles_pagos = async (req, res) => {
+  try {
+    let { id_raw } = req.query; // puede venir como string, número, array, csv, json
+
+    // --- Validaciones básicas ---
+    if (id_raw === undefined || id_raw === null || id_raw === "") {
+      return res.status(400).json({
+        message: "Falta id_raw en la query",
+        error: "BAD_REQUEST",
+        data: null,
+      });
+    }
+
+    // --- Normalización de id_raw a un Array ---
+    // Soporta:
+    //  - ?id_raw=152
+    //  - ?id_raw=152,153,154
+    //  - ?id_raw=["152","153"]
+    //  - ?id_raw=152&id_raw=153
+    let idRawArray;
+
+    if (Array.isArray(id_raw)) {
+      idRawArray = id_raw;
+    } else if (typeof id_raw === "string") {
+      const trimmed = id_raw.trim();
+
+      if (
+        (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
+        (trimmed.startsWith("{") && trimmed.endsWith("}"))
+      ) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          idRawArray = Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          idRawArray = trimmed.includes(",")
+            ? trimmed.split(",").map((s) => s.trim()).filter(Boolean)
+            : [trimmed];
+        }
+      } else {
+        idRawArray = trimmed.includes(",")
+          ? trimmed.split(",").map((s) => s.trim()).filter(Boolean)
+          : [trimmed];
+      }
+    } else {
+      idRawArray = [id_raw];
+    }
+
+    // Convertimos a número cuando aplique (opcional)
+    idRawArray = idRawArray.map((v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : `${v}`;
+    });
+
+    // El SP acepta LONGTEXT y parsea JSON/strings.
+    // Nosotros enviamos SIEMPRE un JSON array para estandarizar.
+    const p_payload = JSON.stringify(idRawArray);
+
+    // --- Llamada al SP ---
+    // sp_pago_detalles(IN p_payload LONGTEXT)
+    const sets = await executeSP2(
+      "sp_pago_detalles",
+      [p_payload],
+      { allSets: true }
+    );
+
+    // Dependiendo de tu wrapper, puede regresar:
+    //  - [facturas, reservas]
+    //  - o [[facturas], [reservas], ...]
+    const facturas = Array.isArray(sets?.[0]) ? sets[0] : [];
+    const reservas = Array.isArray(sets?.[1]) ? sets[1] : [];
+
+    if (facturas.length === 0 && reservas.length === 0) {
+      return res.status(404).json({
+        message: "No se encontraron detalles para el pago especificado",
+        error: "NOT_FOUND",
+        data: { id_raw: idRawArray, facturas: [], reservas: [] },
+      });
+    }
+
+    return res.status(200).json({
+      message: "Detalles obtenidos correctamente",
+      data: { facturas, reservas },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Error desconocido al obtener detalles de pagos",
+      error: error.code || error.name || "ERROR_BACK",
+      data: null,
+    });
+  }
+};
+
 
 const get_pagos_prepago_by_ID = async (req, res) => {
   try {
@@ -2174,5 +2267,6 @@ module.exports = {
   getDetallesConexionesPagos,
   aplicarCambioNochesOAjuste,
   getPagoPrepago,
-  getAllPagosPrepagoFacturasPendientes
+  getAllPagosPrepagoFacturasPendientes,
+  get_detalles_pagos
 };

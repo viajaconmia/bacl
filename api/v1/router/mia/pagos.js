@@ -44,6 +44,7 @@ router.get("/allPendientes", controller.getAllPendientes);
 router.get("/getAllPagos", controller.getAllPagos);
 router.get("/consultas", controller.readConsultas);
 router.get("/metodos_pago", controller.getMetodosPago);
+router.get("/detalles_pagos",controller.get_detalles_pagos)
 router.post(
   "/credito",
   middleware.validateParams([

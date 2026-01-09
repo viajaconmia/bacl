@@ -1587,6 +1587,183 @@ const actualizarPrecioVenta = async (req, res) => {
   }
 };
 
+const validateCodigo = async (req, res) => {
+  try {
+    // Acepta el código por body o query (para que te funcione en ambos casos)
+    const codigo =
+      (req.body?.codigo_reservacion_hotel ?? req.query?.codigo_reservacion_hotel ?? "")
+        .toString()
+        .trim();
+
+    if (!codigo) {
+      return res.status(400).json({
+        ok: false,
+        message: "Falta codigo_reservacion_hotel",
+      });
+    }
+
+    const exists = await model.existsCodigoReservacionHotel(codigo);
+
+    if (exists) {
+      return res.status(409).json({
+        ok: false,
+        exists: true,
+        message: "Ya existe",
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      exists: false,
+      message: "OK",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message,
+    });
+  }
+};
+
+const detalles_reservas = async (req,res)=>{
+  try {
+    console.log("📦 recibido get_detalles_hospedaje (normalizando a JSON array)");
+
+    // Acepta: ?id_hospedaje=..., ?id_buscar=..., o body { id_hospedaje / id_buscar }
+    const rawBuscar =
+      req.query.id_hospedaje ??
+      req.query.id_buscar ??
+      req.query?.id_raw ??
+      req.body?.id_hospedaje ??
+      req.body?.id_buscar ??
+      req.body?.id_raw ??
+      "";
+
+    // --- Normalizar a JSON array de strings ---
+    const toJsonArrayString = (input) => {
+      // si ya viene como array
+      if (Array.isArray(input)) {
+        const arr = input
+          .map((v) => (v == null ? "" : String(v).trim()))
+          .filter(Boolean);
+        return JSON.stringify(arr);
+      }
+
+      const s = String(input).trim();
+      if (!s) return "[]";
+
+      // ¿Ya es JSON?
+      try {
+        const parsed = JSON.parse(s);
+
+        if (Array.isArray(parsed)) {
+          const arr = parsed
+            .map((v) => (v == null ? "" : String(v).trim()))
+            .filter(Boolean);
+          return JSON.stringify(arr);
+        }
+
+        // object JSON: soportar {id_hospedaje:"..."} o {id_hospedajes:[...]} o {id_relacion:"..."}
+        if (parsed && typeof parsed === "object") {
+          const arrCandidate =
+            Array.isArray(parsed.id_hospedajes)
+              ? parsed.id_hospedajes
+              : parsed.id_hospedaje != null
+              ? [parsed.id_hospedaje]
+              : parsed.id_relacion != null
+              ? [parsed.id_relacion]
+              : [parsed];
+
+          const arr = arrCandidate
+            .map((v) => (v == null ? "" : String(v).trim()))
+            .filter(Boolean);
+
+          return JSON.stringify(arr);
+        }
+
+        // escalar JSON (número o string)
+        const one = String(parsed).trim();
+        return JSON.stringify(one ? [one] : []);
+      } catch {
+        // No es JSON: soportar CSV o escalar
+        if (s.includes(",")) {
+          const arr = s
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean);
+          return JSON.stringify(arr);
+        }
+        return JSON.stringify([s]);
+      }
+    };
+
+    const p_payload = toJsonArrayString(rawBuscar);
+    const ids = JSON.parse(p_payload);
+
+    if (!ids || ids.length === 0) {
+      return res.status(400).json({
+        message: "Falta id_hospedaje / id_buscar (≥1 id)",
+        required: ["id_hospedaje (o id_buscar)"],
+        example:
+          '?id_hospedaje=hos-123 OR ?id_hospedaje=["hos-1","hos-2"] OR ?id_hospedaje=hos-1,hos-2',
+      });
+    }
+
+    // (Opcional) Validación de prefijo "hos" si lo quieres forzar:
+    // const invalid = ids.find(x => !String(x).toLowerCase().startsWith("hos"));
+    // if (invalid) { return res.status(400).json({ message:"ID inválido", invalid }); }
+
+    // --- Llamada al SP ---
+    // sp_hospedaje_detalles(IN p_payload LONGTEXT)
+    const sets = await executeSP2(
+      "sp_hospedaje_detalles",
+      [p_payload],
+      { allSets: true }
+    );
+
+    const safe = (i) => (Array.isArray(sets?.[i]) ? sets[i] : []);
+
+    // Contrato esperado del SP (como lo definimos):
+    // 0: pagos (pagos.*)
+    // 1: saldos (saldos_a_favor.*)
+    // 2: facturas (facturas.* o vw_facturas.*)
+    // 3: resumen (counts o debug)
+    const pagos = safe(0);
+    const saldos = safe(1);
+    const facturas = safe(2);
+    const resumen = safe(3);
+
+    if (pagos.length === 0 && saldos.length === 0 && facturas.length === 0) {
+      return res.status(404).json({
+        message: "No se encontraron detalles para el/los hospedaje(s) indicado(s)",
+        error: "NOT_FOUND",
+        data: { ids, pagos: [], saldos: [], facturas: [], resumen: [] },
+      });
+    }
+
+    return res.status(200).json({
+      message: "Consulta exitosa",
+      data:{
+        tipo_origen: "hospedaje",
+      id_origen: ids,
+      pagos,
+      saldos,
+      facturas,
+      resumen,
+      }
+    });
+  } catch (error) {
+    console.error("get_detalles_hospedaje error:", error);
+    return res.status(error.statusCode || 500).json({
+      message: error.message || "Error en el servidor",
+      error: error.code || error.name || "ERROR_BACK",
+      data: null,
+    });
+  }
+
+}
+
 const getReservasWithIAtemsByidAgente = async (req, res) => {
   console.log("ESTE ENDPOINT SOLO TRAE RESERVAS CON ITEMS SIN FACTURAR");
   const { id_agente } = req.query;
@@ -1671,4 +1848,6 @@ module.exports = {
   getReservasWithIAtemsByidAgente,
   getReservasWithItemsSinPagarByAgente,
   getDetallesConexionReservas,
+  validateCodigo,
+  detalles_reservas,
 };
