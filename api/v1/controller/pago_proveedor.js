@@ -701,7 +701,7 @@ function generarCodigoDispersion() {
 const getSolicitudes = async (req, res) => {
   try {
     const spRows = await executeSP(
-      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR
+      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR 
     );
 
     const ids = spRows
