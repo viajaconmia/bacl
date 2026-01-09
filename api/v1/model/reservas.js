@@ -1062,12 +1062,8 @@ const existsCodigoReservacionHotel = async (codigo_reservacion_hotel) => {
       SELECT 1
       FROM vw_reservas_client
       WHERE codigo_reservacion_hotel = ?
-        AND (
-          status_reserva IS NULL
-          OR LOWER(TRIM(status_reserva)) NOT IN ('cancelada', 'canceled')
-        )
-        AND (
-          status_solicitud IS NULL
+           AND (
+          estado IS NULL
           OR LOWER(TRIM(status_solicitud)) NOT IN ('cancelada', 'canceled')
         )
       LIMIT 1;
