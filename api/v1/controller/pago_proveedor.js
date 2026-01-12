@@ -871,10 +871,14 @@ const getSolicitudes = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error", details: error });
   }
 };
+const getDatosFiscalesProveedor = async(req,res)=>{
+  
+}
 
 module.exports = {
   createSolicitud,
   getSolicitudes,
   createDispersion,
   createPago,
+  getDatosFiscalesProveedor
 };
