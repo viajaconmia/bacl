@@ -19,6 +19,9 @@ router.post(
   middleware.validateParams(requiredParamsToCreate),
   controller.createFromOperaciones
 );
+
+router.put("/validacion_codigo", controller.validateCodigo);
+
 router.post(
   "/",
   middleware.validateParams(requiredParamsToCreate),
@@ -37,6 +40,7 @@ router.get(
   controller.getReservasWithItemsSinPagarByAgente
 );
 
+router.get("/detalles_reservas", controller.detalles_reservas);
 router.get("/cotizaciones", async (req, res) => {
   try {
     const { servicio } = req.query;
