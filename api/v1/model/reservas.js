@@ -532,7 +532,8 @@ const asignarFacturasItems = async (req, res) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
-  const { ejemplo_saldos = [], usuarioCreador, user } = reserva;
+  console.log(reserva);
+  const { ejemplo_saldos = [], usuarioCreador, user, intermediario } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
 
   const agentes = await executeQuery(
@@ -651,15 +652,15 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             precio_desayuno = t.precio_desayuno ?? null;
             incluye_desayuno = t.incluye_desayuno ?? null;
           }
-          
+
           const query_hospedaje = `
             INSERT INTO hospedajes (
               id_hospedaje, id_booking, nombre_hotel, cadena_hotel, 
               codigo_reservacion_hotel, tipo_cuarto, noches, 
               is_rembolsable, monto_penalizacion, conciliado, 
               credito, comments, id_hotel, nuevo_incluye_desayuno,
-              tipo_desayuno, comentario_desayuno, precio_desayuno 
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+              tipo_desayuno, comentario_desayuno, precio_desayuno, id_intermediario
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `;
           const params_hospedaje = [
             id_hospedaje,
@@ -679,6 +680,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             tipo_desayuno || null,
             comentario_desayuno || null,
             precio_desayuno || null,
+            intermediario.exists ? intermediario.proveedor.id : null,
           ];
           await connection.execute(query_hospedaje, params_hospedaje);
 
@@ -1188,7 +1190,7 @@ ORDER BY s.created_at DESC;`;
 
 const getReservaAllFacturacion = async () => {
   try {
-        const query = `SELECT
+    const query = `SELECT
     v.id_agente                      AS id_usuario_generador,
     v.id_servicio,
     v.status_reserva                 AS estado_reserva,
@@ -1242,7 +1244,6 @@ FROM vw_reservas_a_credito_sin_facturas v
 
 ORDER BY v.created_at_reserva DESC;
 `;
-
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);
