@@ -7,5 +7,6 @@ router.post("/solicitud", controller.createSolicitud);
 router.post("/dispersion", controller.createDispersion)
 router.post("/pago", controller.createPago)
 router.get("/datosFiscales",controller.getDatosFiscalesProveedor)
-
+router.post("/editProveedor",controller.editProveedores);
+router.get("/proveedores",controller.getProveedores)
 module.exports = router;

@@ -871,8 +871,34 @@ const getSolicitudes = async (req, res) => {
     res.status(500).json({ error: "Internal Server Error", details: error });
   }
 };
+
 const getDatosFiscalesProveedor = async(req,res)=>{
-  
+  console.log("Entrando al controller proveedores datos fiscales");
+  try {
+    const { id_proveedor } = req.query;
+
+    if (!id_proveedor) {
+      return res.status(400).json({ error: "Falta id_proveedor en query" });
+    }
+
+    const data = await model.getProveedoresDatosFiscales(id_proveedor);
+    return res.status(200).json({ data });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Error en el servidor",
+      details: error?.message ?? error,
+    });
+  }
+};
+
+
+const editProveedores = async(req,res) =>{
+
+}
+
+const getProveedores = async(req,res) =>{
+
 }
 
 module.exports = {
@@ -880,5 +906,7 @@ module.exports = {
   getSolicitudes,
   createDispersion,
   createPago,
-  getDatosFiscalesProveedor
+  getDatosFiscalesProveedor,
+  editProveedores,
+  getProveedores
 };
