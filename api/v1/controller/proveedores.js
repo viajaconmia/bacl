@@ -54,6 +54,41 @@ const getDetalles = async (req, res) => {
   }
 };
 
+const getDatosFiscales = async (req, res) => {
+  try {
+    // Opcional: paginación
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 100);
+    const offset = (page - 1) * limit;
+
+    const rows = await executeQuery(
+      `SELECT *
+       FROM proveedores
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
+    );
+
+    // Opcional: total para paginación
+    const [{ total }] = await executeQuery(
+      `SELECT COUNT(*) AS total
+       FROM proveedores`
+    );
+
+    res.status(200).json({
+      message: "",
+      data: rows,
+      meta: { page, limit, total },
+    });
+  } catch (error) {
+    console.log(error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message, data: null, error });
+  }
+};
+
+
 const createProveedor = async (req, res) => {
   try {
     const { nombre, pais, rfc, telefono, email, sitio_web, type } = req.body;
@@ -363,4 +398,5 @@ module.exports = {
   putEditar,
   updateDatosFiscales,
   createDatosFiscales,
+  getDatosFiscales
 };
