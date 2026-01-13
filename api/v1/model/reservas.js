@@ -651,7 +651,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             precio_desayuno = t.precio_desayuno ?? null;
             incluye_desayuno = t.incluye_desayuno ?? null;
           }
-          
+
           const query_hospedaje = `
             INSERT INTO hospedajes (
               id_hospedaje, id_booking, nombre_hotel, cadena_hotel, 
@@ -1056,7 +1056,10 @@ const getReserva = async () => {
   }
 };
 
-const existsCodigoReservacionHotel = async (codigo_reservacion_hotel) => {
+const existsCodigoReservacionHotel = async (
+  codigo_reservacion_hotel,
+  id = null
+) => {
   try {
     const query = `
       SELECT 1
@@ -1065,18 +1068,24 @@ const existsCodigoReservacionHotel = async (codigo_reservacion_hotel) => {
            AND (
           estado IS NULL
           OR LOWER(TRIM(status_solicitud)) NOT IN ('cancelada', 'canceled')
-        )
+  ) ${id ? "and id_booking <> ?" : ""}
       LIMIT 1;
     `;
 
-    const rows = await executeQuery(query, [codigo_reservacion_hotel]);
+    const rows = await executeQuery(
+      query,
+      id ? [codigo_reservacion_hotel, id] : [codigo_reservacion_hotel]
+    );
     return Array.isArray(rows) && rows.length > 0;
   } catch (error) {
     throw error;
   }
 };
 
-const existsCodigoReservacionHotelEdit = async (codigo_reservacion_hotel, id_booking) => {
+const existsCodigoReservacionHotelEdit = async (
+  codigo_reservacion_hotel,
+  id_booking
+) => {
   try {
     const query = `
       SELECT 1
@@ -1090,13 +1099,15 @@ const existsCodigoReservacionHotelEdit = async (codigo_reservacion_hotel, id_boo
       LIMIT 1;
     `;
 
-    const rows = await executeQuery(query, [codigo_reservacion_hotel, id_booking]);
+    const rows = await executeQuery(query, [
+      codigo_reservacion_hotel,
+      id_booking,
+    ]);
     return Array.isArray(rows) && rows.length > 0;
   } catch (error) {
     throw error;
   }
 };
-
 
 const getReservaById = async (id) => {
   /*PARECE SER QUE YA NO SE OCUPA*/
@@ -1210,7 +1221,7 @@ ORDER BY s.created_at DESC;`;
 
 const getReservaAllFacturacion = async () => {
   try {
-        const query = `SELECT
+    const query = `SELECT
     v.id_agente                      AS id_usuario_generador,
     v.id_servicio,
     v.status_reserva                 AS estado_reserva,
@@ -1264,7 +1275,6 @@ FROM vw_reservas_a_credito_sin_facturas v
 
 ORDER BY v.created_at_reserva DESC;
 `;
-
 
     // Ejecutar el procedimiento almacenado
     const response = await executeQuery(query);
@@ -2392,7 +2402,7 @@ module.exports = {
   insertarReservaOperaciones,
   getReservaAllFacturacion,
   existsCodigoReservacionHotel,
-  existsCodigoReservacionHotelEdit
+  existsCodigoReservacionHotelEdit,
 };
 
 function agruparDatos(data) {
