@@ -1076,6 +1076,28 @@ const existsCodigoReservacionHotel = async (codigo_reservacion_hotel) => {
   }
 };
 
+const existsCodigoReservacionHotelEdit = async (codigo_reservacion_hotel, id_booking) => {
+  try {
+    const query = `
+      SELECT 1
+      FROM vw_reservas_client
+      WHERE codigo_reservacion_hotel = ?
+        AND (
+          estado IS NULL
+          OR LOWER(TRIM(status_solicitud)) NOT IN ('cancelada', 'canceled')
+        )
+        AND id_booking <> ?
+      LIMIT 1;
+    `;
+
+    const rows = await executeQuery(query, [codigo_reservacion_hotel, id_booking]);
+    return Array.isArray(rows) && rows.length > 0;
+  } catch (error) {
+    throw error;
+  }
+};
+
+
 const getReservaById = async (id) => {
   /*PARECE SER QUE YA NO SE OCUPA*/
   try {
@@ -2370,6 +2392,7 @@ module.exports = {
   insertarReservaOperaciones,
   getReservaAllFacturacion,
   existsCodigoReservacionHotel,
+  existsCodigoReservacionHotelEdit
 };
 
 function agruparDatos(data) {
