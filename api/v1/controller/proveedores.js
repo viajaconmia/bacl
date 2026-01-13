@@ -41,9 +41,11 @@ const getDetalles = async (req, res) => {
   try {
     const { id_proveedor } = req.query;
     const sucursales = await executeQuery(
-      `SELECT * FROM proveedores_datos_fiscales pdf
-      left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
-      where rel.id_proveedor =?`,
+      `SELECT pdf.id, pdf.rfc, pdf.alias, pdf.razon_social, count(pc.id) as numero_cuentas FROM proveedores_datos_fiscales pdf
+left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
+left join proveedores_cuentas pc on pc.proveedor_datos_fiscales_id = rel.id_datos_fiscales
+WHERE rel.id_proveedor = ?
+group by pdf.id;`,
       [id_proveedor]
     );
     res.status(200).json({ message: "", data: sucursales });
@@ -56,29 +58,19 @@ const getDetalles = async (req, res) => {
 };
 const getDatosFiscales = async (req, res) => {
   try {
-    // Opcional: paginación
-    const page = Number(req.query.page || 1);
-    const limit = Number(req.query.limit || 100);
-    const offset = (page - 1) * limit;
-
-    const rows = await executeQuery(
-      `SELECT *
-       FROM proveedores
-       ORDER BY created_at DESC
-       LIMIT ? OFFSET ?`,
-      [limit, offset]
+    const { id } = req.query;
+    const [data_fiscal] = await executeQuery(
+      `select * from proveedores_datos_fiscales where id = ?`,
+      [id]
     );
-
-    // Opcional: total para paginación
-    const [{ total }] = await executeQuery(
-      `SELECT COUNT(*) AS total
-       FROM proveedores`
+    const cuentas = await executeQuery(
+      `select * from proveedores_cuentas where proveedor_datos_fiscales_id = ?`,
+      [id]
     );
 
     res.status(200).json({
       message: "",
-      data: rows,
-      meta: { page, limit, total },
+      data: { ...data_fiscal, cuentas },
     });
   } catch (error) {
     console.log(error);
@@ -154,9 +146,11 @@ const createDatosFiscales = async (req, res) => {
       }
     });
     const response = await executeQuery(
-      `SELECT * FROM proveedores_datos_fiscales pdf
-      left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
-      where rel.id_proveedor =?`,
+      `SELECT pdf.id, pdf.rfc, pdf.alias, pdf.razon_social, count(pc.id) as numero_cuentas FROM proveedores_datos_fiscales pdf
+left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
+left join proveedores_cuentas pc on pc.proveedor_datos_fiscales_id = rel.id_datos_fiscales
+WHERE rel.id_proveedor = ?
+group by pdf.id;`,
       [id_proveedor]
     );
 
@@ -364,9 +358,11 @@ const updateDatosFiscales = async (req, res) => {
     );
 
     const response = await executeQuery(
-      `SELECT * FROM proveedores_datos_fiscales pdf
-      left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
-      where rel.id_proveedor =?`,
+      `SELECT pdf.id, pdf.rfc, pdf.alias, pdf.razon_social, count(pc.id) as numero_cuentas FROM proveedores_datos_fiscales pdf
+left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
+left join proveedores_cuentas pc on pc.proveedor_datos_fiscales_id = rel.id_datos_fiscales
+WHERE rel.id_proveedor = ?
+group by pdf.id;`,
       [id_proveedor]
     );
 
