@@ -3,10 +3,19 @@ const { executeQuery } = require("../../../config/db");
 const getProveedores = async (req, res) => {
   try {
     const { type } = req.query;
-    const proveedores = await executeQuery(
-      `SELECT * FROM proveedores where type = ?`,
-      [type]
-    );
+
+    // Si no viene type (o viene vacío), no filtra
+    const hasType =
+      typeof type === "string" && type.trim().length > 0;
+
+    const sql = hasType
+      ? "SELECT * FROM proveedores WHERE type = ?"
+      : "SELECT * FROM proveedores";
+
+    const params = hasType ? [type.trim()] : [];
+
+    const proveedores = await executeQuery(sql, params);
+
     res.status(200).json({ message: "", data: proveedores });
   } catch (error) {
     console.log(error);
@@ -15,6 +24,8 @@ const getProveedores = async (req, res) => {
       .json({ message: error.message, data: null, error });
   }
 };
+
+
 const getSucursales = async (req, res) => {
   try {
     const { type } = req.query;
