@@ -1067,7 +1067,7 @@ const existsCodigoReservacionHotel = async (
       WHERE codigo_reservacion_hotel = ?
            AND (
           estado IS NULL
-          OR LOWER(TRIM(status_solicitud)) NOT IN ('cancelada', 'canceled')
+          OR LOWER(TRIM(estado)) NOT IN ('cancelada', 'canceled')
   ) ${id ? "and id_booking <> ?" : ""}
       LIMIT 1;
     `;
@@ -1093,7 +1093,7 @@ const existsCodigoReservacionHotelEdit = async (
       WHERE codigo_reservacion_hotel = ?
         AND (
           estado IS NULL
-          OR LOWER(TRIM(status_solicitud)) NOT IN ('cancelada', 'canceled')
+          OR LOWER(TRIM(estado)) NOT IN ('cancelada', 'canceled')
         )
         AND id_booking <> ?
       LIMIT 1;
