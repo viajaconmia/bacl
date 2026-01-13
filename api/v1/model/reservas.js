@@ -1056,7 +1056,10 @@ const getReserva = async () => {
   }
 };
 
-const existsCodigoReservacionHotel = async (codigo_reservacion_hotel, id) => {
+const existsCodigoReservacionHotel = async (
+  codigo_reservacion_hotel,
+  id = null
+) => {
   try {
     const query = `
       SELECT 1
@@ -1065,11 +1068,14 @@ const existsCodigoReservacionHotel = async (codigo_reservacion_hotel, id) => {
            AND (
           estado IS NULL
           OR LOWER(TRIM(status_solicitud)) NOT IN ('cancelada', 'canceled')
-        ) and id_booking <> ?
+  ) ${id ? "and id_booking <> ?" : ""}
       LIMIT 1;
     `;
 
-    const rows = await executeQuery(query, [codigo_reservacion_hotel, id]);
+    const rows = await executeQuery(
+      query,
+      id ? [codigo_reservacion_hotel, id] : [codigo_reservacion_hotel]
+    );
     return Array.isArray(rows) && rows.length > 0;
   } catch (error) {
     throw error;
