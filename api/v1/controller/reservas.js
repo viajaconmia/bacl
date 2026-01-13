@@ -1589,11 +1589,7 @@ const actualizarPrecioVenta = async (req, res) => {
 
 const validateCodigo = async (req, res) => {
   try {
-    // Acepta el código por body o query (para que te funcione en ambos casos)
-    const codigo =
-      (req.body?.codigo_reservacion_hotel ?? req.query?.codigo_reservacion_hotel ?? "")
-        .toString()
-        .trim();
+    const { codigo_reservacion_hotel: codigo, id_hospedaje } = req.body;
 
     if (!codigo) {
       return res.status(400).json({
@@ -1602,7 +1598,10 @@ const validateCodigo = async (req, res) => {
       });
     }
 
-    const exists = await model.existsCodigoReservacionHotel(codigo);
+    const exists = await model.existsCodigoReservacionHotel(
+      codigo.trim(),
+      id_hospedaje
+    );
 
     if (exists) {
       return res.status(409).json({
@@ -1626,9 +1625,11 @@ const validateCodigo = async (req, res) => {
   }
 };
 
-const detalles_reservas = async (req,res)=>{
+const detalles_reservas = async (req, res) => {
   try {
-    console.log("📦 recibido get_detalles_hospedaje (normalizando a JSON array)");
+    console.log(
+      "📦 recibido get_detalles_hospedaje (normalizando a JSON array)"
+    );
 
     // Acepta: ?id_hospedaje=..., ?id_buscar=..., o body { id_hospedaje / id_buscar }
     const rawBuscar =
@@ -1666,14 +1667,13 @@ const detalles_reservas = async (req,res)=>{
 
         // object JSON: soportar {id_hospedaje:"..."} o {id_hospedajes:[...]} o {id_relacion:"..."}
         if (parsed && typeof parsed === "object") {
-          const arrCandidate =
-            Array.isArray(parsed.id_hospedajes)
-              ? parsed.id_hospedajes
-              : parsed.id_hospedaje != null
-              ? [parsed.id_hospedaje]
-              : parsed.id_relacion != null
-              ? [parsed.id_relacion]
-              : [parsed];
+          const arrCandidate = Array.isArray(parsed.id_hospedajes)
+            ? parsed.id_hospedajes
+            : parsed.id_hospedaje != null
+            ? [parsed.id_hospedaje]
+            : parsed.id_relacion != null
+            ? [parsed.id_relacion]
+            : [parsed];
 
           const arr = arrCandidate
             .map((v) => (v == null ? "" : String(v).trim()))
@@ -1716,11 +1716,9 @@ const detalles_reservas = async (req,res)=>{
 
     // --- Llamada al SP ---
     // sp_hospedaje_detalles(IN p_payload LONGTEXT)
-    const sets = await executeSP2(
-      "sp_hospedaje_detalles",
-      [p_payload],
-      { allSets: true }
-    );
+    const sets = await executeSP2("sp_hospedaje_detalles", [p_payload], {
+      allSets: true,
+    });
 
     const safe = (i) => (Array.isArray(sets?.[i]) ? sets[i] : []);
 
@@ -1736,7 +1734,8 @@ const detalles_reservas = async (req,res)=>{
 
     if (pagos.length === 0 && saldos.length === 0 && facturas.length === 0) {
       return res.status(404).json({
-        message: "No se encontraron detalles para el/los hospedaje(s) indicado(s)",
+        message:
+          "No se encontraron detalles para el/los hospedaje(s) indicado(s)",
         error: "NOT_FOUND",
         data: { ids, pagos: [], saldos: [], facturas: [], resumen: [] },
       });
@@ -1744,14 +1743,14 @@ const detalles_reservas = async (req,res)=>{
 
     return res.status(200).json({
       message: "Consulta exitosa",
-      data:{
+      data: {
         tipo_origen: "hospedaje",
-      id_origen: ids,
-      pagos,
-      saldos,
-      facturas,
-      resumen,
-      }
+        id_origen: ids,
+        pagos,
+        saldos,
+        facturas,
+        resumen,
+      },
     });
   } catch (error) {
     console.error("get_detalles_hospedaje error:", error);
@@ -1761,8 +1760,7 @@ const detalles_reservas = async (req,res)=>{
       data: null,
     });
   }
-
-}
+};
 
 const getReservasWithIAtemsByidAgente = async (req, res) => {
   console.log("ESTE ENDPOINT SOLO TRAE RESERVAS CON ITEMS SIN FACTURAR");
