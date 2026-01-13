@@ -872,7 +872,7 @@ const getSolicitudes = async (req, res) => {
   }
 };
 
-const getDatosFiscalesProveedor = async(req,res)=>{
+const getDatosFiscalesProveedor = async (req, res) => {
   console.log("Entrando al controller proveedores datos fiscales");
   try {
     const { id_proveedor } = req.query;
@@ -881,17 +881,26 @@ const getDatosFiscalesProveedor = async(req,res)=>{
       return res.status(400).json({ error: "Falta id_proveedor en query" });
     }
 
-    const data = await model.getProveedoresDatosFiscales(id_proveedor);
+    const data = await executeQuery(
+      `
+      SELECT df.*
+      FROM proveedores_datos_fiscales_relacion r
+      INNER JOIN proveedores_datos_fiscales df
+        ON df.id = r.id_datos_fiscales
+      WHERE r.id_proveedor = ?;
+      `,
+      [id_proveedor]
+    );
+
     return res.status(200).json({ data });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       error: "Error en el servidor",
       details: error?.message ?? error,
     });
   }
 };
-
 
 const editProveedores = async(req,res) =>{
 
