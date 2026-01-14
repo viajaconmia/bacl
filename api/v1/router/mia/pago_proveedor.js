@@ -9,4 +9,5 @@ router.post("/pago", controller.createPago)
 router.get("/datosFiscales",controller.getDatosFiscalesProveedor)
 router.post("/editProveedor",controller.editProveedores);
 router.get("/proveedores",controller.getProveedores)
+router.post("/subir_factura",controller.cargarFactura)
 module.exports = router;

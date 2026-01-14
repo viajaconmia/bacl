@@ -3,6 +3,7 @@ const {
   executeQuery,
   executeTransaction,
 } = require("../../../config/db");
+const { v4: uuidv4 } = require("uuid");
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
 
 // Convierte valores "vacíos" a null (undefined, null, "", strings de puros espacios)
@@ -910,6 +911,166 @@ const getProveedores = async(req,res) =>{
 
 }
 
+const cargarFactura = async (req, res) => {
+  req.context.logStep(
+    "crearFacturaDesdeCarga",
+    "Iniciando creación de factura desde carga (proveedores)"
+  );
+
+  const {
+    fecha_emision,
+    estado,
+    usuario_creador,
+    id_agente,
+    total,
+    subtotal,
+    impuestos,
+    saldo,
+    rfc,
+    id_empresa,
+    uuid_factura,
+    rfc_emisor,
+    url_pdf,
+    url_xml,
+    fecha_vencimiento,
+    proveedoresData,
+  } = req.body;
+
+  const id_factura = "fac-" + uuidv4();
+
+  const toNumber = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const toDateOnly = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  };
+
+  try {
+    const proveedorRaw = Array.isArray(proveedoresData)
+      ? proveedoresData[0]
+      : proveedoresData;
+
+    if (!proveedorRaw) {
+      return res.status(400).json({
+        error: "Falta proveedoresData",
+        message: "No se puede crear la factura sin proveedoresData.",
+      });
+    }
+
+    // ===== Datos proveedor
+    const proveedor_razon_social =
+      proveedorRaw?.proveedor?.razon_social ?? proveedorRaw?.razon_social ?? null;
+
+    const monto_solicitado = toNumber(
+      proveedorRaw?.solicitud_proveedor?.monto_solicitado ??
+      proveedorRaw?.monto_solicitado
+    );
+
+    const id_solicitud_proveedor =
+      proveedorRaw?.solicitud_proveedor?.id_solicitud_proveedor ??
+      proveedorRaw?.id_solicitud_proveedor ??
+      null;
+
+    // ✅ En tu payload, viene aquí:
+    const id_pago =
+      proveedorRaw?.detalles_pagos?.[0]?.id_pago ??
+      proveedorRaw?.id_pago ??
+      proveedorRaw?.id_pago_proveedores ??
+      null;
+
+    // ===== Reglas
+    const monto_facturado = toNumber(saldo);
+    const pendiente_facturar = monto_solicitado - monto_facturado;
+
+    if (monto_facturado > monto_solicitado) {
+      return res.status(400).json({
+        error: "Monto inválido",
+        message: "El monto facturado es mayor al solicitado.",
+        details: { monto_solicitado, monto_facturado, pendiente_facturar },
+      });
+    }
+
+    const proveedoresDataSP = JSON.stringify({
+      id_pago,
+      solicitud_proveedor: {
+        id_solicitud_proveedor,
+        monto_solicitado,
+      },
+      monto_facturado,
+      pendiente_facturar,
+    });
+
+    const fechaFacturaSQL = toDateOnly(fecha_emision);
+
+    // es_credito: puedes usar proveedoresData.is_credito si viene
+    const es_credito = Number(proveedorRaw?.is_credito ?? (fecha_vencimiento ? 1 : 0));
+
+    // Campos “base” para que se llene toda la tabla
+    const totalN = toNumber(total);
+    const subtotalN = toNumber(subtotal);
+    const impuestosN = toNumber(impuestos);
+
+    // saldo_x_aplicar_items en esta tabla lo usamos como “monto de factura”
+    const saldo_x_aplicar_items = monto_facturado;
+
+    // estado_factura texto (ejemplo)
+    const estado_factura = estado; // o "pendiente" si quieres separado
+
+    const response = await executeSP("sp_inserta_factura_desde_carga_proveedores", [
+      // PK
+      id_factura,            // p_id_factura_proveedor
+
+      // CFDI / proveedor
+      uuid_factura,          // p_uuid_cfdi
+      rfc_emisor,            // p_rfc_emisor
+      proveedor_razon_social,// p_razon_social_emisor
+      monto_facturado,       // p_monto_facturado
+      url_xml,               // p_url_xml
+      url_pdf,               // p_url_pdf
+      fechaFacturaSQL,       // p_fecha_factura
+      es_credito,            // p_es_credito
+      estado_factura,        // p_estado_factura
+
+      // Base facturas
+      fechaFacturaSQL,       // p_fecha_emision
+      estado,                // p_estado (ENUM)
+      usuario_creador,       // p_usuario_creador
+      id_agente,             // p_id_agente
+      totalN,                // p_total
+      subtotalN,             // p_subtotal
+      impuestosN,            // p_impuestos
+      saldo_x_aplicar_items, // p_saldo_x_aplicar_items
+      rfc,                   // p_rfc
+      id_empresa,            // p_id_empresa
+      fecha_vencimiento,     // p_fecha_vencimiento
+
+      // JSON
+      proveedoresDataSP,     // p_proveedores_json
+    ]);
+
+    return res.status(201).json({
+      message: "Factura proveedor creada correctamente desde carga",
+      data: {
+        id_factura_proveedor: id_factura,
+        uuid_cfdi: uuid_factura,
+        monto_facturado,
+        response,
+      },
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      error: "Error al crear factura proveedor desde carga",
+      details: error?.message || error,
+    });
+  }
+};
+
 module.exports = {
   createSolicitud,
   getSolicitudes,
@@ -917,5 +1078,6 @@ module.exports = {
   createPago,
   getDatosFiscalesProveedor,
   editProveedores,
-  getProveedores
+  getProveedores,
+  cargarFactura
 };
