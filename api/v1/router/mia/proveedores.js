@@ -13,4 +13,12 @@ router.get("/sucursal", controller.getSucursales);
 //Fiscal
 router.get("/fiscal", controller.getDatosFiscales);
 
+//Cuentas del proveedor
+router.get("/cuentas", controller.getCuentas);
+router.post("/cuentas", controller.createProveedorCuenta);
+router.put("/cuentas", controller.updateProveedorCuenta);
+
+//Proveedor
+router.get("/proveedor", controller.getProveedorType);
+
 module.exports = router;
