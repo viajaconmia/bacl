@@ -10,4 +10,5 @@ router.get("/datosFiscales",controller.getDatosFiscalesProveedor)
 router.post("/editProveedor",controller.editProveedores);
 router.get("/proveedores",controller.getProveedores)
 router.post("/subir_factura",controller.cargarFactura)
+router.patch("/edit", controller.EditCampos)
 module.exports = router;

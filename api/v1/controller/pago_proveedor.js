@@ -1070,6 +1070,141 @@ const cargarFactura = async (req, res) => {
     });
   }
 };
+const EditCampos = async (req, res) => {
+  try {
+    const { id_solicitud_proveedor, ...rest } = req.body;
+
+    // 1) Validar ID
+    if (!id_solicitud_proveedor) {
+      return res.status(400).json({
+        error: "Falta id_solicitud_proveedor en el body",
+      });
+    }
+
+    // 2) Obtener el campo dinámico a editar (debe venir solo 1)
+    const keys = Object.keys(rest).filter((k) => rest[k] !== undefined);
+
+    if (keys.length === 0) {
+      return res.status(400).json({
+        error: "No viene ningún campo para actualizar (además del id_solicitud_proveedor)",
+      });
+    }
+
+    if (keys.length > 1) {
+      return res.status(400).json({
+        error: "Solo se permite actualizar 1 campo a la vez",
+        campos_recibidos: keys,
+      });
+    }
+
+    const fieldFromClient = keys[0];
+    const value = rest[fieldFromClient];
+
+    // 3) Mapeo opcional (para soportar comentario_cxp -> comentario_CXP)
+    const FIELD_MAP = {
+      comentarios_cxp: "comentario_CXP",
+      comentarios_CXP: "comentario_CXP",
+      comentarios_ops:"comentarios"
+    };
+
+    const dbField = FIELD_MAP[fieldFromClient] || fieldFromClient;
+
+    // 4) Lista blanca de campos permitidos (SEGURIDAD)
+    const ALLOWED_FIELDS = new Set([
+      "fecha_solicitud",
+      "monto_solicitado",
+      "saldo",
+      "forma_pago_solicitada",
+      "id_tarjeta_solicitada",
+      "usuario_solicitante",
+      "usuario_generador",
+      "comentarios",
+      "estado_solicitud",
+      "estado_facturacion",
+      "estatus_pagos",
+      "id_proveedor",
+      "monto_facturado",
+      "monto_por_facturar",
+      "comentario_CXP",
+    ]);
+
+    if (!ALLOWED_FIELDS.has(dbField)) {
+      return res.status(400).json({
+        error: `Campo no permitido para actualizar: ${fieldFromClient}`,
+        permitido: Array.from(ALLOWED_FIELDS),
+      });
+    }
+
+    // 5) Opcional: casteo numérico si lo necesitas
+    const NUMERIC_FIELDS = new Set([
+      "monto_solicitado",
+      "saldo",
+      "id_tarjeta_solicitada",
+      "id_proveedor",
+      "monto_facturado",
+      "monto_por_facturar",
+    ]);
+
+    const finalValue = NUMERIC_FIELDS.has(dbField)
+      ? (value === null || value === "" ? null : Number(value))
+      : value;
+
+    if (NUMERIC_FIELDS.has(dbField) && finalValue !== null && Number.isNaN(finalValue)) {
+      return res.status(400).json({
+        error: `El campo ${fieldFromClient} debe ser numérico`,
+      });
+    }
+
+    // 6) Ejecutar UPDATE (ojo: el nombre de columna NO va como "?" por seguridad)
+    const updateSql = `
+      UPDATE solicitudes_pago_proveedor
+      SET \`${dbField}\` = ?
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1;
+    `;
+
+    const result = await executeQuery(updateSql, [
+      finalValue,
+      id_solicitud_proveedor,
+    ]);
+
+    // dependiendo tu helper, puede venir como result.affectedRows o result[0].affectedRows
+    const affectedRows = result?.affectedRows ?? result?.[0]?.affectedRows ?? 0;
+
+    if (affectedRows === 0) {
+      return res.status(404).json({
+        error: "No se encontró la solicitud o no se actualizó nada",
+        id_solicitud_proveedor,
+      });
+    }
+
+    // 7) (Opcional pero recomendado) regresar el registro actualizado
+    const selectSql = `
+      SELECT *
+      FROM solicitudes_pago_proveedor
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1;
+    `;
+    const rows = await executeQuery(selectSql, [id_solicitud_proveedor]);
+    const updated = Array.isArray(rows) ? rows[0] : rows?.[0];
+
+    return res.status(200).json({
+      ok: true,
+      message: "Campo actualizado correctamente",
+      updated_field: fieldFromClient,
+      db_field: dbField,
+      id_solicitud_proveedor,
+      data: updated || null,
+    });
+  } catch (error) {
+    console.error("Error en EditCampos:", error);
+    return res.status(500).json({
+      error: "Error en el servidor",
+      details: error?.message ?? error,
+    });
+  }
+};
+
 
 module.exports = {
   createSolicitud,
@@ -1079,5 +1214,6 @@ module.exports = {
   getDatosFiscalesProveedor,
   editProveedores,
   getProveedores,
-  cargarFactura
+  cargarFactura,
+  EditCampos
 };
