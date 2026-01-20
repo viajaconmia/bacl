@@ -274,6 +274,101 @@ const createPago = async (req, res) => {
     };
 
     // ============================================================
+    // ✅ NUEVO: Validación de saldo ANTES de insertar el pago
+    // ============================================================
+    const validarSaldoAntesDeInsert = async ({
+      id_dispersion_pagos_proveedor, // <- id_dispersion
+      codigo_dispersion,
+      id_solicitud_proveedor, // fallback si no hay dispersion
+    }) => {
+      let idSolicitud = id_solicitud_proveedor || null;
+
+      // 1) Validar en dispersion_pagos_proveedor SOLO si hay id_dispersion
+      if (id_dispersion_pagos_proveedor) {
+        const qDisp = `
+          SELECT id_solicitud_proveedor, saldo
+          FROM dispersion_pagos_proveedor
+          WHERE id_dispersion_pagos_proveedor = ?
+            AND codigo_dispersion = ?
+          LIMIT 1
+        `;
+        const rowsDisp = await executeQuery(qDisp, [
+          id_dispersion_pagos_proveedor,
+          codigo_dispersion,
+        ]);
+
+        if (!rowsDisp || rowsDisp.length === 0) {
+          throw new Error(
+            `No existe registro en dispersion_pagos_proveedor (id=${id_dispersion_pagos_proveedor}, codigo=${codigo_dispersion})`
+          );
+        }
+
+        const saldoDisp = Number(rowsDisp[0].saldo || 0);
+        idSolicitud = rowsDisp[0].id_solicitud_proveedor;
+
+        if (saldoDisp <= 0) {
+          throw new Error(
+            `Saldo en dispersion_pagos_proveedor es 0. No se permite registrar el pago. (id_dispersion=${id_dispersion_pagos_proveedor})`
+          );
+        }
+      }
+
+      // 2) Si dispersion NO tiene saldo 0 (o no aplica), validar en solicitudes_pago_proveedor
+      if (!idSolicitud) {
+        throw new Error(
+          `No se pudo determinar id_solicitud_proveedor para validar saldo en solicitudes_pago_proveedor`
+        );
+      }
+
+      const qSol = `
+        SELECT saldo
+        FROM solicitudes_pago_proveedor
+        WHERE id_solicitud_proveedor = ?
+        LIMIT 1
+      `;
+      const rowsSol = await executeQuery(qSol, [idSolicitud]);
+
+      if (!rowsSol || rowsSol.length === 0) {
+        throw new Error(
+          `No existe registro en solicitudes_pago_proveedor (id=${idSolicitud})`
+        );
+      }
+
+      const saldoSol = Number(rowsSol[0].saldo || 0);
+      if (saldoSol <= 0) {
+        throw new Error(
+          `Saldo en solicitudes_pago_proveedor es 0. No se permite registrar el pago. (id_solicitud=${idSolicitud})`
+        );
+      }
+
+      return { id_solicitud_proveedor: idSolicitud };
+    };
+
+    // ============================================================
+    // ✅ NUEVO: Insert a pagos_facturas_proveedores (después del pago)
+    // ============================================================
+    const insertarPagoFacturaProveedor = async ({
+      id_pago_proveedor,
+      id_solicitud,
+      monto_pago,
+    }) => {
+      const ins = `
+        INSERT INTO pagos_facturas_proveedores (
+          id_pago_proveedor,
+          id_solicitud,
+          monto_pago,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `;
+      await executeQuery(ins, [
+        id_pago_proveedor,
+        id_solicitud,
+        String(monto_pago),
+      ]);
+    };
+
+    // ============================================================
     // Helper: aplica el cargo a dispersion_pagos_proveedor + solicitud
     // ============================================================
     const aplicarPagoADispersionYSolicitud = async ({
@@ -282,7 +377,6 @@ const createPago = async (req, res) => {
       cargo,
       fecha_pago,
     }) => {
-      // 1) SELECT para obtener saldo/monto_solicitado/id_solicitud_proveedor
       const sel = `
         SELECT
           id_solicitud_proveedor,
@@ -314,7 +408,6 @@ const createPago = async (req, res) => {
       const nuevoMontoPagado = montoPagadoActual + cargoNum;
       const nuevoSaldo = Math.max(montoSolicitado - nuevoMontoPagado, 0);
 
-      // 2) UPDATE dispersion: monto_pagado += cargo y saldo = monto_solicitado - monto_pagado
       const updDisp = `
         UPDATE dispersion_pagos_proveedor
         SET
@@ -333,8 +426,6 @@ const createPago = async (req, res) => {
         codigo_dispersion,
       ]);
 
-      // 3) UPDATE solicitud (pendiente): saldo -= cargo
-      //    (si tu saldo fuera "pagado acumulado", sería saldo += cargo)
       if (idSolicitud) {
         const updSol = `
           UPDATE solicitudes_pago_proveedor
@@ -353,7 +444,7 @@ const createPago = async (req, res) => {
     };
 
     // ===========================
-    // MODO INDIVIDUAL (lo dejo igual a tu versión)
+    // MODO INDIVIDUAL
     // ===========================
     if (!isMasivo) {
       console.log("📥 Datos recibidos para pago individual:", req.body);
@@ -377,7 +468,7 @@ const createPago = async (req, res) => {
           ? new Date(frontendData.fecha_emision)
           : new Date(),
         fecha_pago: new Date(),
-        url_pdf: toNull(frontendData.url_pdf),
+        url_pdf: frontendData.url_pdf,
         numero_comprobante: `COMP-${Date.now()}`,
 
         cuenta_origen: toNull(frontendData.cuenta_origen),
@@ -398,6 +489,13 @@ const createPago = async (req, res) => {
           details: "El campo id_solicitud_proveedor es requerido",
         });
       }
+
+      // ✅ VALIDACIÓN ANTES DEL INSERT (en individual valida solicitud)
+      await validarSaldoAntesDeInsert({
+        id_dispersion_pagos_proveedor: null, // individual normalmente no trae id_dispersion
+        codigo_dispersion: pagoData.codigo_dispersion,
+        id_solicitud_proveedor: pagoData.id_solicitud_proveedor,
+      });
 
       const query = `
         INSERT INTO pago_proveedores (
@@ -438,6 +536,13 @@ const createPago = async (req, res) => {
 
       const result = await executeQuery(query, values);
       const idPagoInsertado = result.insertId;
+
+      // ✅ INSERT EXTRA: pagos_facturas_proveedores
+      await insertarPagoFacturaProveedor({
+        id_pago_proveedor: idPagoInsertado,
+        id_solicitud: pagoData.id_solicitud_proveedor,
+        monto_pago: pagoData.monto_pagado,
+      });
 
       return res.status(201).json({
         success: true,
@@ -485,15 +590,13 @@ const createPago = async (req, res) => {
               ? `${frontendData.user_update},${baseUser}`.replace(/,+$/, "")
               : baseUser;
 
-          // Lo que llega en tu CSV
           const pagoData = {
-            id_pago_dispersion: toIntOrNull(csvRow.id_dispersion), // "105" -> 105
-            codigo_dispersion: toNull(csvRow.codigo_dispersion), // "D1EHVX2W"
+            id_pago_dispersion: toIntOrNull(csvRow.id_dispersion),
+            codigo_dispersion: toNull(csvRow.codigo_dispersion),
             referencia_pago:
               toNull(csvRow["Referencia Ampliada"]) ||
               toNull(csvRow["Referencia"]),
 
-            // montos vienen en Cargo
             monto: toDecOrNull(csvRow["Cargo"]),
             monto_pagado: toDecOrNull(csvRow["Cargo"]),
             total: toDecOrNull(csvRow["Cargo"]),
@@ -509,7 +612,7 @@ const createPago = async (req, res) => {
               : new Date(),
 
             fecha_emision: new Date(),
-            url_pdf: null,
+            url_pdf: frontendData.url_pdf,
             numero_comprobante:
               toNull(csvRow["Numero de comprobante"]) ||
               `COMP-CSV-${Date.now()}-${i}`,
@@ -533,9 +636,7 @@ const createPago = async (req, res) => {
           };
 
           if (!pagoData.id_pago_dispersion) {
-            throw new Error(
-              `id_dispersion inválido: "${csvRow.id_dispersion}"`
-            );
+            throw new Error(`id_dispersion inválido: "${csvRow.id_dispersion}"`);
           }
           if (!pagoData.codigo_dispersion) {
             throw new Error(`codigo_dispersion no encontrado en fila ${i + 1}`);
@@ -545,6 +646,13 @@ const createPago = async (req, res) => {
               `Cargo inválido en fila ${i + 1}: "${csvRow["Cargo"]}"`
             );
           }
+
+          // ✅ VALIDACIÓN ANTES DEL INSERT
+          const precheck = await validarSaldoAntesDeInsert({
+            id_dispersion_pagos_proveedor: pagoData.id_pago_dispersion,
+            codigo_dispersion: pagoData.codigo_dispersion,
+            id_solicitud_proveedor: null,
+          });
 
           // 1) Insert pago_proveedores
           const insPago = `
@@ -606,12 +714,20 @@ const createPago = async (req, res) => {
           const resultPago = await executeQuery(insPago, valuesPago);
           const idPagoInsertado = resultPago.insertId;
 
-          // 2) Ahora el UPDATE a dispersion + solicitud (con SELECT previo)
+          // 2) UPDATE a dispersion + solicitud
           const impacto = await aplicarPagoADispersionYSolicitud({
             id_dispersion_pagos_proveedor: pagoData.id_pago_dispersion,
             codigo_dispersion: pagoData.codigo_dispersion,
             cargo: pagoData.monto_pagado,
             fecha_pago: pagoData.fecha_pago,
+          });
+
+          // ✅ 3) INSERT EXTRA: pagos_facturas_proveedores
+          // id_solicitud sale de dispersion_pagos_proveedor
+          await insertarPagoFacturaProveedor({
+            id_pago_proveedor: idPagoInsertado,
+            id_solicitud: impacto.id_solicitud_proveedor || precheck.id_solicitud_proveedor,
+            monto_pago: pagoData.monto_pagado,
           });
 
           resultados.push({
@@ -653,6 +769,18 @@ const createPago = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error al momento de crear pago: ", error);
+
+    // Si quieres distinguir “sin saldo”, normalmente es 409/422
+    if (
+      typeof error.message === "string" &&
+      (error.message.includes("Saldo en dispersion_pagos_proveedor es 0") ||
+        error.message.includes("Saldo en solicitudes_pago_proveedor es 0"))
+    ) {
+      return res.status(409).json({
+        error: "Conflict",
+        details: error.message,
+      });
+    }
 
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
@@ -925,7 +1053,6 @@ const cargarFactura = async (req, res) => {
     total,
     subtotal,
     impuestos,
-    saldo,
     rfc,
     id_empresa,
     uuid_factura,
@@ -951,117 +1078,199 @@ const cargarFactura = async (req, res) => {
   };
 
   try {
-    const proveedorRaw = Array.isArray(proveedoresData)
-      ? proveedoresData[0]
-      : proveedoresData;
+    const proveedoresArr = Array.isArray(proveedoresData)
+      ? proveedoresData
+      : proveedoresData
+      ? [proveedoresData]
+      : [];
 
-    if (!proveedorRaw) {
+    if (proveedoresArr.length === 0) {
       return res.status(400).json({
         error: "Falta proveedoresData",
         message: "No se puede crear la factura sin proveedoresData.",
       });
     }
 
-    // ===== Datos proveedor
+    const proveedorFirst = proveedoresArr[0];
+
     const proveedor_razon_social =
-      proveedorRaw?.proveedor?.razon_social ?? proveedorRaw?.razon_social ?? null;
-
-    const monto_solicitado = toNumber(
-      proveedorRaw?.solicitud_proveedor?.monto_solicitado ??
-      proveedorRaw?.monto_solicitado
-    );
-
-    const id_solicitud_proveedor =
-      proveedorRaw?.solicitud_proveedor?.id_solicitud_proveedor ??
-      proveedorRaw?.id_solicitud_proveedor ??
+      proveedorFirst?.proveedor?.razon_social ??
+      proveedorFirst?.razon_social ??
       null;
-
-    // ✅ En tu payload, viene aquí:
-    const id_pago =
-      proveedorRaw?.detalles_pagos?.[0]?.id_pago ??
-      proveedorRaw?.id_pago ??
-      proveedorRaw?.id_pago_proveedores ??
-      null;
-
-    // ===== Reglas
-    const monto_facturado = toNumber(saldo);
-    const pendiente_facturar = monto_solicitado - monto_facturado;
-
-    if (monto_facturado > monto_solicitado) {
-      return res.status(400).json({
-        error: "Monto inválido",
-        message: "El monto facturado es mayor al solicitado.",
-        details: { monto_solicitado, monto_facturado, pendiente_facturar },
-      });
-    }
-
-    const proveedoresDataSP = JSON.stringify({
-      id_pago,
-      solicitud_proveedor: {
-        id_solicitud_proveedor,
-        monto_solicitado,
-      },
-      monto_facturado,
-      pendiente_facturar,
-    });
 
     const fechaFacturaSQL = toDateOnly(fecha_emision);
 
-    // es_credito: puedes usar proveedoresData.is_credito si viene
-    const es_credito = Number(proveedorRaw?.is_credito ?? (fecha_vencimiento ? 1 : 0));
+    const es_credito = Number(
+      proveedorFirst?.is_credito ?? (fecha_vencimiento ? 1 : 0)
+    );
 
-    // Campos “base” para que se llene toda la tabla
+    // ✅ Normalizar JSON para SP (ARRAY siempre)
+    const detalle = proveedoresArr.map((p, idx) => {
+      const id_solicitud_proveedor =
+        p?.solicitud_proveedor?.id_solicitud_proveedor ??
+        p?.id_solicitud_proveedor ??
+        p?.id_solicitud ?? // payload múltiple
+        null;
+
+      if (!id_solicitud_proveedor) {
+        throw new Error(
+          `proveedoresData[${idx}] no trae id_solicitud / id_solicitud_proveedor`
+        );
+      }
+
+      const monto_solicitado = toNumber(
+        p?.solicitud_proveedor?.monto_solicitado ?? p?.monto_solicitado ?? 0
+      );
+
+      const monto_facturado = toNumber(
+        p?.monto_asociar ?? p?.monto_facturado ?? 0
+      );
+
+      if (monto_facturado <= 0) {
+        throw new Error(
+          `proveedoresData[${idx}] monto_asociar inválido (debe ser > 0)`
+        );
+      }
+
+      if (monto_solicitado > 0 && monto_facturado > monto_solicitado) {
+        throw new Error(
+          `proveedoresData[${idx}] monto_asociar (${monto_facturado}) excede monto_solicitado (${monto_solicitado})`
+        );
+      }
+
+      const pendiente_facturar =
+        monto_solicitado > 0 ? monto_solicitado - monto_facturado : null;
+
+      const id_pago =
+        p?.detalles_pagos?.[0]?.id_pago ??
+        p?.id_pago ??
+        p?.id_pago_proveedores ??
+        null;
+
+      return {
+        id_pago,
+        solicitud_proveedor: {
+          id_solicitud_proveedor,
+          monto_solicitado,
+        },
+        monto_facturado,      // ✅ lo que el SP lee
+        pendiente_facturar,   // opcional
+      };
+    });
+
+    // ✅ SUMA TOTAL = p_monto_facturado
+    const monto_facturado_total = detalle.reduce(
+      (acc, x) => acc + toNumber(x.monto_facturado),
+      0
+    );
+
+    const proveedoresDataSP = JSON.stringify(detalle);
+
     const totalN = toNumber(total);
     const subtotalN = toNumber(subtotal);
     const impuestosN = toNumber(impuestos);
 
-    // saldo_x_aplicar_items en esta tabla lo usamos como “monto de factura”
-    const saldo_x_aplicar_items = monto_facturado;
-
-    // estado_factura texto (ejemplo)
-    const estado_factura = estado; // o "pendiente" si quieres separado
+    const saldo_x_aplicar_items = totalN-monto_facturado_total;
+    const estado_factura = estado;
 
     const response = await executeSP("sp_inserta_factura_desde_carga_proveedores", [
-      // PK
-      id_factura,            // p_id_factura_proveedor
+      id_factura,
 
-      // CFDI / proveedor
-      uuid_factura,          // p_uuid_cfdi
-      rfc_emisor,            // p_rfc_emisor
-      proveedor_razon_social,// p_razon_social_emisor
-      monto_facturado,       // p_monto_facturado
-      url_xml,               // p_url_xml
-      url_pdf,               // p_url_pdf
-      fechaFacturaSQL,       // p_fecha_factura
-      es_credito,            // p_es_credito
-      estado_factura,        // p_estado_factura
+      uuid_factura,
+      rfc_emisor,
+      proveedor_razon_social,
+      monto_facturado_total, // ✅ AHORA SÍ
+      url_xml,
+      url_pdf,
+      fechaFacturaSQL,
+      es_credito,
+      estado_factura,
 
-      // Base facturas
-      fechaFacturaSQL,       // p_fecha_emision
-      estado,                // p_estado (ENUM)
-      usuario_creador,       // p_usuario_creador
-      id_agente,             // p_id_agente
-      totalN,                // p_total
-      subtotalN,             // p_subtotal
-      impuestosN,            // p_impuestos
-      saldo_x_aplicar_items, // p_saldo_x_aplicar_items
-      rfc,                   // p_rfc
-      id_empresa,            // p_id_empresa
-      fecha_vencimiento,     // p_fecha_vencimiento
+      fechaFacturaSQL,
+      estado,
+      usuario_creador,
+      id_agente,
+      totalN,
+      subtotalN,
+      impuestosN,
+      saldo_x_aplicar_items, // ✅ AHORA SÍ
+      rfc,
+      id_empresa,
+      fecha_vencimiento,
 
-      // JSON
-      proveedoresDataSP,     // p_proveedores_json
+      proveedoresDataSP,     // ✅ ARRAY
     ]);
+
+    const idsSolicitudes = [
+  ...new Set(
+    detalle
+      .map((x) => x?.solicitud_proveedor?.id_solicitud_proveedor)
+      .filter(Boolean)
+  ),
+];
+if (idsSolicitudes.length > 0) {
+  const placeholders = idsSolicitudes.map(() => "?").join(",");
+
+  const updateEstatus = `
+    UPDATE solicitudes_pago_proveedor spp
+    LEFT JOIN (
+      SELECT
+        pfp.id_solicitud,
+        SUM(
+          CAST(COALESCE(NULLIF(pfp.monto_facturado, ''), '0') AS DECIMAL(12,2))
+        ) AS total_facturado
+      FROM pagos_facturas_proveedores pfp
+      WHERE pfp.id_solicitud IN (${placeholders})
+      GROUP BY pfp.id_solicitud
+    ) agg
+      ON agg.id_solicitud = spp.id_solicitud_proveedor
+    SET
+      -- Guardamos total facturado (opcional, pero recomendado)
+      spp.monto_facturado = IFNULL(agg.total_facturado, 0),
+
+      -- Recalculamos monto_por_facturar
+      spp.monto_por_facturar = GREATEST(
+        CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
+        0
+      ),
+
+      -- Estado facturacion según tus reglas
+      spp.estado_facturacion = CASE
+        WHEN GREATEST(
+          CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
+          0
+        ) = 0 THEN 'facturado'
+        WHEN GREATEST(
+          CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
+          0
+        ) <> CAST(spp.monto_solicitado AS DECIMAL(12,2)) THEN 'parcial'
+        ELSE 'pendiente'
+      END,
+
+      -- Estatus pagos: si saldo=0 => pagado
+      spp.estatus_pagos = CASE
+        WHEN CAST(COALESCE(NULLIF(spp.saldo, ''), '0') AS DECIMAL(12,2)) = 0 THEN 'pagado'
+        ELSE spp.estatus_pagos
+      END
+    WHERE spp.id_solicitud_proveedor IN (${placeholders});
+  `;
+
+  // Se usan placeholders 2 veces: IN(subquery) + IN(where)
+  await executeQuery(updateEstatus, [...idsSolicitudes, ...idsSolicitudes]);
+}
+
 
     return res.status(201).json({
       message: "Factura proveedor creada correctamente desde carga",
       data: {
         id_factura_proveedor: id_factura,
         uuid_cfdi: uuid_factura,
-        monto_facturado,
+        monto_facturado_total,
+        detalle_asociacion: detalle,
         response,
       },
     });
+
   } catch (error) {
     console.log(error);
     return res.status(500).json({
@@ -1070,6 +1279,8 @@ const cargarFactura = async (req, res) => {
     });
   }
 };
+
+
 const EditCampos = async (req, res) => {
   try {
     const { id_solicitud_proveedor, ...rest } = req.body;
