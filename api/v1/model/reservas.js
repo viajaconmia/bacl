@@ -1224,7 +1224,7 @@ const getReservaAllFacturacion = async () => {
     const query = `SELECT
     v.id_agente                      AS id_usuario_generador,
     v.id_servicio,
-    v.status_reserva                 AS estado_reserva,
+    v.estado                 AS estado_reserva,
     v.created_at_reserva             AS created_at,
     v.id_solicitud,
     v.id_viajero_reserva             AS id_viajero,
@@ -2337,8 +2337,8 @@ const insertarReserva = async ({ reserva }) => {
             reserva.estado_reserva === "En proceso"
               ? "pending"
               : reserva.estado_reserva === "Confirmada"
-              ? "complete"
-              : null;
+                ? "complete"
+                : null;
 
           if (!estado) throw new Error("Estado de reserva no válido");
 
