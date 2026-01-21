@@ -20,9 +20,7 @@ router.post(
   controller.createFromOperaciones
 );
 
-router.put(
-  "/validacion_codigo",controller.validateCodigo
-);
+router.put("/validacion_codigo", controller.validateCodigo);
 
 router.post(
   "/",
@@ -42,8 +40,8 @@ router.get(
   controller.getReservasWithItemsSinPagarByAgente
 );
 
-router.get("/detalles_reservas",controller.detalles_reservas)
-
+router.get("/detalles_reservas", controller.detalles_reservas);
+router.get("/services", controller_v2.obtener);
 router.get("/cotizaciones", async (req, res) => {
   try {
     const { servicio } = req.query;

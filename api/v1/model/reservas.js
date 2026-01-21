@@ -532,7 +532,8 @@ const asignarFacturasItems = async (req, res) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
-  const { ejemplo_saldos = [], usuarioCreador, user } = reserva;
+  console.log(reserva);
+  const { ejemplo_saldos = [], usuarioCreador, user, intermediario } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
 
   const agentes = await executeQuery(
@@ -658,8 +659,8 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               codigo_reservacion_hotel, tipo_cuarto, noches, 
               is_rembolsable, monto_penalizacion, conciliado, 
               credito, comments, id_hotel, nuevo_incluye_desayuno,
-              tipo_desayuno, comentario_desayuno, precio_desayuno 
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+              tipo_desayuno, comentario_desayuno, precio_desayuno, id_intermediario
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
           `;
           const params_hospedaje = [
             id_hospedaje,
@@ -679,6 +680,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             tipo_desayuno || null,
             comentario_desayuno || null,
             precio_desayuno || null,
+            intermediario.exists ? intermediario.proveedor.id : null,
           ];
           await connection.execute(query_hospedaje, params_hospedaje);
 

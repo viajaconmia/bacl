@@ -1032,7 +1032,6 @@ const getDatosFiscalesProveedor = async (req, res) => {
 };
 
 const editProveedores = async(req,res) =>{
-
 }
 
 const getProveedores = async(req,res) =>{
@@ -1416,9 +1415,261 @@ const EditCampos = async (req, res) => {
   }
 };
 
+const Detalles = async (req, res) => {
+  try {
+    const {
+      id_solicitud_proveedor,
+      id_proveedor,
+      id_facturas,
+      id_pagos,
+    } = req.body || {};
+
+    // -----------------------------
+    // 1) Validación mínima
+    // -----------------------------
+    if (!id_solicitud_proveedor) {
+      return res.status(400).json({
+        ok: false,
+        error: "Falta id_solicitud_proveedor en el body",
+      });
+    }
+
+    // -----------------------------
+    // 2) Normalización de arrays
+    // -----------------------------
+    const normalizeArray = (v) => {
+      if (!v) return [];
+      if (Array.isArray(v)) return v;
+      if (typeof v === "string") {
+        const s = v.trim();
+        if (!s) return [];
+        try {
+          const parsed = JSON.parse(s);
+          return Array.isArray(parsed) ? parsed : [parsed];
+        } catch {
+          return [s];
+        }
+      }
+      return [v];
+    };
+
+    const facturasArr = normalizeArray(id_facturas)
+      .map((x) => String(x ?? "").trim())
+      .filter(Boolean);
+
+    const pagosArr = normalizeArray(id_pagos)
+      .map((x) => String(x ?? "").trim())
+      .filter(Boolean);
+
+    // -----------------------------
+    // 3) Traer info base de solicitud
+    // -----------------------------
+    const solicitudSql = `
+      SELECT *
+      FROM solicitudes_pago_proveedor
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1;
+    `;
+
+    const solicitudRows = await executeQuery(solicitudSql, [id_solicitud_proveedor]);
+    const solicitud =
+      Array.isArray(solicitudRows) ? solicitudRows[0] : solicitudRows?.[0] ?? null;
+
+    // -----------------------------
+    // 4) FACTURAS
+    // -----------------------------
+    let facturas = [];
+
+    if (facturasArr.length > 0) {
+      const placeholders = facturasArr.map(() => "?").join(",");
+
+      const facturasSqlMain = `
+        SELECT *
+        FROM facturas_pago_proveedor
+        WHERE id_factura_proveedor IN (${placeholders});
+      `;
+
+      const factRowsMain = await executeQuery(facturasSqlMain, facturasArr);
+      facturas = Array.isArray(factRowsMain) ? factRowsMain : factRowsMain?.[0] ?? [];
+
+      // fallback: id_factura
+      if (!facturas || facturas.length === 0) {
+        const facturasSqlFallback = `
+          SELECT *
+          FROM facturas_pago_proveedor
+          WHERE id_factura IN (${placeholders});
+        `;
+        const factRowsFallback = await executeQuery(facturasSqlFallback, facturasArr);
+        const fb = Array.isArray(factRowsFallback)
+          ? factRowsFallback
+          : factRowsFallback?.[0] ?? [];
+
+        if (Array.isArray(fb) && fb.length > 0) facturas = fb;
+      }
+    }
+
+    // -----------------------------
+    // 5) PAGOS
+    // -----------------------------
+    let pagos = [];
+
+    if (pagosArr.length > 0) {
+      const placeholders = pagosArr.map(() => "?").join(",");
+
+      const pagosSqlMain = `
+        SELECT *
+        FROM pago_proveedores
+        WHERE id_pago_proveedores IN (${placeholders});
+      `;
+
+      const pagosRowsMain = await executeQuery(pagosSqlMain, pagosArr);
+      pagos = Array.isArray(pagosRowsMain) ? pagosRowsMain : pagosRowsMain?.[0] ?? [];
+
+      // fallback: id_pago_proveedor
+      if (!pagos || pagos.length === 0) {
+        const pagosSqlFallback = `
+          SELECT *
+          FROM pago_proveedores
+          WHERE id_pago_proveedor IN (${placeholders});
+        `;
+        const pagosRowsFallback = await executeQuery(pagosSqlFallback, pagosArr);
+        const fb = Array.isArray(pagosRowsFallback)
+          ? pagosRowsFallback
+          : pagosRowsFallback?.[0] ?? [];
+
+        if (Array.isArray(fb) && fb.length > 0) pagos = fb;
+      }
+    }
+
+    // =========================================================
+    // ✅ 6) CONSULTA EXTRA: pagos_facturas_proveedores
+    // =========================================================
+    // Tabla:
+    // id, id_pago_proveedor, id_solicitud, id_factura,
+    // monto_facturado, monto_pago, created_at, updated_at
+
+    let pfp = [];
+
+    {
+      const where = [];
+      const params = [];
+
+      // siempre filtramos por id_solicitud (id_solicitud_proveedor de tu payload)
+      where.push(`id_solicitud = ?`);
+      params.push(Number(id_solicitud_proveedor));
+
+      // filtrar por pagos si viene
+      if (pagosArr.length > 0) {
+        const ph = pagosArr.map(() => "?").join(",");
+        where.push(`id_pago_proveedor IN (${ph})`);
+        params.push(...pagosArr.map((x) => Number(x)));
+      }
+
+      // filtrar por facturas si viene
+      if (facturasArr.length > 0) {
+        const ph = facturasArr.map(() => "?").join(",");
+        where.push(`id_factura IN (${ph})`);
+        params.push(...facturasArr);
+      }
+
+      const pfpSql = `
+        SELECT *
+        FROM pagos_facturas_proveedores
+        WHERE ${where.join(" AND ")}
+        ORDER BY created_at DESC;
+      `;
+
+      const pfpRows = await executeQuery(pfpSql, params);
+      pfp = Array.isArray(pfpRows) ? pfpRows : pfpRows?.[0] ?? [];
+    }
+
+    // =========================================================
+    // ✅ 7) VALIDACIÓN / RESUMEN (cuánto pagado vs facturado)
+    // =========================================================
+    const toNum = (v) => {
+      const n = Number(String(v ?? "").trim());
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    let total_pagado = 0;
+    let total_facturado = 0;
+
+    // resumen por factura: { [id_factura]: { pagado, facturado, diferencia } }
+    const por_factura_map = new Map();
+
+    for (const row of pfp) {
+      const idFactura = String(row?.id_factura ?? "").trim();
+      const pagado = toNum(row?.monto_pago);
+      const facturado = toNum(row?.monto_facturado);
+
+      total_pagado += pagado;
+      total_facturado += facturado;
+
+      if (!idFactura) continue;
+
+      const prev = por_factura_map.get(idFactura) || { id_factura: idFactura, pagado: 0, facturado: 0 };
+      prev.pagado += pagado;
+      prev.facturado += facturado;
+      por_factura_map.set(idFactura, prev);
+    }
+
+    const por_factura = Array.from(por_factura_map.values()).map((x) => ({
+      ...x,
+      diferencia: Number((x.pagado - x.facturado).toFixed(2)),
+      estatus:
+        Math.abs(x.pagado - x.facturado) < 0.01
+          ? "CUADRADO"
+          : x.pagado > x.facturado
+          ? "PAGADO_DE_MAS"
+          : "FALTA_PAGAR",
+    }));
+
+    const resumen_validacion = {
+      total_pagado: Number(total_pagado.toFixed(2)),
+      total_facturado: Number(total_facturado.toFixed(2)),
+      diferencia_total: Number((total_pagado - total_facturado).toFixed(2)),
+      por_factura,
+    };
+
+    // -----------------------------
+    // 8) Response
+    // -----------------------------
+    return res.status(200).json({
+      ok: true,
+      message: "Detalles obtenidos correctamente",
+      request: {
+        id_solicitud_proveedor: String(id_solicitud_proveedor),
+        id_proveedor: String(id_proveedor ?? "").trim(),
+        id_facturas: facturasArr,
+        id_pagos: pagosArr,
+      },
+      data: {
+        solicitud,
+        facturas,
+        pagos,
+
+        // ✅ tabla de relación (pago-factura)
+        pagos_facturas_proveedores: pfp,
+
+        // ✅ validación pagado vs facturado
+        resumen_validacion,
+      },
+    });
+  } catch (error) {
+    console.error("Error en Detalles:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error en el servidor",
+      details: error?.message ?? error,
+    });
+  }
+};
+
+
 
 module.exports = {
   createSolicitud,
+  Detalles,
   getSolicitudes,
   createDispersion,
   createPago,
