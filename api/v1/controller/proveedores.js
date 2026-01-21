@@ -13,7 +13,7 @@ const getProveedores = async (req, res) => {
       page = 1,
       size = 20,
       proveedor = null,
-      estado = null,
+      status = null,
       rfc = null,
     } = req.query;
 
@@ -22,7 +22,7 @@ const getProveedores = async (req, res) => {
       [
         type,
         id,
-        estado == null ? null : estado == "activo" ? 1 : 0,
+        status == null ? null : status == "activo" ? true : false,
         proveedor,
         rfc,
         page,
