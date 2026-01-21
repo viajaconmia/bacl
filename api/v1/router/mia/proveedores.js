@@ -21,4 +21,9 @@ router.put("/cuentas", controller.updateProveedorCuenta);
 //Proveedor
 router.get("/proveedor", controller.getProveedorType);
 
+
+//PROVEEDOR VUELO
+router.put("/vuelo", controller.updateProveedorVuelo);
+router.post("/vuelo", controller.createProveedorVuelo);
+
 module.exports = router;
