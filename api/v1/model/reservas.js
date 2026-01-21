@@ -1058,7 +1058,10 @@ const getReserva = async () => {
   }
 };
 
-const existsCodigoReservacionHotel = async (codigo_reservacion_hotel) => {
+const existsCodigoReservacionHotel = async (
+  codigo_reservacion_hotel,
+  id = null
+) => {
   try {
     const query = `
       SELECT 1
@@ -1066,12 +1069,42 @@ const existsCodigoReservacionHotel = async (codigo_reservacion_hotel) => {
       WHERE codigo_reservacion_hotel = ?
            AND (
           estado IS NULL
-          OR LOWER(TRIM(status_solicitud)) NOT IN ('cancelada', 'canceled')
-        )
+          OR LOWER(TRIM(estado)) NOT IN ('cancelada', 'canceled')
+  ) ${id ? "and id_booking <> ?" : ""}
       LIMIT 1;
     `;
 
-    const rows = await executeQuery(query, [codigo_reservacion_hotel]);
+    const rows = await executeQuery(
+      query,
+      id ? [codigo_reservacion_hotel, id] : [codigo_reservacion_hotel]
+    );
+    return Array.isArray(rows) && rows.length > 0;
+  } catch (error) {
+    throw error;
+  }
+};
+
+const existsCodigoReservacionHotelEdit = async (
+  codigo_reservacion_hotel,
+  id_booking
+) => {
+  try {
+    const query = `
+      SELECT 1
+      FROM vw_reservas_client
+      WHERE codigo_reservacion_hotel = ?
+        AND (
+          estado IS NULL
+          OR LOWER(TRIM(estado)) NOT IN ('cancelada', 'canceled')
+        )
+        AND id_booking <> ?
+      LIMIT 1;
+    `;
+
+    const rows = await executeQuery(query, [
+      codigo_reservacion_hotel,
+      id_booking,
+    ]);
     return Array.isArray(rows) && rows.length > 0;
   } catch (error) {
     throw error;
@@ -1193,7 +1226,7 @@ const getReservaAllFacturacion = async () => {
     const query = `SELECT
     v.id_agente                      AS id_usuario_generador,
     v.id_servicio,
-    v.status_reserva                 AS estado_reserva,
+    v.estado                 AS estado_reserva,
     v.created_at_reserva             AS created_at,
     v.id_solicitud,
     v.id_viajero_reserva             AS id_viajero,
@@ -2306,8 +2339,8 @@ const insertarReserva = async ({ reserva }) => {
             reserva.estado_reserva === "En proceso"
               ? "pending"
               : reserva.estado_reserva === "Confirmada"
-              ? "complete"
-              : null;
+                ? "complete"
+                : null;
 
           if (!estado) throw new Error("Estado de reserva no válido");
 
@@ -2371,6 +2404,7 @@ module.exports = {
   insertarReservaOperaciones,
   getReservaAllFacturacion,
   existsCodigoReservacionHotel,
+  existsCodigoReservacionHotelEdit,
 };
 
 function agruparDatos(data) {
