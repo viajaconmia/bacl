@@ -32,7 +32,9 @@ pool.on("connection", (conn) => {
 
 async function executeQuery(query, params = []) {
   try {
-    const [results] = await pool.execute(query, params);
+    const response = await pool.execute(query, params);
+    console.log(response)
+    const [results] = response
     return results;
   } catch (error) {
     console.log(error);

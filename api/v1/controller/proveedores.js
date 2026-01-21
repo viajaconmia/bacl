@@ -39,6 +39,7 @@ const getProveedores = async (req, res) => {
   }
 };
 
+
 const getSucursales = async (req, res) => {
   try {
     const { type } = req.query;
@@ -54,17 +55,26 @@ const getSucursales = async (req, res) => {
 const getDetalles = async (req, res) => {
   try {
     const { id_proveedor } = req.query;
-    const sucursales = await executeQuery(
-      `SELECT pdf.id, pdf.rfc, pdf.alias, pdf.razon_social FROM proveedores_datos_fiscales pdf
-left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
-WHERE rel.id_proveedor = ?
-group by pdf.id;`,
+
+    if (!id_proveedor) {
+      return res.status(400).json({ message: "id_proveedor es requerido", data: null });
+    }
+
+    const datos_fiscales = await executeQuery(
+      `
+      SELECT df.*
+      FROM proveedores_datos_fiscales_relacion r
+      INNER JOIN proveedores_datos_fiscales df
+        ON df.id = r.id_datos_fiscales
+      WHERE r.id_proveedor = ?;
+      `,
       [id_proveedor]
     );
-    res.status(200).json({ message: "", data: sucursales });
+
+    return res.status(200).json({ message: "", data: datos_fiscales });
   } catch (error) {
     console.log(error);
-    res
+    return res
       .status(error.statusCode || 500)
       .json({ message: error.message, data: null, error });
   }
