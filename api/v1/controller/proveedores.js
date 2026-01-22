@@ -13,7 +13,7 @@ const getProveedores = async (req, res) => {
       page = 1,
       size = 20,
       proveedor = null,
-      estado = null,
+      status = null,
       rfc = null,
     } = req.query;
 
@@ -22,7 +22,7 @@ const getProveedores = async (req, res) => {
       [
         type,
         id,
-        estado == null ? null : estado == "activo" ? 1 : 0,
+        status == null ? null : status == "activo" ? true : false,
         proveedor,
         rfc,
         page,
@@ -97,6 +97,7 @@ const getCuentas = async (req, res) => {
   }
 };
 
+//Creo que ya no se usa
 const getDatosFiscales = async (req, res) => {
   try {
     const { id } = req.query;
@@ -160,36 +161,45 @@ const createDatosFiscales = async (req, res) => {
     );
 
     if (existente) {
-      throw new Error("Ya existe un registro fiscal con este RFC");
+      await executeQuery(
+        `INSERT INTO proveedores_datos_fiscales_relacion (id_proveedor, id_datos_fiscales) VALUES (?,?)`,
+        [id_proveedor, existente.id]
+      );
+    } else {
+      await runTransaction(async (conn) => {
+        try {
+          const response = await conn.execute(
+            `INSERT INTO proveedores_datos_fiscales (rfc, alias, razon_social) VALUES (?, ?, ?)`,
+            [
+              rfc.trim().toUpperCase(),
+              alias.trim().toUpperCase() || null,
+              razon_social.trim().toUpperCase(),
+            ]
+          );
+          await conn.execute(
+            `INSERT INTO proveedores_datos_fiscales_relacion (id_proveedor, id_datos_fiscales) VALUES (?,?)`,
+            [id_proveedor, response[0].insertId]
+          );
+        } catch (error) {
+          throw error;
+        }
+      });
     }
 
-    // 2. Insertar los nuevos datos fiscales
-    // Nota: Uso los nombres de columnas exactos de tu CREATE TABLE (RFC, TITULAR, ALIAS, etc.)
-    await runTransaction(async (conn) => {
-      try {
-        const response = await conn.execute(
-          `INSERT INTO proveedores_datos_fiscales (rfc, alias, razon_social) VALUES (?, ?, ?)`,
-          [
-            rfc.trim().toUpperCase(),
-            alias.trim().toUpperCase() || null,
-            razon_social.trim().toUpperCase(),
-          ]
-        );
-        await conn.execute(
-          `INSERT INTO proveedores_datos_fiscales_relacion (id_proveedor, id_datos_fiscales) VALUES (?,?)`,
-          [id_proveedor, response[0].insertId]
-        );
-      } catch (error) {
-        throw error;
-      }
-    });
     const response = await executeQuery(
-      `select * from proveedores_cuentas where id_proveedor = ?;`,
+      `SELECT pdf.id, pdf.rfc, pdf.alias, pdf.razon_social FROM proveedores_datos_fiscales pdf
+left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
+WHERE rel.id_proveedor = ?
+group by pdf.id;`,
       [id_proveedor]
     );
 
+    console.log(response);
+
     res.status(200).json({
-      message: "Datos fiscales registrados con éxito",
+      message: !existente
+        ? "Datos fiscales registrados con éxito"
+        : "Ese RFC ya existia, por lo tanto lo conectamos con el otro",
       data: response,
     });
   } catch (error) {
@@ -541,11 +551,13 @@ const getProveedorType = async (req, res) => {
     const querys = {
       renta_carro: `SELECT is_con_chofer, is_sin_chofer, is_chofer_bilingue, notas_sin_chofer, notas_con_chofer, notas_chofer_bilingue, incidencia, notas_generales FROM proveedor_auto WHERE id_proveedor = ?`,
       vuelo: `SELECT id, id_proveedor, tarifa, articulo_personal, equipaje_mano_o_carry_on, equipaje_documentado, servicios_adicionales FROM proveedor_vuelo WHERE id_proveedor = ?`,
+      hotel: `SELECT Comentarios as comentarios, Transportacion as transportacion, mascotas, salones FROM hoteles WHERE id_hotel in (SELECT id_relacion FROM proveedores where id = ?)`,
     };
 
     const prop = {
       renta_carro: "auto",
       vuelo: "vuelo",
+      hotel: "hotel",
     };
 
     if (!Object.keys(querys).includes(type))
@@ -567,6 +579,123 @@ const getProveedorType = async (req, res) => {
   }
 };
 
+const updateProveedorVuelo = async (req, res) => {
+  try {
+    const {
+      id,
+      id_proveedor,
+      tarifa,
+      articulo_personal,
+      equipaje_mano_o_carry_on,
+      equipaje_documentado,
+      servicios_adicionales,
+    } = req.body;
+
+    if (!id) throw new Error("ID del registro de vuelo no proporcionado");
+
+    // Verificar que exista el registro
+    const [vuelo] = await executeQuery(
+      `SELECT * FROM proveedor_vuelo WHERE id = ?`,
+      [id]
+    );
+
+    if (!vuelo) throw new Error("El registro de vuelo no existe");
+
+    // Update
+    await executeQuery(
+      `UPDATE proveedor_vuelo
+       SET tarifa = ?,
+           articulo_personal = ?,
+           equipaje_mano_o_carry_on = ?,
+           equipaje_documentado = ?,
+           servicios_adicionales = ?
+       WHERE id = ?`,
+      [
+        tarifa?.trim() || null,
+        articulo_personal.trim() || "",
+        equipaje_mano_o_carry_on.trim() || "",
+        equipaje_documentado?.trim() || null,
+        servicios_adicionales.trim() || "",
+        id,
+      ]
+    );
+
+    // Regresar los vuelos del proveedor
+    const response = await executeQuery(
+      `SELECT * FROM proveedor_vuelo WHERE id_proveedor = ?`,
+      [id_proveedor]
+    );
+
+    res.status(200).json({
+      message: "Información de vuelo actualizada con éxito",
+      data: response,
+    });
+  } catch (error) {
+    console.error("Error en updateProveedorVuelo:", error);
+    res.status(500).json({
+      message: error.message,
+      data: null,
+    });
+  }
+};
+
+const createProveedorVuelo = async (req, res) => {
+  try {
+    const {
+      id_proveedor,
+      tarifa,
+      articulo_personal,
+      equipaje_mano_o_carry_on,
+      equipaje_documentado,
+      servicios_adicionales,
+    } = req.body;
+
+    // Validaciones básicas
+    if (!id_proveedor) throw new Error("El ID del proveedor es obligatorio");
+
+    if (!articulo_personal || !articulo_personal.trim())
+      throw new Error("El artículo personal es obligatorio");
+
+    if (!equipaje_mano_o_carry_on || !equipaje_mano_o_carry_on.trim())
+      throw new Error("El equipaje de mano o carry on es obligatorio");
+
+    if (!servicios_adicionales || !servicios_adicionales.trim())
+      throw new Error("Los servicios adicionales son obligatorios");
+
+    // Insert
+    await executeQuery(
+      `INSERT INTO proveedor_vuelo
+       (id_proveedor, tarifa, articulo_personal, equipaje_mano_o_carry_on, equipaje_documentado, servicios_adicionales)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        id_proveedor,
+        tarifa?.trim() || null,
+        articulo_personal.trim(),
+        equipaje_mano_o_carry_on.trim(),
+        equipaje_documentado?.trim() || null,
+        servicios_adicionales.trim(),
+      ]
+    );
+
+    // Regresar los vuelos del proveedor
+    const response = await executeQuery(
+      `SELECT * FROM proveedor_vuelo WHERE id_proveedor = ?`,
+      [id_proveedor]
+    );
+
+    res.status(200).json({
+      message: "Información de vuelo registrada con éxito",
+      data: response,
+    });
+  } catch (error) {
+    console.error("Error en createProveedorVuelo:", error);
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error interno del servidor",
+      data: null,
+    });
+  }
+};
+
 module.exports = {
   getProveedores,
   createProveedor,
@@ -582,4 +711,7 @@ module.exports = {
   createProveedorCuenta,
   //Proveedor Type
   getProveedorType,
+  //vuelo
+  updateProveedorVuelo,
+  createProveedorVuelo,
 };
