@@ -32,7 +32,9 @@ pool.on("connection", (conn) => {
 
 async function executeQuery(query, params = []) {
   try {
-    const [results] = await pool.execute(query, params);
+    const response = await pool.execute(query, params);
+    console.log(response)
+    const [results] = response
     return results;
   } catch (error) {
     console.log(error);
@@ -174,6 +176,19 @@ async function getById(table, field, id) {
   }
 }
 
+async function get(table, field, ...id) {
+  try {
+    return await executeQuery(
+      `SELECT * FROM ${table} WHERE ${field} in (${id
+        .map(() => "?")
+        .join(",")})`,
+      [...id]
+    );
+  } catch (error) {
+    throw error;
+  }
+}
+
 async function executeTransactionSP(procedure, params = []) {
   const connection = await pool.getConnection();
   try {
@@ -209,4 +224,5 @@ module.exports = {
   insert,
   update,
   getById,
+  get,
 };

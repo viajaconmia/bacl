@@ -1,5 +1,7 @@
 const { executeTransaction, executeQuery } = require("../../../config/db");
 const { supabase } = require("../../../config/auth");
+const model = require("../model/proveedores");
+
 
 const createAgente = async (data) => {
   try {

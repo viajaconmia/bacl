@@ -1,79 +1,184 @@
-const { executeTransaction, executeQuery } = require("../../../config/db");
+const { executeQuery, runTransaction } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
-
-// const createSolicitudYTicket = async (solicitud) => {
-//   try {
-//     let query = `INSERT INTO solicitudes (confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-//     let params = [
-//       solicitud.confirmation_code,
-//       solicitud.id_viajero,
-//       solicitud.hotel_name,
-//       solicitud.check_in,
-//       solicitud.check_out,
-//       solicitud.room_type,
-//       solicitud.total_price,
-//       solicitud.status,
-//     ];
-
-//     let response = await executeTransaction(
-//       query,
-//       params,
-//       async (results, connection) => {
-//         console.log("Creamos el ticket");
-//       }
-//     );
-
-//     return response;
-//   } catch (error) {
-//     throw error;
-//   }
-// };
 
 const createSolicitudes = async (body) => {
   try {
-    const { solicitudes } = body;
-    console.log(solicitudes);
-    const query_solicitudes = `INSERT INTO solicitudes (id_solicitud, id_usuario_generador, confirmation_code, id_viajero, hotel, check_in, check_out, room, total, status, nombre_viajero,viajeros_adicionales, id_agente, origen, usuario_creador) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+    const { solicitudes, tradicional = true } = body;
+    const types = { hotel: 0, flight: 1, car_rental: 2 };
+    const s = Array.isArray(solicitudes) ? solicitudes[0] : solicitudes;
     const id_solicitud = `sol-${uuidv4()}`;
-    const {
-      confirmation_code,
-      id_agente,
-      hotel,
-      check_in,
-      check_out,
-      room,
-      total,
-      status,
-      id_viajero,
-      nombre_viajero,
-      viajeros_adicionales,
-      usuario_creador,
-    } = solicitudes[0];
-    const params_solicitud = [
-      id_solicitud || null,
-      id_agente || null,
-      confirmation_code || null,
-      id_viajero || null,
-      hotel || null,
-      check_in || null,
-      check_out || null,
-      room || null,
-      total || null,
-      status || null,
-      nombre_viajero || null,
-      JSON.stringify(viajeros_adicionales) || [],
-      id_agente || null,
-      "Cliente",
-      usuario_creador || null,
-    ];
+    const proveedor = s?.proveedor || null;
+    const tipo = types[(s.type || "HOTEL").toLowerCase()]; // hotel, flight, car_rental
 
-    const response = await executeQuery(query_solicitudes, params_solicitud);
+    if (tradicional) {
+      const query_solicitudes = `
+        INSERT INTO solicitudes (
+          id_solicitud, 
+          id_usuario_generador, 
+          confirmation_code, 
+          id_viajero, 
+          hotel, 
+          check_in, 
+          check_out, 
+          room, 
+          total, 
+          status, 
+          nombre_viajero,
+          viajeros_adicionales, 
+          id_agente, 
+          origen, 
+          usuario_creador
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `;
 
-    return {
-      id_solicitud,
-    };
+      const params = [
+        id_solicitud,
+        s.id_agente,
+        s.confirmation_code || null,
+        s.id_viajero,
+        s.hotel,
+        s.check_in,
+        s.check_out,
+        s.room,
+        s.total,
+        s.status,
+        s.nombre_viajero,
+        JSON.stringify(s.viajeros_adicionales ?? []),
+        s.id_agente,
+        "Cliente",
+        s.usuario_creador,
+      ];
+
+      await executeQuery(query_solicitudes, params);
+      return { id_solicitud };
+    } else {
+      let id_proveedor_gemini;
+
+      const q_buscar = `
+      SELECT id_proveedor_gemini 
+      FROM proveedores_gemini 
+      WHERE nombre_proveedor = ? AND tipo_proveedor = ?
+      LIMIT 1
+    `;
+
+      const existe = await executeQuery(q_buscar, [proveedor, tipo]);
+
+      await runTransaction(async (connection) => {
+        if (existe.length > 0) {
+          id_proveedor_gemini = existe[0].id_proveedor_gemini;
+        } else {
+          id_proveedor_gemini = `prg-${uuidv4()}`;
+
+          const q_insert = `
+          INSERT INTO proveedores_gemini 
+          (id_proveedor_gemini, tipo_proveedor, nombre_proveedor, url_consultada, complementos)
+          VALUES (?,?,?,?,?)
+        `;
+          await executeQuery(q_insert, [
+            id_proveedor_gemini,
+            tipo,
+            proveedor,
+            proveedor.url_consultada ?? null,
+            JSON.stringify(s),
+          ]);
+        }
+
+        const q_insert_solicitud = `
+              INSERT INTO solicitudes (
+                id_solicitud,
+                tipo_solicitud_gemini,
+                id_proveedor_gemini,
+                data_gemini,
+                total,
+                status,
+                creado_por,
+                hotel,
+                id_viajero,
+                check_in,
+                check_out,
+                room
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            `;
+        try {
+          await connection.execute(q_insert_solicitud, [
+            id_solicitud,
+            tipo,
+            id_proveedor_gemini,
+            JSON.stringify(s),
+            s.total,
+            s.status,
+            s.usuario_creador ?? null,
+            s.hotel || null,
+            s.id_viajero,
+            s.check_in || null,
+            s.check_out || null,
+            s.room || null,
+          ]);
+
+          await createCartItem(connection, {
+            id_solicitud,
+            id_agente: s.id_agente,
+            usuario_generador: s.usuario_creador,
+            total: s.total,
+            type: s.type,
+          });
+        } catch (error) {
+          throw error;
+        }
+      });
+
+      return {
+        id_solicitud,
+        id_proveedor_gemini,
+        tipo,
+        payload: s,
+      };
+    }
   } catch (error) {
     throw error;
+  }
+};
+
+const createCartItem = async (
+  connect,
+  { id_solicitud, id_agente, usuario_generador, total, type, selected }
+) => {
+  try {
+    if (!id_solicitud || !id_agente || !usuario_generador || !total || !type)
+      throw new CustomError(
+        "Faltan datos necesarios para crear el item del carrito",
+        400,
+        "MISSING_DATA",
+        null
+      );
+
+    const [result] = await connect.execute(
+      `INSERT INTO cart (
+    total,
+    id_agente,
+    type,
+    selected,
+    id_solicitud,
+    usuario_generador
+) VALUES ( ?, ?, ?, ?, ?, ?); `,
+      [
+        total,
+        id_agente,
+        type,
+        /*selected*/ true,
+        id_solicitud,
+        usuario_generador,
+      ]
+    );
+
+    return result;
+  } catch (error) {
+    console.log("Este es el error qiuien c", error.message);
+    return res.status(error.statusCode || 500).json({
+      error: error.details,
+      message: error.message,
+      data: null,
+    });
   }
 };
 

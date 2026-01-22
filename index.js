@@ -1,17 +1,21 @@
+const { handleChat } = require("./services/gemini/Core");
 // src/index.js
 const express = require("express");
 const app = express();
 const cookieParser = require("cookie-parser");
-const jwt = require("jsonwebtoken");
 const PORT = process.env.PORT || 3001;
+const jwt = require("jsonwebtoken")
+const {SECRET_KEY} = require("./lib/constant/index")
 /**de aqui para abajo */
-const Stripe = require("stripe");
 require("dotenv").config();
+// const jwt = require("jsonwebtoken");
+// const { SECRET_KEY } = require("./lib/constant");
 const { errorHandler } = require("./middleware/errorHandler");
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
-  apiVersion: "2024-04-10",
-});
+// const Stripe = require("stripe");
+// const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
+//   apiVersion: "2024-04-10",
+// });
 
 // app.post("/disputa", express.raw({ type: "application/json" }), (req, res) => {
 //   const sig = req.headers["stripe-signature"];
@@ -43,17 +47,22 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST, {
 
 //   res.status(200).json({ received: true });
 // });
-/** aqui*/
+// const { SECRET_KEY } = require("./lib/constant");
 
 const { checkApiKey } = require("./middleware/auth");
 const v1Router = require("./api/v1/router/general");
 const cors = require("cors");
 const morgan = require("morgan");
 
-// Logger y trazabilidad
 const logger = require("./api/v1/utils/logger");
 const requestContext = require("./middleware/requestContext");
-const { SECRET_KEY } = require("./lib/constant");
+const {
+  createContact,
+  getContacts,
+  getByEmail,
+} = require("./services/zoho/contacts");
+const { DEPARTMENTS } = require("./lib/constant");
+const { subirTicketSolicitudZoho } = require("./services/zoho");
 
 // Control de CORS
 const corsOptions = {
@@ -128,7 +137,7 @@ app.use((req, res, next) => {
       return;
     }
   }
-  console.log(req.session);
+  // console.log(req.session);
   next();
 });
 
@@ -143,6 +152,20 @@ app.use(
   v1Router
 );
 
+app.get("/probando", async (req, res) => {
+  try {
+    const { id } = req.query;
+    const response = await subirTicketSolicitudZoho({
+      id,
+      servicio,
+    });
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error("Error creando ticket de prueba:", error);
+    return res.json({ message: "Error creando ticket de prueba", error });
+  }
+});
+
 // Ruta pública raíz
 app.get("/", (req, res) =>
   res.json({
@@ -150,6 +173,8 @@ app.get("/", (req, res) =>
       "Bienvenido a la API. Por favor, autentícate para acceder a más datos.",
   })
 );
+
+app.post("/message", handleChat);
 
 // 7. Manejador de errores global (solo formatea respuesta; no llama a logger.error)
 app.use(errorHandler);

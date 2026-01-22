@@ -53,8 +53,43 @@ const SERVICIOS = {
     "fecha_limite_pago",
     "id_agente",
     "id_empresa",
+    "is_cotizacion",
   ],
 };
+
+const SOLICITUDES = {
+  required: ["id_solicitud", "confirmation_code", "id_viajero", "total"],
+  table: "solicitudes",
+  id: "id_solicitud",
+  columnas: [
+    "id_solicitud",
+    "id_servicio",
+    "confirmation_code",
+    "id_viajero",
+    "hotel",
+    "check_in",
+    "check_out",
+    "room",
+    "total",
+    "status",
+    "id_usuario_generador",
+    "nombre_viajero",
+    "viajeros_adicionales",
+    "id_agente",
+    "id_hotel",
+    "id_acompanantes",
+    "usuario_creador",
+    "created_at",
+    "origen",
+    "vuelo",
+    "renta_carro",
+    "tipo_solicitud_gemini",
+    "id_proveedor_gemini",
+    "data_gemini",
+    "creado_por",
+  ],
+};
+
 const FACTURAS = {
   required: ["id_factura", "fecha_emision", "estado", "usuario_creador"],
   table: "facturas",
@@ -311,4 +346,5 @@ module.exports = {
   PAGOS,
   HOSPEDAJE,
   FACTURAS,
+  SOLICITUDES,
 };

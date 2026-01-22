@@ -1,18 +1,18 @@
-const path = require("path");
-const fs = require("fs");
-const https = require("https");
+// const path = require("path");
+// const fs = require("fs");
+// const https = require("https");
 const axios = require("axios");
 
-const ca = fs.readFileSync(
-  path.join(process.cwd(), "certs", "facturama.mx.crt")
-);
+// const ca = fs.readFileSync(
+//   path.join(process.cwd(), "certs", "facturama.mx.crt")
+// );
 
-// O "./certs/facturama.crt"
+// // O "./certs/facturama.crt"
 
-const agent = new https.Agent({
-  ca,
-  rejectUnauthorized: true,
-});
+// const agent = new https.Agent({
+//   ca,
+//   rejectUnauthorized: true,
+// });
 
 const { valuesFacturama } = require("../../../config/auth");
 
@@ -23,7 +23,7 @@ const { valuesFacturama } = require("../../../config/auth");
 // };
 
 let headers = {
-  agent,
+  // agent,
   headers: {
     "User-Agent": valuesFacturama.useragent,
     Authorization: `Basic ${valuesFacturama.token}`,
