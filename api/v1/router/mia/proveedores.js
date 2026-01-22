@@ -25,4 +25,7 @@ router.get("/proveedor", controller.getProveedorType);
 router.put("/vuelo", controller.updateProveedorVuelo);
 router.post("/vuelo", controller.createProveedorVuelo);
 
+
+
 module.exports = router;
+
