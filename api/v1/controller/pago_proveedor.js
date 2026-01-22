@@ -838,7 +838,6 @@ const getSolicitudes = async (req, res) => {
       .filter((id) => id !== null && id !== undefined);
 
     let pagosRaw = [];
-    let facturasRaw = [];
 
     if (ids.length > 0) {
       const placeholders = ids.map(() => "?").join(",");
@@ -869,25 +868,7 @@ const getSolicitudes = async (req, res) => {
 
       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
 
-      facturasRaw = await executeQuery(
-        `SELECT 
-           fs.*,
-           fpp.id_factura_proveedor    AS fac_id_factura_proveedor,
-           fpp.uuid_cfdi               AS fac_uuid_cfdi,
-           fpp.rfc_emisor              AS fac_rfc_emisor,
-           fpp.razon_social_emisor     AS fac_razon_social_emisor,
-           fpp.monto_facturado         AS fac_monto_facturado,
-           fpp.url_xml                 AS fac_url_xml,
-           fpp.url_pdf                 AS fac_url_pdf,
-           fpp.fecha_factura           AS fac_fecha_factura,
-           fpp.es_credito              AS fac_es_credito,
-           fpp.estado_factura          AS fac_estado_factura
-         FROM facturas_solicitudes fs
-         LEFT JOIN facturas_pago_proveedor fpp 
-           ON fpp.id_factura_proveedor = fs.id_factura_proveedor
-         WHERE fs.id_solicitud_proveedor IN (${placeholders});`,
-        ids
-      );
+      
     }
 
     const pagosBySolicitud = pagosRaw.reduce((acc, row) => {
@@ -898,11 +879,7 @@ const getSolicitudes = async (req, res) => {
 
     console.log(pagosBySolicitud, "◾◾◾◾◾◾◾◾◾◾◾");
 
-    const facturasBySolicitud = facturasRaw.reduce((acc, row) => {
-      const key = String(row.id_solicitud_proveedor);
-      (acc[key] ||= []).push(row);
-      return acc;
-    }, {});
+    
 
     const data = spRows.map(
       ({
@@ -926,8 +903,6 @@ const getSolicitudes = async (req, res) => {
         ...rest
       }) => {
         const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
-        const facturas =
-          facturasBySolicitud[String(id_solicitud_proveedor)] ?? [];
 
         const estaPagada =
           estatus_pagos === "pagado" ||
@@ -966,7 +941,7 @@ const getSolicitudes = async (req, res) => {
           tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
           proveedor: { rfc, razon_social },
           pagos,
-          facturas,
+          
         };
       }
     );
