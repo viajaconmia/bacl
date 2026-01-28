@@ -61,7 +61,7 @@ async function liberar_items_facturados(connection, items_desactivados) {
     WHERE id_item IN (${ph}) AND monto > 0
     FOR UPDATE
     `,
-    ids
+    ids,
   );
 
   if (!rows || rows.length === 0) return;
@@ -77,7 +77,7 @@ async function liberar_items_facturados(connection, items_desactivados) {
   // 3) Pone en cero los montos de los items desactivados
   await connection.execute(
     `UPDATE items_facturas SET monto = 0 WHERE id_item IN (${ph}) AND monto > 0`,
-    ids
+    ids,
   );
 
   // 4) Devuelve el monto liberado al saldo de cada factura (sin rebasar el total)
@@ -93,10 +93,10 @@ async function liberar_items_facturados(connection, items_desactivados) {
         END
       WHERE id_factura = ?
       `,
-      [monto_liberado, monto_liberado, id_factura]
+      [monto_liberado, monto_liberado, id_factura],
     );
     console.log(
-      `🧾 [FISCAL] Liberado ${monto_liberado} a saldo_x_aplicar_items en factura ${id_factura}`
+      `🧾 [FISCAL] Liberado ${monto_liberado} a saldo_x_aplicar_items en factura ${id_factura}`,
     );
   }
 }
@@ -108,7 +108,7 @@ async function liberar_items_facturados(connection, items_desactivados) {
  */
 async function insertar_items_facturas_y_descuento(
   connection,
-  { id_item, id_factura, monto, id_relacion }
+  { id_item, id_factura, monto, id_relacion },
 ) {
   const m = Number(monto || 0);
   if (m <= 0.009) return;
@@ -116,7 +116,7 @@ async function insertar_items_facturas_y_descuento(
   // Insert vínculo
   await connection.execute(
     `INSERT INTO items_facturas (id_item, id_factura, monto, id_relacion) VALUES (?, ?, ?, ?)`,
-    [id_item, id_factura, m, id_relacion]
+    [id_item, id_factura, m, id_relacion],
   );
 
   // Descuenta saldo fiscal disponible (capado a >= 0; NULL => total)
@@ -129,7 +129,7 @@ async function insertar_items_facturas_y_descuento(
     END
     WHERE id_factura = ?
     `,
-    [m, m, id_factura]
+    [m, m, id_factura],
   );
 }
 /* =========================
@@ -141,7 +141,7 @@ async function crear_pago_desde_wallet(
   id_servicio,
   id_agente,
   monto_total,
-  saldos_aplicados
+  saldos_aplicados,
 ) {
   console.log("💳 [WALLET] Iniciando crear_pago_desde_wallet");
   console.log("🚓🚓🚓 saldos_aplicados:", saldos_aplicados);
@@ -168,16 +168,16 @@ async function crear_pago_desde_wallet(
   const ph = ids_saldos.map(() => "?").join(",");
   const [saldos_bd] = await connection.execute(
     `SELECT id_saldos, saldo, monto FROM saldos_a_favor WHERE id_saldos IN (${ph})`,
-    ids_saldos
+    ids_saldos,
   );
 
   if (!saldos_bd || saldos_bd.length === 0) {
     console.error(
       "💳 [WALLET][ERROR] No se encontraron saldos en BD. IDs solicitados:",
-      ids_saldos
+      ids_saldos,
     );
     throw new Error(
-      "Validación fallida: Los saldos solicitados no existen en la base de datos."
+      "Validación fallida: Los saldos solicitados no existen en la base de datos.",
     );
   }
 
@@ -190,10 +190,10 @@ async function crear_pago_desde_wallet(
 
     if (!saldo_bd) {
       console.error(
-        `💳 [WALLET][ERROR] Saldo ${id_saldo} no encontrado en BD.`
+        `💳 [WALLET][ERROR] Saldo ${id_saldo} no encontrado en BD.`,
       );
       throw new Error(
-        `Validación fallida: Saldo ${id_saldo} no existe en la base de datos.`
+        `Validación fallida: Saldo ${id_saldo} no existe en la base de datos.`,
       );
     }
 
@@ -203,20 +203,20 @@ async function crear_pago_desde_wallet(
 
     if (saldo_disponible_bd < saldo_usado_front) {
       console.error(
-        `💳 [WALLET][ERROR] Saldo insuficiente. ID: ${id_saldo}. BD: ${saldo_disponible_bd}, Front solicita: ${saldo_usado_front}`
+        `💳 [WALLET][ERROR] Saldo insuficiente. ID: ${id_saldo}. BD: ${saldo_disponible_bd}, Front solicita: ${saldo_usado_front}`,
       );
       throw new Error(
-        `Validación fallida: Saldo insuficiente en ${id_saldo}. Disponible: ${saldo_disponible_bd}, Solicitado: ${saldo_usado_front}`
+        `Validación fallida: Saldo insuficiente en ${id_saldo}. Disponible: ${saldo_disponible_bd}, Solicitado: ${saldo_usado_front}`,
       );
     }
 
     console.log(
-      `✅ [WALLET] Saldo ${id_saldo} validado. BD: ${saldo_disponible_bd}, Usar: ${saldo_usado_front}`
+      `✅ [WALLET] Saldo ${id_saldo} validado. BD: ${saldo_disponible_bd}, Usar: ${saldo_usado_front}`,
     );
   }
 
   console.log(
-    "✅ [WALLET] Todas las validaciones de saldos pasaron correctamente."
+    "✅ [WALLET] Todas las validaciones de saldos pasaron correctamente.",
   );
 
   if (monto_total <= 0) {
@@ -264,17 +264,17 @@ async function asociar_items_a_pago(
   connection,
   id_hospedaje,
   id_pago,
-  items_a_vincular
+  items_a_vincular,
 ) {
   if (!Array.isArray(items_a_vincular) || items_a_vincular.length === 0) {
     console.log(
-      "🔗 [ITEMS_PAGOS] No hay items_a_vincular. Omitiendo asociación."
+      "🔗 [ITEMS_PAGOS] No hay items_a_vincular. Omitiendo asociación.",
     );
     return;
   }
 
   console.log(
-    `🔗 [ITEMS_PAGOS] Vinculando ${items_a_vincular.length} items al pago ${id_pago}`
+    `🔗 [ITEMS_PAGOS] Vinculando ${items_a_vincular.length} items al pago ${id_pago}`,
   );
 
   for (const item of items_a_vincular) {
@@ -284,11 +284,11 @@ async function asociar_items_a_pago(
 
     const [result] = await connection.execute(
       `INSERT INTO items_pagos (id_item, id_pago, monto, id_relacion) VALUES (?, ?, ?, ?)`,
-      [item.id_item, id_pago, monto, id_hospedaje]
+      [item.id_item, id_pago, monto, id_hospedaje],
     );
     console.log(
       `🔗 [ITEMS_PAGOS] Vínculo creado item=${item.id_item} monto=${monto}. Info:`,
-      result?.info || ""
+      result?.info || "",
     );
   }
 }
@@ -320,7 +320,7 @@ async function get_payment_type(id_solicitud, id_servicio) {
     tipo_pago = "wallet";
   }
   console.log(
-    `🧾 [TIPO_PAGO] id_servicio=${id_servicio} → tipo_pago_original=${tipo_pago}`
+    `🧾 [TIPO_PAGO] id_servicio=${id_servicio} → tipo_pago_original=${tipo_pago}`,
   );
   return tipo_pago;
 }
@@ -331,13 +331,13 @@ async function get_payment_type(id_solicitud, id_servicio) {
  */
 async function is_invoiced_reservation(connection, id_servicio) {
   console.log(
-    `🧾 [FISCAL] Consultando estado fiscal para servicio ${id_servicio}...`
+    `🧾 [FISCAL] Consultando estado fiscal para servicio ${id_servicio}...`,
   );
 
   // mysql2 devuelve [rows, fields]; y rows para CALL es una matrioshka
   const [rows /*, fields*/] = await connection.query(
     "CALL sp_get_facturas_pagos_by_id_servicio(?)",
-    [id_servicio]
+    [id_servicio],
   );
 
   // ---- 1) Desanidar de forma tolerante
@@ -439,11 +439,11 @@ async function are_invoiced_payments({ saldos }) {
   const r1 = await executeQuery(q1, ids);
   const ids_facturados = new Set(r1.map((r) => String(r.id_saldos)));
   const saldos_filtrados = saldos.filter((s) =>
-    ids_facturados.has(String(s.id_saldos))
+    ids_facturados.has(String(s.id_saldos)),
   );
 
   console.log(
-    `🧾 [FISCAL] Saldos facturados usados: ${saldos_filtrados.length}/${saldos.length}`
+    `🧾 [FISCAL] Saldos facturados usados: ${saldos_filtrados.length}/${saldos.length}`,
   );
 
   if (saldos_filtrados.length === 0) {
@@ -491,7 +491,7 @@ async function are_invoiced_payments({ saldos }) {
       id_factura: String(row.id_factura),
       total: Number(row.total_factura || 0),
       saldo_interpretado_para_items: Number(
-        row.saldo_interpretado_para_items ?? row.total_factura ?? 0
+        row.saldo_interpretado_para_items ?? row.total_factura ?? 0,
       ),
       monto_asociado_al_saldo: Number(row.monto_asociado_al_saldo || 0),
       fecha_creacion: row.fecha_creacion,
@@ -526,7 +526,7 @@ async function rebajar_wallet_saldos(connection, saldos_aplicados) {
       `UPDATE saldos_a_favor 
          SET saldo = GREATEST(COALESCE(saldo,0) - ?, 0) 
        WHERE id_saldos = ?`,
-      [usado, id_saldos]
+      [usado, id_saldos],
     );
     console.log(`💳 [WALLET] Descontado ${usado} de saldo ${id_saldos}`);
   }
@@ -535,12 +535,12 @@ async function asociar_factura_items_logica(
   connection,
   id_hospedaje,
   items_a_vincular,
-  facturas_disponibles
+  facturas_disponibles,
 ) {
   console.log(
     `🧾 [FISCAL] Iniciando herencia fiscal (items=${
       items_a_vincular.length
-    }, facturas=${facturas_disponibles?.length || 0})`
+    }, facturas=${facturas_disponibles?.length || 0})`,
   );
 
   if (!Array.isArray(items_a_vincular) || items_a_vincular.length === 0) {
@@ -552,7 +552,7 @@ async function asociar_factura_items_logica(
     facturas_disponibles.length === 0
   ) {
     console.warn(
-      "🧾 [FISCAL] No hay facturas disponibles para herencia fiscal. Omitido."
+      "🧾 [FISCAL] No hay facturas disponibles para herencia fiscal. Omitido.",
     );
     return;
   }
@@ -567,7 +567,7 @@ async function asociar_factura_items_logica(
         ? f.saldo_interpretado_para_items
         : (f.saldo_x_aplicar_items == null
             ? f.total
-            : f.saldo_x_aplicar_items) || 0
+            : f.saldo_x_aplicar_items) || 0,
     ),
   }));
 
@@ -596,13 +596,13 @@ async function asociar_factura_items_logica(
       pendiente = Number((pendiente - asignar).toFixed(2));
 
       console.log(
-        `🧾 [FISCAL] item=${item.id_item} -> factura=${f.id_factura} +${asignar}. pendiente_item=${pendiente}, saldo_factura=${f.saldo}`
+        `🧾 [FISCAL] item=${item.id_item} -> factura=${f.id_factura} +${asignar}. pendiente_item=${pendiente}, saldo_factura=${f.saldo}`,
       );
     }
 
     if (pendiente > 0.009) {
       console.error(
-        `🧾 [FISCAL][ERROR] No hay saldo fiscal suficiente para cubrir item ${item.id_item}. Restante: ${pendiente}`
+        `🧾 [FISCAL][ERROR] No hay saldo fiscal suficiente para cubrir item ${item.id_item}. Restante: ${pendiente}`,
       );
       throw new Error("(revisar la data con finanzas)");
     }
@@ -613,10 +613,10 @@ async function asociar_factura_items_logica(
 
 async function manejar_desactivacion_fiscal(
   connection,
-  items_desactivados /*, facturas_reserva*/
+  items_desactivados /*, facturas_reserva*/,
 ) {
   console.log(
-    "🧾 [FISCAL] Manejando desactivación fiscal (Regla Morada, multi-factura)..."
+    "🧾 [FISCAL] Manejando desactivación fiscal (Regla Morada, multi-factura)...",
   );
   if (!Array.isArray(items_desactivados) || items_desactivados.length === 0)
     return;
@@ -629,7 +629,7 @@ async function manejar_reduccion_fiscal(
   items_activos_post_split,
   facturas_reserva,
   id_agente,
-  restanteNum
+  restanteNum,
 ) {
   console.log("🧾 [FISCAL] Manejando reducción fiscal (Down-scale)...");
   if (!Array.isArray(facturas_reserva) || facturas_reserva.length === 0) return;
@@ -638,13 +638,13 @@ async function manejar_reduccion_fiscal(
 
   const [rows] = await connection.execute(
     "SELECT saldo_x_aplicar_items, id_agente, total FROM facturas WHERE id_factura = ?",
-    [factura_principal.id_factura]
+    [factura_principal.id_factura],
   );
 
   if (!rows || rows.length === 0) return;
 
   let monto_liberado_reasignable = parseFloat(
-    rows[0]?.saldo_x_aplicar_items || 0
+    rows[0]?.saldo_x_aplicar_items || 0,
   );
   // const id_agente = rows[0]?.id_agente;
   const total_factura = parseFloat(rows[0]?.total || 0);
@@ -654,7 +654,7 @@ async function manejar_reduccion_fiscal(
     monto_liberado_reasignable > total_factura
   ) {
     console.error(
-      `🧾 [FISCAL][ERROR] Factura ${factura_principal.id_factura} saldo inválido (${monto_liberado_reasignable}) vs total (${total_factura})`
+      `🧾 [FISCAL][ERROR] Factura ${factura_principal.id_factura} saldo inválido (${monto_liberado_reasignable}) vs total (${total_factura})`,
     );
     throw new Error("(revisar la data con finanzas)");
   }
@@ -669,14 +669,14 @@ async function manejar_reduccion_fiscal(
 
       await connection.execute(
         "UPDATE items_facturas SET monto = ? WHERE id_item = ? AND id_factura = ?",
-        [capacidad_fiscal_nueva, item.id_item, factura_principal.id_factura]
+        [capacidad_fiscal_nueva, item.id_item, factura_principal.id_factura],
       );
     }
   }
 
   if (monto_liberado_reasignable > 0) {
     console.log(
-      `🧾 [FISCAL] Generando devolución no facturable por ${monto_liberado_reasignable}`
+      `🧾 [FISCAL] Generando devolución no facturable por ${monto_liberado_reasignable}`,
     );
     await connection.execute(
       `INSERT INTO saldos_a_favor (id_agente, monto, concepto, activo, is_facturable, is_devolucion, monto_facturado, fecha_creacion, fecha_pago) 
@@ -685,22 +685,22 @@ async function manejar_reduccion_fiscal(
         id_agente,
         monto_liberado_reasignable,
         "Devolucion por ajuste de reserva",
-      ]
+      ],
     );
 
     await connection.execute(
       "UPDATE facturas SET saldo_x_aplicar_items = 0 WHERE id_factura = ?",
-      [factura_principal.id_factura]
+      [factura_principal.id_factura],
     );
   }
   console.log(
-    "🧾 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)..."
+    "🧾 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)...",
   );
   console.log("restanteNum:", restanteNum);
 
   if (restanteNum <= 0) {
     console.log(
-      "🧾🔽🔽 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)..."
+      "🧾🔽🔽 [FISCAL] PASO NUEVO, reduccion fiscal por decremento por input facturado (Down-scale)...",
     );
 
     const facturas_ids = Array.isArray(facturas_reserva)
@@ -709,7 +709,7 @@ async function manejar_reduccion_fiscal(
 
     if (facturas_ids.length === 0) {
       console.warn(
-        "🧾 [FISCAL][WARN] facturas_reserva vacío. Omitiendo recalculo."
+        "🧾 [FISCAL][WARN] facturas_reserva vacío. Omitiendo recalculo.",
       );
     } else {
       const ph = facturas_ids.map(() => "?").join(",");
@@ -721,7 +721,7 @@ async function manejar_reduccion_fiscal(
       FROM items_facturas
       WHERE id_factura IN (${ph})
       `,
-        facturas_ids
+        facturas_ids,
       );
 
       const sumaPrev = Number(prevSumRows?.[0]?.suma || 0);
@@ -731,7 +731,7 @@ async function manejar_reduccion_fiscal(
         "🧾 [FISCAL][DEBUG] sumaPrev:",
         sumaPrev,
         "objetivo:",
-        objetivo
+        objetivo,
       );
 
       // 2) update igualitario
@@ -750,11 +750,11 @@ async function manejar_reduccion_fiscal(
 
       const [updateEqualRes] = await connection.execute(
         updateEqualSql,
-        updateEqualParams
+        updateEqualParams,
       );
       console.log(
         "🧾 [FISCAL][DEBUG] Resultado UPDATE igualitario:",
-        updateEqualRes
+        updateEqualRes,
       );
 
       // 3) ajustar centavos
@@ -764,7 +764,7 @@ async function manejar_reduccion_fiscal(
       FROM items_facturas
       WHERE id_factura IN (${ph})
       `,
-        facturas_ids
+        facturas_ids,
       );
 
       const sumaNueva = Number(afterSumRows?.[0]?.suma || 0);
@@ -778,7 +778,7 @@ async function manejar_reduccion_fiscal(
         WHERE id_item = ?
         LIMIT 1
         `,
-          [delta, afterSumRows[0].any_item]
+          [delta, afterSumRows[0].any_item],
         );
         console.log("🔧 [FISCAL] Ajuste de redondeo aplicado:", delta);
       }
@@ -794,10 +794,10 @@ async function actualizar_credito_existente(
   connection,
   id_servicio,
   delta_total,
-  id_agente
+  id_agente,
 ) {
   console.log(
-    `🏦 [CREDITO] Actualizando pagos_credito para ${id_servicio} por delta: ${delta_total}`
+    `🏦 [CREDITO] Actualizando pagos_credito para ${id_servicio} por delta: ${delta_total}`,
   );
 
   const findQuery = `SELECT id_credito FROM pagos_credito WHERE id_servicio = ? ORDER BY created_at DESC LIMIT 1`;
@@ -805,7 +805,7 @@ async function actualizar_credito_existente(
 
   if (!rows || rows.length === 0) {
     console.warn(
-      `🏦 [CREDITO] No se encontró registro en pagos_credito para ${id_servicio}. No se pudo actualizar.`
+      `🏦 [CREDITO] No se encontró registro en pagos_credito para ${id_servicio}. No se pudo actualizar.`,
     );
     return;
   }
@@ -834,19 +834,19 @@ async function actualizar_credito_existente(
   ]);
   console.log(
     "🏦 [CREDITO] Resultado UPDATE pagos_credito:",
-    updateResult?.info || ""
+    updateResult?.info || "",
   );
   if (delta_total < 0 && id_agente) {
     const montoDevolver = Math.abs(delta_total);
     await connection.execute(
       "UPDATE agentes SET saldo = saldo + ? WHERE id_agente = ?",
-      [montoDevolver, id_agente]
+      [montoDevolver, id_agente],
     );
     console.log(
       "🏦 [CREDITO] Devolución de crédito aplicada al agente:",
       montoDevolver,
       "agente:",
-      id_agente
+      id_agente,
     );
   }
 }
@@ -856,10 +856,10 @@ async function crear_nuevo_pago_credito(
   id_servicio,
   delta_total,
   id_agente,
-  id_empresa
+  id_empresa,
 ) {
   console.log(
-    `🏦 [CREDITO] Creando NUEVO pagos_credito para ${id_servicio} por delta: ${delta_total}`
+    `🏦 [CREDITO] Creando NUEVO pagos_credito para ${id_servicio} por delta: ${delta_total}`,
   );
 
   const nuevo_id_credito = `cred-${uuidv4()}`;
@@ -885,14 +885,14 @@ async function crear_nuevo_pago_credito(
   ]);
   console.log(
     "🏦 [CREDITO] Resultado INSERT pagos_credito:",
-    insertResult?.info || ""
+    insertResult?.info || "",
   );
   return nuevo_id_credito;
 }
 
 async function obtener_total_pagado_credito(connection, id_servicio) {
   console.log(
-    `🏦 [CREDITO] Obteniendo total pagado para servicio (crédito) ${id_servicio}`
+    `🏦 [CREDITO] Obteniendo total pagado para servicio (crédito) ${id_servicio}`,
   );
   const query = `
         SELECT SUM(pago_por_credito) as total_pagado 
@@ -901,7 +901,7 @@ async function obtener_total_pagado_credito(connection, id_servicio) {
   const [rows] = await connection.execute(query, [id_servicio]);
   const total_pagado = parseFloat(rows[0]?.total_pagado || 0);
   console.log(
-    `🏦 [CREDITO] Total pagado (crédito) encontrado: ${total_pagado}`
+    `🏦 [CREDITO] Total pagado (crédito) encontrado: ${total_pagado}`,
   );
   return total_pagado;
 }
@@ -941,7 +941,7 @@ async function caso_base_tolerante({
           total,
           subtotal,
           impuestos,
-        })
+        }),
       );
       console.log("🧱 [CASO_BASE] Servicio.update aplicado con total:", total);
     }
@@ -998,11 +998,11 @@ async function caso_base_tolerante({
     if (debeActualizarViajeros && id_hospedaje) {
       const [viajerosActualesRows] = await connection.execute(
         `SELECT id_viajero, is_principal FROM viajeros_hospedajes WHERE id_hospedaje = ?`,
-        [id_hospedaje]
+        [id_hospedaje],
       );
 
       const actuales = new Map(
-        viajerosActualesRows.map((r) => [String(r.id_viajero), r])
+        viajerosActualesRows.map((r) => [String(r.id_viajero), r]),
       );
 
       // principal
@@ -1012,11 +1012,11 @@ async function caso_base_tolerante({
         if (!yaP || String(yaP.id_viajero) !== idP) {
           await connection.execute(
             `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND is_principal = 1`,
-            [id_hospedaje]
+            [id_hospedaje],
           );
           await connection.execute(
             `INSERT INTO viajeros_hospedajes (id_hospedaje, id_viajero, is_principal) VALUES (?, ?, 1)`,
-            [id_hospedaje, idP]
+            [id_hospedaje, idP],
           );
           console.log("🧱 [CASO_BASE] Principal actualizado a:", idP);
         }
@@ -1024,7 +1024,7 @@ async function caso_base_tolerante({
 
       // acompañantes (no principal)
       const nuevosAcomp = new Set(
-        (acompanantes || []).map((a) => String(a.id_viajero)).filter(Boolean)
+        (acompanantes || []).map((a) => String(a.id_viajero)).filter(Boolean),
       );
 
       const paraEliminar = [];
@@ -1037,7 +1037,7 @@ async function caso_base_tolerante({
         const ph = paraEliminar.map(() => "?").join(",");
         await connection.execute(
           `DELETE FROM viajeros_hospedajes WHERE id_hospedaje = ? AND is_principal = 0 AND id_viajero IN (${ph})`,
-          [id_hospedaje, ...paraEliminar]
+          [id_hospedaje, ...paraEliminar],
         );
         console.log("🧱 [CASO_BASE] Acompañantes removidos:", paraEliminar);
       }
@@ -1045,7 +1045,7 @@ async function caso_base_tolerante({
         if (!actuales.has(id)) {
           await connection.execute(
             `INSERT INTO viajeros_hospedajes (id_hospedaje, id_viajero, is_principal) VALUES (?, ?, 0)`,
-            [id_hospedaje, id]
+            [id_hospedaje, id],
           );
           console.log("🧱 [CASO_BASE] Acompañante agregado:", id);
         } else {
@@ -1053,11 +1053,11 @@ async function caso_base_tolerante({
           if (r.is_principal) {
             await connection.execute(
               `UPDATE viajeros_hospedajes SET is_principal = 0 WHERE id_hospedaje = ? AND id_viajero = ?`,
-              [id_hospedaje, id]
+              [id_hospedaje, id],
             );
             console.log(
               "🧱 [CASO_BASE] Acompañante corregido de principal→0:",
-              id
+              id,
             );
           }
         }
@@ -1168,7 +1168,7 @@ const editar_reserva_definitivo = async (req, res) => {
         });
 
         console.log(
-          "✅ [EDITAR_RESERVA] Caso base aplicado sin cambios monetarios."
+          "✅ [EDITAR_RESERVA] Caso base aplicado sin cambios monetarios.",
         );
 
         // NUEVO: Si hay cambio de noches, actualizamos items aunque no haya monetario.
@@ -1194,7 +1194,7 @@ const editar_reserva_definitivo = async (req, res) => {
                 const items_activos_actuales = await Item.findActivos(
                   connection,
                   metadata.id_hospedaje,
-                  "ASC"
+                  "ASC",
                 );
                 const fecha_ultima =
                   items_activos_actuales.length > 0
@@ -1208,7 +1208,7 @@ const editar_reserva_definitivo = async (req, res) => {
                   metadata.id_hospedaje,
                   fecha_ultima,
                   delta_noches_seguro,
-                  0
+                  0,
                 );
 
                 // Asegurar total/saldo 0 en caso de que la función cree valores distintos
@@ -1219,12 +1219,12 @@ const editar_reserva_definitivo = async (req, res) => {
                   const ph = makeInPlaceholders(ids.length);
                   await connection.execute(
                     `UPDATE items SET total = 0, saldo = 0 WHERE id_item IN (${ph})`,
-                    ids
+                    ids,
                   );
                 }
                 console.log(
                   "🧾 [ITEMS] Noches añadidas (no monetario) count:",
-                  items_nuevos.length
+                  items_nuevos.length,
                 );
               } else {
                 // Desactivar noches LIFO (mantener comportamiento existente; no ajuste fiscal aquí)
@@ -1232,24 +1232,24 @@ const editar_reserva_definitivo = async (req, res) => {
                 const items_desactivados = await Item.desactivar_noches_lifo(
                   connection,
                   metadata.id_hospedaje,
-                  cantidad
+                  cantidad,
                 );
                 console.log(
                   "🧾 [ITEMS] Noches desactivadas (no monetario) count:",
-                  items_desactivados.length
+                  items_desactivados.length,
                 );
                 // No se manejan pasos fiscales porque no estamos procesando monetario.
               }
             });
           } else {
             console.log(
-              "🧾 [ITEMS] No hay cambio de noches para procesar en modo no-monetario."
+              "🧾 [ITEMS] No hay cambio de noches para procesar en modo no-monetario.",
             );
           }
         } catch (e) {
           console.error(
             "🧾 [ITEMS][ERROR] Falló actualización de items en modo no-monetario:",
-            e?.message || e
+            e?.message || e,
           );
           // No forzamos rollback del caso_base_tolerante aquí: devolvemos error 500 para visibilidad.
           return res.status(500).json({
@@ -1288,7 +1288,7 @@ const editar_reserva_definitivo = async (req, res) => {
       });
 
       console.log(
-        "🧱 [EDITAR_RESERVA] Caso base aplicado (con/para cambios monetarios)."
+        "🧱 [EDITAR_RESERVA] Caso base aplicado (con/para cambios monetarios).",
       );
 
       // PASO 2: Monetario
@@ -1327,18 +1327,18 @@ const editar_reserva_definitivo = async (req, res) => {
 
         tipo_pago_original = await get_payment_type(
           metadata.id_solicitud,
-          metadata.id_servicio
+          metadata.id_servicio,
         );
 
         estado_fiscal = await is_invoiced_reservation(
           connection,
-          metadata.id_servicio
+          metadata.id_servicio,
         );
         console.log("🧾 [FISCAL] Estado fiscal de la reserva:", estado_fiscal);
 
         saldos_aplicados = Array.isArray(saldos)
           ? saldos.filter(
-              (s) => s.usado === true && parseFloat(s.saldo_usado || 0) > 0
+              (s) => s.usado === true && parseFloat(s.saldo_usado || 0) > 0,
             )
           : [];
 
@@ -1357,13 +1357,13 @@ const editar_reserva_definitivo = async (req, res) => {
           "restanteNum:",
           restanteNum,
           "monto_restante_a_credito:",
-          monto_restante_a_credito
+          monto_restante_a_credito,
         );
 
         let items_activos_originales = await Item.findActivos(
           connection,
           metadata.id_hospedaje,
-          "ASC"
+          "ASC",
         );
 
         let items_nuevos = [];
@@ -1381,14 +1381,14 @@ const editar_reserva_definitivo = async (req, res) => {
             connection,
             metadata.id_servicio,
             delta_precio_venta,
-            metadata.id_agente
+            metadata.id_agente,
           );
 
           // 1.2 Refrescamos items activos actuales (antes de aplicar split)
           items_activos_actuales = await Item.findActivos(
             connection,
             metadata.id_hospedaje,
-            "ASC"
+            "ASC",
           );
         } else {
           // Caso normal (no crédito decremental): partimos de los items originales
@@ -1412,27 +1412,27 @@ const editar_reserva_definitivo = async (req, res) => {
               metadata.id_hospedaje,
               fecha_ultima,
               delta_noches_seguro,
-              precio_noche_std
+              precio_noche_std,
             );
             console.log(
               "🧾 [ITEMS] Nuevas noches creadas:",
-              items_nuevos.length
+              items_nuevos.length,
             );
           } else if (delta_noches_seguro < 0) {
             const items_desactivados = await Item.desactivar_noches_lifo(
               connection,
               metadata.id_hospedaje,
-              Math.abs(delta_noches_seguro)
+              Math.abs(delta_noches_seguro),
             );
             console.log(
               "🧾 [ITEMS] Noches desactivadas (LIFO):",
-              items_desactivados.length
+              items_desactivados.length,
             );
             if (estado_fiscal.es_facturada && items_desactivados.length > 0) {
               await manejar_desactivacion_fiscal(
                 connection,
                 items_desactivados,
-                estado_fiscal.facturas
+                estado_fiscal.facturas,
               );
             }
           }
@@ -1441,7 +1441,7 @@ const editar_reserva_definitivo = async (req, res) => {
           items_activos_actuales = await Item.findActivos(
             connection,
             metadata.id_hospedaje,
-            "ASC"
+            "ASC",
           );
         }
 
@@ -1458,17 +1458,17 @@ const editar_reserva_definitivo = async (req, res) => {
               connection,
               metadata.id_hospedaje,
               delta_residual,
-              TASA_IVA_DECIMAL
+              TASA_IVA_DECIMAL,
             );
             console.log(
               "🧾 [ITEMS] Item de ajuste creado por delta residual:",
               delta_residual,
               "id_item:",
-              item_ajuste?.id_item
+              item_ajuste?.id_item,
             );
           } else {
             console.log(
-              "🧾 [ITEMS] Delta cubierto por noches nuevas; no se crea item de ajuste."
+              "🧾 [ITEMS] Delta cubierto por noches nuevas; no se crea item de ajuste.",
             );
           }
         } else if (delta_precio_venta < 0) {
@@ -1476,11 +1476,11 @@ const editar_reserva_definitivo = async (req, res) => {
             connection,
             items_activos_actuales,
             nuevo_total_venta,
-            TASA_IVA_DECIMAL
+            TASA_IVA_DECIMAL,
           );
           console.log(
             "🧾 [ITEMS] Split de precio aplicado ->",
-            nuevo_total_venta
+            nuevo_total_venta,
           );
           if (estado_fiscal.es_facturada) {
             await manejar_reduccion_fiscal(
@@ -1488,7 +1488,7 @@ const editar_reserva_definitivo = async (req, res) => {
               items_activos_actuales,
               estado_fiscal.facturas,
               metadata.id_agente,
-              restanteNum
+              restanteNum,
             );
           }
         } else if (delta_precio_venta === 0 && cambian_noches) {
@@ -1496,10 +1496,10 @@ const editar_reserva_definitivo = async (req, res) => {
             connection,
             items_activos_actuales,
             nuevo_total_venta,
-            TASA_IVA_DECIMAL
+            TASA_IVA_DECIMAL,
           );
           console.log(
-            "🧾 [ITEMS] Split de precio por cambio de noches con delta_precio_venta=0."
+            "🧾 [ITEMS] Split de precio por cambio de noches con delta_precio_venta=0.",
           );
         }
       }
@@ -1523,7 +1523,7 @@ const editar_reserva_definitivo = async (req, res) => {
           // 🛠 FIX REAL DE ESPACIO FISCAL DISPONIBLE
           // ================================================
           const facturas_disponibles_final = Array.isArray(
-            estado_fiscal?.facturas
+            estado_fiscal?.facturas,
           )
             ? estado_fiscal.facturas.map((f) => {
                 const total = Number(f.total || 0);
@@ -1541,18 +1541,18 @@ const editar_reserva_definitivo = async (req, res) => {
 
           console.log(
             "🧾[FISCAL][FIX] facturas_disponibles_final =",
-            facturas_disponibles_final
+            facturas_disponibles_final,
           );
 
           // Calcular total de espacio REAL disponible
           const totalSaldoDisponible = facturas_disponibles_final.reduce(
             (acc, f) => acc + Number(f.saldo_interpretado_para_items || 0),
-            0
+            0,
           );
 
           console.log(
             "🧾[FISCAL][FIX] totalSaldoDisponible (REAL) =",
-            totalSaldoDisponible
+            totalSaldoDisponible,
           );
 
           // ================================================
@@ -1560,7 +1560,7 @@ const editar_reserva_definitivo = async (req, res) => {
           // ================================================
           if (totalSaldoDisponible <= 0.009) {
             console.warn(
-              "🧾[FISCAL][FIX] 0 de espacio fiscal → NO se asociará el incremento a facturas."
+              "🧾[FISCAL][FIX] 0 de espacio fiscal → NO se asociará el incremento a facturas.",
             );
             facturas_disponibles_final.length = 0;
           }
@@ -1570,7 +1570,7 @@ const editar_reserva_definitivo = async (req, res) => {
           // ================================================
           if (facturas_disponibles_final.length === 0) {
             console.warn(
-              "🧾[FISCAL] No hay facturas disponibles (después del FIX). Se omite herencia fiscal."
+              "🧾[FISCAL] No hay facturas disponibles (después del FIX). Se omite herencia fiscal.",
             );
           } else {
             console.log(
@@ -1578,21 +1578,21 @@ const editar_reserva_definitivo = async (req, res) => {
               items_para_fiscal.map((i) => i.id_item),
               "con facturas:",
               facturas_disponibles_final.map(
-                (f) => `${f.id_factura}:${f.saldo_interpretado_para_items}`
-              )
+                (f) => `${f.id_factura}:${f.saldo_interpretado_para_items}`,
+              ),
             );
 
             await asociar_factura_items_logica(
               connection,
               metadata.id_hospedaje,
               items_para_fiscal,
-              facturas_disponibles_final
+              facturas_disponibles_final,
             );
 
             console.log(
               "🧾[FISCAL] Herencia fiscal completada para",
               items_para_fiscal.length,
-              "items."
+              "items.",
             );
           }
         } else {
@@ -1602,13 +1602,13 @@ const editar_reserva_definitivo = async (req, res) => {
               hayReservaFacturada,
               haySaldosFacturados,
               items_para_fiscal: items_para_fiscal.length,
-            }
+            },
           );
         }
       } catch (e) {
         console.error(
           "🧾[FISCAL][ERROR] Falló herencia fiscal:",
-          e?.message || e
+          e?.message || e,
         );
         throw e; // rollback
       }
@@ -1638,7 +1638,7 @@ const editar_reserva_definitivo = async (req, res) => {
           "💳 [PAGOS] Items a pagar (ajuste+nuevos):",
           items_a_pagar.length,
           "monto_total_a_cubrir:",
-          monto_total_a_cubrir
+          monto_total_a_cubrir,
         );
 
         // 2.1 WALLET -> split a items_pagos
@@ -1657,7 +1657,7 @@ const editar_reserva_definitivo = async (req, res) => {
 
           let restanteWallet = Math.min(
             walletDisponible,
-            monto_total_a_cubrir || walletDisponible
+            monto_total_a_cubrir || walletDisponible,
           );
           const asociacionesWallet = [];
 
@@ -1665,7 +1665,7 @@ const editar_reserva_definitivo = async (req, res) => {
             if (restanteWallet <= 0) break;
             let asignar = Math.min(
               Number(it.total || 0),
-              Number(restanteWallet || 0)
+              Number(restanteWallet || 0),
             );
             asignar = Number(asignar.toFixed(2));
             if (asignar > 0.009) {
@@ -1680,9 +1680,9 @@ const editar_reserva_definitivo = async (req, res) => {
             (
               Math.min(
                 walletDisponible,
-                monto_total_a_cubrir || walletDisponible
+                monto_total_a_cubrir || walletDisponible,
               ) - Math.max(restanteWallet, 0)
-            ).toFixed(2)
+            ).toFixed(2),
           );
 
           if (asociacionesWallet.length > 0 && cubiertoWallet > 0.009) {
@@ -1692,7 +1692,7 @@ const editar_reserva_definitivo = async (req, res) => {
               metadata.id_servicio,
               metadata.id_agente,
               cubiertoWallet, // 👈 usa el cubierto real, no "monto_total"
-              saldos_aplicados
+              saldos_aplicados,
             );
 
             if (id_pago_wallet) {
@@ -1708,13 +1708,13 @@ const editar_reserva_definitivo = async (req, res) => {
                 connection,
                 metadata.id_hospedaje,
                 id_pago_wallet,
-                asociacionesWallet
+                asociacionesWallet,
               );
               console.log(
                 "💳 [PAGOS] asociacionesWallet:",
                 asociacionesWalletConPago.length,
                 "id_pago:",
-                id_pago_wallet
+                id_pago_wallet,
               );
 
               // 3) Rebaja SÓLO lo realmente usado en wallet (distribución simple en orden)
@@ -1737,7 +1737,7 @@ const editar_reserva_definitivo = async (req, res) => {
                     saldo_usado: Number(usa.toFixed(2)),
                   });
                   restantePorRebajar = Number(
-                    (restantePorRebajar - usa).toFixed(2)
+                    (restantePorRebajar - usa).toFixed(2),
                   );
                 }
               }
@@ -1746,12 +1746,12 @@ const editar_reserva_definitivo = async (req, res) => {
                 await rebajar_wallet_saldos(connection, saldos_para_rebajar);
                 console.log(
                   "💳 [WALLET] Rebaja aplicada:",
-                  saldos_para_rebajar
+                  saldos_para_rebajar,
                 );
               }
             } else {
               console.warn(
-                "💳 [WALLET] No se pudo crear el pago desde wallet (id_pago_wallet nulo)."
+                "💳 [WALLET] No se pudo crear el pago desde wallet (id_pago_wallet nulo).",
               );
             }
           }
@@ -1764,7 +1764,7 @@ const editar_reserva_definitivo = async (req, res) => {
               "💳 [PAGOS] Wallet cubrió:",
               cubiertoWallet,
               "pendiente por cubrir:",
-              monto_total_a_cubrir
+              monto_total_a_cubrir,
             );
           }
         }
@@ -1776,24 +1776,24 @@ const editar_reserva_definitivo = async (req, res) => {
         ) {
           const aplicarCredito = Math.min(
             monto_total_a_cubrir,
-            monto_restante_a_credito
+            monto_restante_a_credito,
           );
           await crear_nuevo_pago_credito(
             connection,
             metadata.id_servicio,
             aplicarCredito,
             metadata.id_agente,
-            metadata.id_empresa
+            metadata.id_empresa,
           );
           await connection.execute(
             "UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?",
-            [aplicarCredito, metadata.id_agente]
+            [aplicarCredito, metadata.id_agente],
           );
           console.log(
             "🏦 [CREDITO] Aplicado a servicio:",
             aplicarCredito,
             "agente:",
-            metadata.id_agente
+            metadata.id_agente,
           );
         }
       }
@@ -1801,8 +1801,11 @@ const editar_reserva_definitivo = async (req, res) => {
       // 2.3 Devoluciones por ajuste negativo (restante < 0)
       console.log(
         "🔄 [DEVOLUCION] Checando devolución por ajuste negativo...",
-        { cambia_precio_de_venta, delta_precio_venta, restanteNum }
+        { cambia_precio_de_venta, delta_precio_venta, restanteNum },
       );
+
+      //DEVOLUCIÓN DE SALDO
+      // === BLOQUE CORREGIDO: DEVOLUCIÓN DE SALDO (MANEJO DE SALDO EXISTENTE Y FACTURACIÓN) ===
       if (
         cambia_precio_de_venta &&
         delta_precio_venta < 0 &&
@@ -1810,137 +1813,117 @@ const editar_reserva_definitivo = async (req, res) => {
         restanteNum <= 0
       ) {
         const monto_devolucion = Math.abs(restanteNum);
-        const concepto = `Devolucion por ajuste de reserva en ${
-          metadata.hotel_reserva ?? ""
-        }`;
+        const concepto = `Devolucion por ajuste de reserva en ${metadata.hotel_reserva ?? ""}`;
 
         if (!metadata?.id_agente) {
           console.warn(
-            "🔄 [DEVOLUCION] No hay id_agente en metadata; no se inserta saldo_a_favor de devolución."
+            "🔄 [DEVOLUCION] No hay id_agente en metadata; se omite devolución.",
+          );
+        } else if (tipo_pago_original === "credito") {
+          console.log(
+            "🔄 [DEVOLUCION] Reserva a crédito: se omite devolución de saldo.",
           );
         } else {
-          // Si es crédito, NO hacemos devolución basada en pagos/items_pagos
-          if (tipo_pago_original === "credito") {
-            console.log(
-              "🔄 [DEVOLUCION] Reserva a crédito: se omite devolución basada en pagos/items_pagos."
-            );
-          } else {
-            // Intentar localizar un pago original solo para métodos no-crédito
-            const [rows_pago] = await connection.execute(
-              `SELECT id_pago, total FROM pagos WHERE id_servicio = ? ORDER BY fecha_creacion ASC LIMIT 1`,
-              [metadata.id_servicio]
-            );
+          // 1. Buscamos el pago y verificamos si ya tiene un saldo asociado y si está facturado
+          const [rows_pago] = await connection.execute(
+            `SELECT id_pago, id_saldo_a_favor, is_facturado, total, saldo_aplicado 
+       FROM pagos WHERE id_servicio = ? ORDER BY fecha_creacion ASC LIMIT 1`,
+            [metadata.id_servicio],
+          );
 
-            if (!rows_pago || rows_pago.length === 0) {
-              console.warn(
-                "🔄 [DEVOLUCION] No se encontró el pago original; se omite devolución basada en pagos."
+          if (rows_pago.length > 0) {
+            const pago = rows_pago[0];
+            const id_pago_original = pago.id_pago;
+
+            if (pago.id_saldo_a_favor) {
+              // --- ESCENARIO B: REINTEGRAR A SALDO EXISTENTE ---
+              console.log(
+                "🔄 [DEVOLUCION] El pago ya tiene saldo asociado. Reintegrando...",
+              );
+              await connection.execute(
+                `UPDATE saldos_a_favor 
+           SET saldo = saldo + ?, updated_at = NOW(), activo = 1 
+           WHERE id_saldos = ?`,
+                [monto_devolucion, pago.id_saldo_a_favor],
+              );
+
+              await connection.execute(
+                `UPDATE pagos 
+           SET saldo_aplicado = GREATEST(0, COALESCE(saldo_aplicado, 0) - ?),
+               estado = IF(COALESCE(saldo_aplicado, 0) - ? <= 0, 'Devuelto', estado)
+           WHERE id_pago = ?`,
+                [monto_devolucion, monto_devolucion, id_pago_original],
               );
             } else {
-              const id_pago_original = rows_pago[0].id_pago;
-              const total_pago_original = parseFloat(rows_pago[0].total || 0);
+              // --- ESCENARIO A: CREAR NUEVO SALDO A FAVOR (PAGO DIRECTO) ---
+              console.log(
+                "🔄 [DEVOLUCION] Creando nuevo saldo a favor y vinculando facturación...",
+              );
 
-              // Crear saldo a favor (no facturable) por el monto de devolución
-              const [data /*, field*/] = await connection.execute(
-                `INSERT INTO saldos_a_favor (id_agente, monto, saldo, concepto, activo, is_facturable, is_devolucion, monto_facturado, fecha_creacion, fecha_pago) 
-                   VALUES (?, ?, ?, ?, 1, 0, 1, 0, NOW(), NOW())`,
+              const [resultSaldo] = await connection.execute(
+                `INSERT INTO saldos_a_favor (
+            id_agente, monto, saldo, concepto, activo, is_facturable, 
+            is_devolucion, is_facturado, monto_facturado, fecha_creacion, fecha_pago
+          ) VALUES (?, ?, ?, ?, 1, 0, 1, ?, 0, NOW(), NOW())`,
                 [
                   metadata.id_agente,
-                  total_pago_original,
-                  monto_devolucion,
+                  pago.total, // El monto total del pago original
+                  monto_devolucion, // Lo que realmente se devuelve como saldo disponible
                   concepto,
-                ]
+                  pago.is_facturado, // Heredamos si el pago ya estaba facturado
+                ],
               );
 
-              // Ligar el saldo_a_favor al pago y registrar el monto aplicado
+              const newIdSaldo = resultSaldo.insertId;
+
+              // Actualizar el pago con el nuevo saldo
               await connection.execute(
-                `UPDATE pagos SET id_saldo_a_favor = ?, saldo_aplicado = ? WHERE id_pago = ?`,
-                [data.insertId, monto_devolucion, id_pago_original]
+                `UPDATE pagos 
+           SET id_saldo_a_favor = ?, saldo_aplicado = ?, estado = 'Devuelto' 
+           WHERE id_pago = ?`,
+                [newIdSaldo, monto_devolucion, id_pago_original],
               );
 
-              // Reparto igualitario de items_pagos al total objetivo = venta.current.total (redondeado a 2)
-              const objetivoPagoDeseado = Number(
-                Formato.number(venta?.current?.total)
+              // VINCULACIÓN DE FACTURACIÓN: Si el pago estaba en una factura, asociamos el saldo
+              await connection.execute(
+                `UPDATE facturas_pagos_y_saldos 
+           SET id_saldo_a_favor = ?, updated_at = NOW() 
+           WHERE id_pago = ?`,
+                [newIdSaldo, id_pago_original],
               );
+            }
 
-              // (Opcional/seguro) No sobrepasar el total del propio pago:
-              const [pagoRow] = await connection.execute(
-                `SELECT total FROM pagos WHERE id_pago = ? LIMIT 1`,
-                [id_pago_original]
+            // --- AJUSTE DE ITEMS_PAGOS (Reparto igualitario) ---
+            // Mantenemos tu lógica de redondeo para que los items sumen el nuevo total de venta
+            const objetivoPago = Number(Formato.number(venta?.current?.total));
+
+            await connection.execute(
+              `UPDATE items_pagos ip
+         JOIN (SELECT id_pago, COUNT(*) AS n FROM items_pagos WHERE id_pago = ?) t ON t.id_pago = ip.id_pago
+         SET ip.monto = ROUND(? / NULLIF(t.n, 0), 2)
+         WHERE ip.id_pago = ?`,
+              [id_pago_original, objetivoPago, id_pago_original],
+            );
+
+            // Ajuste de centavos final
+            const [sumRows] = await connection.execute(
+              `SELECT COALESCE(SUM(monto), 0) AS suma, MIN(id_item) AS any_item 
+         FROM items_pagos WHERE id_pago = ?`,
+              [id_pago_original],
+            );
+            const delta = Number((objetivoPago - sumRows[0].suma).toFixed(2));
+            if (Math.abs(delta) >= 0.01 && sumRows[0].any_item) {
+              await connection.execute(
+                `UPDATE items_pagos SET monto = monto + ? WHERE id_item = ?`,
+                [delta, sumRows[0].any_item],
               );
-              const totalPago = Number(pagoRow?.[0]?.total || 0);
-              // Si no quieres esta cota, usa directamente "objetivoPagoDeseado".
-              const objetivoPago = Math.min(objetivoPagoDeseado, totalPago);
-
-              // Reparto igualitario con 2 decimales
-              const updateEqualSql = `
-                  UPDATE items_pagos ip
-                  JOIN (
-                    SELECT id_pago, COUNT(*) AS n
-                    FROM items_pagos
-                    WHERE id_pago = ?
-                  ) t ON t.id_pago = ip.id_pago
-                  SET ip.monto = ROUND(? / NULLIF(t.n, 0), 2)
-                  WHERE ip.id_pago = ?;
-                `;
-              const updateEqualParams = [
-                id_pago_original,
-                objetivoPago,
-                id_pago_original,
-              ];
-
-              console.log(
-                "🔄 [DEVOLUCION][DEBUG] UPDATE igualitario (ROUND) a ejecutar:",
-                updateEqualSql.trim()
-              );
-              console.log(
-                "🔄 [DEVOLUCION][DEBUG] UPDATE igualitario (ROUND) params:",
-                updateEqualParams
-              );
-
-              const [updateEqualResult] = await connection.execute(
-                updateEqualSql,
-                updateEqualParams
-              );
-              console.log(
-                "🔄 [DEVOLUCION][DEBUG] Resultado UPDATE igualitario (ROUND):",
-                updateEqualResult
-              );
-
-              // Ajuste de centavos para que la suma == objetivoPago
-              const [sumRows2] = await connection.execute(
-                `
-                  SELECT 
-                    COALESCE(SUM(monto), 0) AS suma,
-                    MIN(id_item) AS any_item
-                  FROM items_pagos
-                  WHERE id_pago = ?
-                  `,
-                [id_pago_original]
-              );
-
-              const sumaActual = Number(sumRows2?.[0]?.suma || 0);
-              const delta = Number((objetivoPago - sumaActual).toFixed(2));
-
-              if (Math.abs(delta) >= 0.01 && sumRows2?.[0]?.any_item) {
-                await connection.execute(
-                  `UPDATE items_pagos 
-                     SET monto = ROUND(monto + ?, 2) 
-                     WHERE id_pago = ? AND id_item = ? 
-                     LIMIT 1`,
-                  [delta, id_pago_original, sumRows2[0].any_item]
-                );
-                console.log(
-                  "🔧 [DEVOLUCION] Ajuste de redondeo items_pagos aplicado:",
-                  delta
-                );
-              }
             }
           }
         }
       }
 
       console.log(
-        "🧾 [TX] --- FIN PASO 2: TRANSACCION MONETARIA COMPLETA (COMMIT) ---"
+        "🧾 [TX] --- FIN PASO 2: TRANSACCION MONETARIA COMPLETA (COMMIT) ---",
       );
 
       // console.log("✅ [EDITAR_RESERVA] Reserva actualizada exitosamente.");
@@ -1952,7 +1935,7 @@ const editar_reserva_definitivo = async (req, res) => {
   } catch (error) {
     console.error(
       "💥 [EDITAR_RESERVA][ERROR] Capturado en el controlador:",
-      error
+      error,
     );
 
     // Manejo específico de errores
@@ -2003,7 +1986,7 @@ const cancelarBooking = async (req, res) => {
     try {
       conn.execute(
         `UPDATE bookings SET estado = "Cancelada" WHERE id_booking = ?`,
-        [id_booking]
+        [id_booking],
       );
     } catch (error) {
       throw error;
