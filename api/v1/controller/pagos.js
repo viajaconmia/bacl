@@ -1964,7 +1964,7 @@ const getAllPagosPrepagoFacturasPendientes = async (req, res) => {
   try {
     const pagos = await executeQuery(
       `SELECT *
-FROM vw_pagos_prepago_facturables WHERE is_facturado = 0;;`
+FROM vw_pagos_prepago_facturables WHERE is_facturado = 0;`
     );
     const balance = await executeQuery(
       `SELECT * FROM vw_balance_pagos_facturas;`
