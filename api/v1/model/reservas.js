@@ -1241,7 +1241,7 @@ const getReservaAllFacturacion = async () => {
     v.updated_at,
     v.costo_total,
     v.id_hospedaje,
-    v.comments,
+    v.comments, 
     v.codigo_reservacion_hotel,
     v.id_pago,
     v.id_credito,

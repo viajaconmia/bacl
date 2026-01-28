@@ -28,75 +28,280 @@ const toNullableNumber = (value) => {
 const createSolicitud = async (req, res) => {
   try {
     const { solicitud } = req.body;
+
     const {
       monto_a_pagar,
       paymentMethod,
-      paymentStatus, // Recibido del frontend
+      paymentStatus,
       comments,
+      comments_cxp,
       date,
       paymentType,
       selectedCard,
       id_hospedaje,
+      usuario_creador,
+      paymentSchedule = [],
+      moneda, // opcional si lo mandas después
     } = solicitud;
 
     console.log("📥 Datos recibidos:", solicitud);
 
-    if (paymentType !== "credit") {
-      const estado_pago = paymentStatus;
+    const schedule =
+      Array.isArray(paymentSchedule) && paymentSchedule.length > 0
+        ? paymentSchedule
+        : [{ fecha_pago: date, monto: monto_a_pagar }];
 
-      if (paymentMethod === "transfer") {
-        const parametros = [
-          monto_a_pagar,
-          "transfer",
-          null,
-          "Operaciones",
-          "Operaciones",
-          comments,
-          id_hospedaje,
-          date,
-          estado_pago, // Usamos el valor mapeado
-        ];
+    if (paymentType === "credit") {
+      return res.status(400).json({
+        ok: false,
+        message: "Este endpoint no está manejando credit todavía.",
+      });
+    }
 
-        response = await executeSP(
-          STORED_PROCEDURE.POST.SOLICITUD_PAGO_PROVEEDOR,
-          parametros
-        );
-      } else if (paymentMethod === "card" || paymentMethod === "link") {
-        const parametros = [
-          monto_a_pagar,
-          paymentMethod,
-          selectedCard,
-          "Operaciones",
-          "Operaciones",
-          comments,
-          id_hospedaje,
-          date,
-          estado_pago, // Usamos el valor mapeado
-        ];
-        console.log("parametrossss", parametros);
-        response = await executeSP(
-          STORED_PROCEDURE.POST.SOLICITUD_PAGO_PROVEEDOR,
-          parametros
-        );
+    // ✅ Mapeo estado_solicitud (ENUM de solicitudes_pago_proveedor)
+    const mapEstadoSolicitud = (status) => {
+      const s = String(status || "").trim().toLowerCase();
+      if (s === "spei_solicitado") return "transferencia solicitada";
+      if (s === "enviada_para_cobro") return "enviada a cobro";
+      if (s === "pago_tdc") return "solicitud pago tdc";
+      if (s === "cupon_enviado") return "cupon enviado";
+      if (s === "pagada") return "pagada";
+      return "pendiente";
+    };
+
+    // ✅ Mapeo estatus_pagos (ENUM: enviado_a_pago / pagado / cancelado)
+    const mapEstatusPagos = (estadoSolicitud) => {
+      const s = String(estadoSolicitud || "").trim().toLowerCase();
+      if (s === "pagada") return "pagado";
+      return "enviado_a_pago";
+    };
+
+    const estado_solicitud_db = mapEstadoSolicitud(paymentStatus);
+    const estatus_pagos_db = mapEstatusPagos(estado_solicitud_db);
+
+    // forma_pago_solicitada en tu SP admite: credit/transfer/card/link
+    const formaPagoDB = paymentMethod;
+
+    // -----------------------------
+    // ✅ VALIDACIÓN DEL SCHEDULE
+    // (solo card/link tienen N pagos)
+    // -----------------------------
+    if (paymentMethod === "card" || paymentMethod === "link") {
+      if (!Array.isArray(schedule) || schedule.length === 0) {
+        return res.status(400).json({
+          ok: false,
+          message: "paymentSchedule es requerido para card/link.",
+        });
+      }
+
+      for (const item of schedule) {
+        const fecha_pago = item?.fecha_pago;
+        const monto = Number(item?.monto);
+        if (!fecha_pago || !Number.isFinite(monto) || monto <= 0) {
+          return res.status(400).json({
+            ok: false,
+            message:
+              "paymentSchedule inválido. Cada item debe tener fecha_pago y monto > 0.",
+            item,
+          });
+        }
+      }
+
+      const sum = schedule.reduce((acc, it) => acc + Number(it.monto || 0), 0);
+      if (Math.abs(Number(sum) - Number(monto_a_pagar)) > 0.01) {
+        return res.status(400).json({
+          ok: false,
+          message: `La suma del paymentSchedule (${Number(sum).toFixed(
+            2
+          )}) debe ser igual a monto_a_pagar (${Number(monto_a_pagar).toFixed(
+            2
+          )}).`,
+        });
       }
     }
 
-    res.status(200).json({
-      message: "Solicitud procesada con éxito",
+    // -----------------------------
+    // ✅ CREAR SOLICITUD SOLO 1 VEZ
+    // -----------------------------
+    if ((paymentMethod === "card" || paymentMethod === "link") && !selectedCard) {
+      return res.status(400).json({
+        ok: false,
+        message: "Falta selectedCard para card/link.",
+      });
+    }
+
+    if (!id_hospedaje) {
+      return res.status(400).json({
+        ok: false,
+        message: "Falta id_hospedaje.",
+      });
+    }
+
+    // Para card/link guarda la 1a fecha del schedule; para transfer usa date
+    const fechaSolicitud =
+      paymentMethod === "card" || paymentMethod === "link"
+        ? schedule?.[0]?.fecha_pago || date
+        : date;
+
+    const parametrosSP = [
+      Number(monto_a_pagar), // p_monto_solicitado (TOTAL)
+      formaPagoDB, // p_forma_pago_solicitada
+      formaPagoDB === "transfer" ? null : selectedCard, // p_id_tarjeta_solicitada
+      "Operaciones", // p_usuario_solicitante (ajusta si tienes session user)
+      "Operaciones", // p_usuario_generador
+      comments || "", // p_comentarios
+      comments_cxp || "", // p_comentario_cxp
+      usuario_creador || null, // p_id_creador
+      id_hospedaje, // p_id_hospedaje
+      fechaSolicitud, // p_fecha
+      estado_solicitud_db, // p_estado_solicitud
+      estatus_pagos_db, // p_estatus_pagos
+    ];
+
+    const spResp = await executeSP(
+      STORED_PROCEDURE.POST.SOLICITUD_PAGO_PROVEEDOR,
+      parametrosSP
+    );
+
+    // ⚠️ Ajusta a tu estructura real de retorno
+    const idSolicitudProveedor =
+      spResp?.[0]?.[0]?.id_solicitud_proveedor ??
+      spResp?.[0]?.id_solicitud_proveedor ??
+      spResp?.id_solicitud_proveedor ??
+      null;
+
+    if (!idSolicitudProveedor) {
+      return res.status(500).json({
+        ok: false,
+        error: "No se pudo obtener id_solicitud_proveedor del SP",
+        details: spResp,
+      });
+    }
+
+    // -----------------------------
+    // ✅ INSERT en pago_proveedores (N filas) SOLO card/link
+    //     -> en UN SOLO INSERT multi-row (sin SELECT para empatar)
+    // -----------------------------
+    let pagosInsertados = [];
+    let idsPagos = [];
+
+    if (paymentMethod === "card" || paymentMethod === "link") {
+      const monedaDB = (String(moneda || "").trim().toUpperCase() || "MXN");
+      const userCreated = String(usuario_creador || "Operaciones");
+      const descripcion =
+        paymentMethod === "card"
+          ? "Pago generado con tarjeta"
+          : "Pago generado con link";
+
+      const placeholders = schedule.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+
+      const insertPagosSql = `
+        INSERT INTO pago_proveedores
+          (id_solicitud_proveedor, monto_pagado, fecha_pago, metodo_de_pago, user_created, moneda, monto, descripcion, total)
+        VALUES
+          ${placeholders};
+      `;
+
+      const params = [];
+      for (const item of schedule) {
+        const fecha_pago = String(item.fecha_pago);
+        const montoFila = Number(item.monto);
+
+        // TIMESTAMP (si tu columna es timestamp): manda YYYY-MM-DD 00:00:00
+        const ts = `${fecha_pago} 00:00:00`;
+
+        params.push(
+          Number(idSolicitudProveedor), // id_solicitud_proveedor
+          montoFila,                    // monto_pagado (fila)
+          ts,                           // fecha_pago
+          paymentMethod,                // metodo_de_pago
+          userCreated,                  // user_created
+          monedaDB,                     // moneda (default MXN)
+          Number(monto_a_pagar),        // monto (TOTAL original, ej 720)
+          descripcion,                  // descripcion
+          montoFila                     // total (monto asignado en esa fila)
+        );
+      }
+
+      const insertResult = await executeQuery(insertPagosSql, params);
+
+      const firstId =
+        insertResult?.insertId ?? insertResult?.[0]?.insertId ?? null;
+      const affected =
+        insertResult?.affectedRows ?? insertResult?.[0]?.affectedRows ?? 0;
+
+      if (!firstId || affected !== schedule.length) {
+        return res.status(500).json({
+          ok: false,
+          error: "No se pudieron insertar todos los pagos en pago_proveedores",
+          details: {
+            firstId,
+            affected,
+            esperado: schedule.length,
+            insertResult,
+          },
+        });
+      }
+
+      idsPagos = Array.from({ length: affected }, (_, i) => Number(firstId) + i);
+
+      // Construimos respuesta amigable
+      pagosInsertados = schedule.map((it, i) => ({
+        id_pago_proveedores: idsPagos[i],
+        fecha_pago: it.fecha_pago,
+        monto: Number(it.monto),
+      }));
+
+      // -----------------------------
+      // ✅ INSERT también en pagos_facturas_proveedores (N filas)
+      // columnas: id_pago_proveedor, id_solicitud, id_factura, monto_facturado, monto_pago
+      // -----------------------------
+      const placeholders2 = schedule.map(() => "(?, ?, ?, ?, ?)").join(", ");
+      const insertPFPsql = `
+        INSERT INTO pagos_facturas_proveedores
+          (id_pago_proveedor, id_solicitud, id_factura, monto_facturado, monto_pago)
+        VALUES
+          ${placeholders2};
+      `;
+
+      const params2 = [];
+      for (let i = 0; i < schedule.length; i++) {
+        params2.push(
+          idsPagos[i],                 // id_pago_proveedor (FK al pago)
+          Number(idSolicitudProveedor),// id_solicitud (tu id_solicitud_proveedor)
+          null,                        // id_factura (por ahora null)
+          null,                        // monto_facturado (por ahora null)
+          Number(schedule[i].monto)    // monto_pago
+        );
+      }
+
+      await executeQuery(insertPFPsql, params2);
+    }
+
+    return res.status(200).json({
       ok: true,
-      data: solicitud,
+      message: "Solicitud creada y pagos registrados con éxito",
+      id_solicitud_proveedor: Number(idSolicitudProveedor),
+      pagos_creados: pagosInsertados.length,
+      pagos: pagosInsertados,
+      sp: spResp,
     });
   } catch (error) {
     console.error("❌ Error:", error);
-    if (error.message == "El hospedaje que tratas de agregar ya existe") {
+
+    if (error.message === "El hospedaje que tratas de agregar ya existe") {
       return res.status(200).json({
-        message: "La reserva ya fue guardada, se estan creando mas",
-        details: { message: "se estan generando mas, pero puedes continuar" },
+        ok: true,
+        message: "La reserva ya fue guardada, puedes continuar",
+        details: { message: "ya existía, pero se procesó el flujo" },
       });
     }
-    res
-      .status(500)
-      .json({ error: "Internal Server Error", details: error.message });
+
+    return res.status(500).json({
+      ok: false,
+      error: "Internal Server Error",
+      details: error.message,
+    });
   }
 };
 
@@ -830,7 +1035,7 @@ function generarCodigoDispersion() {
 const getSolicitudes = async (req, res) => {
   try {
     const spRows = await executeSP(
-      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR 
+      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR
     );
 
     const ids = spRows
@@ -840,35 +1045,8 @@ const getSolicitudes = async (req, res) => {
     let pagosRaw = [];
 
     if (ids.length > 0) {
-      const placeholders = ids.map(() => "?").join(",");
-
-      // pagosRaw = await executeQuery(
-      //   `SELECT
-      //      ps.*,
-      //      pp.id_pago_proveedor       AS pago_id_pago_proveedor,
-      //      pp.monto_pagado            AS pago_monto_pagado,
-      //      pp.forma_pago_ejecutada    AS pago_forma_pago_ejecutada,
-      //      pp.id_tarjeta_pagada       AS pago_id_tarjeta_pagada,
-      //      pp.id_cuenta_bancaria      AS pago_id_cuenta_bancaria,
-      //      pp.url_comprobante_pago    AS pago_url_comprobante_pago,
-      //      pp.fecha_pago              AS pago_fecha_pago,
-      //      pp.fecha_transaccion_tesoreria AS pago_fecha_transaccion_tesoreria,
-      //      pp.usuario_tesoreria_pago  AS pago_usuario_tesoreria_pago,
-      //      pp.comentarios_tesoreria   AS pago_comentarios_tesoreria,
-      //      pp.numero_autorizacion     AS pago_numero_autorizacion,
-      //      pp.creado_en               AS pago_creado_en,
-      //      pp.actualizado_en          AS pago_actualizado_en,
-      //      pp.estado_pago             AS pago_estado_pago
-      //    FROM pagos_solicitudes ps
-      //    LEFT JOIN pagos_proveedor pp
-      //      ON pp.id_pago_proveedor = ps.id_pago_proveedor
-      //    WHERE ps.id_solicitud_proveedor IN (${placeholders});`,
-      //   ids
-      // );
-
+      // const placeholders = ids.map(() => "?").join(",");
       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
-
-      
     }
 
     const pagosBySolicitud = pagosRaw.reduce((acc, row) => {
@@ -877,9 +1055,9 @@ const getSolicitudes = async (req, res) => {
       return acc;
     }, {});
 
-    console.log(pagosBySolicitud, "◾◾◾◾◾◾◾◾◾◾◾");
-
-    
+    // ✅ bandera: 0 / undefined => solo "todos"
+    // ✅ bandera: 1 => response dividido SIN "todos"
+    const bandera = Number(req.query.bandera ?? 0); // ajusta el nombre si usas otro
 
     const data = spRows.map(
       ({
@@ -904,15 +1082,20 @@ const getSolicitudes = async (req, res) => {
       }) => {
         const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
 
+        // (lo dejo igual, aunque ojo con el tipo de "pagos")
         const estaPagada =
           estatus_pagos === "pagado" ||
-          pagos.some((p) => p.pago_estado_pago === "pagado" || p.saldo == 0);
+          pagos.some((p) => p?.pago_estado_pago === "pagado" || p?.saldo == 0);
+
+        // ✅ Cambio 2: en modo bandera=1, link/card se consideran "pagada"
+        // Regla exacta: si saldo==0 => pagada; si no, pero forma es link/card => pagada (solo cuando bandera=1)
+        const esLinkOCart = forma_pago_solicitada === "link" || forma_pago_solicitada === "card";
+        const isPagadaPorRegla = saldo == 0.0 || (bandera === 1 && esLinkOCart);
 
         let filtro_pago = "todos";
 
-        if (saldo == 0.0) {
+        if (isPagadaPorRegla) {
           filtro_pago = "pagada";
-          console.log("pagada 😘😘😘😘😘😘😘😘😘😘", saldo);
         } else if (forma_pago_solicitada === "transfer") {
           filtro_pago = "spei_solicitado";
         } else if (forma_pago_solicitada === "card") {
@@ -941,40 +1124,46 @@ const getSolicitudes = async (req, res) => {
           tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
           proveedor: { rfc, razon_social },
           pagos,
-          
+          // opcional: si te sirve en front para debug/UX
+          // estaPagada,
+          // isPagadaPorRegla,
         };
       }
     );
 
-    const todos = data;
-    const spei_solicitado = data.filter(
-      (d) => d.filtro_pago === "spei_solicitado"
-    );
-    const pago_tdc = data.filter((d) => d.filtro_pago === "pago_tdc");
-    const cupon_enviado = data.filter((d) => d.filtro_pago === "cupon_enviado");
-    const pagada = data.filter((d) => d.filtro_pago === "pagada");
+    // ✅ Response condicionado por bandera
+    let responseData;
+
+    if (bandera !== 1) {
+      // bandera = 0 o no viene => SOLO "todos"
+      responseData = { todos: data };
+    } else {
+      // bandera = 1 => dividido, SIN "todos"
+      const spei_solicitado = data.filter((d) => d.filtro_pago === "spei_solicitado");
+      const pago_tdc = data.filter((d) => d.filtro_pago === "pago_tdc");
+      const cupon_enviado = data.filter((d) => d.filtro_pago === "cupon_enviado");
+      const pagada = data.filter((d) => d.filtro_pago === "pagada");
+
+      responseData = { spei_solicitado, pago_tdc, cupon_enviado, pagada };
+    }
+
     res.set({
       "Cache-Control": "no-store",
       Pragma: "no-cache",
       Expires: "0",
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Registros obtenidos con exito",
       ok: true,
-      data: {
-        todos,
-        spei_solicitado,
-        pago_tdc,
-        cupon_enviado,
-        pagada,
-      },
+      data: responseData,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Internal Server Error", details: error });
+    return res.status(500).json({ error: "Internal Server Error", details: error });
   }
 };
+
 
 const getDatosFiscalesProveedor = async (req, res) => {
   console.log("Entrando al controller proveedores datos fiscales");
