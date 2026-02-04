@@ -1254,24 +1254,30 @@ const getReservaAllFacturacion = async () => {
 
     -- === ITEMS generados igual que en tu query anterior ===
     (
-      SELECT JSON_ARRAYAGG(
-               JSON_OBJECT(
-                 'id_item',       i.id_item,
-                 'fecha_uso',     i.fecha_uso,
-                 'total',         i.total,
-                 'subtotal',      i.subtotal,
-                 'impuestos',     i.impuestos,
-                 'costo_total',   i.costo_total,
-                 'costo_subtotal',i.costo_subtotal,
-                 'costo_impuestos',i.costo_impuestos,
-                 'saldo',         i.saldo,
-                 'is_facturado',  i.is_facturado,
-                 'id_factura',    i.id_factura
-               )
-             )
-      FROM items i
-      WHERE i.id_hospedaje = v.id_hospedaje
-    ) AS items
+  SELECT JSON_ARRAYAGG(
+           JSON_OBJECT(
+             'id_item',         i.id_item,
+             'fecha_uso',       i.fecha_uso,
+             'total',           i.total,
+             'subtotal',        i.subtotal,
+             'impuestos',       i.impuestos,
+             'costo_total',     i.costo_total,
+             'costo_subtotal',  i.costo_subtotal,
+             'costo_impuestos', i.costo_impuestos,
+             'saldo',           i.saldo,
+             'is_facturado',    i.is_facturado,
+             'id_factura',      i.id_factura
+           )
+         )
+  FROM items i
+  WHERE i.id_hospedaje = v.id_hospedaje
+    AND NOT EXISTS (
+      SELECT 1
+      FROM items_facturas ifa
+      WHERE ifa.id_item = i.id_item
+    )
+) AS items
+
 
 FROM vw_reservas_a_credito_sin_facturas v
 
