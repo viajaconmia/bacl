@@ -1110,6 +1110,16 @@ const editar_reserva_definitivo = async (req, res) => {
         });
       }
 
+      if (
+        estado_reserva?.before === "Confirmada" &&
+        estado_reserva?.current === "Cancelada"
+      ) {
+        const response = await executeQuery(
+          "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_hospedaje, '-', ''), 8)) WHERE id_hospedaje = ?",
+          [metadata.id_hospedaje],
+        );
+      }
+
       const hayCambioPrecio = hasPrecioChange(venta);
       const hayCambioNoches = hasNochesChange(noches);
       const haySaldos = Array.isArray(saldos) && saldos.length > 0;
