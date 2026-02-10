@@ -34,31 +34,30 @@ const read = async (req, res) => {
 };
 
 const getUbicacionHotel = async (req, res) => {
-  const { id } =req.query;
+  const { id } = req.query;
   try {
-    console.log(id)
+    console.log(id);
     let ubicacion = await executeSP2("getUbicacionHotel", [id]);
-      res
-        .status(200)
-        .json({ message: "Ubicacion obtenida correctamente", res:ubicacion });
-    
-  }catch (error) {
+    res
+      .status(200)
+      .json({ message: "Ubicacion obtenida correctamente", res: ubicacion });
+  } catch (error) {
     console.error(error);
     req.context.logStep("Error en la ejecucion del SP", error);
     res.status(500).json({ error: "Internal Server Error", details: error });
   }
-}
+};
 
 const readClient = async (req, res) => {
   const { user_id } = req.query;
   req.context.logStep(
     "Llegando al endpoint de readClient con user_id:",
-    user_id
+    user_id,
   );
   try {
     const result = await executeSP(
       "sp_get_solicitudes_con_pagos_con_facturas_by_id_agente",
-      [user_id]
+      [user_id],
     );
     if (!result || result.length === 0) {
       return res.status(404).json({ message: "No se encontraron solicitudes" });
@@ -74,7 +73,6 @@ const readClient = async (req, res) => {
   }
 };
 const readSolicitudById = async (req, res) => {
-  req.context.logStep("Llegando al endpoint de readSolicitudById");
   const { id } = req.query;
   try {
     const result = await executeSP("sp_get_solicitud_by_id", [id]);
@@ -89,8 +87,8 @@ const readSolicitudById = async (req, res) => {
       data: result,
     });
   } catch (error) {
-    req.context.logStep("error en la ejecucion del SP", error);
-    console.error(error);
+    // req.context.logStep("error en la ejecucion del SP", error);
+    // console.error(error);
     res.status(500).json({ error: "Internal Server Error", details: error });
   }
 };
@@ -242,7 +240,7 @@ const createFromCartWallet = async (req, res) => {
 
     // Solo actualizamos solicitudes de items seleccionados
     const itemsSeleccionados = items.filter(
-      (i) => i?.selected && i?.details?.id_solicitud
+      (i) => i?.selected && i?.details?.id_solicitud,
     );
     if (itemsSeleccionados.length === 0) {
       return res.status(400).json({
@@ -276,18 +274,18 @@ const createFromCartWallet = async (req, res) => {
           ORDER BY saf.saldo ASC,saf.fecha_pago ASC 
           FOR UPDATE
           `,
-          [id_agente]
+          [id_agente],
         );
 
         // 2) Verificar cobertura
         const disponible = rowsSaldos.reduce(
           (acc, r) => acc + Number(r.saldo || 0),
-          0
+          0,
         );
         if (disponible < totalNumerico) {
           // Lanzar error para que haga rollback
           const err = new Error(
-            `Fondos insuficientes en wallet. Disponible: ${disponible}, requerido: ${totalNumerico}`
+            `Fondos insuficientes en wallet. Disponible: ${disponible}, requerido: ${totalNumerico}`,
           );
           err.status = 409;
           throw err;
@@ -407,7 +405,7 @@ const createFromCartWallet = async (req, res) => {
 
         if (restante > 0) {
           const err = new Error(
-            `Fondos quedaron cortos tras aplicar. Restante: ${restante}`
+            `Fondos quedaron cortos tras aplicar. Restante: ${restante}`,
           );
           err.status = 500;
           throw err;
@@ -419,7 +417,7 @@ const createFromCartWallet = async (req, res) => {
           pagos,
           ids_solicitudes,
         };
-      }
+      },
     );
 
     return res.status(201).json({

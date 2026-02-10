@@ -24,25 +24,123 @@ inner join agente_details ad on ad.id_agente = s.id_agente;`);
   }
 };
 
+const getVuelosCupon = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      created_inicio,
+      created_fin,
+      viajero,
+      codigo_confirmacion,
+    } = req.query;
+
+    const pageNumber = Number(page) || 1;
+    const pageSize = 50;
+    const offset = (pageNumber - 1) * pageSize;
+
+    let where = [];
+    let params = [];
+
+    /* =========================
+       FECHA CREACIÓN
+    ========================= */
+    if (created_inicio && created_fin) {
+      where.push(`va.created_at BETWEEN ? AND ?`);
+      params.push(created_inicio, created_fin);
+    }
+
+    /* =========================
+       VIAJERO (texto)
+    ========================= */
+    if (viajero) {
+      where.push(`
+        CONCAT_WS(
+          ' ',
+          vi.primer_nombre,
+          vi.segundo_nombre,
+          vi.apellido_paterno,
+          vi.apellido_materno
+        ) LIKE ?
+      `);
+      params.push(`%${viajero}%`);
+    }
+
+    /* =========================
+       CÓDIGO CONFIRMACIÓN
+    ========================= */
+    if (codigo_confirmacion) {
+      where.push(`va.codigo_confirmacion LIKE ?`);
+      params.push(`%${codigo_confirmacion}%`);
+    }
+
+    const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    /* =========================
+       TOTAL
+    ========================= */
+    const totalQuery = `
+      SELECT COUNT(DISTINCT va.id_viaje_aereo) AS total
+      FROM vw_viaje_aereo va
+      LEFT JOIN viajeros vi ON vi.id_viajero = va.id_viajero
+      ${whereSQL}
+    `;
+
+    const [totalRow] = await executeQuery(totalQuery, params);
+    const total = totalRow.total;
+
+    /* =========================
+       DATA PAGINADA
+    ========================= */
+    const dataQuery = `
+  SELECT va.*
+  FROM vw_viaje_aereo va
+  LEFT JOIN viajeros vi ON vi.id_viajero = va.id_viajero
+  ${whereSQL}
+  ORDER BY va.created_at DESC
+  LIMIT ${pageSize} OFFSET ${offset}
+`;
+
+    const data = await executeQuery(dataQuery, params);
+
+    res.status(200).json({
+      data,
+      metadata: {
+        total,
+        page: Number(page),
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      },
+      message: "",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(error.statusCode || 500).json({
+      message: error.message,
+      data: null,
+      error,
+    });
+  }
+};
+
 const getVueloById = async (req, res) => {
   try {
     const { id } = req.query;
 
     const [viaje_aereo] = await executeQuery(
       `SELECT * FROM viajes_aereos WHERE id_viaje_aereo = ?`,
-      [id]
+      [id],
     );
 
     let vuelos = await executeQuery(
       `select * from vuelos where id_viaje_aereo = ?`,
-      [id]
+      [id],
     );
 
     const [viajero] = await executeQuery(
       `SELECT av.id_agente, v.*, CONCAT_WS(' ', v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno) AS nombre_completo FROM agentes_viajeros av
       LEFT JOIN viajeros v on v.id_viajero = av.id_viajero
     WHERE av.id_viajero = ?`,
-      [vuelos[0].id_viajero]
+      [vuelos[0].id_viajero],
     );
 
     const aeropuertos = await executeQuery(
@@ -52,19 +150,19 @@ const getVueloById = async (req, res) => {
       vuelos.flatMap((vuelo) => [
         vuelo.departure_airport_code,
         vuelo.arrival_airport_code,
-      ])
+      ]),
     );
 
     const [booking] = await executeQuery(
       `select * from bookings where id_booking = ?`,
-      [viaje_aereo.id_booking]
+      [viaje_aereo.id_booking],
     );
 
     const proveedores = await executeQuery(
       `SELECT * FROM proveedores WHERE id in (${vuelos
         .map(() => "?")
         .join(",")})`,
-      vuelos.map((v) => v.airline_code)
+      vuelos.map((v) => v.airline_code),
     );
 
     const vuelosFromViaje = vuelos.map((vuelo) => ({
@@ -72,10 +170,10 @@ const getVueloById = async (req, res) => {
       tipo: vuelo.fly_type,
       folio: vuelo.flight_number,
       origen: aeropuertos.find(
-        (aeropuerto) => aeropuerto.id == vuelo.departure_airport_code
+        (aeropuerto) => aeropuerto.id == vuelo.departure_airport_code,
       ),
       destino: aeropuertos.find(
-        (aeropuerto) => aeropuerto.id == vuelo.arrival_airport_code
+        (aeropuerto) => aeropuerto.id == vuelo.arrival_airport_code,
       ),
       check_in: `${vuelo.departure_date.toISOString().split("T")[0]}T${
         vuelo.departure_time
@@ -130,14 +228,15 @@ const crearVuelo = async (req, res) => {
       req.body.faltante,
       req.body.reserva,
       req.body.saldos,
-      req.body.vuelos
+      req.body.vuelos,
     );
 
+    console.log(vuelos);
     //FORMATO DE LAS TABLAS PARA UN MANEJO MAS SENCILLO
     //VUELOS
     const id_solicitud = `sol-${uuidv4()}`;
     const id_transaccion = `tra-${uuidv4()}`;
-    console.log(vuelos);
+    console.log("THIS IS THE VUELOS:", vuelos);
 
     //VALIDACIONES DE LOS DATOS DEL FRONT CON LOS DE LA BASE DE DATOS
     /**
@@ -147,7 +246,7 @@ const crearVuelo = async (req, res) => {
      */
     const [agente] = await executeQuery(
       `SELECT * FROM agente_details where id_agente = ?`,
-      [id_agente]
+      [id_agente],
     );
     if (!agente) throw new Error("No existe agente");
     if (faltante > 0 && Number(agente.saldo) < faltante)
@@ -157,7 +256,7 @@ const crearVuelo = async (req, res) => {
         `SELECT * FROM saldos_a_favor where id_saldos in (${saldos
           .map((s) => "?")
           .join(",")})`,
-        saldos.map((s) => s.id_saldos)
+        saldos.map((s) => s.id_saldos),
       );
       //Verificar esta parte cuando se hagan los cargos a los saldos
       const isValidateSaldos = verificarSaldos([...saldosDB, ...saldos]);
@@ -315,8 +414,8 @@ const crearVuelo = async (req, res) => {
 
           await Promise.all(
             pagosToInsert.map((paramPago) =>
-              connection.execute(insertPagosQuery, paramPago)
-            )
+              connection.execute(insertPagosQuery, paramPago),
+            ),
           );
         }
         const id_credito = `cre-${uuidv4()}`;
@@ -359,9 +458,9 @@ const crearVuelo = async (req, res) => {
                 `INSERT INTO relacion_credito_pago 
                 (id_credito, id_pago, monto_del_pago, restante)
                 VALUES (?, ?, ?, ?)`,
-                [id_credito, id_pago, monto, faltante]
-              )
-            )
+                [id_credito, id_pago, monto, faltante],
+              ),
+            ),
           );
         }
 
@@ -476,8 +575,12 @@ const crearVuelo = async (req, res) => {
           ) VALUES (?, ?, ?);`;
         await Promise.all(
           pagos_to_item_pagos.map(({ id_pago, monto }) =>
-            connection.execute(insertItemsPagosQuery, [id_item, id_pago, monto])
-          )
+            connection.execute(insertItemsPagosQuery, [
+              id_item,
+              id_pago,
+              monto,
+            ]),
+          ),
         );
 
         const insertVuelosQuery = `
@@ -508,8 +611,13 @@ const crearVuelo = async (req, res) => {
             rate_type,
             comentarios,
             fly_type,
-            id_intermediario
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+            id_intermediario,
+            eq_mano,
+            eq_personal,
+            eq_documentado
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+
+        console.log("INSERT VUELOS QUERY:", vuelos);
 
         await Promise.all(
           vuelos.map((vuelo) =>
@@ -517,7 +625,7 @@ const crearVuelo = async (req, res) => {
               vuelo.id_viaje_aereo || null, // No es NULL, no tiene valor por defecto.
               vuelo.id_viajero || null, // No es NULL, no tiene valor por defecto.
               vuelo.flight_number || null, // Puede ser NULL.
-              vuelo.airline || null, // No es NULL||null, no tiene valor por defecto.
+              vuelo.aerolinea.proveedor || null, // No es NULL||null, no tiene valor por defecto.
               vuelo.airline_code || null, // No es NULL||null, no tiene valor por defecto.
               vuelo.departure.airport || null, // No es NULL||null, no tiene valor por defecto.
               vuelo.departure.airport_code || null, // No es NULL||null, no tiene valor por defecto.
@@ -541,15 +649,18 @@ const crearVuelo = async (req, res) => {
               vuelo.comentarios || null, // Puede ser NULL.
               vuelo.fly_type || null, // Puede ser NULL.
               vuelo.intermediario || null,
-            ])
-          )
+              vuelo.eq_mano || null,
+              vuelo.eq_personal || null,
+              vuelo.eq_documentado || null,
+            ]),
+          ),
         );
 
         //Falta editar credito y asi
         if (faltante > 0) {
           await connection.execute(
             `UPDATE agentes SET saldo = saldo - ? where id_agente = ?`,
-            [faltante, id_agente]
+            [faltante, id_agente],
           );
         }
         if (saldos.length > 0) {
@@ -557,9 +668,9 @@ const crearVuelo = async (req, res) => {
             saldos.map((saldo) =>
               connection.execute(
                 `UPDATE saldos_a_favor SET saldo = ? where id_saldos = ?`,
-                [saldo.restante, saldo.id_saldos]
-              )
-            )
+                [saldo.restante, saldo.id_saldos],
+              ),
+            ),
           );
         }
       } catch (error) {
@@ -588,7 +699,7 @@ const editarVuelo = async (req, res) => {
       req.body.current,
       req.body.saldos,
       req.body.current.vuelos,
-      viaje_aereo
+      viaje_aereo,
     );
 
     if (cambios.keys.length == 0) throw new Error(ERROR.CHANGES.EMPTY);
@@ -636,12 +747,12 @@ const editarVuelo = async (req, res) => {
      * */
     const [servicio] = await executeQuery(
       `SELECT * FROM servicios where id_servicio = ?`,
-      [viaje_aereo.id_servicio]
+      [viaje_aereo.id_servicio],
     );
 
     const [viaje] = await executeQuery(
       `SELECT * FROM viajes_aereos WHERE id_viaje_aereo = ?`,
-      [viaje_aereo.id_viaje_aereo]
+      [viaje_aereo.id_viaje_aereo],
     );
 
     const BEFORE = {
@@ -695,4 +806,5 @@ module.exports = {
   editarVuelo,
   getVuelos,
   getVueloById,
+  getVuelosCupon,
 };

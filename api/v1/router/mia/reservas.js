@@ -3,11 +3,51 @@ const { executeQuery } = require("../../../../config/db");
 const controller = require("../../controller/reservas");
 const middleware = require("../../middleware/validateParams");
 const controller_v2 = require("../../../../v2/controller/reservas.controller");
+const v2 = require("../../../../v2/controller/booking.controller");
+
+router.get("/v2/cupon", async (req, res) => {
+  try {
+    const { id } = req.query;
+    const response = await v2.getCupon(id);
+    res.status(200).json({ message: "done", data: response });
+  } catch (error) {
+    res
+      .status(error.statusCode || error.status || 500)
+      .json({ message: error.message, error: error.message });
+  }
+});
+
+/**
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ *
+ */
 
 const requiredParamsToCreate = [];
 router.get("/detallesConexion", controller.getDetallesConexionReservas);
 router.put("/nuevo-editar-reserva", controller_v2.editar_reserva_definitivo);
 router.put("/cancelar", controller_v2.cancelarBooking);
+
 /*router.put(
   "/",
   //middleware.validateParams(requiredParamsToCreate),
@@ -17,7 +57,7 @@ router.put("/cancelar", controller_v2.cancelarBooking);
 router.post(
   "/operaciones",
   middleware.validateParams(requiredParamsToCreate),
-  controller.createFromOperaciones
+  controller.createFromOperaciones,
 );
 
 router.put("/validacion_codigo", controller.validateCodigo);
@@ -25,7 +65,7 @@ router.put("/validacion_codigo", controller.validateCodigo);
 router.post(
   "/",
   middleware.validateParams(requiredParamsToCreate),
-  controller.create
+  controller.create,
 );
 router.get("/", controller.read);
 router.get("/agente", controller.readById);
@@ -37,7 +77,7 @@ router.get("/items", controller.getItemsFromBooking);
 router.get("/reservasConItems", controller.getReservasWithIAtemsByidAgente);
 router.get(
   "/reservasConItemsSinPagar",
-  controller.getReservasWithItemsSinPagarByAgente
+  controller.getReservasWithItemsSinPagarByAgente,
 );
 
 router.get("/detalles_reservas", controller.detalles_reservas);
@@ -50,7 +90,7 @@ router.get("/cotizaciones", async (req, res) => {
       `SELECT * FROM vw_solicitud_cotizaciones ${
         servicio ? "WHERE id_servicio = ?" : ""
       }`,
-      servicio ? [servicio] : []
+      servicio ? [servicio] : [],
     );
 
     const split_services = response.reduce((acc, curr) => {
