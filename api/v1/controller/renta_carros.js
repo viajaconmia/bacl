@@ -55,7 +55,7 @@ const validateRentaAutosPayload = (payload) => {
     ) {
       throw new ValidationError(
         `El campo '${key}' es obligatorio y no puede estar vacío.`,
-        400
+        400,
       );
     }
   }
@@ -66,19 +66,19 @@ const validateRentaAutosPayload = (payload) => {
   if (typeof costo !== "number" || costo < 0) {
     throw new ValidationError(
       "El campo 'costo' debe ser un número no negativo.",
-      400
+      400,
     );
   }
   if (typeof precio !== "number" || precio < 0) {
     throw new ValidationError(
       "El campo 'precio' debe ser un número no negativo.",
-      400
+      400,
     );
   }
   if (typeof faltante !== "number" || faltante < 0) {
     throw new ValidationError(
       "El campo 'faltante' debe ser un número no negativo.",
-      400
+      400,
     );
   }
 
@@ -89,13 +89,13 @@ const validateRentaAutosPayload = (payload) => {
   if (isNaN(checkInDate.getTime()) || isNaN(checkOutDate.getTime())) {
     throw new ValidationError(
       "Las fechas 'check_in' o 'check_out' tienen un formato inválido (ISO 8601 esperado).",
-      400
+      400,
     );
   }
   if (checkOutDate <= checkInDate) {
     throw new ValidationError(
       "La fecha de 'check_out' debe ser estrictamente posterior a la fecha de 'check_in'.",
-      400
+      400,
     );
   }
 
@@ -107,7 +107,7 @@ const validateRentaAutosPayload = (payload) => {
   ) {
     throw new ValidationError(
       "El objeto 'proveedor' debe contener un 'id' numérico válido.",
-      400
+      400,
     );
   }
 
@@ -115,13 +115,13 @@ const validateRentaAutosPayload = (payload) => {
   if (typeof recogida_lugar !== "object" || !recogida_lugar.id_sucursal) {
     throw new ValidationError(
       "El 'recogida_lugar' debe contener un 'id_sucursal'.",
-      400
+      400,
     );
   }
   if (typeof devuelta_lugar !== "object" || !devuelta_lugar.id_sucursal) {
     throw new ValidationError(
       "El 'devuelta_lugar' debe contener un 'id_sucursal'.",
-      400
+      400,
     );
   }
 
@@ -129,7 +129,7 @@ const validateRentaAutosPayload = (payload) => {
   if (!Array.isArray(conductores) || conductores.length === 0) {
     throw new ValidationError(
       "El campo 'conductores' debe ser un array con al menos un elemento.",
-      400
+      400,
     );
   }
 
@@ -143,7 +143,7 @@ const validateRentaAutosPayload = (payload) => {
       const conductorId = conductor.id_viajero || "Desconocido";
       throw new ValidationError(
         `El conductor con ID ${conductorId} debe tener 'id_viajero', 'primer_nombre', 'apellido_paterno' y 'correo'.`,
-        400
+        400,
       );
     }
   }
@@ -182,7 +182,7 @@ const createRentaAutos = async (req, res) => {
     // A. Proveedor
     const [proveedorDB] = await executeQuery(
       "SELECT id FROM proveedores WHERE id = ?",
-      [proveedorId]
+      [proveedorId],
     );
     if (!proveedorDB) {
       return res.status(404).json({
@@ -216,7 +216,7 @@ const createRentaAutos = async (req, res) => {
     const placeholders = viajeroIds.map(() => "?").join(",");
     const viajerosDB = await executeQuery(
       `SELECT id_viajero FROM viajeros WHERE id_viajero IN (${placeholders})`,
-      viajeroIds
+      viajeroIds,
     );
 
     if (viajerosDB.length !== viajeroIds.length) {
@@ -230,7 +230,7 @@ const createRentaAutos = async (req, res) => {
     //D. Precios y formas de pago
     const [agente] = await executeQuery(
       `SELECT * FROM agente_details where id_agente = ?`,
-      [payload.id_agente]
+      [payload.id_agente],
     );
     if (!agente) throw new Error("No existe agente");
     if (payload.faltante > 0 && Number(agente.saldo) < payload.faltante)
@@ -240,11 +240,11 @@ const createRentaAutos = async (req, res) => {
         `SELECT * FROM saldos_a_favor where id_saldos in (${saldos
           .map(() => "?")
           .join(",")})`,
-        saldos.map((s) => s.id_saldos)
+        saldos.map((s) => s.id_saldos),
       );
       if (saldosDB.length < saldos.length)
         throw new CustomError(
-          "La cantidad de saldos no coincide con la que se tiene"
+          "La cantidad de saldos no coincide con la que se tiene",
         );
       const isValidateSaldos = verificarSaldos([...saldosDB, ...saldos]);
       if (!isValidateSaldos)
@@ -385,8 +385,8 @@ const createRentaAutos = async (req, res) => {
 
           await Promise.all(
             pagosToInsert.map((paramPago) =>
-              connection.execute(insertPagosQuery, paramPago)
-            )
+              connection.execute(insertPagosQuery, paramPago),
+            ),
           );
         }
 
@@ -432,9 +432,9 @@ const createRentaAutos = async (req, res) => {
                 (id_credito, id_pago, monto_del_pago, restante)
 VALUES (?, ?, ?, ?)
 `,
-                [id_credito, id_pago, monto, payload.faltante]
-              )
-            )
+                [id_credito, id_pago, monto, payload.faltante],
+              ),
+            ),
           );
         }
 
@@ -533,9 +533,9 @@ VALUES (?, ?, ?, ?)
 
         const insertParametrosRentaAutos = [
           id_renta_autos,
-          payload.proveedor.nombre,
+          payload.proveedor.proveedor,
           payload.proveedor.id,
-          payload.intermediario.id,
+          payload.intermediario?.id || null,
           payload.codigo,
           payload.auto_descripcion,
           payload.edad,
@@ -583,7 +583,7 @@ VALUES (?, ?, ?, ?)
 
         await connection.execute(
           insertRentaAutosQuery,
-          insertParametrosRentaAutos
+          insertParametrosRentaAutos,
         );
 
         const insertItemsQuery = `
@@ -623,15 +623,19 @@ VALUES (?, ?, ?, ?)
 `;
         await Promise.all(
           pagos_to_item_pagos.map(({ id_pago, monto }) =>
-            connection.execute(insertItemsPagosQuery, [id_item, id_pago, monto])
-          )
+            connection.execute(insertItemsPagosQuery, [
+              id_item,
+              id_pago,
+              monto,
+            ]),
+          ),
         );
 
         //Falta editar credito y asi
         if (payload.faltante > 0) {
           await connection.execute(
             `UPDATE agentes SET saldo = saldo - ? where id_agente = ?`,
-            [payload.faltante, payload.id_agente]
+            [payload.faltante, payload.id_agente],
           );
         }
 
@@ -640,9 +644,9 @@ VALUES (?, ?, ?, ?)
             saldos.map((saldo) =>
               connection.execute(
                 `UPDATE saldos_a_favor SET saldo = ? where id_saldos = ?`,
-                [saldo.restante, saldo.id_saldos]
-              )
-            )
+                [saldo.restante, saldo.id_saldos],
+              ),
+            ),
           );
         }
       } catch (error) {

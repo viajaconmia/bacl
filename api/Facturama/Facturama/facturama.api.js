@@ -12,8 +12,11 @@ const headers = {
 const facturama = () => {
   const settings = { url: valuesFacturama.url };
 
-  const retrieve = async (path, id) => {
-    const response = await axios.get(`${settings.url}${path}/${id}`, headers);
+  const retrieve = async (path, id, type) => {
+    const response = await axios.get(
+      `${settings.url}${path}/${id}${type ? `?type=${type}` : ""}`,
+      headers,
+    );
     return response.data;
   };
 
@@ -23,7 +26,10 @@ const facturama = () => {
   };
 
   const listWithParam = async (path, param) => {
-    const response = await axios.get(`${settings.url}${path}?${param}`, headers);
+    const response = await axios.get(
+      `${settings.url}${path}?${param}`,
+      headers,
+    );
     return response.data;
   };
 
@@ -41,9 +47,13 @@ const facturama = () => {
   };
 
   const postSyncWithParams = async (path, params, data = {}) => {
-    const response = await axios.post(`${settings.url}${path}?${params}`, data, {
-      headers: { ...headers.headers, "Content-Type": "application/json" },
-    });
+    const response = await axios.post(
+      `${settings.url}${path}?${params}`,
+      data,
+      {
+        headers: { ...headers.headers, "Content-Type": "application/json" },
+      },
+    );
     return response.data;
   };
 
@@ -55,13 +65,16 @@ const facturama = () => {
   };
 
   const deleteSyncWithParam = async (path, param) => {
-    const response = await axios.delete(`${settings.url}${path}/${param}`, headers);
+    const response = await axios.delete(
+      `${settings.url}${path}/${param}`,
+      headers,
+    );
     return response.data;
   };
 
   return {
     Cfdi: {
-      Get: (id) => retrieve("cfdi", id),
+      Get: (id, type) => retrieve("cfdi", id, type),
       Create3: (data, req) => postSyncWithData(req, "3/cfdis", data),
       Send: (param) => postSyncWithParams("cfdi", param),
       Cancel: (params) => deleteSyncWithParam("cfdi", params),
@@ -77,7 +90,7 @@ const facturama = () => {
         postSyncWithData(
           req,
           `Addendas?addendaType=${encodeURIComponent(addendaType)}`,
-          data
+          data,
         ),
     },
 

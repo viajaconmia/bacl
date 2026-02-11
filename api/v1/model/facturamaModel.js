@@ -25,7 +25,7 @@ const crearCliente = (data) => facturama.Clients.Create(data);
 const cancelarCfdi = (idCfdi, motive = "03", type = "issued") =>
   facturama.Cfdi.Cancel(`${idCfdi}?type=${type}&motive=${motive}`);
 
-const getCfdi = (idCfdi) => facturama.Cfdi.Get(idCfdi);
+const getCfdi = (idCfdi, type) => facturama.Cfdi.Get(idCfdi, type);
 
 module.exports = {
   listaClientes,

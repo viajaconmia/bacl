@@ -15,9 +15,9 @@ const pool = mysql.createPool({
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
   waitForConnections: true,
-  connectionLimit: 15,
+  connectionLimit: 10,
   // timezone: "-06:00",
-  multipleStatements: true,
+  // multipleStatements: true,
   typeCast: function (field, next) {
     if (field.type === "JSON") {
       return JSON.parse(field.string());
@@ -33,16 +33,16 @@ pool.on("connection", (conn) => {
 async function executeQuery(query, params = []) {
   try {
     const response = await pool.execute(query, params);
-    console.log(response)
-    const [results] = response
+    const [results] = response;
     return results;
   } catch (error) {
-    console.log(error);
     throw new CustomError(
-      error.sqlMessage || "Ha ocurrido un error al hacer la petición",
-      500,
+      error.sqlMessage ||
+        error.message ||
+        "Ha ocurrido un error al hacer la petición",
+      error.statusCode || 500,
       "DATABASE_ERROR",
-      error
+      error,
     );
   }
 }
@@ -60,7 +60,7 @@ async function executeSP(procedure, params = []) {
       error.sqlMessage,
       500,
       "ERROR_STORED_PROCEDURE",
-      error
+      error,
     );
   } finally {
     connection.release();
@@ -99,7 +99,7 @@ async function executeSP2(procedure, params = [], { allSets = false } = {}) {
       error.sqlMessage || String(error),
       500,
       "ERROR_STORED_PROCEDURE",
-      error
+      error,
     );
   } finally {
     conn.release();
@@ -124,7 +124,7 @@ async function runTransaction(callback) {
         "Ha ocurrido un error al hacer la petición",
       error.statusCode || 500,
       error.errorCode || "DATABASE_ERROR",
-      error
+      error,
     );
   } finally {
     connection.release();
@@ -143,7 +143,7 @@ async function insert(connection, schema, obj) {
     .join(",")}) VALUES (${propiedades.map((_) => "?").join(",")});`;
   const response = await connection.execute(
     query,
-    propiedades.map((p) => p.value)
+    propiedades.map((p) => p.value),
   );
   return [obj, response];
 }
@@ -182,7 +182,7 @@ async function get(table, field, ...id) {
       `SELECT * FROM ${table} WHERE ${field} in (${id
         .map(() => "?")
         .join(",")})`,
-      [...id]
+      [...id],
     );
   } catch (error) {
     throw error;
@@ -205,7 +205,7 @@ async function executeTransactionSP(procedure, params = []) {
     await connection.rollback();
     console.error(
       `Error ejecutando SP, ya manejamos el rollback "${procedure}":`,
-      error.message
+      error.message,
     );
     throw error;
   } finally {

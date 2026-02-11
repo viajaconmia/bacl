@@ -25,7 +25,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
       async (selectResults, connection) => {
         if (!selectResults || selectResults.length === 0) {
           throw new Error(
-            `Reserva con ID ${id_booking_a_editar} no encontrada.`
+            `Reserva con ID ${id_booking_a_editar} no encontrada.`,
           );
         }
         const {
@@ -37,7 +37,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
         if (edicionData.viajero) {
           connection.execute(
             "UPDATE viajeros_hospedajes SET id_viajero = ? WHERE id_hospedaje = ? and is_principal = 1;",
-            [edicionData.viajero.current.id_viajero, id_hospedaje_actual]
+            [edicionData.viajero.current.id_viajero, id_hospedaje_actual],
           );
         }
 
@@ -47,10 +47,10 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           edicionData.items.current?.length > 0
         ) {
           console.error(
-            `No se encontró un hospedaje asociado a la reserva ${id_booking_a_editar}. No se pueden procesar los items.`
+            `No se encontró un hospedaje asociado a la reserva ${id_booking_a_editar}. No se pueden procesar los items.`,
           );
           throw new Error(
-            `No se encontró un hospedaje para la reserva ${id_booking_a_editar} para procesar items.`
+            `No se encontró un hospedaje para la reserva ${id_booking_a_editar} para procesar items.`,
           );
         }
         // --- 0. Verificar si es la primera vez que se procesa la solicitud
@@ -92,19 +92,19 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
             if (edicionData.venta.current.total !== undefined) {
               updates_bookings_clauses.push("total = ?");
               params_update_bookings_values.push(
-                edicionData.venta.current.total
+                edicionData.venta.current.total,
               );
             }
             if (edicionData.venta.current.subtotal !== undefined) {
               updates_bookings_clauses.push("subtotal = ?");
               params_update_bookings_values.push(
-                edicionData.venta.current.subtotal
+                edicionData.venta.current.subtotal,
               );
             }
             if (edicionData.venta.current.impuestos !== undefined) {
               updates_bookings_clauses.push("impuestos = ?");
               params_update_bookings_values.push(
-                edicionData.venta.current.impuestos
+                edicionData.venta.current.impuestos,
               );
             }
           }
@@ -112,33 +112,33 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
         if (edicionData.estado_reserva?.current !== undefined) {
           updates_bookings_clauses.push("estado = ?");
           params_update_bookings_values.push(
-            edicionData.estado_reserva.current
+            edicionData.estado_reserva.current,
           );
         }
         if (edicionData.proveedor?.current) {
           if (edicionData.proveedor.current.total !== undefined) {
             updates_bookings_clauses.push("costo_total = ?");
             params_update_bookings_values.push(
-              edicionData.proveedor.current.total
+              edicionData.proveedor.current.total,
             );
           }
           if (edicionData.proveedor.current.subtotal !== undefined) {
             updates_bookings_clauses.push("costo_subtotal = ?");
             params_update_bookings_values.push(
-              edicionData.proveedor.current.subtotal
+              edicionData.proveedor.current.subtotal,
             );
           }
           if (edicionData.proveedor.current.impuestos !== undefined) {
             updates_bookings_clauses.push("costo_impuestos = ?");
             params_update_bookings_values.push(
-              edicionData.proveedor.current.impuestos
+              edicionData.proveedor.current.impuestos,
             );
           }
         }
 
         if (updates_bookings_clauses.length > 0) {
           const query_update_bookings = `UPDATE bookings SET ${updates_bookings_clauses.join(
-            ", "
+            ", ",
           )} WHERE id_booking = ?;`;
           await connection.execute(query_update_bookings, [
             ...params_update_bookings_values,
@@ -154,19 +154,19 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           if (edicionData.hotel?.current?.content?.nombre_hotel !== undefined) {
             updates_hospedaje_clauses.push("nombre_hotel = ?");
             params_update_hospedaje_values.push(
-              edicionData.hotel.current.content.nombre_hotel
+              edicionData.hotel.current.content.nombre_hotel,
             );
           }
           if (edicionData.hotel?.current?.content?.id_hotel !== undefined) {
             updates_hospedaje_clauses.push("id_hotel = ?");
             params_update_hospedaje_values.push(
-              edicionData.hotel.current.content.id_hotel
+              edicionData.hotel.current.content.id_hotel,
             );
           }
           if (edicionData.codigo_reservacion_hotel?.current !== undefined) {
             updates_hospedaje_clauses.push("codigo_reservacion_hotel = ?");
             params_update_hospedaje_values.push(
-              edicionData.codigo_reservacion_hotel.current
+              edicionData.codigo_reservacion_hotel.current,
             );
           }
           if (edicionData.habitacion?.current !== undefined) {
@@ -184,7 +184,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
 
           if (updates_hospedaje_clauses.length > 0) {
             const query_update_hospedaje = `UPDATE hospedajes SET ${updates_hospedaje_clauses.join(
-              ", "
+              ", ",
             )} WHERE id_hospedaje = ?;`;
             await connection.execute(query_update_hospedaje, [
               ...params_update_hospedaje_values,
@@ -249,7 +249,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
                   itemConId.costo.impuestos.toFixed(2),
                   (itemConId.costo.total * 0.16).toFixed(2),
                   0,
-                ]
+                ],
               );
               await connection.execute(query_items_insert, params_items_insert);
 
@@ -287,14 +287,14 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
                 ]);
                 await connection.execute(
                   query_impuestos_items,
-                  params_impuestos_items
+                  params_impuestos_items,
                 );
               }
 
               const query_pago_contado = `SELECT id_pago FROM pagos WHERE id_servicio = ? LIMIT 1;`;
               const [rowsContado] = await connection.execute(
                 query_pago_contado,
-                [id_servicio_actual]
+                [id_servicio_actual],
               );
 
               if (rowsContado.length > 0) {
@@ -313,23 +313,23 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
                         edicionData.venta.before.total /
                         edicionData.noches.before
                       ).toFixed(2),
-                    ]
+                    ],
                   );
                   await connection.execute(
                     query_items_pagos_insert,
-                    params_items_pagos_insert
+                    params_items_pagos_insert,
                   );
                 }
               } else {
                 const query_pago_credito = `SELECT id_credito FROM pagos_credito WHERE id_servicio = ? LIMIT 1;`;
                 const [rowsCredito] = await connection.execute(
                   query_pago_credito,
-                  [id_servicio_actual]
+                  [id_servicio_actual],
                 );
                 if (rowsCredito.length === 0) {
                   console.warn(
                     "Advertencia: No se encontró un pago (contado o crédito) para el servicio al re-crear items_pagos:",
-                    id_servicio_actual
+                    id_servicio_actual,
                   );
                 }
               }
@@ -340,7 +340,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
             id_hospedaje_actual
           ) {
             console.log(
-              `Todos los items asociados al hospedaje ${id_hospedaje_actual} han sido eliminados según la solicitud.`
+              `Todos los items asociados al hospedaje ${id_hospedaje_actual} han sido eliminados según la solicitud.`,
             );
           }
         }
@@ -443,7 +443,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           // Ejecutar la actualización de solicitudes si hay cláusulas para actualizar
           if (updates_solicitud_clauses.length > 0) {
             const query_update_solicitud = `UPDATE solicitudes SET ${updates_solicitud_clauses.join(
-              ", "
+              ", ",
             )} WHERE id_solicitud = ?;`;
             await connection.execute(query_update_solicitud, [
               ...params_update_solicitud_values,
@@ -456,7 +456,7 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
           message: "Reserva actualizada exitosamente",
           id_booking: id_booking_a_editar,
         };
-      }
+      },
     );
     return response;
   } catch (error) {
@@ -466,8 +466,8 @@ const editarReserva = async (edicionData, id_booking_a_editar) => {
 
     throw new Error(
       `Error al editar reserva: ${message}. Datos: ${JSON.stringify(
-        edicionData
-      )}`
+        edicionData,
+      )}`,
     );
   }
 };
@@ -503,13 +503,13 @@ const asignarFacturasItems = async (req, res) => {
       arrItems.map((i) => ({
         id_item: i.id_item || i,
         total: Number(i.total ?? i.monto ?? i.max ?? 0),
-      }))
+      })),
     );
 
     // Llamada al SP (envía el array como JSON)
     const result = await executeQuery(
       "CALL sp_asignar_facturas_de_pagos_a_items(?, ?)",
-      [id_saldo, JSON.stringify(arrItems)]
+      [id_saldo, JSON.stringify(arrItems)],
     );
 
     // Log de salida
@@ -538,7 +538,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
 
   const agentes = await executeQuery(
     `SELECT * FROM agentes WHERE id_agente = ?`,
-    [reserva.solicitud.id_agente]
+    [reserva.solicitud.id_agente],
   );
 
   if (!agentes || agentes.length === 0) {
@@ -549,7 +549,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
   // Si es crédito, validar saldo del agente
   if (bandera === 0 && Number(agente.saldo) < Number(reserva.venta.total)) {
     throw new Error(
-      `El saldo del agente ${agente.nombre} es insuficiente para procesar esta reserva.`
+      `El saldo del agente ${agente.nombre} es insuficiente para procesar esta reserva.`,
     );
   }
 
@@ -602,6 +602,146 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             "Operaciones",
           ];
           await connection.execute(query_solicitudes, params_solicitud);
+          let pagosOrdenados;
+          if (bandera === 0) {
+            // Crédito: descuenta saldo del agente + inserta pagos_credito
+            await connection.execute(
+              `UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?;`,
+              [venta.total, reserva.solicitud.id_agente],
+            );
+
+            const queryCredito = `
+              INSERT INTO pagos_credito (
+                id_credito, id_servicio, monto_a_credito,
+                responsable_pago_empresa, responsable_pago_agente, fecha_creacion,
+                pago_por_credito, pendiente_por_cobrar,
+                total, subtotal, impuestos, concepto, referencia, currency, tipo_de_pago
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            `;
+            const paramsCredito = [
+              `cre-${uuidv4()}`,
+              id_servicio,
+              venta.total,
+              null,
+              reserva.solicitud.id_agente,
+              new Date(),
+              venta.total,
+              venta.total,
+              venta.total,
+              venta.subtotal,
+              venta.impuestos,
+              `Reserva por ${reserva.noches} a ${hotel.name}`,
+              null,
+              "mxn",
+              "credito",
+            ];
+            await connection.execute(queryCredito, paramsCredito);
+          } else if (bandera === 1) {
+            // Wallet: validar saldos y generar pagos (SIN relación)
+            // const ejemplo_saldos = [
+            //   {
+            //     id_saldo: 33,
+            //     saldo_original: 500,
+            //     saldo_actual: 0,
+            //     aplicado: 500,
+            //     id_agente: reserva.solicitud.id_agente,
+            //     metodo_de_pago: "wallet",
+            //     fecha_pago: new Date().toISOString().slice(0, 10),
+            //     concepto: null,
+            //     referencia: null,
+            //     currency: "mxn",
+            //     tipo_de_tarjeta: null,
+            //     link_pago: null,
+            //     last_digits: null,
+            //   },
+            //   {
+            //     id_saldo: 55,
+            //     saldo_original: 100,
+            //     saldo_actual: 0,
+            //     aplicado: 100,
+            //     id_agente: reserva.solicitud.id_agente,
+            //     metodo_de_pago: "wallet",
+            //     fecha_pago: new Date().toISOString().slice(0, 10),
+            //     concepto: null,
+            //     referencia: null,
+            //     currency: "mxn",
+            //     tipo_de_tarjeta: null,
+            //     link_pago: null,
+            //     last_digits: null,
+            //   },
+            // ];
+
+            // Validación de saldos
+            for (const saldo of ejemplo_saldos) {
+              const [rows] = await connection.execute(
+                `SELECT saldo FROM saldos_a_favor WHERE id_saldos = ?`,
+                [saldo.id_saldo],
+              );
+              const saldo_real = rows && rows[0] ? rows[0].saldo : null;
+              if (saldo_real == null) {
+                throw new Error(`Saldo no encontrado: ${saldo.id_saldo}`);
+              }
+              if (Number(saldo_real) !== Number(saldo.saldo_original)) {
+                throw new Error(
+                  `El saldo del id_saldo: ${saldo.id_saldo} no coincide con el saldo real`,
+                );
+              }
+            }
+
+            // Inserción de pagos por cada saldo aplicado
+            let pagos_insertados = [];
+            const query_pagos = `
+              INSERT INTO pagos (
+                id_pago, id_servicio, id_saldo_a_favor, id_agente,
+                metodo_de_pago, fecha_pago, concepto, referencia,
+                currency, tipo_de_tarjeta, link_pago, last_digits, total,saldo_aplicado,transaccion,monto_transaccion
+              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+            `;
+
+            const query_update_saldo = `
+              UPDATE saldos_a_favor SET saldo = saldo - ? WHERE id_saldos = ?;
+            `;
+            const transaccion = `tra-${uuidv4()}`;
+
+            for (const saldo of ejemplo_saldos) {
+              console.log("Procesando saldo:", saldo);
+              const id_pago = `pag-${uuidv4()}`;
+
+              console.log("Generando pago con ID:", id_pago);
+              await connection.execute(query_pagos, [
+                id_pago,
+                id_servicio,
+                saldo.id_saldo,
+                saldo.id_agente,
+                saldo.metodo_de_pago,
+                saldo.fecha_pago,
+                saldo.concepto,
+                saldo.referencia,
+                saldo.currency,
+                saldo.tipo_de_tarjeta,
+                saldo.link_pago,
+                saldo.last_digits,
+                venta.total, // (mantengo tu código tal cual)
+                saldo.aplicado,
+                transaccion,
+                venta.total,
+              ]);
+              await connection.execute(query_update_saldo, [
+                saldo.aplicado,
+                saldo.id_saldo,
+              ]);
+              pagos_insertados.push(id_pago);
+            }
+
+            pagosOrdenados = ejemplo_saldos
+              .map((s, idx) => ({
+                id_pago: pagos_insertados[idx], // mismo orden en que los insertaste
+                restante: Number(s.aplicado),
+                id_saldo: s.id_saldo,
+                saldo_actual: s.saldo_actual,
+              }))
+              .sort((a, b) => a.restante - b.restante);
+          }
 
           // Booking
           const id_booking = `boo-${uuidv4()}`;
@@ -761,7 +901,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               ]);
               await connection.execute(
                 query_impuestos_items,
-                params_impuestos_items
+                params_impuestos_items,
               );
             }
           }
@@ -787,154 +927,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             }
           }
 
-          // ======== SOLO PAGO (según bandera) =========
-          console.log(
-            "Procesando bandera 0 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:"
-          );
-          if (bandera === 0) {
-            // Crédito: descuenta saldo del agente + inserta pagos_credito
-            await connection.execute(
-              `UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?;`,
-              [venta.total, reserva.solicitud.id_agente]
-            );
-
-            const queryCredito = `
-              INSERT INTO pagos_credito (
-                id_credito, id_servicio, monto_a_credito,
-                responsable_pago_empresa, responsable_pago_agente, fecha_creacion,
-                pago_por_credito, pendiente_por_cobrar,
-                total, subtotal, impuestos, concepto, referencia, currency, tipo_de_pago
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            `;
-            const paramsCredito = [
-              `cre-${uuidv4()}`,
-              id_servicio,
-              venta.total,
-              null,
-              reserva.solicitud.id_agente,
-              new Date(),
-              venta.total,
-              venta.total,
-              venta.total,
-              venta.subtotal,
-              venta.impuestos,
-              `Reserva por ${reserva.noches} a ${hotel.name}`,
-              null,
-              "mxn",
-              "credito",
-            ];
-            await connection.execute(queryCredito, paramsCredito);
-          } else if (bandera === 1) {
-            console.log(
-              "Procesando bandera 1 carNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL:",
-              itemsConIdAnadido,
-              "acabo"
-            );
-            // Wallet: validar saldos y generar pagos (SIN relación)
-            // const ejemplo_saldos = [
-            //   {
-            //     id_saldo: 33,
-            //     saldo_original: 500,
-            //     saldo_actual: 0,
-            //     aplicado: 500,
-            //     id_agente: reserva.solicitud.id_agente,
-            //     metodo_de_pago: "wallet",
-            //     fecha_pago: new Date().toISOString().slice(0, 10),
-            //     concepto: null,
-            //     referencia: null,
-            //     currency: "mxn",
-            //     tipo_de_tarjeta: null,
-            //     link_pago: null,
-            //     last_digits: null,
-            //   },
-            //   {
-            //     id_saldo: 55,
-            //     saldo_original: 100,
-            //     saldo_actual: 0,
-            //     aplicado: 100,
-            //     id_agente: reserva.solicitud.id_agente,
-            //     metodo_de_pago: "wallet",
-            //     fecha_pago: new Date().toISOString().slice(0, 10),
-            //     concepto: null,
-            //     referencia: null,
-            //     currency: "mxn",
-            //     tipo_de_tarjeta: null,
-            //     link_pago: null,
-            //     last_digits: null,
-            //   },
-            // ];
-
-            // Validación de saldos
-            for (const saldo of ejemplo_saldos) {
-              const [rows] = await connection.execute(
-                `SELECT saldo FROM saldos_a_favor WHERE id_saldos = ?`,
-                [saldo.id_saldo]
-              );
-              const saldo_real = rows && rows[0] ? rows[0].saldo : null;
-              if (saldo_real == null) {
-                throw new Error(`Saldo no encontrado: ${saldo.id_saldo}`);
-              }
-              if (Number(saldo_real) !== Number(saldo.saldo_original)) {
-                throw new Error(
-                  `El saldo del id_saldo: ${saldo.id_saldo} no coincide con el saldo real`
-                );
-              }
-            }
-
-            // Inserción de pagos por cada saldo aplicado
-            let pagos_insertados = [];
-            const query_pagos = `
-              INSERT INTO pagos (
-                id_pago, id_servicio, id_saldo_a_favor, id_agente,
-                metodo_de_pago, fecha_pago, concepto, referencia,
-                currency, tipo_de_tarjeta, link_pago, last_digits, total,saldo_aplicado,transaccion,monto_transaccion
-              ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
-            `;
-
-            const query_update_saldo = `
-              UPDATE saldos_a_favor SET saldo = saldo - ? WHERE id_saldos = ?;
-            `;
-            const transaccion = `tra-${uuidv4()}`;
-
-            for (const saldo of ejemplo_saldos) {
-              console.log("Procesando saldo:", saldo);
-              const id_pago = `pag-${uuidv4()}`;
-
-              console.log("Generando pago con ID:", id_pago);
-              await connection.execute(query_pagos, [
-                id_pago,
-                id_servicio,
-                saldo.id_saldo,
-                saldo.id_agente,
-                saldo.metodo_de_pago,
-                saldo.fecha_pago,
-                saldo.concepto,
-                saldo.referencia,
-                saldo.currency,
-                saldo.tipo_de_tarjeta,
-                saldo.link_pago,
-                saldo.last_digits,
-                venta.total, // (mantengo tu código tal cual)
-                saldo.aplicado,
-                transaccion,
-                venta.total,
-              ]);
-              await connection.execute(query_update_saldo, [
-                saldo.aplicado,
-                saldo.id_saldo,
-              ]);
-              pagos_insertados.push(id_pago);
-            }
-
-            const pagosOrdenados = ejemplo_saldos
-              .map((s, idx) => ({
-                id_pago: pagos_insertados[idx], // mismo orden en que los insertaste
-                restante: Number(s.aplicado),
-                id_saldo: s.id_saldo,
-                saldo_actual: s.saldo_actual,
-              }))
-              .sort((a, b) => a.restante - b.restante);
-
+          if (bandera == 1) {
             // Clonar items con su total pendiente
             const itemsPendientes = itemsConIdAnadido.map((it) => ({
               id_item: it.id_item,
@@ -961,7 +954,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               const flat = relaciones.flat();
               await connection.execute(
                 `INSERT INTO items_pagos (id_item, id_pago, monto) VALUES ${values}`,
-                flat
+                flat,
               );
             }
 
@@ -973,7 +966,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
                 SET saldo = ?,
                 activo = CASE WHEN (saldo - ?) <= 0 THEN 0 ELSE 1 END
                 WHERE id_saldos = ?`,
-                [pago.saldo_actual, pago.restante, pago.id_saldo]
+                [pago.saldo_actual, pago.restante, pago.id_saldo],
               );
             }
           }
@@ -981,7 +974,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           // Completar solicitud
           await connection.execute(
             `UPDATE solicitudes SET status = "complete" WHERE id_solicitud = ?;`,
-            [id_solicitud]
+            [id_solicitud],
           );
 
           /* ======== RELACIONAR FACTURAS ⇄ ITEMS por SALDO (SP) ======== */
@@ -992,7 +985,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               total: Number(it?.venta?.total ?? 0),
             }))
             .filter(
-              (x) => x.id_item && Number.isFinite(x.total) && x.total > 0
+              (x) => x.id_item && Number.isFinite(x.total) && x.total > 0,
             );
 
           console.log("🧾 Items para SP (tope por item):");
@@ -1002,13 +995,13 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           for (const saldo of ejemplo_saldos) {
             const idSaldo = Number(saldo.id_saldo);
             console.log(
-              `🚀 CALL sp_asignar_facturas_de_pagos_a_items(${idSaldo}, items[])`
+              `🚀 CALL sp_asignar_facturas_de_pagos_a_items(${idSaldo}, items[])`,
             );
 
             try {
               const spResult = await connection.execute(
                 "CALL sp_asignar_facturas_de_pagos_a_items(?, ?)",
-                [idSaldo, JSON.stringify(itemsParaSP)]
+                [idSaldo, JSON.stringify(itemsParaSP)],
               );
 
               console.log("📦 Resultado del SP (primer set):");
@@ -1016,7 +1009,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             } catch (e) {
               console.error(
                 `❌ Error al ejecutar SP para id_saldo=${idSaldo}:`,
-                e.message
+                e.message,
               );
               throw e; // re-lanza para que la transacción haga rollback
             }
@@ -1035,7 +1028,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
           console.error("Error dentro de la transacción:", errorInTransaction);
           throw errorInTransaction;
         }
-      }
+      },
     );
 
     return response;
@@ -1060,7 +1053,7 @@ const getReserva = async () => {
 
 const existsCodigoReservacionHotel = async (
   codigo_reservacion_hotel,
-  id = null
+  id = null,
 ) => {
   try {
     const query = `
@@ -1076,7 +1069,7 @@ const existsCodigoReservacionHotel = async (
 
     const rows = await executeQuery(
       query,
-      id ? [codigo_reservacion_hotel, id] : [codigo_reservacion_hotel]
+      id ? [codigo_reservacion_hotel, id] : [codigo_reservacion_hotel],
     );
     return Array.isArray(rows) && rows.length > 0;
   } catch (error) {
@@ -1086,7 +1079,7 @@ const existsCodigoReservacionHotel = async (
 
 const existsCodigoReservacionHotelEdit = async (
   codigo_reservacion_hotel,
-  id_booking
+  id_booking,
 ) => {
   try {
     const query = `
@@ -2113,7 +2106,7 @@ const insertarReserva = async ({ reserva }) => {
                 itemConId.costo.impuestos.toFixed(2),
                 (itemConId.costo.total * 0.16).toFixed(2),
                 0,
-              ]
+              ],
             );
 
             await connection.execute(query_items_insert, params_items_insert);
@@ -2158,7 +2151,7 @@ const insertarReserva = async ({ reserva }) => {
 
               await connection.execute(
                 query_impuestos_items,
-                params_impuestos_items
+                params_impuestos_items,
               );
             }
           }
@@ -2174,7 +2167,7 @@ const insertarReserva = async ({ reserva }) => {
    INNER JOIN saldos_a_favor s ON p.id_saldo_a_favor = s.id_saldos
    WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
    ORDER BY p.fecha_pago ASC, p.id_pago ASC`,
-            [solicitud.id_servicio]
+            [solicitud.id_servicio],
           );
 
           const esWalletPrepagado = walletPagos.length > 0;
@@ -2184,27 +2177,27 @@ const insertarReserva = async ({ reserva }) => {
             // 2) Calcular total en CENTAVOS
             const totalReservaCents = itemsConIdAnadido.reduce(
               (sum, item) => sum + toCents(item.venta.total),
-              0
+              0,
             );
 
             let saldoDisponibleCents = walletPagos.reduce(
               (sum, p) => sum + toCents(p.saldo_aplicado || 0),
-              0
+              0,
             );
 
             console.log(
               `Total reserva: ${fromCents(
-                totalReservaCents
-              )}, Saldo disponible: ${fromCents(saldoDisponibleCents)}`
+                totalReservaCents,
+              )}, Saldo disponible: ${fromCents(saldoDisponibleCents)}`,
             );
 
             if (saldoDisponibleCents < totalReservaCents) {
               throw new Error(
                 `Saldo insuficiente en wallet. Disponible: ${fromCents(
-                  saldoDisponibleCents
+                  saldoDisponibleCents,
                 ).toFixed(2)}, Requerido: ${fromCents(
-                  totalReservaCents
-                ).toFixed(2)}`
+                  totalReservaCents,
+                ).toFixed(2)}`,
               );
             }
 
@@ -2212,15 +2205,15 @@ const insertarReserva = async ({ reserva }) => {
             const asignaciones = [];
             let pagoIndex = 0;
             let saldoRestanteEnPagoCents = toCents(
-              walletPagos[pagoIndex]?.saldo_aplicado || 0
+              walletPagos[pagoIndex]?.saldo_aplicado || 0,
             );
 
             for (const item of itemsConIdAnadido) {
               let montoRestanteItemCents = toCents(item.venta.total);
               console.log(
                 `\nProcesando item ${item.id_item}, monto: ${fromCents(
-                  montoRestanteItemCents
-                )}`
+                  montoRestanteItemCents,
+                )}`,
               );
 
               // safety guard por si acaso (no debería dispararse)
@@ -2233,19 +2226,19 @@ const insertarReserva = async ({ reserva }) => {
                 if (saldoRestanteEnPagoCents <= 0) {
                   pagoIndex++;
                   saldoRestanteEnPagoCents = toCents(
-                    walletPagos[pagoIndex]?.saldo_aplicado || 0
+                    walletPagos[pagoIndex]?.saldo_aplicado || 0,
                   );
                   console.log(
                     `Cambiando a siguiente pago. pagoIndex=${pagoIndex}, saldoRestanteEnPago=${fromCents(
-                      saldoRestanteEnPagoCents
-                    )}`
+                      saldoRestanteEnPagoCents,
+                    )}`,
                   );
                   continue;
                 }
 
                 const montoAsignarCents = Math.min(
                   montoRestanteItemCents,
-                  saldoRestanteEnPagoCents
+                  saldoRestanteEnPagoCents,
                 );
 
                 asignaciones.push({
@@ -2262,21 +2255,21 @@ const insertarReserva = async ({ reserva }) => {
                     walletPagos[pagoIndex].id_pago
                   } | ` +
                     `resto item: ${fromCents(
-                      montoRestanteItemCents
-                    )}, resto pago: ${fromCents(saldoRestanteEnPagoCents)}`
+                      montoRestanteItemCents,
+                    )}, resto pago: ${fromCents(saldoRestanteEnPagoCents)}`,
                 );
 
                 // watchdog para evitar loops por cualquier bug
                 watchdog++;
                 if (watchdog > 10000)
                   throw new Error(
-                    "Watchdog: demasiadas iteraciones en distribución wallet."
+                    "Watchdog: demasiadas iteraciones en distribución wallet.",
                   );
               }
 
               if (montoRestanteItemCents > 0) {
                 throw new Error(
-                  `No se pudo asignar completo el pago para el item ${item.id_item}`
+                  `No se pudo asignar completo el pago para el item ${item.id_item}`,
                 );
               }
             }
@@ -2298,7 +2291,7 @@ const insertarReserva = async ({ reserva }) => {
 
               await connection.execute(queryItemsPagos, paramsItemsPagos);
               console.log(
-                `Insertados ${asignaciones.length} registros en items_pagos`
+                `Insertados ${asignaciones.length} registros en items_pagos`,
               );
             }
           } else {
@@ -2307,7 +2300,7 @@ const insertarReserva = async ({ reserva }) => {
 
             const [rowsContado] = await connection.execute(
               `SELECT id_pago FROM pagos WHERE id_servicio = ? LIMIT 1`,
-              [solicitud.id_servicio]
+              [solicitud.id_servicio],
             );
 
             if (rowsContado.length > 0 && itemsConIdAnadido.length > 0) {
@@ -2322,19 +2315,19 @@ const insertarReserva = async ({ reserva }) => {
                   itemConId.id_item,
                   id_pago,
                   Number(itemConId.venta.total).toFixed(2),
-                ]
+                ],
               );
 
               await connection.execute(query_items_pagos, params_items_pagos);
             } else {
               const [rowsCredito] = await connection.execute(
                 `SELECT id_credito FROM pagos_credito WHERE id_servicio = ? LIMIT 1`,
-                [solicitud.id_servicio]
+                [solicitud.id_servicio],
               );
 
               if (rowsCredito.length === 0) {
                 throw new Error(
-                  `No se encontró pago para el servicio ${solicitud.id_servicio}`
+                  `No se encontró pago para el servicio ${solicitud.id_servicio}`,
                 );
               }
             }
@@ -2352,12 +2345,12 @@ const insertarReserva = async ({ reserva }) => {
 
           await connection.execute(
             `UPDATE solicitudes SET status = ? WHERE id_solicitud = ?`,
-            [estado, solicitud.id_solicitud]
+            [estado, solicitud.id_solicitud],
           );
 
           await connection.execute(
             `UPDATE servicios SET id_agente = ? WHERE id_servicio = ?`,
-            [solicitud.id_agente, solicitud.id_servicio]
+            [solicitud.id_agente, solicitud.id_servicio],
           );
 
           // Insertar viajeros
@@ -2391,7 +2384,7 @@ const insertarReserva = async ({ reserva }) => {
           console.error("Error en transacción:", errorInTransaction);
           throw errorInTransaction;
         }
-      }
+      },
     );
 
     return response;

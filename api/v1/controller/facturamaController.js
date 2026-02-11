@@ -7,7 +7,7 @@ const obtenerClientePorRfc = async (req, res) => {
 
     let listClient = await model.listaClientes();
     const filtrado = listClient.find(
-      ({ Rfc }) => Rfc.toUpperCase() === rfc.toUpperCase()
+      ({ Rfc }) => Rfc.toUpperCase() === rfc.toUpperCase(),
     );
 
     if (!filtrado) {
@@ -80,6 +80,7 @@ const obtenerClientes = async (req, res) => {
       .json({ error: "Internal Server Error", details: error.response.data });
   }
 };
+
 const obtenerCfdiByFechas = async (req, res) => {
   try {
     const { start, end } = req.query || req.params;
@@ -99,7 +100,7 @@ const obtenerFacturasCliente = async (req, res) => {
     const listFacturas = await model.listaCfdis(rfc); // Asegúrate de que esta función devuelva una promesa
     const empresa = await executeQuery(
       `select e.id_empresa from empresas as e inner join datos_fiscales as d on d.id_empresa = e.id_empresa where d.rfc = ?;`,
-      [rfc]
+      [rfc],
     );
     console.log(empresa);
     const id_empresa = empresa[0] ? empresa[0].id_empresa : null;
@@ -136,6 +137,7 @@ const descargarFacturas = async (req, res) => {
       .json({ error: "Internal Server Error", details: error.response.data });
   }
 };
+
 const newDescargarFacturas = async (req, res) => {
   try {
     const { id, type } = req.body;
@@ -212,7 +214,7 @@ const crearCliente = async (req, res) => {
 
 const cancelarCfdi = async (req, res) => {
   try {
-    const { id_cfdi, motive, type } = req.body;
+    const { id_cfdi, motive, type } = req.query;
 
     if (!id_cfdi || !motive)
       throw new Error("Falta el id o el motivo de cancelación");
@@ -231,12 +233,11 @@ const cancelarCfdi = async (req, res) => {
 
 const getCdfi = async (req, res) => {
   try {
-    const { id } = req.query;
+    const { id, type = "issued" } = req.query;
 
     if (!id) throw new Error("Falta el id del CFDI");
 
-    const response = await model.getCfdi(id);
-
+    const response = await model.getCfdi(id, type);
     res.status(200).json(response);
   } catch (error) {
     console.error(error);

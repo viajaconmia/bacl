@@ -1965,31 +1965,87 @@ const editar_reserva_definitivo = async (req, res) => {
 };
 
 const obtener = async (req, res) => {
-  let { page = 0, length = 20 } = req.query;
+  let { page = 1, length = 20 } = req.query;
 
   page = Number(page);
   length = Number(length);
 
-  if (!Number.isInteger(page) || !Number.isInteger(length) || length <= 0) {
+  if (
+    !Number.isInteger(page) ||
+    !Number.isInteger(length) ||
+    length <= 0 ||
+    page < 1
+  ) {
     return res.status(400).json({ message: "Parámetros inválidos" });
   }
 
-  const offset = page * length;
+  const offset = (page - 1) * length;
 
-  const sql = `
+  const where = [];
+  const params = [];
+
+  if (req.query.id_agente !== undefined) {
+    where.push(`id_agente = ?`);
+    params.push(req.query.id_agente);
+  }
+
+  if (req.query.type) {
+    where.push(`type = ?`);
+    params.push(req.query.type);
+  }
+
+  if (req.query.estado) {
+    where.push(`estado = ?`);
+    params.push(req.query.estado);
+  }
+
+  if (req.query.proveedor) {
+    where.push(`proveedor LIKE CONCAT('%', ?, '%')`);
+    params.push(req.query.proveedor);
+  }
+
+  if (req.query.id_booking) {
+    where.push(`id_booking LIKE CONCAT('%', ?, '%')`);
+    params.push(req.query.id_booking);
+  }
+
+  if (req.query.fecha_inicio && req.query.fecha_fin) {
+    where.push(`created_at BETWEEN ? AND ?`);
+    params.push(req.query.fecha_inicio, req.query.fecha_fin);
+  }
+
+  const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+  const sqlTotal = `
+    SELECT COUNT(*) AS total
+    FROM vw_new_reservas
+    ${whereSQL}
+  `;
+
+  const sqlData = `
     SELECT *
     FROM vw_new_reservas
+    ${whereSQL}
     ORDER BY created_at DESC
-    LIMIT ${offset}, ${length}
+    LIMIT ${length} OFFSET ${offset}
   `;
 
   try {
-    const response = await executeQuery(sql);
-    res.status(200).json({ message: "ok", data: response });
+    const [{ total }] = await executeQuery(sqlTotal, params);
+
+    const data = await executeQuery(sqlData, [...params]);
+
+    res.status(200).json({
+      message: "ok",
+      data,
+      metadata: { page, length, total },
+    });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error });
   }
 };
+
 const cancelarBooking = async (req, res) => {
   const { id_booking } = req.body;
   const cancelar = async (conn, id_booking) => {
