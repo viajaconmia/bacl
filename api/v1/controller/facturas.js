@@ -56,7 +56,8 @@ const createCombinada = async (req, res) => {
     return res.status(201).json(resp.data.data);
   } catch (error) {
     console.log("ERROR MANEJADO");
-    console.log(error.response);
+    console.log(error?.details?.response?.data?.ModelState || null);
+    console.log(error?.response?.data?.ModelState || null)
     res.status(500).json({
       error: "Error en el servidor",
       details: error.message || error,
@@ -2874,6 +2875,69 @@ const getFullDetalles = async (req, res) => {
   }
 };
 
+const getQuitarDetalles = async (req, res) => {
+  try {
+    console.log("📦 recibido getQuitarDetalles");
+
+    const id_factura = String(req.query.id_factura ?? req.body?.id_factura ?? "")
+      .trim();
+
+    if (!id_factura) {
+      return res.status(400).json({
+        ok: false,
+        message: "Se requiere id_factura",
+      });
+    }
+
+    // Opcional: valida formato si tus facturas son "fac-xxxx"
+    // if (!/^fac-[a-z0-9-]+$/i.test(id_factura)) {
+    //   return res.status(400).json({ ok: false, message: "id_factura inválido" });
+    // }
+
+    const deleteItemsFacturasSQL = `
+      DELETE FROM items_facturas
+      WHERE id_factura = ?
+    `;
+
+    const updateItemsSQL = `
+      UPDATE items
+      SET id_factura = ""
+      WHERE id_factura = ?
+    `;
+
+    const deleteSaldos = ` DELETE FROM facturas_pagos_y_saldos
+      WHERE id_factura = ?
+    `;
+
+    return await runTransaction(async (connection) => {
+      // 1) Elimina relaciones/detalles
+      const [del] = await connection.query(deleteItemsFacturasSQL, [id_factura]);
+      const [delsaldos] = await connection.query(deleteSaldos, [id_factura]);
+
+      // 2) Vacía id_factura en items
+      const [upd] = await connection.query(updateItemsSQL, [id_factura]);
+
+      return res.status(200).json({
+        ok: true,
+        message: "Detalles quitados correctamente",
+        data: {
+          id_factura,
+          deleted_items_facturas: del?.affectedRows ?? 0,
+          updated_items: upd?.affectedRows ?? 0,
+          delet_saldos:delsaldos?.affectedRows?? 0,
+        },
+      });
+    });
+  } catch (error) {
+    console.error("getQuitarDetalles error:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error en el servidor",
+      details: error?.message ?? error,
+    });
+  }
+};
+
 module.exports = { getFullDetalles };
 
 const getDetallesConexionesFactura = async (req, res) => {
@@ -2943,6 +3007,7 @@ module.exports = {
   getfacturasPagoPendienteByAgente,
   updateDocumentosFacturas,
   getFacturasDetalles,
+  getQuitarDetalles,
 };
 
 //ya quedo "#$%&/()="

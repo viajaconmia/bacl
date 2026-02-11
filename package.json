@@ -20,22 +20,31 @@
     "@aws-sdk/s3-request-presigner": "^3.830.0",
     "@google/genai": "^1.29.0",
     "@sendgrid/mail": "^8.1.4",
+    "@sparticuz/chromium-min": "^143.0.4",
     "@supabase/supabase-js": "^2.49.9",
     "aws-sdk": "^2.1692.0",
     "axios": "^1.7.9",
     "bcrypt": "^6.0.0",
     "callback": "^0.0.1",
+    "cheerio": "^1.2.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "follow-redirects": "^1.15.11",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "mysql2": "^3.12.0",
     "nodemon": "^3.1.10",
     "otp-generator": "^4.0.1",
+    "playwright": "^1.58.1",
+    "puppeteer-core": "^24.37.1",
     "stripe": "^17.6.0",
     "uuid": "^11.1.0",
-    "winston": "^3.17.0"
+    "winston": "^3.17.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.37.1"
   }
 }

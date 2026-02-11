@@ -227,6 +227,8 @@ const cancelarCfdi = async (req, res) => {
       .json({ error: "Internal Server Error", details: error.response.data });
   }
 };
+
+
 const getCdfi = async (req, res) => {
   try {
     const { id } = req.query;

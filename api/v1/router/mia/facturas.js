@@ -20,7 +20,8 @@ router.post(
 );
 
 router.get("/detallesConexion", controller.getDetallesConexionesFactura);
-
+router.get("/eliminar factura");
+router.delete("/quitar_relacion",controller.getQuitarDetalles)
 router.get("/getfulldetalles", controller.getFullDetalles);
 
 router.get("/get_agente_facturas", controller.get_agente_facturas);
