@@ -514,7 +514,8 @@ const crearVuelo = async (req, res) => {
             taxes,
             total,
             codigo_confirmacion
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+            id_intermediario
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?);`;
 
         const viajesAereosParams = [
           viaje_aereo.id_viaje_aereo, // No es NULL, no tiene valor por defecto. Es la clave primaria.
@@ -536,6 +537,7 @@ const crearVuelo = async (req, res) => {
           precio.impuestos, // Puede ser NULL.
           precio.total, // No es NULL, no tiene valor por defecto.
           viaje_aereo.codigo_confirmation, // Puede ser NULL.
+          req?.body?.reserva?.intermediario?.id || null,
         ];
 
         await connection.execute(insertViajesAereosQuery, viajesAereosParams);
@@ -611,11 +613,10 @@ const crearVuelo = async (req, res) => {
             rate_type,
             comentarios,
             fly_type,
-            id_intermediario,
             eq_mano,
             eq_personal,
             eq_documentado
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
         console.log("INSERT VUELOS QUERY:", vuelos);
 
@@ -648,7 +649,6 @@ const crearVuelo = async (req, res) => {
               vuelo.rate_type || null, // Puede ser NULL.
               vuelo.comentarios || null, // Puede ser NULL.
               vuelo.fly_type || null, // Puede ser NULL.
-              vuelo.intermediario || null,
               vuelo.eq_mano || null,
               vuelo.eq_personal || null,
               vuelo.eq_documentado || null,

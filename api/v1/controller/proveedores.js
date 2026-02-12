@@ -11,10 +11,11 @@ const getProveedores = async (req, res) => {
       type = null,
       id = null,
       page = 1,
-      size = 20,
+      size = 100,
       proveedor = null,
       status = null,
       rfc = null,
+      intermediario = null,
     } = req.query;
 
     const [[{ total }], data] = await executeQuery(
@@ -25,9 +26,10 @@ const getProveedores = async (req, res) => {
         status == null ? null : status == "activo" ? true : false,
         proveedor,
         rfc,
+        intermediario,
         page,
         size,
-      ]
+      ],
     );
 
     res.status(200).json({ message: "", data, metadata: { total } });
@@ -38,7 +40,6 @@ const getProveedores = async (req, res) => {
       .json({ message: error.message, data: null, error });
   }
 };
-
 
 const getSucursales = async (req, res) => {
   try {
@@ -57,7 +58,9 @@ const getDetalles = async (req, res) => {
     const { id_proveedor } = req.query;
 
     if (!id_proveedor) {
-      return res.status(400).json({ message: "id_proveedor es requerido", data: null });
+      return res
+        .status(400)
+        .json({ message: "id_proveedor es requerido", data: null });
     }
 
     const datos_fiscales = await executeQuery(
@@ -68,7 +71,7 @@ const getDetalles = async (req, res) => {
         ON df.id = r.id_datos_fiscales
       WHERE r.id_proveedor = ?;
       `,
-      [id_proveedor]
+      [id_proveedor],
     );
 
     return res.status(200).json({ message: "", data: datos_fiscales });
@@ -86,7 +89,7 @@ const getCuentas = async (req, res) => {
     console.log(req.query);
     const cuentas = await executeQuery(
       `select * from proveedores_cuentas where id_proveedor = ?;`,
-      [id_proveedor]
+      [id_proveedor],
     );
     res.status(200).json({ message: "", data: cuentas });
   } catch (error) {
@@ -104,7 +107,7 @@ const getDatosFiscales = async (req, res) => {
 
     const cuentas = await executeQuery(
       `select * from proveedores_cuentas where id_proveedor = ?`,
-      [id]
+      [id],
     );
 
     res.status(200).json({
@@ -118,24 +121,29 @@ const getDatosFiscales = async (req, res) => {
       .json({ message: error.message, data: null, error });
   }
 };
+
 const createProveedor = async (req, res) => {
   try {
-    const { nombre, type } = req.body;
-    if (!nombre.trim()) throw new Error("Viene vacio el nombre");
-    const [proveedor] = await executeQuery(
+    const { nombre: proveedor, type, intermediario = false } = req.body;
+    if (!proveedor.trim()) throw new Error("Viene vacio el nombre");
+    const [proveedorexist] = await executeQuery(
       `SELECT * FROM proveedores WHERE proveedor = ?`,
-      [(nombre || "").toUpperCase()]
+      [(proveedor || "").toUpperCase()],
     );
-    if (proveedor) throw new Error("Ya existe ese proveedor");
+    if (proveedorexist) throw new Error("Ya existe ese proveedor");
 
     await executeQuery(
-      `INSERT INTO proveedores (proveedor, type) VALUES (?, ?)`,
-      [(nombre || "").trim().toUpperCase(), type || null]
+      `INSERT INTO proveedores (proveedor, type, intermediario) VALUES (?, ?, ?)`,
+      [
+        (proveedor || "").trim().toUpperCase(),
+        type || null,
+        intermediario || null,
+      ],
     );
 
     const proveedores = await executeQuery(
       `SELECT * FROM proveedores where type = ?`,
-      [type]
+      [type],
     );
     res.status(200).json({ message: "Creado con exito", data: proveedores });
   } catch (error) {
@@ -157,13 +165,13 @@ const createDatosFiscales = async (req, res) => {
     // 1. Verificar si ya existe el RFC (porque es UNIQUE en tu tabla)
     const [existente] = await executeQuery(
       `SELECT * FROM proveedores_datos_fiscales WHERE rfc = ?`,
-      [rfc.trim().toUpperCase()]
+      [rfc.trim().toUpperCase()],
     );
 
     if (existente) {
       await executeQuery(
         `INSERT INTO proveedores_datos_fiscales_relacion (id_proveedor, id_datos_fiscales) VALUES (?,?)`,
-        [id_proveedor, existente.id]
+        [id_proveedor, existente.id],
       );
     } else {
       await runTransaction(async (conn) => {
@@ -174,11 +182,11 @@ const createDatosFiscales = async (req, res) => {
               rfc.trim().toUpperCase(),
               alias.trim().toUpperCase() || null,
               razon_social.trim().toUpperCase(),
-            ]
+            ],
           );
           await conn.execute(
             `INSERT INTO proveedores_datos_fiscales_relacion (id_proveedor, id_datos_fiscales) VALUES (?,?)`,
-            [id_proveedor, response[0].insertId]
+            [id_proveedor, response[0].insertId],
           );
         } catch (error) {
           throw error;
@@ -191,7 +199,7 @@ const createDatosFiscales = async (req, res) => {
 left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
 WHERE rel.id_proveedor = ?
 group by pdf.id;`,
-      [id_proveedor]
+      [id_proveedor],
     );
 
     console.log(response);
@@ -249,7 +257,7 @@ const crearSucursal = async (req, res) => {
         true,
         horarios,
         direccion,
-      ]
+      ],
     );
 
     const sucursales = await executeQuery(`SELECT * FROM sucursales`);
@@ -344,12 +352,12 @@ const putEditar = async (req, res) => {
           if (!!auto) {
             const [[proveedor]] = await conn.execute(
               `SELECT 1 FROM proveedor_auto where id_proveedor = ?`,
-              [id]
+              [id],
             );
             if (!proveedor && !!auto)
               await conn.execute(
                 `INSERT INTO proveedor_auto (id_proveedor) VALUES (?)`,
-                [id]
+                [id],
               );
             await conn.execute(
               `UPDATE proveedor_auto SET is_con_chofer = ?, is_sin_chofer = ?, is_chofer_bilingue = ?, notas_sin_chofer = ?, notas_con_chofer = ?, notas_chofer_bilingue = ?, incidencia = ?, notas_generales = ? WHERE id_proveedor = ?`,
@@ -363,7 +371,7 @@ const putEditar = async (req, res) => {
                 auto.incidencia || null,
                 auto.notas_generales || null,
                 id,
-              ]
+              ],
             );
           }
           if (!!vuelo) {
@@ -376,7 +384,7 @@ const putEditar = async (req, res) => {
 
     const updated = await executeQuery(
       `SELECT * FROM proveedores WHERE id = ?`,
-      [id]
+      [id],
     );
 
     response.message = "Proveedor actualizado correctamente";
@@ -413,7 +421,7 @@ const updateDatosFiscales = async (req, res) => {
 
     const [proveedor] = await executeQuery(
       `SELECT * FROM proveedores_datos_fiscales WHERE rfc = ? and id <> ?`,
-      [rfc.trim().toUpperCase(), id]
+      [rfc.trim().toUpperCase(), id],
     );
 
     if (proveedor) throw new Error("Ya existe ese rfc");
@@ -428,12 +436,12 @@ const updateDatosFiscales = async (req, res) => {
         alias || null,
         razon_social.trim().toUpperCase(),
         id,
-      ]
+      ],
     );
 
     const response = await executeQuery(
       `select * from proveedores_cuentas where id_proveedor = ?;`,
-      [id_proveedor]
+      [id_proveedor],
     );
 
     res.status(200).json({
@@ -467,13 +475,13 @@ const createProveedorCuenta = async (req, res) => {
         titular?.trim().toUpperCase() || null,
         comentarios || null,
         alias?.trim().toUpperCase() || null,
-      ]
+      ],
     );
 
     // 3. Regresar las cuentas del proveedor
     const response = await executeQuery(
       `SELECT * FROM proveedores_cuentas WHERE id_proveedor = ?`,
-      [id_proveedor]
+      [id_proveedor],
     );
 
     res.status(200).json({
@@ -501,7 +509,7 @@ const updateProveedorCuenta = async (req, res) => {
     const [existente] = await executeQuery(
       `SELECT * FROM proveedores_cuentas 
        WHERE id_proveedor = ? AND cuenta = ? AND id <> ?`,
-      [id_proveedor, cuenta.trim(), id]
+      [id_proveedor, cuenta.trim(), id],
     );
 
     if (existente) {
@@ -520,13 +528,13 @@ const updateProveedorCuenta = async (req, res) => {
         comentarios || null,
         alias?.trim().toUpperCase() || null,
         id,
-      ]
+      ],
     );
 
     // 3. Regresar las cuentas del proveedor
     const response = await executeQuery(
       `SELECT * FROM proveedores_cuentas WHERE id_proveedor = ?`,
-      [id_proveedor]
+      [id_proveedor],
     );
 
     res.status(200).json({
@@ -562,7 +570,7 @@ const getProveedorType = async (req, res) => {
 
     if (!Object.keys(querys).includes(type))
       throw new Error(
-        "No encontramos el tipo de proveedor, el que recibimos fue: " + type
+        "No encontramos el tipo de proveedor, el que recibimos fue: " + type,
       );
 
     const response = await executeQuery(querys[type], [id]);
@@ -596,7 +604,7 @@ const updateProveedorVuelo = async (req, res) => {
     // Verificar que exista el registro
     const [vuelo] = await executeQuery(
       `SELECT * FROM proveedor_vuelo WHERE id = ?`,
-      [id]
+      [id],
     );
 
     if (!vuelo) throw new Error("El registro de vuelo no existe");
@@ -617,13 +625,13 @@ const updateProveedorVuelo = async (req, res) => {
         equipaje_documentado?.trim() || null,
         servicios_adicionales.trim() || "",
         id,
-      ]
+      ],
     );
 
     // Regresar los vuelos del proveedor
     const response = await executeQuery(
       `SELECT * FROM proveedor_vuelo WHERE id_proveedor = ?`,
-      [id_proveedor]
+      [id_proveedor],
     );
 
     res.status(200).json({
@@ -674,13 +682,13 @@ const createProveedorVuelo = async (req, res) => {
         equipaje_mano_o_carry_on.trim(),
         equipaje_documentado?.trim() || null,
         servicios_adicionales.trim(),
-      ]
+      ],
     );
 
     // Regresar los vuelos del proveedor
     const response = await executeQuery(
       `SELECT * FROM proveedor_vuelo WHERE id_proveedor = ?`,
-      [id_proveedor]
+      [id_proveedor],
     );
 
     res.status(200).json({

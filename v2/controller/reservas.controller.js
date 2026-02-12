@@ -1984,34 +1984,90 @@ const obtener = async (req, res) => {
   const where = [];
   const params = [];
 
-  if (req.query.id_agente !== undefined) {
-    where.push(`id_agente = ?`);
-    params.push(req.query.id_agente);
+  /* =========================
+     FILTROS
+  ==========================*/
+
+  // Código reservación
+  if (req.query.codigo_reservacion) {
+    where.push(`codigo_confirmacion LIKE CONCAT('%', ?, '%')`);
+    params.push(req.query.codigo_reservacion);
   }
 
-  if (req.query.type) {
-    where.push(`type = ?`);
-    params.push(req.query.type);
-  }
-
-  if (req.query.estado) {
-    where.push(`estado = ?`);
-    params.push(req.query.estado);
-  }
-
+  // Proveedor
   if (req.query.proveedor) {
     where.push(`proveedor LIKE CONCAT('%', ?, '%')`);
     params.push(req.query.proveedor);
   }
 
-  if (req.query.id_booking) {
-    where.push(`id_booking LIKE CONCAT('%', ?, '%')`);
-    params.push(req.query.id_booking);
+  // ID cliente
+  if (req.query.id_client) {
+    where.push(`id_agente LIKE CONCAT('%', ?, '%')`);
+    params.push(req.query.id_client);
   }
 
-  if (req.query.fecha_inicio && req.query.fecha_fin) {
-    where.push(`created_at BETWEEN ? AND ?`);
-    params.push(req.query.fecha_inicio, req.query.fecha_fin);
+  // Cliente (nombre agente)
+  if (req.query.cliente) {
+    where.push(`agente LIKE CONCAT('%', ?, '%')`);
+    params.push(req.query.cliente);
+  }
+
+  // Viajero
+  if (req.query.traveler) {
+    where.push(`viajero LIKE CONCAT('%', ?, '%')`);
+    params.push(req.query.traveler);
+  }
+
+  // Estado
+  if (req.query.status) {
+    where.push(`estado = ?`);
+    params.push(req.query.status);
+  }
+
+  // Etapa reservación
+  if (req.query.reservationStage) {
+    where.push(`etapa_reservacion = ?`);
+    params.push(req.query.reservationStage);
+  }
+
+  // Reservante
+  if (req.query.reservante) {
+    where.push(`reservante = ?`);
+    params.push(req.query.reservante);
+  }
+
+  // Método de pago
+  if (req.query.paymentMethod) {
+    where.push(`metodo_pago = ?`);
+    params.push(req.query.paymentMethod);
+  }
+
+  /* =========================
+     FILTRO DE FECHA DINÁMICO
+  ==========================*/
+
+  const { startDate, endDate, filterType } = req.query;
+
+  if (startDate || endDate) {
+    let column = "created_at";
+
+    if (filterType) {
+      const type = filterType.toLowerCase();
+
+      if (type === "check in") column = "check_in";
+      if (type === "check out") column = "check_out";
+      if (type === "transaccion") column = "created_at";
+    }
+    if (startDate && endDate) {
+      where.push(`${column} BETWEEN ? AND ?`);
+      params.push(startDate, endDate);
+    } else if (startDate) {
+      where.push(`${column} >= ?`);
+      params.push(startDate);
+    } else if (endDate) {
+      where.push(`${column} <= ?`);
+      params.push(endDate);
+    }
   }
 
   const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";

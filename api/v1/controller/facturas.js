@@ -47,7 +47,7 @@ const isFacturada = async (req, res) => {
 const createCombinada = async (req, res) => {
   req.context.logStep(
     "createCombinada",
-    "Inicio del proceso de creación de factura combinada"
+    "Inicio del proceso de creación de factura combinada",
   );
   try {
     const resp = await model.createFacturaCombinada(req, req.body);
@@ -64,7 +64,6 @@ const createCombinada = async (req, res) => {
     });
   }
 };
-
 
 // const createEmi = async (req, res) => {
 //   req.context.logStep(
@@ -172,8 +171,8 @@ const getFacturasDetalles = async (req, res) => {
           const arrCandidate = Array.isArray(parsed.id_facturas)
             ? parsed.id_facturas
             : parsed.id_factura != null
-            ? [parsed.id_factura]
-            : [parsed];
+              ? [parsed.id_factura]
+              : [parsed];
 
           const arr = arrCandidate
             .map((v) => (v == null ? "" : String(v).trim()))
@@ -238,13 +237,13 @@ const getFacturasDetalles = async (req, res) => {
 
     return res.status(200).json({
       message: "Consulta exitosa",
-      data:{
+      data: {
         tipo_origen: "factura",
-      id_origen: ids,
-      pagos,
-      saldos,
-      reservas,
-      }
+        id_origen: ids,
+        pagos,
+        saldos,
+        reservas,
+      },
     });
   } catch (error) {
     console.error("get_detalles_factura error:", error);
@@ -306,7 +305,7 @@ const updateDocumentosFacturas = async (req, res) => {
 const crearFacturaDesdeCarga = async (req, res) => {
   req.context.logStep(
     "crearFacturaDesdeCarga",
-    "Iniciando creación de factura desde carga"
+    "Iniciando creación de factura desde carga",
   );
   const {
     fecha_emision,
@@ -329,7 +328,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
   const id_factura = "fac-" + uuidv4();
 
   console.log(items, "estos son los items 👌👌👌👌👌👌👌👌");
-  
+
   try {
     console.log("😒😒😒😒😒", req.body);
     const response = await executeSP("sp_inserta_factura_desde_carga", [
@@ -355,7 +354,7 @@ const crearFacturaDesdeCarga = async (req, res) => {
     if (!response) {
       req.context.logStep(
         "crearFacturaDesdeCarga:",
-        "Error al crear factura desde carga"
+        "Error al crear factura desde carga",
       );
       throw new Error("No se pudo crear la factura desde carga");
     } else {
@@ -403,7 +402,7 @@ const asignarFacturaItems = async (req, res) => {
 
     const saldo_factura = await executeQuery(
       `select saldo from facturas where id_factura = ?;`,
-      [id_factura]
+      [id_factura],
     );
     let suma_total_items = 0;
     for (const item of itemsArray) {
@@ -585,7 +584,7 @@ const asignarFacturaPagos2 = async (req, res) => {
     step(
       4.2,
       "disponiblePorRawId (as array)",
-      Array.from(disponiblePorRawId.entries())
+      Array.from(disponiblePorRawId.entries()),
     );
 
     // =========================
@@ -624,7 +623,7 @@ const asignarFacturaPagos2 = async (req, res) => {
       "SELECT items_facturas por facturas",
       queryItems,
       facturasOrden,
-      itemsDeFacturas
+      itemsDeFacturas,
     );
     step(6.1, "itemsDeFacturas (preview)", brief(itemsDeFacturas, 20));
 
@@ -634,7 +633,7 @@ const asignarFacturaPagos2 = async (req, res) => {
       step(
         6.2,
         "Keys del primer item_factura",
-        Object.keys(itemsDeFacturas[0])
+        Object.keys(itemsDeFacturas[0]),
       );
       step(6.3, "Primer item_factura completo", itemsDeFacturas[0]);
     }
@@ -659,11 +658,11 @@ const asignarFacturaPagos2 = async (req, res) => {
     // Guardas para detectar el bug al vuelo
     const sumPendiente = itemPendiente.reduce(
       (a, x) => a + (Number(x.pendiente) || 0),
-      0
+      0,
     );
     const sumMonto = itemPendiente.reduce(
       (a, x) => a + (Number(x.pendiente_from_monto) || 0),
-      0
+      0,
     );
     step(6.5, "SUMAS: pendiente(usado) vs monto(de DB)", {
       sumPendiente,
@@ -690,7 +689,7 @@ const asignarFacturaPagos2 = async (req, res) => {
         ([f, set]) => ({
           id_factura: f,
           hospedajes: Array.from(set),
-        })
+        }),
       ),
     });
 
@@ -705,13 +704,13 @@ const asignarFacturaPagos2 = async (req, res) => {
       `;
       const rowsVista = await executeQuery(
         queryVistaReservas,
-        hospedajesUnicos
+        hospedajesUnicos,
       );
       logQuery(
         "SELECT vw_reservas_client",
         queryVistaReservas,
         hospedajesUnicos,
-        rowsVista
+        rowsVista,
       );
 
       for (const r of rowsVista || []) {
@@ -780,11 +779,11 @@ const asignarFacturaPagos2 = async (req, res) => {
 
         appliedByFactura.set(
           f.id_factura,
-          (appliedByFactura.get(f.id_factura) || 0) + aplicar
+          (appliedByFactura.get(f.id_factura) || 0) + aplicar,
         );
         appliedByCredito.set(
           cred.raw_id,
-          (appliedByCredito.get(cred.raw_id) || 0) + aplicar
+          (appliedByCredito.get(cred.raw_id) || 0) + aplicar,
         );
 
         if (f.saldo <= 0) idxFactura++;
@@ -811,7 +810,7 @@ const asignarFacturaPagos2 = async (req, res) => {
     step(
       9,
       "itemPendiente antes de repartir (preview)",
-      brief(itemPendiente, 30)
+      brief(itemPendiente, 30),
     );
 
     for (const cred of creditos) {
@@ -868,7 +867,7 @@ const asignarFacturaPagos2 = async (req, res) => {
             "itemPendiente.pendiente quedó en 0 porque estás usando it.saldo pero tu SELECT trae monto. Cambia pendiente: Number(it.monto).",
           sumPendiente,
           sumMonto,
-        }
+        },
       );
       // aquí puedes throw si quieres forzar que truene y lo veas
       // throw new Error("planItemsPagos vacío: no hay nada que insertar en items_pagos");
@@ -930,7 +929,7 @@ const asignarFacturaPagos2 = async (req, res) => {
     step(
       10.2,
       "pagosCreados (raw_id -> id_pago)",
-      Array.from(pagosCreados.entries())
+      Array.from(pagosCreados.entries()),
     );
 
     // =========================
@@ -948,7 +947,7 @@ const asignarFacturaPagos2 = async (req, res) => {
           step(
             11.1,
             "WARN: No existe id_pago para raw_id (saltando fila items_pagos)",
-            p
+            p,
           );
           continue;
         }
@@ -965,7 +964,7 @@ const asignarFacturaPagos2 = async (req, res) => {
 
       if (valuesIP.length > 0) {
         const sqlIP = `INSERT INTO items_pagos (id_item, id_pago, monto) VALUES ${valuesIP.join(
-          ","
+          ",",
         )};`;
         const rIP = await executeQuery(sqlIP, paramsIP);
         logQuery("INSERT items_pagos (bulk)", sqlIP, paramsIP, rIP);
@@ -987,7 +986,7 @@ const asignarFacturaPagos2 = async (req, res) => {
     // =========================
     const montoFacturaCredito = new Map();
     const facturaPorItem = new Map(
-      itemPendiente.map((it) => [it.id_item, it.id_factura])
+      itemPendiente.map((it) => [it.id_item, it.id_factura]),
     );
 
     for (const p of planItemsPagos) {
@@ -995,7 +994,7 @@ const asignarFacturaPagos2 = async (req, res) => {
       const key = `${id_factura}|${p.raw_id}`;
       montoFacturaCredito.set(
         key,
-        (montoFacturaCredito.get(key) || 0) + p.monto
+        (montoFacturaCredito.get(key) || 0) + p.monto,
       );
     }
 
@@ -1018,14 +1017,14 @@ const asignarFacturaPagos2 = async (req, res) => {
       console.log(
         queryBridge,
         paramsBridge,
-        "🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽 parametros"
+        "🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽🔽 parametros",
       );
       const rBridge = await executeQuery(queryBridge, paramsBridge);
       logQuery(
         "INSERT facturas_pagos_y_saldos",
         queryBridge,
         paramsBridge,
-        rBridge
+        rBridge,
       );
     }
 
@@ -1043,7 +1042,7 @@ const asignarFacturaPagos2 = async (req, res) => {
         "UPDATE facturas.saldo",
         queryUpdateFactura,
         [f.saldo, f.id_factura],
-        rUF
+        rUF,
       );
     }
 
@@ -1051,7 +1050,7 @@ const asignarFacturaPagos2 = async (req, res) => {
     // STEP 14: UPDATE items (OJO: tu código actual actualiza items, no items_facturas)
     // =========================
     const itemsConCambio = itemPendiente.filter((it) =>
-      Number.isFinite(it.pendiente)
+      Number.isFinite(it.pendiente),
     );
     step(14, "itemsConCambio (preview)", brief(itemsConCambio, 20));
 
@@ -1077,7 +1076,7 @@ const asignarFacturaPagos2 = async (req, res) => {
         "UPDATE items.saldo (CASE bulk)",
         sqlUpdateItems,
         paramsUpdateItems,
-        rUI
+        rUI,
       );
     }
 
@@ -1228,7 +1227,7 @@ const asignarFacturaPagos = async (req, res) => {
 
       if (!donorKey) {
         throw new Error(
-          `[LINK] No hay donador para meter 1 centavo en FACTURA ${id_factura} con saldo ${id_saldo}`
+          `[LINK] No hay donador para meter 1 centavo en FACTURA ${id_factura} con saldo ${id_saldo}`,
         );
       }
 
@@ -1295,7 +1294,7 @@ const asignarFacturaPagos = async (req, res) => {
 
       if (!chosenItem) {
         throw new Error(
-          `[LINK] No hay item/donador para meter 1 centavo en ITEMS de FACTURA ${id_factura} con saldo ${id_saldo}`
+          `[LINK] No hay item/donador para meter 1 centavo en ITEMS de FACTURA ${id_factura} con saldo ${id_saldo}`,
         );
       }
 
@@ -1406,11 +1405,11 @@ const asignarFacturaPagos = async (req, res) => {
 
     log(
       "[LINK] sets FINAL factura",
-      Array.from(finalSetFactura.entries()).map(([f, s]) => [f, Array.from(s)])
+      Array.from(finalSetFactura.entries()).map(([f, s]) => [f, Array.from(s)]),
     );
     log(
       "[LINK] sets FINAL items",
-      Array.from(finalSetItems.entries()).map(([f, s]) => [f, Array.from(s)])
+      Array.from(finalSetItems.entries()).map(([f, s]) => [f, Array.from(s)]),
     );
 
     return { creditoFacturaFinal, creditoItemFinal };
@@ -1549,7 +1548,7 @@ const asignarFacturaPagos = async (req, res) => {
 
     const totalFacturasCents = facturas.reduce(
       (acc, f) => acc + toCents(f.saldo),
-      0
+      0,
     );
     log("Facturas cargadas", {
       facturas,
@@ -1606,7 +1605,7 @@ const asignarFacturaPagos = async (req, res) => {
 
     const totalItemsCents = (itemsDeFacturas || []).reduce(
       (acc, it) => acc + toCents(it.monto),
-      0
+      0,
     );
     log("Total items", { total_items: fromCents(totalItemsCents) });
 
@@ -1665,7 +1664,7 @@ const asignarFacturaPagos = async (req, res) => {
     // (B) Validación facturas: total aplicado debe cubrir EXACTO total facturas
     const totalAplicadoCents = saldosAplicados.reduce(
       (acc, s) => acc + s.aplicado_cents,
-      0
+      0,
     );
     let diferencia = fromCents(totalFacturasCents - totalAplicadoCents);
     log("Totales aplicado vs facturas", {
@@ -1677,7 +1676,7 @@ const asignarFacturaPagos = async (req, res) => {
     // (C) Validación items: suma de min(aplicado, saldoVista) >= total items
     const totalItemCapCents = saldosAplicados.reduce(
       (acc, s) => acc + s.itemCapCents,
-      0
+      0,
     );
     log("Totales items (cap vs need)", {
       total_item_cap: fromCents(totalItemCapCents),
@@ -1709,7 +1708,7 @@ const asignarFacturaPagos = async (req, res) => {
       poolFactura.map((p) => ({
         id_saldo: p.id_saldo,
         remaining: fromCents(p.remaining),
-      }))
+      })),
     );
 
     const credito_a_factura = [];
@@ -1783,7 +1782,7 @@ const asignarFacturaPagos = async (req, res) => {
       poolItem.map((p) => ({
         id_saldo: p.id_saldo,
         remaining: fromCents(p.remaining),
-      }))
+      })),
     );
 
     const credito_a_item = [];
@@ -1869,7 +1868,7 @@ const asignarFacturaPagos = async (req, res) => {
 
       log(
         "[LINK] credito_a_factura reconciliado",
-        briefLocal(credito_a_factura, 50)
+        briefLocal(credito_a_factura, 50),
       );
       log("[LINK] credito_a_item reconciliado", briefLocal(credito_a_item, 50));
     } catch (e) {
@@ -1925,7 +1924,7 @@ const asignarFacturaPagos = async (req, res) => {
     }
     log(
       "[PAGOS] itemToHospedaje (preview)",
-      briefLocal(Array.from(itemToHospedaje.entries()), 20)
+      briefLocal(Array.from(itemToHospedaje.entries()), 20),
     );
 
     // hospedajes únicos (de credito_a_item)
@@ -1934,7 +1933,7 @@ const asignarFacturaPagos = async (req, res) => {
         (credito_a_item || [])
           .map((row) => itemToHospedaje.get(String(row.id_item)))
           .filter(Boolean)
-          .map(String)
+          .map(String),
       ),
     ];
     log("[PAGOS] hospedajesUnicos", hospedajesUnicos);
@@ -1950,13 +1949,13 @@ const asignarFacturaPagos = async (req, res) => {
   `;
       const rowsVista = await executeQuery(
         queryVistaReservas,
-        hospedajesUnicos
+        hospedajesUnicos,
       );
       logQuery(
         "SELECT vw_reservas_client",
         queryVistaReservas,
         hospedajesUnicos,
-        rowsVista
+        rowsVista,
       );
 
       for (const r of rowsVista || []) {
@@ -1967,7 +1966,7 @@ const asignarFacturaPagos = async (req, res) => {
     }
     log(
       "[PAGOS] hospToServicio (preview)",
-      briefLocal(Array.from(hospToServicio.entries()), 20)
+      briefLocal(Array.from(hospToServicio.entries()), 20),
     );
 
     // Metadata por saldo (saldos_a_favor)
@@ -1997,7 +1996,7 @@ const asignarFacturaPagos = async (req, res) => {
         "SELECT saldos_a_favor (metadata)",
         querySaldoInfo,
         saldosIdsUnicos,
-        rowsSaldoInfo
+        rowsSaldoInfo,
       );
 
       for (const r of rowsSaldoInfo || []) {
@@ -2014,7 +2013,7 @@ const asignarFacturaPagos = async (req, res) => {
     }
     log(
       "[PAGOS] saldoInfoById (preview)",
-      briefLocal(Array.from(saldoInfoById.entries()), 10)
+      briefLocal(Array.from(saldoInfoById.entries()), 10),
     );
 
     // Acumulador para restar saldo en saldos_a_favor (por id_saldo) en CENTS
@@ -2212,26 +2211,42 @@ const asignarFacturaPagos = async (req, res) => {
 };
 
 const filtrarFacturas = async (req, res) => {
-  const { estatusFactura, id_factura, id_cliente, cliente, uuid, rfc } =
-    req.body;
+  const {
+    estatusFactura,
+    id_factura,
+    id_cliente,
+    cliente,
+    uuid,
+    rfc,
+    page = 1,
+    length = 100,
+  } = req.body;
   try {
     console.log(estatusFactura);
-    const result = await executeSP("sp_filtrar_facturas", [
-      estatusFactura || null,
-      id_factura || null,
-      id_cliente || null,
-      cliente || null,
-      uuid || null,
-      rfc || null,
-    ]);
-    if (!result) {
+    const result = await executeQuery(
+      "Call sp_filtrar_facturas(?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        estatusFactura || null,
+        id_factura || null,
+        id_cliente || null,
+        cliente || null,
+        uuid || null,
+        rfc || null,
+        page,
+        length,
+      ],
+    );
+
+    console.log(result);
+    if (!result[0]) {
       return res.status(404).json({
         message: "No se encontraron facturas con el parametro deseado",
       });
     }
     return res.status(200).json({
       message: "Facturas filtradas correctamente",
-      data: result,
+      data: result[0],
+      metadata: result[1] ? result[1][0] : null, // Asumiendo que el SP devuelve metadata en el segundo result set
     });
   } catch (error) {
     return res.status(500).json({
@@ -2278,7 +2293,7 @@ const get_agente_facturas = async (req, res) => {
 const createEmi = async (req, res) => {
   req.context.logStep(
     "createEmi",
-    "Inicio del proceso de creación de factura (emi)"
+    "Inicio del proceso de creación de factura (emi)",
   );
   try {
     const resp = await model.crearFacturaEmi(req, req.body);
@@ -2286,12 +2301,12 @@ const createEmi = async (req, res) => {
     const facturamaData = resp?.facturama?.Id
       ? resp.facturama
       : resp?.data?.facturama?.Id
-      ? resp.data.facturama
-      : resp?.data?.Id
-      ? resp.data
-      : resp?.Id
-      ? resp
-      : null;
+        ? resp.data.facturama
+        : resp?.data?.Id
+          ? resp.data
+          : resp?.Id
+            ? resp
+            : null;
 
     if (!facturamaData) {
       return res.status(500).json({
@@ -2365,7 +2380,7 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
     const mImp =
       mTotal != null && mSub != null
         ? Number(mTotal) - Number(mSub)
-        : impuestos ?? 0;
+        : (impuestos ?? 0);
 
     return {
       fecha_emision: f.Fecha || f.fecha || new Date(),
@@ -2399,12 +2414,12 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
       facturamaData = resp?.facturama?.Id
         ? resp.facturama
         : resp?.data?.facturama?.Id
-        ? resp.data.facturama
-        : resp?.data?.Id
-        ? resp.data
-        : resp?.Id
-        ? resp
-        : null;
+          ? resp.data.facturama
+          : resp?.data?.Id
+            ? resp.data
+            : resp?.Id
+              ? resp
+              : null;
 
       if (!facturamaData) {
         return res.status(500).json({
@@ -2611,12 +2626,12 @@ const crearFacturaMultiplesPagos = async (req, res) => {
       facturamaData = resp?.facturama?.Id
         ? resp.facturama
         : resp?.data?.facturama?.Id
-        ? resp.data.facturama
-        : resp?.data?.Id
-        ? resp.data
-        : resp?.Id
-        ? resp
-        : null;
+          ? resp.data.facturama
+          : resp?.data?.Id
+            ? resp.data
+            : resp?.Id
+              ? resp
+              : null;
 
       if (!facturamaData) {
         return res.status(500).json({
@@ -2661,7 +2676,7 @@ const crearFacturaMultiplesPagos = async (req, res) => {
     const totalFacturaCents = Math.round(Number(rowFactura.total) * 100);
     const sumPagosCents = pagos.reduce(
       (acc, p) => acc + Math.round(Number(p.monto) * 100),
-      0
+      0,
     );
     if (sumPagosCents !== totalFacturaCents) {
       return res.status(400).json({
@@ -2774,7 +2789,7 @@ const crearFacturaMultiplesPagos = async (req, res) => {
 const getFullDetalles = async (req, res) => {
   try {
     console.log(
-      "📦 recibido getFullDetalles (normalizando id_buscar a JSON array)"
+      "📦 recibido getFullDetalles (normalizando id_buscar a JSON array)",
     );
 
     const rawAgente = req.query.id_agente ?? req.body?.id_agente ?? "";
@@ -2840,7 +2855,7 @@ const getFullDetalles = async (req, res) => {
     const sets = await executeSP2(
       "sp_get_conexion_full",
       [id_agente, tipo, id_buscar_json], // <— JSON array
-      { allSets: true }
+      { allSets: true },
     );
 
     // Normalizar juegos de resultados
@@ -2882,7 +2897,7 @@ const getDetallesConexionesFactura = async (req, res) => {
     const [pagos = [], reservas = []] = await executeSP2(
       "sp_get_detalles_conexion_fcaturas",
       [id_agente, id_factura],
-      { allSets: true }
+      { allSets: true },
     );
     res.status(200).json({
       message: "Consulta exitosa",
