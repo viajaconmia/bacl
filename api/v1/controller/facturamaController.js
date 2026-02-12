@@ -230,6 +230,7 @@ const cancelarCfdi = async (req, res) => {
   }
 };
 
+
 const getCdfi = async (req, res) => {
   try {
     const { id, type = "issued" } = req.query;

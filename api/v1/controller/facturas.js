@@ -56,7 +56,8 @@ const createCombinada = async (req, res) => {
     return res.status(201).json(resp.data.data);
   } catch (error) {
     console.log("ERROR MANEJADO");
-    console.log(error.response);
+    console.log(error?.details?.response?.data?.ModelState || null);
+    console.log(error?.response?.data?.ModelState || null);
     res.status(500).json({
       error: "Error en el servidor",
       details: error.message || error,
@@ -391,38 +392,113 @@ const asignarFacturaItems = async (req, res) => {
     }
   }
 
-  try {
-    const updateitems = `UPDATE items
-    SET id_factura  = ?,
-        is_facturado = 1
-    WHERE id_item = ?;`;
-    const updateFactura = `  UPDATE facturas
-  SET saldo =  ?
-  WHERE id_factura = ?;`;
+  if (!Array.isArray(itemsArray) || itemsArray.length === 0) {
+    return res
+      .status(400)
+      .json({ error: "El campo 'items' debe ser un array con elementos" });
+  }
 
+  // Helpers para DECIMAL (evita float issues)
+  const toDecimal2String = (value) => {
+    // acepta number o string; convierte a string con 2 decimales
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "0.00";
+    return n.toFixed(2);
+  };
+
+  try {
+    // --- Queries ---
+    const updateItems = `
+      UPDATE items
+      SET id_factura = ?,
+          is_facturado = 1
+      WHERE id_item = ?;
+    `;
+
+    const insertItemFactura = `
+      INSERT INTO items_facturas (id_factura, id_item, monto)
+      VALUES (?, ?, ?);
+    `;
+
+    const updateFactura = `
+      UPDATE facturas
+      SET saldo = ?
+      WHERE id_factura = ?;
+    `;
+
+    // --- Transacción (si tu executeQuery soporta múltiples statements, ajusta) ---
+    await executeQuery("START TRANSACTION;");
+
+    // Bloquea la fila de factura para evitar carreras
     const saldo_factura = await executeQuery(
-      `select saldo from facturas where id_factura = ?;`,
+      `select saldo from facturas where id_factura = ? FOR UPDATE;`,
       [id_factura],
     );
+
+    if (!saldo_factura?.length) {
+      await executeQuery("ROLLBACK;");
+      return res
+        .status(404)
+        .json({ error: "Factura no encontrada", id_factura });
+    }
+
     let suma_total_items = 0;
+
     for (const item of itemsArray) {
-      // Asegura que item.total sea un número válido
-      const totalItem = Number(item.total) || 0;
-      suma_total_items += totalItem;
-      await executeQuery(updateitems, [id_factura, item.id_item]);
+      // total del item (o monto que quieras registrar)
+      const totalItemNum = Number(item.total);
+      if (!Number.isFinite(totalItemNum) || totalItemNum <= 0) {
+        await executeQuery("ROLLBACK;");
+        return res.status(400).json({
+          error: "Cada item debe traer un total numérico > 0",
+          item,
+        });
+      }
+
+      const montoDecimalStr = toDecimal2String(totalItemNum);
+      suma_total_items += totalItemNum;
+
+      // 1) UPDATE items
+      await executeQuery(updateItems, [id_factura, item.id_item]);
+
+      // 2) INSERT items_facturas con monto DECIMAL
+      //    Nota: pasar string "972.92" es lo más seguro para DECIMAL en MySQL
+      await executeQuery(insertItemFactura, [
+        id_factura,
+        item.id_item,
+        montoDecimalStr,
+      ]);
     }
-    const nuevo_saldo = saldo_factura[0].saldo - suma_total_items;
+
+    const saldoActualNum = Number(saldo_factura[0].saldo);
+    const nuevo_saldo = saldoActualNum - suma_total_items;
+
     if (nuevo_saldo < 0) {
-      throw new ShortError("El saldo de la factura no puede ser negativo", 400);
-    } else {
-      await executeQuery(updateFactura, [nuevo_saldo, id_factura]);
+      await executeQuery("ROLLBACK;");
+      // respeta tu ShortError si quieres, aquí lo dejo directo:
+      return res
+        .status(400)
+        .json({ error: "El saldo de la factura no puede ser negativo" });
     }
+
+    await executeQuery(updateFactura, [
+      toDecimal2String(nuevo_saldo),
+      id_factura,
+    ]);
+
+    await executeQuery("COMMIT;");
 
     return res.status(200).json({
       message: "Items asignados correctamente a la factura",
       data: "Factura asociada: " + id_factura,
+      total_asignado: toDecimal2String(suma_total_items),
+      nuevo_saldo: toDecimal2String(nuevo_saldo),
     });
   } catch (error) {
+    try {
+      await executeQuery("ROLLBACK;");
+    } catch (_) {}
+
     return res.status(500).json({
       error: "Error al asignar items a la factura",
       details: error.message || error,
@@ -2889,6 +2965,72 @@ const getFullDetalles = async (req, res) => {
   }
 };
 
+const getQuitarDetalles = async (req, res) => {
+  try {
+    console.log("📦 recibido getQuitarDetalles");
+
+    const id_factura = String(
+      req.query.id_factura ?? req.body?.id_factura ?? "",
+    ).trim();
+
+    if (!id_factura) {
+      return res.status(400).json({
+        ok: false,
+        message: "Se requiere id_factura",
+      });
+    }
+
+    // Opcional: valida formato si tus facturas son "fac-xxxx"
+    // if (!/^fac-[a-z0-9-]+$/i.test(id_factura)) {
+    //   return res.status(400).json({ ok: false, message: "id_factura inválido" });
+    // }
+
+    const deleteItemsFacturasSQL = `
+      DELETE FROM items_facturas
+      WHERE id_factura = ?
+    `;
+
+    const updateItemsSQL = `
+      UPDATE items
+      SET id_factura = ""
+      WHERE id_factura = ?
+    `;
+
+    const deleteSaldos = ` DELETE FROM facturas_pagos_y_saldos
+      WHERE id_factura = ?
+    `;
+
+    return await runTransaction(async (connection) => {
+      // 1) Elimina relaciones/detalles
+      const [del] = await connection.query(deleteItemsFacturasSQL, [
+        id_factura,
+      ]);
+      const [delsaldos] = await connection.query(deleteSaldos, [id_factura]);
+
+      // 2) Vacía id_factura en items
+      const [upd] = await connection.query(updateItemsSQL, [id_factura]);
+
+      return res.status(200).json({
+        ok: true,
+        message: "Detalles quitados correctamente",
+        data: {
+          id_factura,
+          deleted_items_facturas: del?.affectedRows ?? 0,
+          updated_items: upd?.affectedRows ?? 0,
+          delet_saldos: delsaldos?.affectedRows ?? 0,
+        },
+      });
+    });
+  } catch (error) {
+    console.error("getQuitarDetalles error:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error en el servidor",
+      details: error?.message ?? error,
+    });
+  }
+};
+
 module.exports = { getFullDetalles };
 
 const getDetallesConexionesFactura = async (req, res) => {
@@ -2958,6 +3100,7 @@ module.exports = {
   getfacturasPagoPendienteByAgente,
   updateDocumentosFacturas,
   getFacturasDetalles,
+  getQuitarDetalles,
 };
 
 //ya quedo "#$%&/()="

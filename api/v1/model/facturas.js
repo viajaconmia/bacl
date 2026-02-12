@@ -7,7 +7,9 @@ const {
 const { CustomError } = require("../../../middleware/errorHandler");
 const { crearCfdi } = require("./facturamaModel");
 const { v4: uuidv4 } = require("uuid");
-const { buildAddendaXmlFromJson } = require("../../Facturama/Facturama/addenda");
+const {
+  buildAddendaXmlFromJson,
+} = require("../../Facturama/Facturama/addenda");
 
 const isFacturada = async (id) => {
   try {
@@ -48,31 +50,36 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         response_factura = await crearCfdi(req, cfdi);
 
         const { addenda_json, addenda_type } = info_user || {};
-const cfdiId = response_factura?.data?.Id;
+        const cfdiId = response_factura?.data?.Id;
 
-if (cfdiId && addenda_json) {
-  const addendaXml = buildAddendaXmlFromJson(addenda_json, "NoktosAddenda");
+        if (cfdiId && addenda_json) {
+          const addendaXml = buildAddendaXmlFromJson(
+            addenda_json,
+            "NoktosAddenda"
+          );
 
-  // Esto es lo que el endpoint de Facturama espera según el modelo: CfdiId + AddendaXML :contentReference[oaicite:2]{index=2}
-  const addendaBody = {
-    CfdiId: cfdiId,
-    AddendaXML: addendaXml,
-    // opcional: Addenda: addendaXml,
-  };
+          // Esto es lo que el endpoint de Facturama espera según el modelo: CfdiId + AddendaXML :contentReference[oaicite:2]{index=2}
+          const addendaBody = {
+            CfdiId: cfdiId,
+            AddendaXML: addendaXml,
+            // opcional: Addenda: addendaXml,
+          };
 
-  try {
-    const addendaResp = await facturama.Addendas.Create(
-      req,
-      addenda_type || "Noktos",
-      addendaBody
-    );
-    console.log("✅ Addenda attach result:", addendaResp?.data);
-  } catch (e) {
-    // MUY recomendado: NO tumbar la factura si falla el addenda (a menos que negocio lo exija)
-    console.error("⚠️ No se pudo adjuntar addenda:", e?.response?.data || e?.message || e);
-  }
-}
-
+          try {
+            const addendaResp = await facturama.Addendas.Create(
+              req,
+              addenda_type || "Noktos",
+              addendaBody
+            );
+            console.log("✅ Addenda attach result:", addendaResp?.data);
+          } catch (e) {
+            // MUY recomendado: NO tumbar la factura si falla el addenda (a menos que negocio lo exija)
+            console.error(
+              "⚠️ No se pudo adjuntar addenda:",
+              e?.response?.data || e?.message || e
+            );
+          }
+        }
       } catch (error) {
         console.error(
           "Error al crear CFDI:",
@@ -188,30 +195,39 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
     const result = await runTransaction(async (conn) => {
       try {
         // 1. Crear factura en Facturama
-        const response_factura = await crearCfdi(req, cfdi);// 1. Crear factura en Facturama
+        const response_factura = await crearCfdi(req, cfdi); // 1. Crear factura en Facturama
 
-// ✅ Adjuntar addenda si viene
-const cfdiId = response_factura?.data?.Id;
-const addendaJson = info_user?.addenda_json;     // <- lo mandas desde front
-const addendaType = info_user?.addenda_type || "Noktos";
+        // ✅ Adjuntar addenda si viene
+        const cfdiId = response_factura?.data?.Id;
+        const addendaJson = info_user?.addenda_json; // <- lo mandas desde front
+        const addendaType = info_user?.addenda_type || "Noktos";
 
-if (cfdiId && addendaJson) {
-  const addendaXml = buildAddendaXmlFromJson(addendaJson, "NoktosAddenda");
+        if (cfdiId && addendaJson) {
+          const addendaXml = buildAddendaXmlFromJson(
+            addendaJson,
+            "NoktosAddenda"
+          );
 
-  const addendaBody = {
-    CfdiId: cfdiId,
-    AddendaXML: addendaXml,
-  };
+          const addendaBody = {
+            CfdiId: cfdiId,
+            AddendaXML: addendaXml,
+          };
 
-  try {
-    const addendaResp = await facturama.Addenda.Create(req, addendaType, addendaBody);
-    console.log("✅ Addenda attach:", addendaResp?.data);
-  } catch (e) {
-    // Recomiendo NO tirar la factura si falla la addenda
-    console.error("⚠️ Falló addenda:", e?.response?.data || e?.message || e);
-  }
-}
-
+          try {
+            const addendaResp = await facturama.Addenda.Create(
+              req,
+              addendaType,
+              addendaBody
+            );
+            console.log("✅ Addenda attach:", addendaResp?.data);
+          } catch (e) {
+            // Recomiendo NO tirar la factura si falla la addenda
+            console.error(
+              "⚠️ Falló addenda:",
+              e?.response?.data || e?.message || e
+            );
+          }
+        }
 
         // 2. Generar ID local de factura
         const id_factura = `fac-${uuidv4()}`;
@@ -858,15 +874,16 @@ ORDER BY vf.uuid_factura, vf.fecha_emision;`;
   }
 };
 
-const facturasPagoPendiente= async (id_agente) =>{
+const facturasPagoPendiente = async (id_agente) => {
   try {
-
-    const response = await executeSP2('sp_get_facturas_pendientes_por_agente',[id_agente])
+    const response = await executeSP2("sp_get_facturas_pendientes_por_agente", [
+      id_agente,
+    ]);
     return response;
   } catch (error) {
     throw error;
   }
-}
+};
 
 const getDetailsFactura = async (id_factura) => {
   try {
@@ -949,5 +966,5 @@ module.exports = {
   getDetailsFactura,
   isFacturada,
   crearFacturaEmi,
-  facturasPagoPendiente
+  facturasPagoPendiente,
 };

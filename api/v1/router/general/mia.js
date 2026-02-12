@@ -25,6 +25,7 @@ const pago_proveedor = require("../mia/pago_proveedor");
 const utils = require("../mia/utils");
 const vuelos = require("../mia/vuelos");
 const reservasClient = require("../mia/reservasClient");
+const volaris = require("../mia/volaris");
 
 router.use("/auth", auth);
 router.use("/cart", cart);
@@ -52,5 +53,6 @@ router.use("/utils", utils);
 router.use("/vuelos", vuelos);
 router.use("/pago_proveedor", pago_proveedor);
 router.use("/reservasClient", reservasClient);
+router.use("/volaris", volaris);
 
 module.exports = router;
