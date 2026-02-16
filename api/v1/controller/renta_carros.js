@@ -449,8 +449,9 @@ VALUES (?, ?, ?, ?)
     impuestos,
     estado,
     costo_total,
-    id_solicitud
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    id_solicitud,
+    usuario_creador
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?);
 `;
 
         const paramsInsertBooking = [
@@ -464,6 +465,7 @@ VALUES (?, ?, ?, ?)
           payload.status, // Puede ser NULL y tiene un valor por defecto de 'En proceso'.
           payload.costo.toFixed(2), // Puede ser NULL.
           id_solicitud, // Puede ser NULL.
+          req?.session?.user?.id,
         ];
 
         await connection.execute(sqlInsertBooking, paramsInsertBooking);
