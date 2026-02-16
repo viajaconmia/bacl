@@ -56,6 +56,7 @@ async function executeSP(procedure, params = []) {
     const [rows] = result;
     return Array.isArray(rows[0]) ? rows[0] : rows;
   } catch (error) {
+    console.log(error)
     throw new CustomError(
       error.sqlMessage,
       500,
