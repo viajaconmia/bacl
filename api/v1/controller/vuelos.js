@@ -513,9 +513,9 @@ const crearVuelo = async (req, res) => {
             subtotal,
             taxes,
             total,
-            codigo_confirmacion
+            codigo_confirmacion,
             id_intermediario
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?);`;
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
         const viajesAereosParams = [
           viaje_aereo.id_viaje_aereo, // No es NULL, no tiene valor por defecto. Es la clave primaria.

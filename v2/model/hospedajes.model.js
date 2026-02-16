@@ -10,6 +10,7 @@ const create = async (conn, hospedaje) => {
 };
 
 const update = async (conn, hospedaje) => {
+  console.log("\n\n\n\nVEAMOS QUE ANDO EDITANDO", hospedaje, "\n\n\n\n");
   Validacion.uuid(hospedaje.id_hospedaje);
   return await db.update(conn, schema, hospedaje);
 };

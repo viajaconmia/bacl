@@ -927,6 +927,7 @@ async function caso_base_tolerante({
   hotel,
   habitacion,
   nuevo_incluye_desayuno,
+  intermediario,
 }) {
   return await runTransaction(async (connection) => {
     console.log("🧱 [CASO_BASE] Iniciando caso_base_tolerante...");
@@ -966,11 +967,16 @@ async function caso_base_tolerante({
     } else {
       console.log("🧱 [CASO_BASE] Booking.update omitido (sin cambios).");
     }
-
+    console.log("\n\n\nintermediario", intermediario);
+    console.log(intermediario?.current);
+    console.log(intermediario?.current != undefined);
     // 3) Hospedaje
     const updatesHosp = Calculo.cleanEmpty({
       id_hospedaje,
       ...(Number.isFinite(noches?.current) ? { noches: noches.current } : {}),
+      ...(intermediario?.current !== undefined
+        ? { id_intermediario: intermediario?.current?.id ?? null }
+        : {}),
       ...(codigo_reservacion_hotel?.current
         ? { codigo_reservacion_hotel: codigo_reservacion_hotel.current }
         : {}),
@@ -1097,6 +1103,7 @@ const editar_reserva_definitivo = async (req, res) => {
         impuestos,
         saldos,
         restante,
+        intermediario,
       } = req.body;
 
       // Validation and initial checks
@@ -1158,6 +1165,7 @@ const editar_reserva_definitivo = async (req, res) => {
 
       // Solo caso base
       if (!debeProcesarMonetario) {
+        console.log("\n\n\n\nthis it:\n", intermediario, "\n\n\n\n");
         const respBase = await caso_base_tolerante({
           id_servicio: metadata.id_servicio,
           id_hospedaje: metadata.id_hospedaje,
@@ -1175,6 +1183,7 @@ const editar_reserva_definitivo = async (req, res) => {
           hotel,
           habitacion,
           nuevo_incluye_desayuno,
+          intermediario,
         });
 
         console.log(
@@ -1295,6 +1304,7 @@ const editar_reserva_definitivo = async (req, res) => {
         hotel,
         habitacion,
         nuevo_incluye_desayuno,
+        intermediario,
       });
 
       console.log(
@@ -1965,21 +1975,18 @@ const editar_reserva_definitivo = async (req, res) => {
 };
 
 const obtener = async (req, res) => {
-  let { page = 1, length = 20 } = req.query;
+  let { page, length } = req.query;
 
-  page = Number(page);
-  length = Number(length);
+  page = page ? Number(page) : null;
+  length = length ? Number(length) : null;
 
-  if (
-    !Number.isInteger(page) ||
-    !Number.isInteger(length) ||
-    length <= 0 ||
-    page < 1
-  ) {
+  const hasPagination = page && length;
+
+  if (hasPagination && page < 1) {
     return res.status(400).json({ message: "Parámetros inválidos" });
   }
 
-  const offset = (page - 1) * length;
+  const offset = hasPagination ? (page - 1) * length : null;
 
   const where = [];
   const params = [];
@@ -2079,12 +2086,12 @@ const obtener = async (req, res) => {
   `;
 
   const sqlData = `
-    SELECT *
-    FROM vw_new_reservas
-    ${whereSQL}
-    ORDER BY created_at DESC
-    LIMIT ${length} OFFSET ${offset}
-  `;
+  SELECT *
+  FROM vw_new_reservas
+  ${whereSQL}
+  ORDER BY created_at DESC
+  ${hasPagination ? `LIMIT ${length} OFFSET ${offset}` : ""}
+`;
 
   try {
     const [{ total }] = await executeQuery(sqlTotal, params);
