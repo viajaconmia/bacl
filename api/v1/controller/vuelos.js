@@ -475,8 +475,9 @@ const crearVuelo = async (req, res) => {
             impuestos,
             estado,
             costo_total,
-            id_solicitud
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+            id_solicitud,
+            usuario_creador
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?);`;
 
         const paramsInsertBooking = [
           id_booking, // No es NULL, no tiene valor por defecto. Es parte de la clave primaria.
@@ -489,6 +490,7 @@ const crearVuelo = async (req, res) => {
           reserva.status, // Puede ser NULL y tiene un valor por defecto de 'En proceso'.
           reserva.costo.toFixed(2), // Puede ser NULL.
           id_solicitud, // Puede ser NULL.
+          req?.session?.user?.id,
         ];
 
         await connection.execute(sqlInsertBooking, paramsInsertBooking);

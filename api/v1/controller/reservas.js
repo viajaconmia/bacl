@@ -1446,7 +1446,9 @@ const createFromOperaciones = async (req, res) => {
       "REVISANDO FECHAS",
       checkOutDate.getTime() - checkInDate.getTime(),
     );
-
+    //ESTA COSA DEBEMOS CAMBIARLA <= UNA VEZ QUE TENGAMOS LO DEL VUELO Y RENTA DE AUTOS PORQUE LUEGO SE HACE CADA PINCHE MAMADA QUE NO PREGUNTAN Y NOS AFECTA, DEBEN PINCHES PREGUNTAR, ME VALE VERGA A LA PUTISDIMA VERGA AHHHHHH
+    //Pero bueno, si estas aqui, vienes del futuro y ya tenemos vuelos y renta de autos por favor cambia el de fecha a <= y dile a andrea que me gusta, aveda no es cierto, soy anonimo, no le digas a rh
+    //Empezare a dejar notitas asi, porque estoy haciendo tiempo en lo que operaciones cree que le ando metiendo a lo de 1 items con sus "otros servicios" porque pa que no pinches preguntan, unas 3 horas? o yo creo que mejor ahorita lo subo
     if (checkOutDate.getTime() < checkInDate.getTime()) {
       // return res.status(400).json({
       //   error: "La fecha de check-out no puede ser anterior a la fecha de check-in"
@@ -1458,6 +1460,7 @@ const createFromOperaciones = async (req, res) => {
       );
     }
 
+    //Estare dejando las notas aqui, va a ser commo mi diario, hoy estamos a 16 de febrero
     let response = await model.insertarReservaOperaciones(
       { ...req.body, ...req.session },
       req.body.bandera,

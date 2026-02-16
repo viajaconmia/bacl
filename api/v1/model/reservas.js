@@ -832,7 +832,15 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
                   id_item: `ite-${uuidv4()}`,
                   fecha_uso: sumarDias(new Date(reserva.check_in), index + 1),
                 }))
-              : [];
+              : //ESTA PARTE DE CODIGO ES PARA QUITARLA UNA VES QUE CREEMOS LOS UELOS Y RENTAS DE AUTOS Y EN EL CONTROLLER DEBEMOS PONER QUE NO SE PERMITAN LAS MISMAS PINCHES FECHAS PORQUE LUEGO SE HACE CADA MAMADA EN ESTO, PTMMMMMMM
+                [
+                  {
+                    id_item: `ite-${uuidv4()}`,
+                    fecha_uso: reserva.check_in,
+                    venta: venta,
+                    costo: proveedor,
+                  },
+                ];
 
           if (itemsConIdAnadido.length > 0) {
             const query_items_insert = `
