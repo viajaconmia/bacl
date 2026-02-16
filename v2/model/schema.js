@@ -260,6 +260,7 @@ const HOSPEDAJE = {
     "tipo_desayuno",
     "comentario_desayuno",
     "precio_desayuno",
+    "id_intermediario",
   ],
 };
 const SALDOS_A_FAVOR = {
