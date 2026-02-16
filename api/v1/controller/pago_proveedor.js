@@ -84,8 +84,19 @@ const createSolicitud = async (req, res) => {
       return "enviado_a_pago";
     };
 
-    const estado_solicitud_db = mapEstadoSolicitud(paymentStatus);
-    const estatus_pagos_db = mapEstatusPagos(estado_solicitud_db);
+    // ✅ Estado inicial EXACTO como tu enum real:
+    const estado_solicitud_db =
+      formaPagoDB === "credit"
+        ? "CUPON ENVIADO"
+        : formaPagoDB === "transfer"
+          ? "TRANSFERENCIA_SOLICITADA"
+          : (formaPagoDB === "card" || formaPagoDB === "link")
+            ? "CARTA_ENVIADA"
+            : "CARTA_ENVIADA";
+
+    // ✅ estatus_pagos en tu tabla es varchar(45), puedes dejarlo así:
+    const estatus_pagos_db = "enviado_a_pago";
+
 
     // ✅ schedule: solo card/link (como ya lo haces)
     const schedule =
@@ -186,7 +197,6 @@ const createSolicitud = async (req, res) => {
     });
   }
 };
-
 
 const createDispersion = async (req, res) => {
   try {
@@ -917,50 +927,125 @@ function generarCodigoDispersion() {
 
 const getSolicitudes = async (req, res) => {
   try {
-    const spRows = await executeSP(
-      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR
-    );
+    // ---------------- helpers ----------------
+    const norm = (v) => String(v ?? "").trim().toLowerCase();
+    const num = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const safeJsonParse = (v) => {
+      if (v == null) return null;
+      if (Array.isArray(v) || typeof v === "object") return v;
+      if (typeof v !== "string") return null;
+      const s = v.trim();
+      if (!s) return null;
+      if (!(s.startsWith("{") || s.startsWith("["))) return null;
+      try {
+        return JSON.parse(s);
+      } catch {
+        return null;
+      }
+    };
+
+    const toArray = (v) => {
+      const parsed = safeJsonParse(v);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && typeof parsed === "object") return [parsed];
+      return [];
+    };
+
+    const flattenPagosArr = (v) => {
+      // soporta: array, string JSON, mezcla
+      const arr = Array.isArray(v) ? v : toArray(v);
+      const lvl1 = arr.flatMap((x) => (Array.isArray(x) ? x : [x]));
+      const lvl2 = lvl1.flatMap((x) => (Array.isArray(x) ? x : [x]));
+      return lvl2.filter(Boolean);
+    };
+
+    const getPagoStats = (pagos) => {
+      const p = flattenPagosArr(pagos);
+      let solicitado = 0;
+      let pagado = 0;
+      let conFecha = 0;
+
+      for (const x of p) {
+        solicitado += num(x?.monto_solicitado ?? 0);
+        pagado += num(x?.monto_pagado ?? 0);
+        if (x?.fecha_pago) conFecha += 1;
+      }
+
+      const anyPagadoEstado =
+        p.some((x) => norm(x?.pago_estado_pago) === "pagado" || norm(x?.estado_pago) === "pagado") || false;
+
+      return {
+        count: p.length,
+        solicitado,
+        pagado,
+        conFecha,
+        anyPagadoEstado,
+      };
+    };
+
+    // Facturación en tu SP: no diste esquema fijo.
+    // Intentamos detectar en `rest` varios nombres típicos.
+    const getFacturaNums = (row) => {
+      const solicitado = num(row?.monto_solicitado);
+      const fact = num(
+        row?.monto_facturado ??
+          row?.total_facturado ??
+          row?.total_facturado_en_pfp ??
+          row?.facturado ??
+          row?.monto_facturas ??
+          0
+      );
+
+      // si existe un "por_facturar" explícito, úsalo; si no, calcula.
+      const porFacturarRaw = row?.monto_por_facturar ?? row?.por_facturar ?? row?.saldo_por_facturar;
+      const porFacturar = porFacturarRaw != null ? num(porFacturarRaw) : Math.max(0, +(solicitado - fact).toFixed(2));
+
+      return { solicitado, facturado: fact, porFacturar };
+    };
+
+    const isSinPagosAsociados = (pagosArray) => {
+      const p = flattenPagosArr(pagosArray);
+      return p.length === 0;
+    };
+
+    // ---------------- inputs ----------------
+    const debug = Number(req.query.debug ?? 0) === 1;
+
+    // ---------------- fetch SPs ----------------
+    const spRows = await executeSP(STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR);
 
     const ids = spRows
       .map((r) => r.id_solicitud_proveedor)
       .filter((id) => id !== null && id !== undefined);
 
     let pagosRaw = [];
-
     if (ids.length > 0) {
-      // OJO: este SP trae todo; más abajo te dejo versión para filtrarlo por ids (mejor performance)
+      // NOTE: hoy traes todos los pagos del SP, no filtras por ids.
+      // Está OK para funcionalidad, pero puede pegar en performance.
       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
     }
 
-    const safeParseJson = (v, fallback) => {
-      if (v == null) return fallback;
-      if (Array.isArray(v) || typeof v === "object") return v;
-      if (typeof v === "string") {
-        try {
-          const parsed = JSON.parse(v);
-          return parsed ?? fallback;
-        } catch {
-          return fallback;
-        }
-      }
-      return fallback;
-    };
-
-    // ✅ Ahora guardamos un objeto por solicitud: { dispersiones: [], pagos: [] }
+    // ---------------- index pagos by solicitud ----------------
     const pagosBySolicitud = pagosRaw.reduce((acc, row) => {
       const key = String(row.id_solicitud_proveedor);
 
-      const dispersiones = safeParseJson(row.dispersiones_json, []);
-      const pagos = safeParseJson(row.pagos_json, []);
+      // en tu código original: push(row.dispersiones_json, row.pagos_json)
+      // aquí: parsea y flatten para que el front tenga un array usable
+      const dispersiones = toArray(row.dispersiones_json);
+      const pagos = toArray(row.pagos_json);
 
-      acc[key] = { dispersiones, pagos };
+      (acc[key] ||= []).push(...dispersiones, ...pagos);
       return acc;
     }, {});
 
-    const bandera = Number(req.query.bandera ?? 0);
-
-    const data = spRows.map(
-      ({
+    // ---------------- normalize rows ----------------
+    const data = spRows.map((r) => {
+      // destructuring con tus campos + rest
+      const {
         id_solicitud_proveedor,
         fecha_solicitud,
         monto_solicitado,
@@ -979,90 +1064,193 @@ const getSolicitudes = async (req, res) => {
         razon_social,
         estatus_pagos,
         ...rest
-      }) => {
-        const key = String(id_solicitud_proveedor);
-        const pagosInfo = pagosBySolicitud[key] ?? { dispersiones: [], pagos: [] };
+      } = r;
 
-        const saldoNum = Number(saldo ?? 0);
+      const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
+      const forma = norm(forma_pago_solicitada);
 
-        // ✅ Definición coherente de "pagada"
-        // - si saldo == 0 => pagada
-        // - o si estado_solicitud dice pagada
-        // - o si hay evidencia de pago (dispersion/pago con monto_pagado > 0)
-        const hayPago =
-          (pagosInfo.pagos || []).some((p) => Number(p?.monto_pagado ?? 0) > 0) ||
-          (pagosInfo.dispersiones || []).some((d) => Number(d?.monto_pagado ?? 0) > 0);
+      const pagoStats = getPagoStats(pagos);
 
-        const esLinkOCart =
-          forma_pago_solicitada === "link" || forma_pago_solicitada === "card";
+      const saldoNum = num(saldo);
+      const estaPagada =
+        norm(estatus_pagos) === "pagado" ||
+        saldoNum === 0 ||
+        pagoStats.anyPagadoEstado ||
+        pagoStats.pagado >= num(monto_solicitado);
 
-        const isPagadaPorRegla =
-          saldoNum === 0 ||
-          estado_solicitud === "pagada" ||
-          estatus_pagos === "pagado" ||
-          hayPago ||
-          (bandera === 1 && esLinkOCart); // tu regla especial cuando bandera=1
+      // Facturas (si vienen dentro de rest en tu SP)
+      const factNums = getFacturaNums({ ...r, ...rest });
 
-        let filtro_pago = "todos";
+      // devolvemos el shape que tu front ya espera + extras para que “muestres todo”
+      return {
+        ...rest,
 
-        if (isPagadaPorRegla) {
-          filtro_pago = "pagada";
-        } else if (forma_pago_solicitada === "transfer") {
-          filtro_pago = "spei_solicitado";
-        } else if (forma_pago_solicitada === "card") {
-          filtro_pago = "pago_tdc";
-        } else if (forma_pago_solicitada === "link") {
-          filtro_pago = "pago_link";
-        } else if (forma_pago_solicitada === "credit") {
-          filtro_pago = "carta_garantia";
-        }
+        estatus_pagos,
+        // NOTA: ya no calculamos filtro_pago en back como antes para no perder registros.
+        // Lo vamos a calcular al agrupar, pero dejamos forma/saldo aquí accesibles.
+        solicitud_proveedor: {
+          id_solicitud_proveedor,
+          fecha_solicitud,
+          monto_solicitado,
+          saldo,
+          forma_pago_solicitada,
+          id_tarjeta_solicitada,
+          usuario_solicitante,
+          usuario_generador,
+          comentarios,
+          estado_solicitud,
+          estado_facturacion,
+        },
+        tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
+        proveedor: { rfc, razon_social },
+        pagos,
 
-        return {
-          ...rest,
-          estatus_pagos,
-          filtro_pago,
-          solicitud_proveedor: {
-            id_solicitud_proveedor,
-            fecha_solicitud,
-            monto_solicitado,
-            saldo,
-            forma_pago_solicitada,
-            id_tarjeta_solicitada,
-            usuario_solicitante,
-            usuario_generador,
-            comentarios,
-            estado_solicitud,
-            estado_facturacion,
-          },
-          tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
-          proveedor: { rfc, razon_social },
+        __computed: {
+          forma,
+          estaPagada,
+          pagos_count: pagoStats.count,
+          pagos_total_pagado: pagoStats.pagado,
+          pagos_total_solicitado_sum: pagoStats.solicitado,
+          facturado: factNums.facturado,
+          por_facturar: factNums.porFacturar,
+          solicitado: factNums.solicitado,
+        },
+      };
+    });
 
-          // ✅ ya no es un array raro; ahora son dos arrays separados y limpios
-          dispersiones: pagosInfo.dispersiones,
-          pagos: pagosInfo.pagos,
+    // ---------------- buckets para front ----------------
+    // reglas que pediste (front), pero aquí ya te lo acomodamos en el back
+    const todos = data;
 
-          // si quieres debug:
-          // hayPago,
-          // isPagadaPorRegla,
-        };
+    const spei_solicitado = data.filter((d) => {
+      const forma = d.__computed?.forma;
+      return forma === "transfer" && isSinPagosAsociados(d.pagos);
+    });
+
+    const pago_tdc = data.filter((d) => {
+      const forma = d.__computed?.forma;
+      return forma === "card" && isSinPagosAsociados(d.pagos);
+    });
+
+    const pago_link = data.filter((d) => {
+      const forma = d.__computed?.forma;
+      return forma === "link" && isSinPagosAsociados(d.pagos);
+    });
+
+    // Carta enviada: credit y (sin facturar / parcial / por facturar == solicitado)
+    const carta_enviada = data.filter((d) => {
+      const forma = d.__computed?.forma;
+      if (forma !== "credit") return false;
+
+      const solicitado = num(d.__computed?.solicitado);
+      const facturado = num(d.__computed?.facturado);
+      const porFacturar = num(d.__computed?.por_facturar);
+
+      // condiciones que diste (equivalentes en práctica)
+      const sinFacturar = facturado <= 0;
+      const parcial = facturado > 0 && facturado < solicitado;
+      const porFacturarIgualSolicitado = porFacturar === solicitado;
+
+      return sinFacturar || parcial || porFacturarIgualSolicitado;
+    });
+
+    // Carta garantía: credit y (facturado == solicitado) y (por facturar == 0)
+    const carta_garantia = data.filter((d) => {
+      const forma = d.__computed?.forma;
+      if (forma !== "credit") return false;
+
+      const solicitado = num(d.__computed?.solicitado);
+      const facturado = num(d.__computed?.facturado);
+      const porFacturar = num(d.__computed?.por_facturar);
+
+      return facturado === solicitado && porFacturar === 0;
+    });
+
+    // Pagada (carpeta): marcadas como pagadas por regla de negocio
+    // Nota: puedes ajustar si “pagada” solo aplica a transfer, etc.
+    const pagada = data.filter((d) => !!d.__computed?.estaPagada);
+
+    // Histórico vacío por ahora (como pediste)
+    const historico = [];
+
+    // Otros: lo que no cayó en ninguna categoría (para no “perder” registros)
+    const inAny = new Set();
+    const addIds = (arr) => {
+      for (const x of arr) {
+        const id = x?.solicitud_proveedor?.id_solicitud_proveedor;
+        if (id != null) inAny.add(String(id));
       }
-    );
+    };
+    addIds(spei_solicitado);
+    addIds(pago_tdc);
+    addIds(pago_link);
+    addIds(carta_enviada);
+    addIds(carta_garantia);
+    addIds(pagada);
 
-    let responseData;
+    const otros = data.filter((d) => {
+      const id = d?.solicitud_proveedor?.id_solicitud_proveedor;
+      if (id == null) return true;
+      return !inAny.has(String(id));
+    });
 
-    if (bandera !== 1) {
-      responseData = { todos: data };
-    } else {
-      const spei_solicitado = data.filter((d) => d.filtro_pago === "spei_solicitado");
-      const pago_tdc = data.filter((d) => d.filtro_pago === "pago_tdc");
-      const pago_link = data.filter((d) => d.filtro_pago === "pago_link");
-      const carta_garantia = data.filter((d) => d.filtro_pago === "carta_garantia");
-      const pagada = data.filter((d) => d.filtro_pago === "pagada");
+    // ---------------- debug meta ----------------
+    const responseData = {
+      todos,
+      spei_solicitado,
+      pago_tdc,
+      pago_link,
+      carta_enviada,
+      carta_garantia,
+      pagada,
+      historico,
+      otros,
+    };
 
-      // ✅ quité cupon_enviado porque ahorita nunca lo produces
-      responseData = { spei_solicitado, pago_tdc, pago_link, carta_garantia, pagada };
+    if (debug) {
+      const byForma = data.reduce((acc, d) => {
+        const f = d.__computed?.forma || "(vacio)";
+        acc[f] = (acc[f] || 0) + 1;
+        return acc;
+      }, {});
+
+      const counts = {
+        spRows_len: spRows.length,
+        mapped_len: data.length,
+        pagosRaw_len: pagosRaw.length,
+        ids_null: spRows.filter((x) => x.id_solicitud_proveedor == null).length,
+      };
+
+      const buckets = {
+        todos: todos.length,
+        spei_solicitado: spei_solicitado.length,
+        pago_tdc: pago_tdc.length,
+        pago_link: pago_link.length,
+        carta_enviada: carta_enviada.length,
+        carta_garantia: carta_garantia.length,
+        pagada: pagada.length,
+        historico: historico.length,
+        otros: otros.length,
+      };
+
+      responseData.meta = {
+        counts,
+        byForma,
+        buckets,
+        ejemplo_otros: otros.slice(0, 15).map((d) => ({
+          id: d?.solicitud_proveedor?.id_solicitud_proveedor,
+          forma: d?.solicitud_proveedor?.forma_pago_solicitada,
+          saldo: d?.solicitud_proveedor?.saldo,
+          estatus_pagos: d?.estatus_pagos,
+          pagos_count: d.__computed?.pagos_count,
+          facturado: d.__computed?.facturado,
+          por_facturar: d.__computed?.por_facturar,
+          solicitado: d.__computed?.solicitado,
+        })),
+      };
     }
 
+    // ---------------- response ----------------
     res.set({
       "Cache-Control": "no-store",
       Pragma: "no-cache",
@@ -1076,9 +1264,15 @@ const getSolicitudes = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "Internal Server Error", details: error });
+    return res.status(500).json({
+      ok: false,
+      error: "Internal Server Error",
+      details: error?.message || error,
+    });
   }
 };
+
+module.exports = { getSolicitudes };
 
 
 
@@ -1402,22 +1596,25 @@ const EditCampos = async (req, res) => {
 
     // 4) Lista blanca de campos permitidos (SEGURIDAD)
     const ALLOWED_FIELDS = new Set([
-      "fecha_solicitud",
-      "monto_solicitado",
-      "saldo",
-      "forma_pago_solicitada",
-      "id_tarjeta_solicitada",
-      "usuario_solicitante",
-      "usuario_generador",
-      "comentarios",
-      "estado_solicitud",
-      "estado_facturacion",
-      "estatus_pagos",
-      "id_proveedor",
-      "monto_facturado",
-      "monto_por_facturar",
-      "comentario_CXP",
-    ]);
+  "fecha_solicitud",
+  "monto_solicitado",
+  "saldo",
+  "forma_pago_solicitada",
+  "id_tarjeta_solicitada",
+  "usuario_solicitante",
+  "usuario_generador",
+  "comentarios",
+  "estado_solicitud",
+  "estado_facturacion",
+  "estatus_pagos",
+  "id_proveedor",
+  "monto_facturado",
+  "monto_por_facturar",
+  "comentario_CXP",
+  // ✅ nuevo
+  "consolidado",
+]);
+
 
     if (!ALLOWED_FIELDS.has(dbField)) {
       return res.status(400).json({
@@ -1428,13 +1625,16 @@ const EditCampos = async (req, res) => {
 
     // 5) Opcional: casteo numérico si lo necesitas
     const NUMERIC_FIELDS = new Set([
-      "monto_solicitado",
-      "saldo",
-      "id_tarjeta_solicitada",
-      "id_proveedor",
-      "monto_facturado",
-      "monto_por_facturar",
-    ]);
+  "monto_solicitado",
+  "saldo",
+  "id_tarjeta_solicitada",
+  "id_proveedor",
+  "monto_facturado",
+  "monto_por_facturar",
+  // ✅ nuevo
+  "consolidado",
+]);
+
 
     const finalValue = NUMERIC_FIELDS.has(dbField)
       ? (value === null || value === "" ? null : Number(value))
