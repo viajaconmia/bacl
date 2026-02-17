@@ -516,8 +516,9 @@ const crearVuelo = async (req, res) => {
             taxes,
             total,
             codigo_confirmacion,
-            id_intermediario
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+            id_intermediario,
+            id_viajero
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
         const viajesAereosParams = [
           viaje_aereo.id_viaje_aereo, // No es NULL, no tiene valor por defecto. Es la clave primaria.
@@ -540,6 +541,7 @@ const crearVuelo = async (req, res) => {
           precio.total, // No es NULL, no tiene valor por defecto.
           viaje_aereo.codigo_confirmation, // Puede ser NULL.
           req?.body?.reserva?.intermediario?.id || null,
+          vuelos[0]?.id_viajero || null,
         ];
 
         await connection.execute(insertViajesAereosQuery, viajesAereosParams);
@@ -590,7 +592,6 @@ const crearVuelo = async (req, res) => {
         const insertVuelosQuery = `
           INSERT INTO vuelos (
             id_viaje_aereo,
-            id_viajero,
             flight_number,
             airline,
             id_proveedor,
@@ -618,7 +619,7 @@ const crearVuelo = async (req, res) => {
             eq_mano,
             eq_personal,
             eq_documentado
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
         console.log("INSERT VUELOS QUERY:", vuelos);
 
@@ -626,7 +627,6 @@ const crearVuelo = async (req, res) => {
           vuelos.map((vuelo) =>
             connection.execute(insertVuelosQuery, [
               vuelo.id_viaje_aereo || null, // No es NULL, no tiene valor por defecto.
-              vuelo.id_viajero || null, // No es NULL, no tiene valor por defecto.
               vuelo.flight_number || null, // Puede ser NULL.
               vuelo.aerolinea.proveedor || null, // No es NULL||null, no tiene valor por defecto.
               vuelo.airline_code || null, // No es NULL||null, no tiene valor por defecto.

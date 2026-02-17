@@ -1249,7 +1249,7 @@ const getReservaAllFacturacion = async () => {
     v.nombre_cliente                 AS nombre_agente_completo,
     v.correo,
     v.telefono,
-    v.razon_social,
+    v.nombre_comercial as razon_social,
     v.rfc,
     v.tipo_persona,
 
