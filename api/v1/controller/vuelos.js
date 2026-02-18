@@ -541,7 +541,7 @@ const crearVuelo = async (req, res) => {
           precio.total, // No es NULL, no tiene valor por defecto.
           viaje_aereo.codigo_confirmation, // Puede ser NULL.
           req?.body?.reserva?.intermediario?.id || null,
-          vuelos[0]?.id_viajero || null,
+          req.body?.reserva.viajero?.id_viajero || null,
         ];
 
         await connection.execute(insertViajesAereosQuery, viajesAereosParams);

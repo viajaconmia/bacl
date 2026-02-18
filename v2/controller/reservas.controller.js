@@ -2066,14 +2066,15 @@ const obtener = async (req, res) => {
       if (type === "transaccion") column = "created_at";
     }
     if (startDate && endDate) {
-      where.push(`${column} BETWEEN ? AND ?`);
-      params.push(startDate, endDate);
+      where.push(`${column} >= ? AND ${column} <= ?`);
+      params.push(startDate + " 00:00:00", endDate + " 23:59:59");
+      console.log(startDate, endDate);
     } else if (startDate) {
       where.push(`${column} >= ?`);
-      params.push(startDate);
+      params.push(startDate + " 00:00:00");
     } else if (endDate) {
       where.push(`${column} <= ?`);
-      params.push(endDate);
+      params.push(endDate + " 23:59:59");
     }
   }
 
