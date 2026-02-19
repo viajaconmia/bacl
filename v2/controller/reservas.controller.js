@@ -1074,6 +1074,448 @@ async function caso_base_tolerante({
   });
 }
 
+/* 
+====================================
+Cambio de pagos proveedores desde reserva cambio de costo
+===================================
+*/ 
+
+/**
+ * Ajusta solicitudes_pago_proveedor cuando sube el costo del proveedor (solo caso aumento).
+ *
+ * Reglas:
+ * 1) Busca id_solicitud en booking_solicitud con metadata.id_booking
+ *    - si no existe, se detiene sin hacer nada.
+ * 2) Busca estado_solicitud (y monto/saldo actuales) en solicitudes_pago_proveedor
+ * 3) Según estado:
+ *    - "CUPON ENVIADO" o "CARTA_ENVIADA":
+ *        monto_solicitado = nuevo_total
+ *        saldo = saldo + (nuevo_total - monto_solicitado_anterior)
+ *    - "PAGADO LINK" | "PAGADO TARJETA" | "PAGADO TRANSFERENCIA":
+ *        estado_solicitud = "CARTA_ENVIADA"
+ *        is_ajuste = 1
+ *    - "DISPERSION":
+ *        is_ajuste = 1
+ */
+ async function ajustarSolicitudPorAumentoCostoProveedor({
+  executeQuery, // OJO: aquí le pasaremos txExecuteQuery
+  metadata,
+  proveedorTotal,
+}) {
+  const id_booking = String(metadata?.id_booking ?? "").trim();
+  if (!id_booking) {
+    console.log("🧾 [AJUSTE] sin metadata.id_booking");
+    return { ok: false, reason: "NO_ID_BOOKING" };
+  }
+
+  const total_new = Number(proveedorTotal);
+  if (!Number.isFinite(total_new)) {
+    console.log("🧾 [AJUSTE] proveedorTotal inválido:", proveedorTotal);
+    return { ok: false, reason: "INVALID_TOTAL" };
+  }
+
+  // 1) Buscar id_solicitud
+  const qBooking = `
+    SELECT id_solicitud
+    FROM booking_solicitud
+    WHERE id_booking = ?
+    LIMIT 1
+  `;
+  const rBooking = await executeQuery(qBooking, [id_booking]);
+
+  const id_solicitud = rBooking?.[0]?.id_solicitud
+    ? String(rBooking[0].id_solicitud)
+    : null;
+
+  if (!id_solicitud) {
+    console.log("🧾 [AJUSTE] booking_solicitud sin id_solicitud para:", id_booking);
+    return { ok: false, reason: "NO_ID_SOLICITUD", id_booking };
+  }
+
+  // 2) Leer estado + montos actuales (bloqueo fila para evitar carreras)
+  const qSol = `
+    SELECT estado_solicitud, monto_solicitado, saldo
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1
+    FOR UPDATE
+  `;
+  const rSol = await executeQuery(qSol, [id_solicitud]);
+
+  if (!rSol?.length) {
+    console.log("🧾 [AJUSTE] no existe solicitudes_pago_proveedor:", id_solicitud);
+    return { ok: false, reason: "SOLICITUD_NOT_FOUND", id_solicitud };
+  }
+
+  const estado = String(rSol[0].estado_solicitud ?? "").trim();
+  const monto_old = Number(rSol[0].monto_solicitado ?? 0);
+  const saldo_old = Number(rSol[0].saldo ?? 0);
+
+  // 3) Reglas
+  if (estado === "CUPON ENVIADO" || estado === "CARTA_ENVIADA") {
+    const delta = total_new - monto_old; // en aumento, debe ser > 0
+
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [total_new, delta, id_solicitud]);
+
+    console.log("🧾 [AJUSTE] monto/saldo actualizados:", {
+      id_solicitud,
+      estado,
+      monto_old,
+      total_new,
+      delta,
+      saldo_old,
+    });
+
+    return {
+      ok: true,
+      action: "UPDATE_MONTO_SALDO",
+      id_booking,
+      id_solicitud,
+      estado,
+      monto_old,
+      total_new,
+      delta,
+    };
+  }
+
+  if (
+    estado === "PAGADO LINK" ||
+    estado === "PAGADO TARJETA" ||
+    estado === "PAGADO TRANSFERENCIA"
+  ) {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        estado_solicitud = 'CARTA_ENVIADA',
+        is_ajuste = 1
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [id_solicitud]);
+
+    console.log("🧾 [AJUSTE] ajuste (pagado -> CARTA_ENVIADA):", {
+      id_solicitud,
+      estado_anterior: estado,
+    });
+
+    return {
+      ok: true,
+      action: "PAGADO_TO_CARTA_ENVIADA_AJUSTE",
+      id_booking,
+      id_solicitud,
+      estado_anterior: estado,
+    };
+  }
+
+  if (estado === "DISPERSION") {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET is_ajuste = 1
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [id_solicitud]);
+
+    console.log("🧾 [AJUSTE] is_ajuste=1 en DISPERSION:", { id_solicitud });
+
+    return {
+      ok: true,
+      action: "DISPERSION_MARK_AJUSTE",
+      id_booking,
+      id_solicitud,
+    };
+  }
+
+  console.log("🧾 [AJUSTE] sin regla para estado:", { id_solicitud, estado });
+  return { ok: true, action: "NO_ACTION", id_booking, id_solicitud, estado };
+}
+
+
+function mapPagoStatusFromFormaPago(formaPagoRaw) {
+  const fp = String(formaPagoRaw ?? "").trim().toLowerCase();
+  if (fp === "card") return "PAGADO TARJETA";
+  if (fp === "link") return "PAGADO LINK";
+  if (fp === "transfer") return "PAGADO TRANSFERENCIA";
+  return null; // desconocido
+}
+
+/**
+ * Ajusta solicitudes_pago_proveedor cuando BAJA el costo del proveedor.
+ *
+ * executeQuery: idealmente txExecuteQuery (usando connection.execute) dentro de runTransaction
+ * executeSP2: tu función para llamar SP (usa pool propio)
+ */
+ async function ajustarSolicitudPorDisminucionCostoProveedor({
+  executeQuery,
+  executeSP2,
+  metadata,
+  proveedorTotal,
+  EPS = 0.01,
+}) {
+  const id_booking = String(metadata?.id_booking ?? "").trim();
+  if (!id_booking) {
+    console.log("🧾 [AJUSTE-LOW] sin metadata.id_booking");
+    return { ok: false, reason: "NO_ID_BOOKING" };
+  }
+
+  const total_new = Number(proveedorTotal);
+  if (!Number.isFinite(total_new)) {
+    console.log("🧾 [AJUSTE-LOW] proveedorTotal inválido:", proveedorTotal);
+    return { ok: false, reason: "INVALID_TOTAL" };
+  }
+
+  // 1) Buscar id_solicitud en booking_solicitud
+  const qBooking = `
+    SELECT id_solicitud
+    FROM booking_solicitud
+    WHERE id_booking = ?
+    LIMIT 1
+  `;
+  const rBooking = await executeQuery(qBooking, [id_booking]);
+
+  const id_solicitud = rBooking?.[0]?.id_solicitud
+    ? String(rBooking[0].id_solicitud)
+    : null;
+
+  if (!id_solicitud) {
+    console.log("🧾 [AJUSTE-LOW] booking_solicitud sin id_solicitud para:", id_booking);
+    return { ok: false, reason: "NO_ID_SOLICITUD", id_booking };
+  }
+
+  // 2) Leer datos de la solicitud (bloqueo fila si estás en TX)
+  const qSol = `
+    SELECT estado_solicitud, monto_solicitado, saldo, forma_pago_solicitada
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud = ?
+    LIMIT 1
+    FOR UPDATE
+  `;
+  const rSol = await executeQuery(qSol, [id_solicitud]);
+
+  if (!rSol?.length) {
+    console.log("🧾 [AJUSTE-LOW] no existe solicitudes_pago_proveedor:", id_solicitud);
+    return { ok: false, reason: "SOLICITUD_NOT_FOUND", id_solicitud };
+  }
+
+  const estado = String(rSol[0].estado_solicitud ?? "").trim();
+  const forma_pago_solicitada = String(rSol[0].forma_pago_solicitada ?? "").trim();
+  const monto_old = Number(rSol[0].monto_solicitado ?? 0);
+  const saldo_old = Number(rSol[0].saldo ?? 0);
+
+  // Diferencia real entre nuevo y anterior monto_solicitado
+  const delta = total_new - monto_old; // aquí normalmente será NEGATIVA (disminuyó)
+
+  // 3) Caso A: CUPON ENVIADO / CARTA_ENVIADA
+  if (estado === "CUPON ENVIADO" || estado === "CARTA_ENVIADA") {
+    // Aplicar:
+    // monto_solicitado = total_new
+    // saldo = saldo - (monto_old - total_new)  == saldo + (total_new - monto_old) == saldo + delta
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?
+      WHERE id_solicitud = ?
+    `;
+    await executeQuery(qUp, [total_new, delta, id_solicitud]);
+
+    // Releer saldo para decidir (≈0 o negativo)
+    const qSaldo = `
+      SELECT saldo, forma_pago_solicitada
+      FROM solicitudes_pago_proveedor
+      WHERE id_solicitud = ?
+      LIMIT 1
+    `;
+    const rSaldo = await executeQuery(qSaldo, [id_solicitud]);
+    const saldo_new = Number(rSaldo?.[0]?.saldo ?? 0);
+    const fp_now = String(rSaldo?.[0]?.forma_pago_solicitada ?? forma_pago_solicitada);
+
+    // Si saldo ~ 0 => marcar PAGADO según forma_pago_solicitada
+    if (Math.abs(saldo_new) <= EPS) {
+      const nuevoEstado = mapPagoStatusFromFormaPago(fp_now);
+
+      if (nuevoEstado) {
+        const qPaid = `
+          UPDATE solicitudes_pago_proveedor
+          SET estado_solicitud = ?, saldo = 0
+          WHERE id_solicitud = ?
+        `;
+        await executeQuery(qPaid, [nuevoEstado, id_solicitud]);
+
+        console.log("🧾 [AJUSTE-LOW] saldo≈0 -> marcado pagado:", {
+          id_solicitud,
+          nuevoEstado,
+          saldo_new,
+          fp_now,
+        });
+
+        return {
+          ok: true,
+          action: "UPDATE_MONTO_SALDO_AND_MARK_PAID",
+          id_booking,
+          id_solicitud,
+          estado_anterior: estado,
+          forma_pago_solicitada: fp_now,
+          monto_old,
+          total_new,
+          delta,
+          saldo_new: 0,
+          nuevoEstado,
+        };
+      } else {
+        console.warn("🧾 [AJUSTE-LOW] saldo≈0 pero forma_pago_solicitada desconocida:", fp_now);
+        return {
+          ok: true,
+          action: "UPDATE_MONTO_SALDO_SALDO_ZERO_UNKNOWN_PAYMENT",
+          id_booking,
+          id_solicitud,
+          estado,
+          forma_pago_solicitada: fp_now,
+          monto_old,
+          total_new,
+          delta,
+          saldo_new,
+        };
+      }
+    }
+
+    // Si saldo negativo => is_ajuste=1
+    if (saldo_new < -EPS) {
+      const qAdj = `
+        UPDATE solicitudes_pago_proveedor
+        SET is_ajuste = 1
+        WHERE id_solicitud = ?
+      `;
+      await executeQuery(qAdj, [id_solicitud]);
+
+      console.log("🧾 [AJUSTE-LOW] saldo negativo -> is_ajuste=1:", {
+        id_solicitud,
+        saldo_new,
+      });
+
+      return {
+        ok: true,
+        action: "UPDATE_MONTO_SALDO_AND_MARK_AJUSTE_NEGATIVE",
+        id_booking,
+        id_solicitud,
+        estado,
+        forma_pago_solicitada: fp_now,
+        monto_old,
+        total_new,
+        delta,
+        saldo_new,
+      };
+    }
+
+    console.log("🧾 [AJUSTE-LOW] monto/saldo actualizados (sin pago/ajuste extra):", {
+      id_solicitud,
+      estado,
+      monto_old,
+      total_new,
+      delta,
+      saldo_old,
+      saldo_new,
+    });
+
+    return {
+      ok: true,
+      action: "UPDATE_MONTO_SALDO",
+      id_booking,
+      id_solicitud,
+      estado,
+      forma_pago_solicitada: fp_now,
+      monto_old,
+      total_new,
+      delta,
+      saldo_old,
+      saldo_new,
+    };
+  }
+
+  // 4) Caso B: Estado DIFERENTE a estos:
+  // "CUPON ENVIADO","CARTA_ENVIADA","CANCELADO","DISPERSION"
+  if (
+    estado !== "CUPON ENVIADO" &&
+    estado !== "CARTA_ENVIADA" &&
+    estado !== "CANCELADO" &&
+    estado !== "DISPERSION"
+  ) {
+    // Marcar ajuste
+    const qAdj = `
+      UPDATE solicitudes_pago_proveedor
+      SET is_ajuste = 1
+      WHERE id_solicitud = ?
+    `;
+    await executeQuery(qAdj, [id_solicitud]);
+
+    // Si forma_pago_solicitada === transfer => llamar SP
+    const fp = String(forma_pago_solicitada ?? "").trim().toLowerCase();
+
+    if (fp === "transfer") {
+      if (typeof executeSP2 === "function") {
+        // 👇 Solo llamar (como pediste). Ajusta params si tu SP requiere algo.
+        // Yo asumo que al menos requiere id_solicitud; si necesita más, aquí se agregan.
+        await executeSP2("sp_saldo_a_favor_proveedor", [id_solicitud]);
+
+        console.log("🧾 [AJUSTE-LOW] transfer -> SP sp_saldo_a_favor_proveedor llamada:", {
+          id_solicitud,
+        });
+
+        return {
+          ok: true,
+          action: "MARK_AJUSTE_AND_CALL_SP_TRANSFER",
+          id_booking,
+          id_solicitud,
+          estado,
+          forma_pago_solicitada,
+        };
+      }
+
+      console.warn("🧾 [AJUSTE-LOW] transfer pero no se pasó executeSP2");
+      return {
+        ok: true,
+        action: "MARK_AJUSTE_TRANSFER_NO_SP_FN",
+        id_booking,
+        id_solicitud,
+        estado,
+        forma_pago_solicitada,
+      };
+    }
+
+    // card o link => solo is_ajuste=1 (sin SP)
+    console.log("🧾 [AJUSTE-LOW] estado fuera de lista -> is_ajuste=1 (sin SP):", {
+      id_solicitud,
+      estado,
+      forma_pago_solicitada,
+    });
+
+    return {
+      ok: true,
+      action: "MARK_AJUSTE_NO_SP",
+      id_booking,
+      id_solicitud,
+      estado,
+      forma_pago_solicitada,
+    };
+  }
+
+  // 5) Estados en lista (CANCELADO o DISPERSION) => por ahora no haces nada
+  console.log("🧾 [AJUSTE-LOW] estado en lista sin acción:", {
+    id_solicitud,
+    estado,
+    forma_pago_solicitada,
+  });
+
+  return { ok: true, action: "NO_ACTION", id_booking, id_solicitud, estado };
+}
+
+
+
 /* =========================
  * CONTROLADOR PRINCIPAL
  * ========================= */
@@ -1126,6 +1568,40 @@ const editar_reserva_definitivo = async (req, res) => {
           [metadata.id_hospedaje],
         );
       }
+
+      console.log(metadata.id_booking,"👍👍👍👍")
+      const diferencia_proveedor =
+        Number(proveedor.current.total) - Number(metadata.costo_total);
+
+      // Si hay decimales, mejor con tolerancia:
+      const EPS = 0.01;
+
+      if (Math.abs(diferencia_proveedor) > EPS) {
+
+        console.log(diferencia_proveedor, "diff ✅✅✅✅");
+
+        if (diferencia_proveedor > 0) {
+          console.log(diferencia_proveedor, "se aumentó el costo proveedor 🚓🚓");
+              await ajustarSolicitudPorAumentoCostoProveedor({
+                executeQuery,
+                metadata,
+                proveedorTotal: proveedor.current.total,
+              });
+
+        } else {
+          console.log(diferencia_proveedor, "se disminuyó el costo proveedor 1️⃣1️⃣1️⃣1️⃣1️⃣");
+          await ajustarSolicitudPorDisminucionCostoProveedor({
+            executeQuery,
+            executeSP2, // tu SP caller (pool). Solo si forma_pago_solicitada es transfer se usa
+            metadata,
+            proveedorTotal: proveedor.current.total,
+            EPS: 0.01,
+          });
+        }
+      } else {
+        console.log(diferencia_proveedor, "sin cambio (≈0)");
+      }
+
 
       const hayCambioPrecio = hasPrecioChange(venta);
       const hayCambioNoches = hasNochesChange(noches);
