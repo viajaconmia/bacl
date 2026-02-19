@@ -2101,7 +2101,7 @@ const obtener = async (req, res) => {
     const [{ total }] = await executeQuery(sqlTotal, params);
 
     let data = await executeQuery(sqlData, [...params]);
-    if (usuario_creador && id_client) {
+    if (usuario_creador && req.query.id_client) {
       const [{ restringido }] = await executeQuery(
         `select restringido from agentes where id_agente = ?`,
         [id_client],
