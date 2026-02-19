@@ -2104,7 +2104,7 @@ const obtener = async (req, res) => {
     if (usuario_creador && req.query.id_client) {
       const [{ restringido }] = await executeQuery(
         `select restringido from agentes where id_agente = ?`,
-        [id_client],
+        [req.query.id_client],
       );
       if (Boolean(restringido)) {
         data = data.filter((i) => i.id_user_creador == usuario_creador);
