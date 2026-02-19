@@ -2110,7 +2110,7 @@ const obtener = async (req, res) => {
         data = data.filter((i) => i.id_user_creador == usuario_creador);
       }
     }
-    data.filter(
+    data = data.filter(
       (i) => i.admin_creador != "cef88247-b690-11f0-9e79-06cc8e8ac9fd",
     );
 
