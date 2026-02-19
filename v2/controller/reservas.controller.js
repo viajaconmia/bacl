@@ -2451,8 +2451,11 @@ const editar_reserva_definitivo = async (req, res) => {
 };
 
 const obtener = async (req, res) => {
-  let { page, length } = req.query;
+  let { page, length, usuario_creador } = req.query;
 
+  if (usuario_creador && !req.query.id_client) {
+    throw new Error("No puede existir un usuario creador sin un id cliente");
+  }
   page = page ? Number(page) : null;
   length = length ? Number(length) : null;
 
@@ -2573,7 +2576,16 @@ const obtener = async (req, res) => {
   try {
     const [{ total }] = await executeQuery(sqlTotal, params);
 
-    const data = await executeQuery(sqlData, [...params]);
+    let data = await executeQuery(sqlData, [...params]);
+    if (usuario_creador && id_client) {
+      const [{ restringido }] = await executeQuery(
+        `select restringido from agentes where id_agente = ?`,
+        [id_client],
+      );
+      if (Boolean(restringido)) {
+        data = data.filter((i) => i.id_user_creador == usuario_creador);
+      }
+    }
 
     res.status(200).json({
       message: "ok",
