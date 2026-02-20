@@ -1997,7 +1997,7 @@ const obtener = async (req, res) => {
   /* =========================
      FILTROS
   ==========================*/
-  where.push(`admin_creador <> ?`);
+  where.push(`admin_creador <> ? OR is null`);
   params.push("cef88247-b690-11f0-9e79-06cc8e8ac9fd");
 
   // Código reservación
