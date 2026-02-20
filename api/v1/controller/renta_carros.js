@@ -137,8 +137,7 @@ const validateRentaAutosPayload = (payload) => {
     if (
       !conductor.id_viajero ||
       !conductor.primer_nombre ||
-      !conductor.apellido_paterno ||
-      !conductor.correo
+      !conductor.apellido_paterno
     ) {
       const conductorId = conductor.id_viajero || "Desconocido";
       throw new ValidationError(
