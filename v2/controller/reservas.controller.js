@@ -1997,6 +1997,8 @@ const obtener = async (req, res) => {
   /* =========================
      FILTROS
   ==========================*/
+  where.push(`admin_creador <> ?`);
+  params.push("cef88247-b690-11f0-9e79-06cc8e8ac9fd");
 
   // Código reservación
   if (req.query.codigo_reservacion) {
@@ -2110,9 +2112,6 @@ const obtener = async (req, res) => {
         data = data.filter((i) => i.id_user_creador == usuario_creador);
       }
     }
-    data = data.filter(
-      (i) => i.admin_creador != "cef88247-b690-11f0-9e79-06cc8e8ac9fd",
-    );
 
     res.status(200).json({
       message: "ok",
