@@ -290,13 +290,13 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         for (let i = 0; i < numberOfItems; i++) {
           console.log(
             "😎😎😎😎😎😎😎😎😎😎😎😎😎🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬",
-            itemsArray[i].id_hospedaje,
+            itemsArray[i].id_relacion,
             itemsArray[i].id_item,
             total / numberOfItems,
           );
           await conn.execute(insertItemsFacturasQuery, [
             id_factura,
-            itemsArray[i].id_hospedaje,
+            itemsArray[i].id_relacion,
             itemsArray[i].id_item,
             total / numberOfItems,
           ]);
