@@ -59,12 +59,15 @@ const createSolicitud = async (req, res) => {
     }
 
     // ✅ User IDs (evita "Operaciones" si tus columnas son UUID/FK)
-    const userId = usuario_creador; // o req.user.id si tienes auth
+    let userId = session; // o req.user.id si tienes auth
+    console.log(session,"",userId)
     if (!userId) {
-      return res.status(400).json({
-        ok: false,
-        message: "Falta usuario_creador (UUID) para registrar la solicitud.",
-      });
+      // return res.status(400).json({
+      //   ok: false,
+      //   message: "Falta usuario_creador (UUID) para registrar la solicitud.",
+      // });
+
+      userId = "cliente";
     }
 
     // ✅ Mapeos como ya los tienes
