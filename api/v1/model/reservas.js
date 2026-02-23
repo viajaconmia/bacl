@@ -750,8 +750,8 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               id_booking, id_servicio, check_in, check_out, 
               total, subtotal, impuestos, estado, 
               costo_total, costo_subtotal, costo_impuestos, 
-              fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud, usuario_creador
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?);
+              fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud, usuario_creador, comentarios_internos
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?);
           `;
           const params_bookings = [
             id_booking,
@@ -769,6 +769,7 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             null,
             id_solicitud,
             user.id,
+            reserva.comentarios_internos || null,
           ];
           await connection.execute(query_bookings, params_bookings);
 

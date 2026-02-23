@@ -1975,7 +1975,7 @@ const editar_reserva_definitivo = async (req, res) => {
 };
 
 const obtener = async (req, res) => {
-  let { page, length, usuario_creador } = req.query;
+  let { page, length, usuario_creador, is_client } = req.query;
 
   if (usuario_creador && !req.query.id_client) {
     throw new Error("No puede existir un usuario creador sin un id cliente");
@@ -2103,6 +2103,19 @@ const obtener = async (req, res) => {
     const [{ total }] = await executeQuery(sqlTotal, params);
 
     let data = await executeQuery(sqlData, [...params]);
+
+    if (is_client) {
+      console.log("🔍 [FILTRO CLIENTE] Datos del cliente:", data);
+      const dataClient = await get_reservasClient_by_id_agente({
+        id_client: req.query.id_client,
+        usuario_creador,
+      });
+      data = [...dataClient, ...data];
+      console.log(
+        "🔍 [FILTRO CLIENTE] Datos del cliente filtrados:",
+        dataClient[0],
+      );
+    }
     if (usuario_creador && req.query.id_client) {
       const [{ restringido }] = await executeQuery(
         `select restringido from agentes where id_agente = ?`,
@@ -2112,7 +2125,6 @@ const obtener = async (req, res) => {
         data = data.filter((i) => i.id_user_creador == usuario_creador);
       }
     }
-
     res.status(200).json({
       message: "ok",
       data,
@@ -2147,6 +2159,53 @@ const cancelarBooking = async (req, res) => {
       error,
       data: null,
     });
+  }
+};
+
+const get_reservasClient_by_id_agente = async (body) => {
+  try {
+    const { id_client, usuario_creador } = body;
+    if (!id_client) {
+      throw new CustomError(
+        "Falta el parametro id_client",
+        400,
+        "ERROR_MISSING_PARAMETER",
+        null,
+      );
+    }
+    let result = await executeSP("sp_get_reservasClient_by_id_cliente", [
+      id_client,
+    ]);
+
+    const [{ restringido }] = await executeQuery(
+      `select restringido from agentes where id_agente = ?`,
+      [id_client],
+    );
+
+    if (Boolean(restringido) && usuario_creador) {
+      result = result.filter((item) => item.usuario_creador == usuario_creador);
+    }
+    result = result.filter((item) => !item.id_booking);
+    result = result.map((item) => ({
+      ...item,
+      codigo_confirmacion: "",
+      proveedor: item.hotel || null,
+      type: "hotel",
+      tipo_cuarto_vuelo:
+        item.room == "single"
+          ? "SENCILLO"
+          : item.room == "double"
+            ? "DOBLE"
+            : null,
+      id_user_creador: item.usuario_creador || null,
+      room: item.tipo_cuarto_vuelo || null,
+      total: item.total ? String(item.total) : null,
+      viajero: item.nombre_viajero_reservacion.replace("  ", " ") || "",
+    }));
+    console.log("🔍 [FILTRO CLIENTE] Resultado final:", result.length);
+    return result;
+  } catch (error) {
+    throw error;
   }
 };
 
