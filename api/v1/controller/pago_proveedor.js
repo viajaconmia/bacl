@@ -417,15 +417,14 @@ if (formaPagoDB === "link" || formaPagoDB === "card") {
 };
 
 const createDispersion = async (req, res) => {
+  let conn;
   try {
     console.log("📥 Datos recibidos en createDispersion:", req.body);
 
     const { id_dispersion, solicitudes } = req.body;
 
     if (!id_dispersion) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "id_dispersion es requerido" });
+      return res.status(400).json({ ok: false, message: "id_dispersion es requerido" });
     }
 
     if (!Array.isArray(solicitudes) || solicitudes.length === 0) {
@@ -435,7 +434,7 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // 1) Sacamos ids de solicitud proveedor
+    // 1) ids
     const ids = solicitudes
       .map((s) => s.id_solicitud_proveedor)
       .filter(Boolean)
@@ -448,17 +447,32 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // 2) Consultamos saldo real en solicitudes_pago_proveedor
-    const inPlaceholders = ids.map(() => "?").join(", ");
+    // OJO: si quieres evitar duplicados en la misma request:
+    const uniqueIds = [...new Set(ids)];
+
+    // 2) placeholders IN (...)
+    const inPlaceholders = uniqueIds.map(() => "?").join(", ");
+
+    // SQLs
     const saldoSql = `
       SELECT id_solicitud_proveedor, saldo
       FROM solicitudes_pago_proveedor
       WHERE id_solicitud_proveedor IN (${inPlaceholders});
     `;
 
-    const saldoRows = await executeQuery(saldoSql, ids);
+    const updateSql = `
+      UPDATE solicitudes_pago_proveedor
+      SET estado_solicitud = 'DISPERSION'
+      WHERE id_solicitud_proveedor IN (${inPlaceholders});
+    `;
 
-    // Mapa: id_solicitud_proveedor -> saldo
+    // ---- INICIA TRANSACCIÓN ----
+    conn = await pool.getConnection(); // <- ajusta a tu pool
+    await conn.beginTransaction();
+
+    // 3) traer saldos
+    const [saldoRows] = await conn.query(saldoSql, uniqueIds);
+
     const saldoMap = new Map(
       (saldoRows || []).map((r) => [
         String(r.id_solicitud_proveedor),
@@ -466,35 +480,47 @@ const createDispersion = async (req, res) => {
       ])
     );
 
-    // 3) Validamos que existan todos los saldos
-    const faltantes = ids.filter((id) => !saldoMap.has(String(id)));
+    // 4) validar que existan todas
+    const faltantes = uniqueIds.filter((id) => !saldoMap.has(String(id)));
     if (faltantes.length > 0) {
+      await conn.rollback();
       return res.status(400).json({
         ok: false,
-        message:
-          "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
+        message: "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
         faltantes,
       });
     }
 
-    // 4) Armamos values usando saldo del DB como monto_solicitado y saldo
-    const values = solicitudes.map((s) => {
-      const idSol = String(s.id_solicitud_proveedor);
-      const saldoDb = Number(saldoMap.get(idSol) ?? 0);
+    // 5) actualizar estado_solicitud = DISPERSION
+    const [updateResult] = await conn.query(updateSql, uniqueIds);
 
+    // (opcional) validar que se actualizaron todas las filas esperadas
+    if (updateResult.affectedRows !== uniqueIds.length) {
+      await conn.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "No se pudieron actualizar todas las solicitudes a DISPERSION",
+        affectedRows: updateResult.affectedRows,
+        expected: uniqueIds.length,
+      });
+    }
+
+    // 6) armar values con saldo DB
+    const values = uniqueIds.map((idSol) => {
+      const saldoDb = Number(saldoMap.get(String(idSol)) ?? 0);
       return [
-        idSol, // id_solicitud_proveedor
-        saldoDb, // monto_solicitado  <-- sale de solicitudes_pago_proveedor.saldo
-        saldoDb, // saldo             <-- igual
-        0, // monto_pagado
+        String(idSol), // id_solicitud_proveedor
+        saldoDb,       // monto_solicitado
+        saldoDb,       // saldo
+        0,             // monto_pagado
         id_dispersion, // codigo_dispersion
-        null, // fecha_pago
+        null,          // fecha_pago
       ];
     });
 
     const placeholders = values.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
 
-    const sql = `
+    const insertSql = `
       INSERT INTO dispersion_pagos_proveedor (
         id_solicitud_proveedor,
         monto_solicitado,
@@ -506,21 +532,21 @@ const createDispersion = async (req, res) => {
     `;
 
     const flattenedValues = values.flat();
-    const dbResult = await executeQuery(sql, flattenedValues);
+    const [dbResult] = await conn.query(insertSql, flattenedValues);
 
-    // 5) Obtener ids insertados (como ya lo haces)
+    // 7) ids insertados
     const lastInsertIdQuery = `
       SELECT id_dispersion_pagos_proveedor
       FROM dispersion_pagos_proveedor
-      WHERE codigo_dispersion = ? ;
+      WHERE codigo_dispersion = ?;
     `;
-    const lastInsertIdResult = await executeQuery(lastInsertIdQuery, [
-      id_dispersion,
-    ]);
+    const [lastInsertRows] = await conn.query(lastInsertIdQuery, [id_dispersion]);
 
-    const id_pagos = lastInsertIdResult.map((row) =>
+    const id_pagos = (lastInsertRows || []).map((row) =>
       String(row.id_dispersion_pagos_proveedor)
     );
+
+    await conn.commit();
 
     return res.status(200).json({
       ok: true,
@@ -528,18 +554,25 @@ const createDispersion = async (req, res) => {
       data: {
         id_dispersion,
         id_pagos,
-        total_registros: solicitudes.length,
+        total_registros: uniqueIds.length,
         dbResult,
       },
     });
+
   } catch (error) {
+    if (conn) {
+      try { await conn.rollback(); } catch (_) {}
+    }
     console.error("❌ Error en createDispersion:", error);
     return res.status(500).json({
       error: "Internal Server Error",
       details: error.message,
     });
+  } finally {
+    if (conn) conn.release();
   }
 };
+
 
 const createPago = async (req, res) => {
   try {
