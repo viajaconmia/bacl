@@ -1,10 +1,460 @@
 const {
   executeSP,
+  executeSP2,
   executeQuery,
   executeTransaction,
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+const {
+  ajustarSolicitudPorDisminucionCostoProveedor,
+  ajustarSolicitudPorAumentoCostoProveedor,
+} = require("../../../v2/controller/reservas.controller");
+
+
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
+
+//helpers
+
+function money2(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  // redondeo a 2 decimales
+  return Math.round(x * 100) / 100;
+}
+
+function mapPagoStatusFromFormaPago(formaPago) {
+  const fp = String(formaPago || "").trim().toLowerCase();
+  if (fp === "card") return "PAGADO TARJETA";
+  if (fp === "link") return "PAGADO LINK";
+  if (fp === "transfer") return "PAGADO TRANSFERENCIA";
+  // si "credit" en tu negocio se paga como transferencia:
+  if (fp === "credit") return "PAGADO TRANSFERENCIA";
+  return null;
+}
+
+function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
+  const fp = String(formaPagoSolicitada || "").trim().toLowerCase();
+  if (fp === "transfer") return "SPEI";
+  if (fp === "link") return "LINK";
+  if (fp === "card") return "LINK";
+  return "TRANSFERENCIA";
+}
+
+// Si YA tienes estas funcs, usa las tuyas:
+function makeIdSaldo() {
+  return `SAL_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+function randomTransactionId() {
+  return `TX_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function mapPaidStatusFromFormaPagoExceptCredit(formaPago) {
+  const fp = String(formaPago || "").trim().toLowerCase();
+  if (fp === "transfer") return "PAGADO TRANSFERENCIA";
+  if (fp === "card") return "PAGADO TARJETA";
+  if (fp === "link") return "PAGADO LINK";
+  // credit => NO cambiar estado
+  return null;
+}
+
+async function finalizarSiSaldoCero({
+  executeQuery,
+  id_solicitud_proveedor,
+  saldo_new,
+  forma_pago_solicitada,
+  EPS = 0.01,
+}) {
+  if (Math.abs(Number(saldo_new)) > EPS) {
+    return { did: false };
+  }
+
+  const fp = String(forma_pago_solicitada || "").trim().toLowerCase();
+
+  // siempre normaliza saldo a 0 cuando quedó en 0
+  const paidStatus = mapPaidStatusFromFormaPagoExceptCredit(fp);
+
+  if (!paidStatus) {
+    // credit (o desconocido): NO tocar estado, solo saldo=0
+    const q = `
+      UPDATE solicitudes_pago_proveedor
+      SET saldo = 0
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(q, [id_solicitud_proveedor]);
+    return { did: true, estado_final: null, saldo_final: 0, keep_estado: true };
+  }
+
+  const q = `
+    UPDATE solicitudes_pago_proveedor
+    SET estado_solicitud = ?, saldo = 0
+    WHERE id_solicitud_proveedor = ?
+  `;
+  await executeQuery(q, [paidStatus, id_solicitud_proveedor]);
+
+  return { did: true, estado_final: paidStatus, saldo_final: 0, keep_estado: false };
+}
+
+
+//========cambio para controlar aumento o disminucion
+async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
+  executeQuery,
+  id_solicitud_proveedor,
+  nuevoMonto,
+  EPS = 0.01,
+}) {
+  const id = Number(id_solicitud_proveedor);
+  if (!Number.isFinite(id) || id <= 0) {
+    return { ok: false, reason: "INVALID_ID_SOLICITUD", id_solicitud_proveedor };
+  }
+
+  const total_new = Number(nuevoMonto);
+  if (!Number.isFinite(total_new)) {
+    return { ok: false, reason: "INVALID_TOTAL", nuevoMonto };
+  }
+
+  const qSol = `
+    SELECT
+      id_solicitud_proveedor,
+      estado_solicitud,
+      monto_solicitado,
+      saldo,
+      forma_pago_solicitada
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1
+    FOR UPDATE
+  `;
+  const rSol = await executeQuery(qSol, [id]);
+  if (!rSol?.length) return { ok: false, reason: "SOLICITUD_NOT_FOUND", id };
+
+  const estado = String(rSol[0].estado_solicitud ?? "").trim();
+  const forma_pago_solicitada = String(rSol[0].forma_pago_solicitada ?? "").trim();
+  const monto_old = Number(rSol[0].monto_solicitado ?? 0);
+  const saldo_old = Number(rSol[0].saldo ?? 0);
+
+  const delta = money2(total_new - monto_old);
+  if (Math.abs(delta) <= EPS) {
+    return { ok: true, action: "NO_CHANGE", id, estado, monto_old, total_new, saldo_old };
+  }
+  if (delta < -EPS) {
+    return { ok: false, reason: "NOT_AN_INCREASE", id, delta, monto_old, total_new };
+  }
+
+  const isPagado =
+    estado === "PAGADO LINK" ||
+    estado === "PAGADO TARJETA" ||
+    estado === "PAGADO TRANSFERENCIA";
+
+  const isCartaCupon = estado === "CUPON ENVIADO" || estado === "CARTA_ENVIADA";
+
+  let action = "";
+  let estado_anterior = null;
+
+  if (isCartaCupon) {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [money2(total_new), money2(delta), id]);
+    action = "UPDATE_MONTO_SALDO";
+  } else if (isPagado) {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?,
+        estado_solicitud = 'CARTA_ENVIADA',
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por aumento de monto (estaba pagado)'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [money2(total_new), money2(delta), id]);
+    action = "PAGADO_TO_CARTA_ENVIADA_AJUSTE";
+    estado_anterior = estado;
+  } else if (estado === "DISPERSION") {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?,
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por aumento de monto (en dispersión)'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [money2(total_new), money2(delta), id]);
+    action = "DISPERSION_UPDATE_AND_MARK_AJUSTE";
+  } else {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?,
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por aumento de monto'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [money2(total_new), money2(delta), id]);
+    action = "UPDATE_MONTO_SALDO_AND_MARK_AJUSTE";
+  }
+
+  // ✅ NUEVO: si saldo queda 0, marcar PAGADO según forma_pago_solicitada (excepto credit)
+  const saldo_new = money2(saldo_old + delta);
+  const fin = await finalizarSiSaldoCero({
+    executeQuery,
+    id_solicitud_proveedor: id,
+    saldo_new,
+    forma_pago_solicitada,
+    EPS,
+  });
+
+  return {
+    ok: true,
+    action,
+    id_solicitud_proveedor: id,
+    estado,
+    estado_anterior,
+    forma_pago_solicitada,
+    monto_old,
+    monto_new: total_new,
+    delta,
+    saldo_old,
+    saldo_new: fin.did ? 0 : saldo_new,
+    estado_final: fin.did ? fin.estado_final : null, // null cuando credit (se mantiene)
+  };
+}
+
+async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
+  executeQuery,     // idealmente txExecuteQuery
+  executeSP2,       // opcional
+  id_solicitud_proveedor,
+  nuevoMonto,
+  EPS = 0.01,
+}) {
+  const id = Number(id_solicitud_proveedor);
+  if (!Number.isFinite(id) || id <= 0) {
+    return { ok: false, reason: "INVALID_ID_SOLICITUD", id_solicitud_proveedor };
+  }
+
+  const total_new = Number(nuevoMonto);
+  if (!Number.isFinite(total_new)) {
+    return { ok: false, reason: "INVALID_TOTAL", nuevoMonto };
+  }
+
+  // 1) Leer fila (FOR UPDATE)
+  const qSol = `
+    SELECT
+      id_solicitud_proveedor,
+      id_proveedor,
+      estado_solicitud,
+      monto_solicitado,
+      saldo,
+      forma_pago_solicitada,
+      comentarios
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1
+    FOR UPDATE
+  `;
+  const rSol = await executeQuery(qSol, [id]);
+  if (!rSol?.length) return { ok: false, reason: "SOLICITUD_NOT_FOUND", id };
+
+  const row = rSol[0];
+
+  const estado = String(row.estado_solicitud ?? "").trim();
+  const forma_pago_solicitada = String(row.forma_pago_solicitada ?? "").trim();
+  const monto_old = Number(row.monto_solicitado ?? 0);
+  const saldo_old = Number(row.saldo ?? 0);
+  const id_proveedor = String(row.id_proveedor ?? "").trim();
+  const comentarios_solicitud = row.comentarios ?? null;
+
+  const delta = money2(total_new - monto_old);
+  if (Math.abs(delta) <= EPS) {
+    return { ok: true, action: "NO_CHANGE", id, estado, monto_old, total_new, saldo_old };
+  }
+
+  if (delta > EPS) {
+    return { ok: false, reason: "NOT_A_DECREASE", id, delta, monto_old, total_new };
+  }
+
+  // 2) Si está CANCELADA, normalmente no tocar (ajusta si tu negocio sí permite)
+  if (estado === "CANCELADA") {
+    return { ok: true, action: "NO_ACTION_CANCELADA", id, estado };
+  }
+
+  // 3) Primero: siempre actualiza monto + saldo
+  const qUpBase = `
+    UPDATE solicitudes_pago_proveedor
+    SET
+      monto_solicitado = ?,
+      saldo = COALESCE(saldo, 0) + ?
+    WHERE id_solicitud_proveedor = ?
+  `;
+  await executeQuery(qUpBase, [money2(total_new), money2(delta), id]);
+
+  // 4) Calcular saldo_new (puedes releer o derivar)
+  const saldo_new = money2(saldo_old + delta);
+
+  // 4.1) saldo ~ 0 => marcar pagado según forma_pago
+  if (Math.abs(saldo_new) <= EPS) {
+    const nuevoEstado = mapPagoStatusFromFormaPago(forma_pago_solicitada);
+    if (nuevoEstado) {
+      const qPaid = `
+        UPDATE solicitudes_pago_proveedor
+        SET estado_solicitud = ?, saldo = 0
+        WHERE id_solicitud_proveedor = ?
+      `;
+      await executeQuery(qPaid, [nuevoEstado, id]);
+
+      return {
+        ok: true,
+        action: "UPDATE_MONTO_SALDO_AND_MARK_PAID",
+        id_solicitud_proveedor: id,
+        estado_anterior: estado,
+        nuevoEstado,
+        forma_pago_solicitada,
+        monto_old,
+        monto_new: total_new,
+        delta,
+        saldo_new: 0,
+      };
+    }
+
+    return {
+      ok: true,
+      action: "SALDO_ZERO_UNKNOWN_PAYMENT",
+      id_solicitud_proveedor: id,
+      estado,
+      forma_pago_solicitada,
+      monto_old,
+      monto_new: total_new,
+      delta,
+      saldo_new,
+    };
+  }
+
+  // 4.2) saldo NEGATIVO => saldo a favor
+  if (saldo_new < -EPS) {
+    // marcar ajuste
+    const qAdj = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por disminución de monto (saldo a favor)'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qAdj, [id]);
+
+    const credito = money2(Math.abs(saldo_new));
+    const id_saldo = makeIdSaldo();
+    const transaction_id = randomTransactionId();
+
+    const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(forma_pago_solicitada);
+
+    const referencia = `AJUSTE_LOW|SOL:${id}`;
+    const motivo = "Ajuste por disminución de monto proveedor";
+    const comentarios = [
+      `Saldo quedó negativo: ${money2(saldo_new)}`,
+      `Monto anterior: ${money2(monto_old)} | Nuevo: ${money2(total_new)} | Delta: ${money2(delta)}`,
+      comentarios_solicitud ? `Comentarios solicitud: ${comentarios_solicitud}` : null,
+    ].filter(Boolean).join(" | ");
+
+    const qInsSaldo = `
+      INSERT INTO saldos
+        (id_saldo, id_proveedor, monto, restante, forma_pago, fecha_procesamiento,
+         referencia, id_hospedaje, transaction_id, motivo, comentarios, estado)
+      VALUES
+        (?, ?, ?, ?, ?, NOW(), ?, NULL, ?, ?, ?, 'pending')
+    `;
+
+    await executeQuery(qInsSaldo, [
+      id_saldo,
+      id_proveedor,
+      credito,
+      credito,
+      forma_pago_saldo,
+      referencia,
+      transaction_id,
+      motivo,
+      comentarios,
+    ]);
+
+    return {
+      ok: true,
+      action: "UPDATE_MONTO_SALDO_AND_INSERT_SALDO_FAVOR",
+      id_solicitud_proveedor: id,
+      estado,
+      forma_pago_solicitada,
+      monto_old,
+      monto_new: total_new,
+      delta,
+      saldo_new,
+      id_saldo,
+      transaction_id,
+      credito,
+    };
+  }
+
+  // 4.3) saldo POSITIVO => si el estado está “fuera de lista” puedes marcar ajuste + SP si transfer
+  if (
+    estado !== "CUPON ENVIADO" &&
+    estado !== "CARTA_ENVIADA" &&
+    estado !== "DISPERSION"
+  ) {
+    const qAdj = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por disminución de monto'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qAdj, [id]);
+
+    const fp = String(forma_pago_solicitada || "").trim().toLowerCase();
+    if (fp === "transfer" && typeof executeSP2 === "function") {
+      await executeSP2("sp_saldo_a_favor_proveedor", [id]);
+      return {
+        ok: true,
+        action: "MARK_AJUSTE_AND_CALL_SP_TRANSFER",
+        id_solicitud_proveedor: id,
+        estado,
+        forma_pago_solicitada,
+        monto_old,
+        monto_new: total_new,
+        delta,
+        saldo_new,
+      };
+    }
+
+    return {
+      ok: true,
+      action: fp === "transfer" ? "MARK_AJUSTE_TRANSFER_NO_SP" : "MARK_AJUSTE_NO_SP",
+      id_solicitud_proveedor: id,
+      estado,
+      forma_pago_solicitada,
+      monto_old,
+      monto_new: total_new,
+      delta,
+      saldo_new,
+    };
+  }
+
+  // En CUPON/CARTA/DISPERSION con saldo>0, solo base update (ya hecho)
+  return {
+    ok: true,
+    action: "UPDATE_MONTO_SALDO",
+    id_solicitud_proveedor: id,
+    estado,
+    forma_pago_solicitada,
+    monto_old,
+    monto_new: total_new,
+    delta,
+    saldo_new,
+  };
+}
+
 
 // Convierte valores "vacíos" a null (undefined, null, "", strings de puros espacios)
 const toNullableString = (value) => {
@@ -44,12 +494,13 @@ const createSolicitud = async (req, res) => {
       moneda,
     } = solicitud;
 
+    
     // ✅ Determina forma_pago_solicitada para el SP
     const formaPagoDB =
-      String(paymentType || "").toLowerCase() === "credit"
-        ? "credit"
-        : String(paymentMethod || "").toLowerCase();
-
+    String(paymentType || "").toLowerCase() === "credit"
+    ? "credit"
+    : String(paymentMethod || "").toLowerCase();
+    
     const allowed = new Set(["credit", "transfer", "card", "link"]);
     if (!allowed.has(formaPagoDB)) {
       return res.status(400).json({
@@ -57,18 +508,29 @@ const createSolicitud = async (req, res) => {
         message: `paymentMethod/paymentType inválido. Recibido: ${formaPagoDB}`,
       });
     }
+    
+// ✅ 1) Session seguro (no revienta si no hay sesión)
+const session = req.session?.user?.id ?? "";
 
-    // ✅ User IDs (evita "Operaciones" si tus columnas son UUID/FK)
-    let userId = session; // o req.user.id si tienes auth
-    console.log(session,"",userId)
-    if (!userId) {
-      // return res.status(400).json({
-      //   ok: false,
-      //   message: "Falta usuario_creador (UUID) para registrar la solicitud.",
-      // });
+// ✅ 2) Fallback configurable: "" (vacío) o "cliente"
+const USER_FALLBACK = "cliente"; // <-- si quieres vacío: pon "";
 
-      userId = "cliente";
-    }
+// ✅ 3) Resolver userId: prioriza session, luego usuario_creador, luego fallback
+const resolveUserId = (...candidates) => {
+  const found = candidates
+    .map((v) => String(v ?? "").trim())
+    .find((v) => v.length > 0);
+
+  return found || USER_FALLBACK;
+};
+
+let userId = resolveUserId(session, usuario_creador);
+
+// (Opcional) si quieres que a DB llegue NULL en vez de "" cuando esté vacío:
+const userIdDB = userId === "" ? null : userId;
+
+console.log("session:", session, " userId:", userId);
+
 
     // ✅ Mapeos como ya los tienes
     const mapEstadoSolicitud = (status) => {
@@ -87,15 +549,98 @@ const createSolicitud = async (req, res) => {
       return "enviado_a_pago";
     };
 
+              const insertPagoProveedorLinkSql = `
+  INSERT INTO pago_proveedores (
+    id_pago_dispersion,
+    id_solicitud_proveedor,
+    codigo_dispersion,
+    monto_pagado,
+    fecha_pago,
+    url_pdf,
+    monto_facturado,
+    url_factura,
+    fecha_update,
+    id_factura,
+    user_update,
+    user_created,
+    fecha_emision,
+    numero_comprobante,
+    cuenta_origen,
+    cuenta_destino,
+    monto,
+    moneda,
+    concepto,
+    metodo_de_pago,
+    referencia_pago,
+    nombre_pagador,
+    rfc_pagador,
+    domicilio_pagador,
+    nombre_beneficiario,
+    domicilio_beneficiario,
+    descripcion,
+    iva,
+    total
+  ) VALUES (
+    ?, ?, ?, ?, ?,
+    ?, ?, ?, NOW(), ?,
+    ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?,
+    ?, ?, ?, ?
+  );
+`;
+const insertPagoProveedorCardSql = `
+  INSERT INTO pago_proveedores (
+    id_pago_dispersion,
+    id_solicitud_proveedor,
+    codigo_dispersion,
+    fecha_pago,
+    url_pdf,
+    monto_facturado,
+    url_factura,
+    fecha_update,
+    id_factura,
+    user_update,
+    user_created,
+    fecha_emision,
+    numero_comprobante,
+    cuenta_origen,
+    cuenta_destino,
+    monto,
+    moneda,
+    concepto,
+    metodo_de_pago,
+    referencia_pago,
+    nombre_pagador,
+    rfc_pagador,
+    domicilio_pagador,
+    nombre_beneficiario,
+    domicilio_beneficiario,
+    descripcion,
+    iva,
+    total
+  ) VALUES (
+    ?, ?, ?, ?,
+    ?, ?, ?, NOW(), ?,
+    ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?,
+    ?, ?, ?, ?, ?,
+    ?, ?, ?, ?
+  );
+`;
+
+
     // ✅ Estado inicial EXACTO como tu enum real:
     const estado_solicitud_db =
       formaPagoDB === "credit"
         ? "CUPON ENVIADO"
         : formaPagoDB === "transfer"
           ? "TRANSFERENCIA_SOLICITADA"
-          : (formaPagoDB === "card" || formaPagoDB === "link")
+          : (formaPagoDB === "card")
             ? "CARTA_ENVIADA"
-            : "CARTA_ENVIADA";
+            : (formaPagoDB === "link")
+              ? "PAGADO_LINK"
+              :"CARTA_ENVIADA";
 
     // ✅ estatus_pagos en tu tabla es varchar(45), puedes dejarlo así:
     const estatus_pagos_db = "enviado_a_pago";
@@ -176,6 +721,138 @@ const createSolicitud = async (req, res) => {
 
     // ✅ OJO: tu lógica de inserts a pago_proveedores la dejas SOLO card/link como ya está
     // Para credit/transfer normalmente no insertas N pagos aquí (depende tu negocio).
+// ... ya tienes idSolicitudProveedor validado arriba
+
+// Inserta en pago_proveedores SOLO para card/link (según lo que pediste)
+if (formaPagoDB === "link" || formaPagoDB === "card") {
+  // normaliza schedule (ya lo traes como `schedule`)
+  const rows = (Array.isArray(schedule) ? schedule : [])
+    .map((it) => ({
+      fecha_pago: it?.fecha_pago || date,
+      monto: Number(it?.monto || 0),
+    }))
+    .filter((it) => it.fecha_pago && Number.isFinite(it.monto) && it.monto > 0);
+
+  if (rows.length === 0) {
+    return res.status(400).json({
+      ok: false,
+      message: "paymentSchedule inválido: no hay fechas/montos válidos para insertar en pago_proveedores",
+    });
+  }
+
+  const conceptoBase = `Pago proveedor (${formaPagoDB})`;
+  const descripcionBase = comments || "";
+  const monedaDB = moneda ?? null;
+
+  // Usa el SQL correcto
+  const sql = formaPagoDB === "link"
+    ? insertPagoProveedorLinkSql
+    : insertPagoProveedorCardSql;
+
+  for (let i = 0; i < rows.length; i++) {
+    const { fecha_pago, monto } = rows[i];
+
+    // Valores comunes (campos que NO tienes => NULL)
+    const common = {
+      id_pago_dispersion: null,
+      id_solicitud_proveedor: Number(idSolicitudProveedor),
+      codigo_dispersion: null,            // si quieres, aquí puedes generar un código
+      fecha_pago,
+      url_pdf: null,
+      monto_facturado: 0,                 // no hay factura todavía
+      url_factura: null,
+      id_factura: null,
+      user_update: null,                  // o userId si tú quieres
+      user_created: userId,
+      fecha_emision: null,
+      numero_comprobante: null,
+      cuenta_origen: null,
+      cuenta_destino: null,
+      monto,                              // el monto del schedule
+      moneda: monedaDB,
+      concepto: conceptoBase,
+      metodo_de_pago: formaPagoDB,        // "link" o "card"
+      referencia_pago: selectedCard ? String(selectedCard) : null,
+      nombre_pagador: null,
+      rfc_pagador: null,
+      domicilio_pagador: null,
+      nombre_beneficiario: null,
+      domicilio_beneficiario: null,
+      descripcion: descripcionBase,
+      iva: null,
+      total: monto,                       // si prefieres NULL, cámbialo aquí
+    };
+
+    if (formaPagoDB === "link") {
+      // LINK: sí mandamos monto_pagado = monto
+      const params = [
+        common.id_pago_dispersion,
+        common.id_solicitud_proveedor,
+        common.codigo_dispersion,
+        monto,                 // monto_pagado (LINK)
+        common.fecha_pago,
+        common.url_pdf,
+        common.monto_facturado,
+        common.url_factura,
+        common.id_factura,
+        common.user_update,
+        common.user_created,
+        common.fecha_emision,
+        common.numero_comprobante,
+        common.cuenta_origen,
+        common.cuenta_destino,
+        common.monto,
+        common.moneda,
+        common.concepto,
+        common.metodo_de_pago,
+        common.referencia_pago,
+        common.nombre_pagador,
+        common.rfc_pagador,
+        common.domicilio_pagador,
+        common.nombre_beneficiario,
+        common.domicilio_beneficiario,
+        common.descripcion,
+        common.iva,
+        common.total,
+      ];
+
+      await executeQuery(sql, params);
+    } else {
+      // CARD: NO mandamos monto_pagado
+      const params = [
+        common.id_pago_dispersion,
+        common.id_solicitud_proveedor,
+        common.codigo_dispersion,
+        common.fecha_pago,
+        common.url_pdf,
+        common.monto_facturado,
+        common.url_factura,
+        common.id_factura,
+        common.user_update,
+        common.user_created,
+        common.fecha_emision,
+        common.numero_comprobante,
+        common.cuenta_origen,
+        common.cuenta_destino,
+        common.monto,
+        common.moneda,
+        common.concepto,
+        common.metodo_de_pago,
+        common.referencia_pago,
+        common.nombre_pagador,
+        common.rfc_pagador,
+        common.domicilio_pagador,
+        common.nombre_beneficiario,
+        common.domicilio_beneficiario,
+        common.descripcion,
+        common.iva,
+        common.total,
+      ];
+
+      await executeQuery(sql, params);
+    }
+  }
+}
 
     return res.status(200).json({
       ok: true,
@@ -202,15 +879,14 @@ const createSolicitud = async (req, res) => {
 };
 
 const createDispersion = async (req, res) => {
+  let conn;
   try {
     console.log("📥 Datos recibidos en createDispersion:", req.body);
 
     const { id_dispersion, solicitudes } = req.body;
 
     if (!id_dispersion) {
-      return res
-        .status(400)
-        .json({ ok: false, message: "id_dispersion es requerido" });
+      return res.status(400).json({ ok: false, message: "id_dispersion es requerido" });
     }
 
     if (!Array.isArray(solicitudes) || solicitudes.length === 0) {
@@ -220,7 +896,7 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // 1) Sacamos ids de solicitud proveedor
+    // 1) ids
     const ids = solicitudes
       .map((s) => s.id_solicitud_proveedor)
       .filter(Boolean)
@@ -233,17 +909,32 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // 2) Consultamos saldo real en solicitudes_pago_proveedor
-    const inPlaceholders = ids.map(() => "?").join(", ");
+    // OJO: si quieres evitar duplicados en la misma request:
+    const uniqueIds = [...new Set(ids)];
+
+    // 2) placeholders IN (...)
+    const inPlaceholders = uniqueIds.map(() => "?").join(", ");
+
+    // SQLs
     const saldoSql = `
       SELECT id_solicitud_proveedor, saldo
       FROM solicitudes_pago_proveedor
       WHERE id_solicitud_proveedor IN (${inPlaceholders});
     `;
 
-    const saldoRows = await executeQuery(saldoSql, ids);
+    const updateSql = `
+      UPDATE solicitudes_pago_proveedor
+      SET estado_solicitud = 'DISPERSION'
+      WHERE id_solicitud_proveedor IN (${inPlaceholders});
+    `;
 
-    // Mapa: id_solicitud_proveedor -> saldo
+    // ---- INICIA TRANSACCIÓN ----
+    conn = await pool.getConnection(); // <- ajusta a tu pool
+    await conn.beginTransaction();
+
+    // 3) traer saldos
+    const [saldoRows] = await conn.query(saldoSql, uniqueIds);
+
     const saldoMap = new Map(
       (saldoRows || []).map((r) => [
         String(r.id_solicitud_proveedor),
@@ -251,35 +942,47 @@ const createDispersion = async (req, res) => {
       ])
     );
 
-    // 3) Validamos que existan todos los saldos
-    const faltantes = ids.filter((id) => !saldoMap.has(String(id)));
+    // 4) validar que existan todas
+    const faltantes = uniqueIds.filter((id) => !saldoMap.has(String(id)));
     if (faltantes.length > 0) {
+      await conn.rollback();
       return res.status(400).json({
         ok: false,
-        message:
-          "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
+        message: "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
         faltantes,
       });
     }
 
-    // 4) Armamos values usando saldo del DB como monto_solicitado y saldo
-    const values = solicitudes.map((s) => {
-      const idSol = String(s.id_solicitud_proveedor);
-      const saldoDb = Number(saldoMap.get(idSol) ?? 0);
+    // 5) actualizar estado_solicitud = DISPERSION
+    const [updateResult] = await conn.query(updateSql, uniqueIds);
 
+    // (opcional) validar que se actualizaron todas las filas esperadas
+    if (updateResult.affectedRows !== uniqueIds.length) {
+      await conn.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "No se pudieron actualizar todas las solicitudes a DISPERSION",
+        affectedRows: updateResult.affectedRows,
+        expected: uniqueIds.length,
+      });
+    }
+
+    // 6) armar values con saldo DB
+    const values = uniqueIds.map((idSol) => {
+      const saldoDb = Number(saldoMap.get(String(idSol)) ?? 0);
       return [
-        idSol, // id_solicitud_proveedor
-        saldoDb, // monto_solicitado  <-- sale de solicitudes_pago_proveedor.saldo
-        saldoDb, // saldo             <-- igual
-        0, // monto_pagado
+        String(idSol), // id_solicitud_proveedor
+        saldoDb,       // monto_solicitado
+        saldoDb,       // saldo
+        0,             // monto_pagado
         id_dispersion, // codigo_dispersion
-        null, // fecha_pago
+        null,          // fecha_pago
       ];
     });
 
     const placeholders = values.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
 
-    const sql = `
+    const insertSql = `
       INSERT INTO dispersion_pagos_proveedor (
         id_solicitud_proveedor,
         monto_solicitado,
@@ -291,21 +994,21 @@ const createDispersion = async (req, res) => {
     `;
 
     const flattenedValues = values.flat();
-    const dbResult = await executeQuery(sql, flattenedValues);
+    const [dbResult] = await conn.query(insertSql, flattenedValues);
 
-    // 5) Obtener ids insertados (como ya lo haces)
+    // 7) ids insertados
     const lastInsertIdQuery = `
       SELECT id_dispersion_pagos_proveedor
       FROM dispersion_pagos_proveedor
-      WHERE codigo_dispersion = ? ;
+      WHERE codigo_dispersion = ?;
     `;
-    const lastInsertIdResult = await executeQuery(lastInsertIdQuery, [
-      id_dispersion,
-    ]);
+    const [lastInsertRows] = await conn.query(lastInsertIdQuery, [id_dispersion]);
 
-    const id_pagos = lastInsertIdResult.map((row) =>
+    const id_pagos = (lastInsertRows || []).map((row) =>
       String(row.id_dispersion_pagos_proveedor)
     );
+
+    await conn.commit();
 
     return res.status(200).json({
       ok: true,
@@ -313,18 +1016,25 @@ const createDispersion = async (req, res) => {
       data: {
         id_dispersion,
         id_pagos,
-        total_registros: solicitudes.length,
+        total_registros: uniqueIds.length,
         dbResult,
       },
     });
+
   } catch (error) {
+    if (conn) {
+      try { await conn.rollback(); } catch (_) {}
+    }
     console.error("❌ Error en createDispersion:", error);
     return res.status(500).json({
       error: "Internal Server Error",
       details: error.message,
     });
+  } finally {
+    if (conn) conn.release();
   }
 };
+
 
 const createPago = async (req, res) => {
   try {
@@ -1558,6 +2268,7 @@ if (idsSolicitudes.length > 0) {
 };
 
 
+
 const EditCampos = async (req, res) => {
   try {
     const { id_solicitud_proveedor, ...rest } = req.body;
@@ -1649,6 +2360,72 @@ const EditCampos = async (req, res) => {
       });
     }
 
+        // ✅ Interceptar cambios de monto_solicitado para disparar lógica de ajuste
+    // ✅ Interceptar cambios de monto_solicitado para disparar lógica de ajuste
+if (dbField === "monto_solicitado") {
+  const nuevoMonto = Number(finalValue);
+  if (!Number.isFinite(nuevoMonto)) {
+    return res.status(400).json({ error: "monto_solicitado debe ser numérico" });
+  }
+
+  const qOld = `
+    SELECT monto_solicitado
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1
+  `;
+  const rOld = await executeQuery(qOld, [id_solicitud_proveedor]);
+
+  if (!rOld?.length) {
+    return res.status(404).json({
+      error: "No se encontró la solicitud",
+      id_solicitud_proveedor,
+    });
+  }
+
+  const montoOld = Number(rOld[0].monto_solicitado ?? 0);
+  const EPS = 0.01;
+
+  let ajusteResp = { ok: true, action: "NO_CHANGE" };
+
+  if (nuevoMonto > montoOld + EPS) {
+    ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
+      executeQuery,
+      id_solicitud_proveedor,
+      nuevoMonto,
+      EPS,
+    });
+  } else if (nuevoMonto < montoOld - EPS) {
+    ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
+      executeQuery,
+      executeSP2, // si no existe aquí, bórralo
+      id_solicitud_proveedor,
+      nuevoMonto,
+      EPS,
+    });
+  }
+
+  const selectSql = `
+    SELECT *
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1;
+  `;
+  const rows = await executeQuery(selectSql, [id_solicitud_proveedor]);
+  const updated = Array.isArray(rows) ? rows[0] : rows?.[0];
+
+  return res.status(200).json({
+    ok: true,
+    message: "Ajuste aplicado por cambio de monto_solicitado",
+    id_solicitud_proveedor,
+    montoOld,
+    montoNew: nuevoMonto,
+    ajuste: ajusteResp,
+    data: updated || null,
+  });
+}
+
+
     // 6) Ejecutar UPDATE (ojo: el nombre de columna NO va como "?" por seguridad)
     const updateSql = `
       UPDATE solicitudes_pago_proveedor
@@ -1699,6 +2476,7 @@ const EditCampos = async (req, res) => {
   }
 };
 
+// controllers/pago_proveedor.js (o donde lo tengas)
 const Detalles = async (req, res) => {
   try {
     const {
@@ -1737,11 +2515,11 @@ const Detalles = async (req, res) => {
       return [v];
     };
 
-    const facturasArr = normalizeArray(id_facturas)
+    let facturasArr = normalizeArray(id_facturas)
       .map((x) => String(x ?? "").trim())
       .filter(Boolean);
 
-    const pagosArr = normalizeArray(id_pagos)
+    let pagosArr = normalizeArray(id_pagos)
       .map((x) => String(x ?? "").trim())
       .filter(Boolean);
 
@@ -1759,14 +2537,68 @@ const Detalles = async (req, res) => {
     const solicitud =
       Array.isArray(solicitudRows) ? solicitudRows[0] : solicitudRows?.[0] ?? null;
 
+    // =========================================================
+    // 4) CONSULTA: pagos_facturas_proveedores (PFPR)
+    // =========================================================
+    // Tabla: id, id_pago_proveedor, id_solicitud, id_factura,
+    // monto_facturado, monto_pago, created_at, updated_at
+    let pfp = [];
+    {
+      const where = [];
+      const params = [];
+
+      where.push(`id_solicitud = ?`);
+      params.push(Number(id_solicitud_proveedor));
+
+      if (pagosArr.length > 0) {
+        const ph = pagosArr.map(() => "?").join(",");
+        where.push(`id_pago_proveedor IN (${ph})`);
+        params.push(...pagosArr.map((x) => Number(x)));
+      }
+
+      if (facturasArr.length > 0) {
+        const ph = facturasArr.map(() => "?").join(",");
+        where.push(`id_factura IN (${ph})`);
+        params.push(...facturasArr);
+      }
+
+      const pfpSql = `
+        SELECT *
+        FROM pagos_facturas_proveedores
+        WHERE ${where.join(" AND ")}
+        ORDER BY created_at DESC;
+      `;
+
+      const pfpRows = await executeQuery(pfpSql, params);
+      pfp = Array.isArray(pfpRows) ? pfpRows : pfpRows?.[0] ?? [];
+    }
+
+    // ✅ Auto-rellenar ids si vienen vacíos (tu caso)
+    if (facturasArr.length === 0 && Array.isArray(pfp) && pfp.length > 0) {
+      facturasArr = [
+        ...new Set(
+          pfp.map((r) => String(r?.id_factura ?? "").trim()).filter(Boolean)
+        ),
+      ];
+    }
+
+    if (pagosArr.length === 0 && Array.isArray(pfp) && pfp.length > 0) {
+      pagosArr = [
+        ...new Set(
+          pfp.map((r) => String(r?.id_pago_proveedor ?? "").trim()).filter(Boolean)
+        ),
+      ];
+    }
+
     // -----------------------------
-    // 4) FACTURAS
+    // 5) FACTURAS
     // -----------------------------
     let facturas = [];
 
     if (facturasArr.length > 0) {
       const placeholders = facturasArr.map(() => "?").join(",");
 
+      // main: id_factura_proveedor
       const facturasSqlMain = `
         SELECT *
         FROM facturas_pago_proveedor
@@ -1787,19 +2619,19 @@ const Detalles = async (req, res) => {
         const fb = Array.isArray(factRowsFallback)
           ? factRowsFallback
           : factRowsFallback?.[0] ?? [];
-
         if (Array.isArray(fb) && fb.length > 0) facturas = fb;
       }
     }
 
     // -----------------------------
-    // 5) PAGOS
+    // 6) PAGOS
     // -----------------------------
     let pagos = [];
 
     if (pagosArr.length > 0) {
       const placeholders = pagosArr.map(() => "?").join(",");
 
+      // main: id_pago_proveedores
       const pagosSqlMain = `
         SELECT *
         FROM pago_proveedores
@@ -1820,65 +2652,22 @@ const Detalles = async (req, res) => {
         const fb = Array.isArray(pagosRowsFallback)
           ? pagosRowsFallback
           : pagosRowsFallback?.[0] ?? [];
-
         if (Array.isArray(fb) && fb.length > 0) pagos = fb;
       }
     }
 
     // =========================================================
-    // ✅ 6) CONSULTA EXTRA: pagos_facturas_proveedores
-    // =========================================================
-    // Tabla:
-    // id, id_pago_proveedor, id_solicitud, id_factura,
-    // monto_facturado, monto_pago, created_at, updated_at
-
-    let pfp = [];
-
-    {
-      const where = [];
-      const params = [];
-
-      // siempre filtramos por id_solicitud (id_solicitud_proveedor de tu payload)
-      where.push(`id_solicitud = ?`);
-      params.push(Number(id_solicitud_proveedor));
-
-      // filtrar por pagos si viene
-      if (pagosArr.length > 0) {
-        const ph = pagosArr.map(() => "?").join(",");
-        where.push(`id_pago_proveedor IN (${ph})`);
-        params.push(...pagosArr.map((x) => Number(x)));
-      }
-
-      // filtrar por facturas si viene
-      if (facturasArr.length > 0) {
-        const ph = facturasArr.map(() => "?").join(",");
-        where.push(`id_factura IN (${ph})`);
-        params.push(...facturasArr);
-      }
-
-      const pfpSql = `
-        SELECT *
-        FROM pagos_facturas_proveedores
-        WHERE ${where.join(" AND ")}
-        ORDER BY created_at DESC;
-      `;
-
-      const pfpRows = await executeQuery(pfpSql, params);
-      pfp = Array.isArray(pfpRows) ? pfpRows : pfpRows?.[0] ?? [];
-    }
-
-    // =========================================================
-    // ✅ 7) VALIDACIÓN / RESUMEN (cuánto pagado vs facturado)
+    // 7) VALIDACIÓN / RESUMEN
     // =========================================================
     const toNum = (v) => {
       const n = Number(String(v ?? "").trim());
       return Number.isFinite(n) ? n : 0;
     };
+    const nearZero = (n) => Math.abs(Number(n || 0)) < 0.000001;
 
     let total_pagado = 0;
     let total_facturado = 0;
 
-    // resumen por factura: { [id_factura]: { pagado, facturado, diferencia } }
     const por_factura_map = new Map();
 
     for (const row of pfp) {
@@ -1891,22 +2680,38 @@ const Detalles = async (req, res) => {
 
       if (!idFactura) continue;
 
-      const prev = por_factura_map.get(idFactura) || { id_factura: idFactura, pagado: 0, facturado: 0 };
+      const prev = por_factura_map.get(idFactura) || {
+        id_factura: idFactura,
+        pagado: 0,
+        facturado: 0,
+      };
+
       prev.pagado += pagado;
       prev.facturado += facturado;
       por_factura_map.set(idFactura, prev);
     }
 
-    const por_factura = Array.from(por_factura_map.values()).map((x) => ({
-      ...x,
-      diferencia: Number((x.pagado - x.facturado).toFixed(2)),
-      estatus:
-        Math.abs(x.pagado - x.facturado) < 0.01
-          ? "CUADRADO"
-          : x.pagado > x.facturado
-          ? "PAGADO_DE_MAS"
-          : "FALTA_PAGAR",
-    }));
+    const por_factura = Array.from(por_factura_map.values()).map((x) => {
+      const pagado = toNum(x.pagado);
+      const facturado = toNum(x.facturado);
+      const diferencia = Number((pagado - facturado).toFixed(2));
+      const abs = Math.abs(pagado - facturado);
+
+      let estatus = "";
+
+      // ✅ FIX: 0 vs 0 NO es CUADRADO
+      if (nearZero(pagado) && nearZero(facturado)) {
+        estatus = "SIN_MOVIMIENTO";
+      } else if (abs < 0.01) {
+        estatus = "CUADRADO";
+      } else if (pagado > facturado) {
+        estatus = "PAGADO_DE_MAS";
+      } else {
+        estatus = "FALTA_PAGAR";
+      }
+
+      return { ...x, diferencia, estatus };
+    });
 
     const resumen_validacion = {
       total_pagado: Number(total_pagado.toFixed(2)),
@@ -1931,11 +2736,7 @@ const Detalles = async (req, res) => {
         solicitud,
         facturas,
         pagos,
-
-        // ✅ tabla de relación (pago-factura)
         pagos_facturas_proveedores: pfp,
-
-        // ✅ validación pagado vs facturado
         resumen_validacion,
       },
     });
