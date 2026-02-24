@@ -11,6 +11,7 @@ router.get("/v2/cupon", async (req, res) => {
     const response = await v2.getCupon(id);
     res.status(200).json({ message: "done", data: response });
   } catch (error) {
+    console.log(error);
     res
       .status(error.statusCode || error.status || 500)
       .json({ message: error.message, error: error.message });
