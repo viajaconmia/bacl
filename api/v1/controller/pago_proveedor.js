@@ -552,6 +552,7 @@ console.log("session:", session, " userId:", userId);
               const insertPagoProveedorLinkSql = `
   INSERT INTO pago_proveedores (
     id_pago_dispersion,
+    
     id_solicitud_proveedor,
     codigo_dispersion,
     monto_pagado,
