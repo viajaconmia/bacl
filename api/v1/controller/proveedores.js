@@ -10,8 +10,8 @@ const getProveedores = async (req, res) => {
     const {
       type = null,
       id = null,
-      page = 1,
-      size = 100,
+      page = null,
+      size = null,
       proveedor = null,
       status = null,
       rfc = null,

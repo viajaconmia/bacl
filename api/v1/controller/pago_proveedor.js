@@ -1,10 +1,460 @@
 const {
   executeSP,
+  executeSP2,
   executeQuery,
   executeTransaction,
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
+const {
+  ajustarSolicitudPorDisminucionCostoProveedor,
+  ajustarSolicitudPorAumentoCostoProveedor,
+} = require("../../../v2/controller/reservas.controller");
+
+
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
+
+//helpers
+
+function money2(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  // redondeo a 2 decimales
+  return Math.round(x * 100) / 100;
+}
+
+function mapPagoStatusFromFormaPago(formaPago) {
+  const fp = String(formaPago || "").trim().toLowerCase();
+  if (fp === "card") return "PAGADO TARJETA";
+  if (fp === "link") return "PAGADO LINK";
+  if (fp === "transfer") return "PAGADO TRANSFERENCIA";
+  // si "credit" en tu negocio se paga como transferencia:
+  if (fp === "credit") return "PAGADO TRANSFERENCIA";
+  return null;
+}
+
+function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
+  const fp = String(formaPagoSolicitada || "").trim().toLowerCase();
+  if (fp === "transfer") return "SPEI";
+  if (fp === "link") return "LINK";
+  if (fp === "card") return "LINK";
+  return "TRANSFERENCIA";
+}
+
+// Si YA tienes estas funcs, usa las tuyas:
+function makeIdSaldo() {
+  return `SAL_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+function randomTransactionId() {
+  return `TX_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function mapPaidStatusFromFormaPagoExceptCredit(formaPago) {
+  const fp = String(formaPago || "").trim().toLowerCase();
+  if (fp === "transfer") return "PAGADO TRANSFERENCIA";
+  if (fp === "card") return "PAGADO TARJETA";
+  if (fp === "link") return "PAGADO LINK";
+  // credit => NO cambiar estado
+  return null;
+}
+
+async function finalizarSiSaldoCero({
+  executeQuery,
+  id_solicitud_proveedor,
+  saldo_new,
+  forma_pago_solicitada,
+  EPS = 0.01,
+}) {
+  if (Math.abs(Number(saldo_new)) > EPS) {
+    return { did: false };
+  }
+
+  const fp = String(forma_pago_solicitada || "").trim().toLowerCase();
+
+  // siempre normaliza saldo a 0 cuando quedó en 0
+  const paidStatus = mapPaidStatusFromFormaPagoExceptCredit(fp);
+
+  if (!paidStatus) {
+    // credit (o desconocido): NO tocar estado, solo saldo=0
+    const q = `
+      UPDATE solicitudes_pago_proveedor
+      SET saldo = 0
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(q, [id_solicitud_proveedor]);
+    return { did: true, estado_final: null, saldo_final: 0, keep_estado: true };
+  }
+
+  const q = `
+    UPDATE solicitudes_pago_proveedor
+    SET estado_solicitud = ?, saldo = 0
+    WHERE id_solicitud_proveedor = ?
+  `;
+  await executeQuery(q, [paidStatus, id_solicitud_proveedor]);
+
+  return { did: true, estado_final: paidStatus, saldo_final: 0, keep_estado: false };
+}
+
+
+//========cambio para controlar aumento o disminucion
+async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
+  executeQuery,
+  id_solicitud_proveedor,
+  nuevoMonto,
+  EPS = 0.01,
+}) {
+  const id = Number(id_solicitud_proveedor);
+  if (!Number.isFinite(id) || id <= 0) {
+    return { ok: false, reason: "INVALID_ID_SOLICITUD", id_solicitud_proveedor };
+  }
+
+  const total_new = Number(nuevoMonto);
+  if (!Number.isFinite(total_new)) {
+    return { ok: false, reason: "INVALID_TOTAL", nuevoMonto };
+  }
+
+  const qSol = `
+    SELECT
+      id_solicitud_proveedor,
+      estado_solicitud,
+      monto_solicitado,
+      saldo,
+      forma_pago_solicitada
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1
+    FOR UPDATE
+  `;
+  const rSol = await executeQuery(qSol, [id]);
+  if (!rSol?.length) return { ok: false, reason: "SOLICITUD_NOT_FOUND", id };
+
+  const estado = String(rSol[0].estado_solicitud ?? "").trim();
+  const forma_pago_solicitada = String(rSol[0].forma_pago_solicitada ?? "").trim();
+  const monto_old = Number(rSol[0].monto_solicitado ?? 0);
+  const saldo_old = Number(rSol[0].saldo ?? 0);
+
+  const delta = money2(total_new - monto_old);
+  if (Math.abs(delta) <= EPS) {
+    return { ok: true, action: "NO_CHANGE", id, estado, monto_old, total_new, saldo_old };
+  }
+  if (delta < -EPS) {
+    return { ok: false, reason: "NOT_AN_INCREASE", id, delta, monto_old, total_new };
+  }
+
+  const isPagado =
+    estado === "PAGADO LINK" ||
+    estado === "PAGADO TARJETA" ||
+    estado === "PAGADO TRANSFERENCIA";
+
+  const isCartaCupon = estado === "CUPON ENVIADO" || estado === "CARTA_ENVIADA";
+
+  let action = "";
+  let estado_anterior = null;
+
+  if (isCartaCupon) {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [money2(total_new), money2(delta), id]);
+    action = "UPDATE_MONTO_SALDO";
+  } else if (isPagado) {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?,
+        estado_solicitud = 'CARTA_ENVIADA',
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por aumento de monto (estaba pagado)'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [money2(total_new), money2(delta), id]);
+    action = "PAGADO_TO_CARTA_ENVIADA_AJUSTE";
+    estado_anterior = estado;
+  } else if (estado === "DISPERSION") {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?,
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por aumento de monto (en dispersión)'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [money2(total_new), money2(delta), id]);
+    action = "DISPERSION_UPDATE_AND_MARK_AJUSTE";
+  } else {
+    const qUp = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_solicitado = ?,
+        saldo = COALESCE(saldo, 0) + ?,
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por aumento de monto'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qUp, [money2(total_new), money2(delta), id]);
+    action = "UPDATE_MONTO_SALDO_AND_MARK_AJUSTE";
+  }
+
+  // ✅ NUEVO: si saldo queda 0, marcar PAGADO según forma_pago_solicitada (excepto credit)
+  const saldo_new = money2(saldo_old + delta);
+  const fin = await finalizarSiSaldoCero({
+    executeQuery,
+    id_solicitud_proveedor: id,
+    saldo_new,
+    forma_pago_solicitada,
+    EPS,
+  });
+
+  return {
+    ok: true,
+    action,
+    id_solicitud_proveedor: id,
+    estado,
+    estado_anterior,
+    forma_pago_solicitada,
+    monto_old,
+    monto_new: total_new,
+    delta,
+    saldo_old,
+    saldo_new: fin.did ? 0 : saldo_new,
+    estado_final: fin.did ? fin.estado_final : null, // null cuando credit (se mantiene)
+  };
+}
+
+async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
+  executeQuery,     // idealmente txExecuteQuery
+  executeSP2,       // opcional
+  id_solicitud_proveedor,
+  nuevoMonto,
+  EPS = 0.01,
+}) {
+  const id = Number(id_solicitud_proveedor);
+  if (!Number.isFinite(id) || id <= 0) {
+    return { ok: false, reason: "INVALID_ID_SOLICITUD", id_solicitud_proveedor };
+  }
+
+  const total_new = Number(nuevoMonto);
+  if (!Number.isFinite(total_new)) {
+    return { ok: false, reason: "INVALID_TOTAL", nuevoMonto };
+  }
+
+  // 1) Leer fila (FOR UPDATE)
+  const qSol = `
+    SELECT
+      id_solicitud_proveedor,
+      id_proveedor,
+      estado_solicitud,
+      monto_solicitado,
+      saldo,
+      forma_pago_solicitada,
+      comentarios
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1
+    FOR UPDATE
+  `;
+  const rSol = await executeQuery(qSol, [id]);
+  if (!rSol?.length) return { ok: false, reason: "SOLICITUD_NOT_FOUND", id };
+
+  const row = rSol[0];
+
+  const estado = String(row.estado_solicitud ?? "").trim();
+  const forma_pago_solicitada = String(row.forma_pago_solicitada ?? "").trim();
+  const monto_old = Number(row.monto_solicitado ?? 0);
+  const saldo_old = Number(row.saldo ?? 0);
+  const id_proveedor = String(row.id_proveedor ?? "").trim();
+  const comentarios_solicitud = row.comentarios ?? null;
+
+  const delta = money2(total_new - monto_old);
+  if (Math.abs(delta) <= EPS) {
+    return { ok: true, action: "NO_CHANGE", id, estado, monto_old, total_new, saldo_old };
+  }
+
+  if (delta > EPS) {
+    return { ok: false, reason: "NOT_A_DECREASE", id, delta, monto_old, total_new };
+  }
+
+  // 2) Si está CANCELADA, normalmente no tocar (ajusta si tu negocio sí permite)
+  if (estado === "CANCELADA") {
+    return { ok: true, action: "NO_ACTION_CANCELADA", id, estado };
+  }
+
+  // 3) Primero: siempre actualiza monto + saldo
+  const qUpBase = `
+    UPDATE solicitudes_pago_proveedor
+    SET
+      monto_solicitado = ?,
+      saldo = COALESCE(saldo, 0) + ?
+    WHERE id_solicitud_proveedor = ?
+  `;
+  await executeQuery(qUpBase, [money2(total_new), money2(delta), id]);
+
+  // 4) Calcular saldo_new (puedes releer o derivar)
+  const saldo_new = money2(saldo_old + delta);
+
+  // 4.1) saldo ~ 0 => marcar pagado según forma_pago
+  if (Math.abs(saldo_new) <= EPS) {
+    const nuevoEstado = mapPagoStatusFromFormaPago(forma_pago_solicitada);
+    if (nuevoEstado) {
+      const qPaid = `
+        UPDATE solicitudes_pago_proveedor
+        SET estado_solicitud = ?, saldo = 0
+        WHERE id_solicitud_proveedor = ?
+      `;
+      await executeQuery(qPaid, [nuevoEstado, id]);
+
+      return {
+        ok: true,
+        action: "UPDATE_MONTO_SALDO_AND_MARK_PAID",
+        id_solicitud_proveedor: id,
+        estado_anterior: estado,
+        nuevoEstado,
+        forma_pago_solicitada,
+        monto_old,
+        monto_new: total_new,
+        delta,
+        saldo_new: 0,
+      };
+    }
+
+    return {
+      ok: true,
+      action: "SALDO_ZERO_UNKNOWN_PAYMENT",
+      id_solicitud_proveedor: id,
+      estado,
+      forma_pago_solicitada,
+      monto_old,
+      monto_new: total_new,
+      delta,
+      saldo_new,
+    };
+  }
+
+  // 4.2) saldo NEGATIVO => saldo a favor
+  if (saldo_new < -EPS) {
+    // marcar ajuste
+    const qAdj = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por disminución de monto (saldo a favor)'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qAdj, [id]);
+
+    const credito = money2(Math.abs(saldo_new));
+    const id_saldo = makeIdSaldo();
+    const transaction_id = randomTransactionId();
+
+    const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(forma_pago_solicitada);
+
+    const referencia = `AJUSTE_LOW|SOL:${id}`;
+    const motivo = "Ajuste por disminución de monto proveedor";
+    const comentarios = [
+      `Saldo quedó negativo: ${money2(saldo_new)}`,
+      `Monto anterior: ${money2(monto_old)} | Nuevo: ${money2(total_new)} | Delta: ${money2(delta)}`,
+      comentarios_solicitud ? `Comentarios solicitud: ${comentarios_solicitud}` : null,
+    ].filter(Boolean).join(" | ");
+
+    const qInsSaldo = `
+      INSERT INTO saldos
+        (id_saldo, id_proveedor, monto, restante, forma_pago, fecha_procesamiento,
+         referencia, id_hospedaje, transaction_id, motivo, comentarios, estado)
+      VALUES
+        (?, ?, ?, ?, ?, NOW(), ?, NULL, ?, ?, ?, 'pending')
+    `;
+
+    await executeQuery(qInsSaldo, [
+      id_saldo,
+      id_proveedor,
+      credito,
+      credito,
+      forma_pago_saldo,
+      referencia,
+      transaction_id,
+      motivo,
+      comentarios,
+    ]);
+
+    return {
+      ok: true,
+      action: "UPDATE_MONTO_SALDO_AND_INSERT_SALDO_FAVOR",
+      id_solicitud_proveedor: id,
+      estado,
+      forma_pago_solicitada,
+      monto_old,
+      monto_new: total_new,
+      delta,
+      saldo_new,
+      id_saldo,
+      transaction_id,
+      credito,
+    };
+  }
+
+  // 4.3) saldo POSITIVO => si el estado está “fuera de lista” puedes marcar ajuste + SP si transfer
+  if (
+    estado !== "CUPON ENVIADO" &&
+    estado !== "CARTA_ENVIADA" &&
+    estado !== "DISPERSION"
+  ) {
+    const qAdj = `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        is_ajuste = 1,
+        comentario_ajuste = 'Ajuste por disminución de monto'
+      WHERE id_solicitud_proveedor = ?
+    `;
+    await executeQuery(qAdj, [id]);
+
+    const fp = String(forma_pago_solicitada || "").trim().toLowerCase();
+    if (fp === "transfer" && typeof executeSP2 === "function") {
+      await executeSP2("sp_saldo_a_favor_proveedor", [id]);
+      return {
+        ok: true,
+        action: "MARK_AJUSTE_AND_CALL_SP_TRANSFER",
+        id_solicitud_proveedor: id,
+        estado,
+        forma_pago_solicitada,
+        monto_old,
+        monto_new: total_new,
+        delta,
+        saldo_new,
+      };
+    }
+
+    return {
+      ok: true,
+      action: fp === "transfer" ? "MARK_AJUSTE_TRANSFER_NO_SP" : "MARK_AJUSTE_NO_SP",
+      id_solicitud_proveedor: id,
+      estado,
+      forma_pago_solicitada,
+      monto_old,
+      monto_new: total_new,
+      delta,
+      saldo_new,
+    };
+  }
+
+  // En CUPON/CARTA/DISPERSION con saldo>0, solo base update (ya hecho)
+  return {
+    ok: true,
+    action: "UPDATE_MONTO_SALDO",
+    id_solicitud_proveedor: id,
+    estado,
+    forma_pago_solicitada,
+    monto_old,
+    monto_new: total_new,
+    delta,
+    saldo_new,
+  };
+}
+
 
 // Convierte valores "vacíos" a null (undefined, null, "", strings de puros espacios)
 const toNullableString = (value) => {
@@ -44,7 +494,6 @@ const createSolicitud = async (req, res) => {
       moneda,
     } = solicitud;
 
-    const session = req.session.user.id
     
     // ✅ Determina forma_pago_solicitada para el SP
     const formaPagoDB =
@@ -60,15 +509,28 @@ const createSolicitud = async (req, res) => {
       });
     }
     
-    // ✅ User IDs (evita "Operaciones" si tus columnas son UUID/FK)
-    const userId = session; // o req.user.id si tienes auth
-    console.log(session,"",userId)
-    if (!userId) {
-      return res.status(400).json({
-        ok: false,
-        message: "Falta usuario_creador (UUID) para registrar la solicitud.",
-      });
-    }
+// ✅ 1) Session seguro (no revienta si no hay sesión)
+const session = req.session?.user?.id ?? "";
+
+// ✅ 2) Fallback configurable: "" (vacío) o "cliente"
+const USER_FALLBACK = "cliente"; // <-- si quieres vacío: pon "";
+
+// ✅ 3) Resolver userId: prioriza session, luego usuario_creador, luego fallback
+const resolveUserId = (...candidates) => {
+  const found = candidates
+    .map((v) => String(v ?? "").trim())
+    .find((v) => v.length > 0);
+
+  return found || USER_FALLBACK;
+};
+
+let userId = resolveUserId(session, usuario_creador);
+
+// (Opcional) si quieres que a DB llegue NULL en vez de "" cuando esté vacío:
+const userIdDB = userId === "" ? null : userId;
+
+console.log("session:", session, " userId:", userId);
+
 
     // ✅ Mapeos como ya los tienes
     const mapEstadoSolicitud = (status) => {
@@ -1806,6 +2268,7 @@ if (idsSolicitudes.length > 0) {
 };
 
 
+
 const EditCampos = async (req, res) => {
   try {
     const { id_solicitud_proveedor, ...rest } = req.body;
@@ -1896,6 +2359,72 @@ const EditCampos = async (req, res) => {
         error: `El campo ${fieldFromClient} debe ser numérico`,
       });
     }
+
+        // ✅ Interceptar cambios de monto_solicitado para disparar lógica de ajuste
+    // ✅ Interceptar cambios de monto_solicitado para disparar lógica de ajuste
+if (dbField === "monto_solicitado") {
+  const nuevoMonto = Number(finalValue);
+  if (!Number.isFinite(nuevoMonto)) {
+    return res.status(400).json({ error: "monto_solicitado debe ser numérico" });
+  }
+
+  const qOld = `
+    SELECT monto_solicitado
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1
+  `;
+  const rOld = await executeQuery(qOld, [id_solicitud_proveedor]);
+
+  if (!rOld?.length) {
+    return res.status(404).json({
+      error: "No se encontró la solicitud",
+      id_solicitud_proveedor,
+    });
+  }
+
+  const montoOld = Number(rOld[0].monto_solicitado ?? 0);
+  const EPS = 0.01;
+
+  let ajusteResp = { ok: true, action: "NO_CHANGE" };
+
+  if (nuevoMonto > montoOld + EPS) {
+    ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
+      executeQuery,
+      id_solicitud_proveedor,
+      nuevoMonto,
+      EPS,
+    });
+  } else if (nuevoMonto < montoOld - EPS) {
+    ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
+      executeQuery,
+      executeSP2, // si no existe aquí, bórralo
+      id_solicitud_proveedor,
+      nuevoMonto,
+      EPS,
+    });
+  }
+
+  const selectSql = `
+    SELECT *
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1;
+  `;
+  const rows = await executeQuery(selectSql, [id_solicitud_proveedor]);
+  const updated = Array.isArray(rows) ? rows[0] : rows?.[0];
+
+  return res.status(200).json({
+    ok: true,
+    message: "Ajuste aplicado por cambio de monto_solicitado",
+    id_solicitud_proveedor,
+    montoOld,
+    montoNew: nuevoMonto,
+    ajuste: ajusteResp,
+    data: updated || null,
+  });
+}
+
 
     // 6) Ejecutar UPDATE (ojo: el nombre de columna NO va como "?" por seguridad)
     const updateSql = `

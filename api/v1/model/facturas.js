@@ -40,7 +40,7 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
 
         return acc;
       },
-      { total: 0, subtotal: 0, impuestos: 0 }
+      { total: 0, subtotal: 0, impuestos: 0 },
     );
 
     const response = await runTransaction(async (connection) => {
@@ -55,7 +55,7 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         if (cfdiId && addenda_json) {
           const addendaXml = buildAddendaXmlFromJson(
             addenda_json,
-            "NoktosAddenda"
+            "NoktosAddenda",
           );
 
           // Esto es lo que el endpoint de Facturama espera según el modelo: CfdiId + AddendaXML :contentReference[oaicite:2]{index=2}
@@ -69,14 +69,14 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
             const addendaResp = await facturama.Addendas.Create(
               req,
               addenda_type || "Noktos",
-              addendaBody
+              addendaBody,
             );
             console.log("✅ Addenda attach result:", addendaResp?.data);
           } catch (e) {
             // MUY recomendado: NO tumbar la factura si falla el addenda (a menos que negocio lo exija)
             console.error(
               "⚠️ No se pudo adjuntar addenda:",
-              e?.response?.data || e?.message || e
+              e?.response?.data || e?.message || e,
             );
           }
         }
@@ -84,13 +84,13 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         console.error(
           "Error al crear CFDI:",
           error.response.data,
-          error.response
+          error.response,
         );
         throw new CustomError(
           error.response.data.Message || "Error al crear la factura",
           500,
           "FACTURA_ERROR",
-          { data: error.response.data.ModelState }
+          { data: error.response.data.ModelState },
         );
       }
       try {
@@ -121,7 +121,7 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
 
         const [rows] = await connection.execute(
           `SELECT * FROM vw_reservas_client WHERE id_solicitud = ?;`,
-          [id_solicitud]
+          [id_solicitud],
         );
 
         const [reserva] = rows;
@@ -130,7 +130,7 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
         UPDATE items
         SET id_factura = ?,
             is_facturado = 1
-        WHERE id_hospedaje = ?;`;
+        WHERE id_hospedaje = ? OR id_viaje_aereo = ? OR id_renta_carro = ?;`;
         const params2 = [id_factura, reserva.id_hospedaje];
 
         const result = await connection.execute(query2, params2);
@@ -168,7 +168,7 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
 const createFacturaCombinada = async (req, { cfdi, info_user }) => {
   req.context.logStep(
     "LLgando al model de crear factura combinada con los datos:",
-    JSON.stringify({ cfdi, info_user })
+    JSON.stringify({ cfdi, info_user }),
   );
   try {
     const { id_solicitud, id_user, id_items, datos_empresa, items_facturados } =
@@ -188,7 +188,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         item.Taxes.forEach((tax) => (acc.impuestos += parseFloat(tax.Total)));
         return acc;
       },
-      { total: 0, subtotal: 0, impuestos: 0 }
+      { total: 0, subtotal: 0, impuestos: 0 },
     );
 
     // Ejecutamos todo dentro de una transacción
@@ -205,7 +205,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         if (cfdiId && addendaJson) {
           const addendaXml = buildAddendaXmlFromJson(
             addendaJson,
-            "NoktosAddenda"
+            "NoktosAddenda",
           );
 
           const addendaBody = {
@@ -217,14 +217,14 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
             const addendaResp = await facturama.Addenda.Create(
               req,
               addendaType,
-              addendaBody
+              addendaBody,
             );
             console.log("✅ Addenda attach:", addendaResp?.data);
           } catch (e) {
             // Recomiendo NO tirar la factura si falla la addenda
             console.error(
               "⚠️ Falló addenda:",
-              e?.response?.data || e?.message || e
+              e?.response?.data || e?.message || e,
             );
           }
         }
@@ -290,13 +290,13 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         for (let i = 0; i < numberOfItems; i++) {
           console.log(
             "😎😎😎😎😎😎😎😎😎😎😎😎😎🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬",
-            itemsArray[i].id_hospedaje,
+            itemsArray[i].id_relacion,
             itemsArray[i].id_item,
-            total / numberOfItems
+            total / numberOfItems,
           );
           await conn.execute(insertItemsFacturasQuery, [
             id_factura,
-            itemsArray[i].id_hospedaje,
+            itemsArray[i].id_relacion,
             itemsArray[i].id_item,
             total / numberOfItems,
           ]);
@@ -378,7 +378,7 @@ function calcularTotalesDesdeItems(items = []) {
       }
       return acc;
     },
-    { total: 0, subtotal: 0, impuestos: 0 }
+    { total: 0, subtotal: 0, impuestos: 0 },
   );
 }
 
@@ -575,7 +575,7 @@ const crearFacturaEmi = async (req, payload) => {
 
   req.context?.logStep?.(
     "LLgando al model de crear factura combinada con los datos:",
-    JSON.stringify({ cfdi: { ...cfdi, Items: undefined }, info_user })
+    JSON.stringify({ cfdi: { ...cfdi, Items: undefined }, info_user }),
   );
 
   try {
@@ -584,7 +584,7 @@ const crearFacturaEmi = async (req, payload) => {
     if (!id_user) throw new Error("id_user requerido");
     if (!datos_empresa?.rfc || !datos_empresa?.id_empresa) {
       throw new Error(
-        "datos_empresa.rfc y datos_empresa.id_empresa son requeridos"
+        "datos_empresa.rfc y datos_empresa.id_empresa son requeridos",
       );
     }
 
@@ -598,7 +598,7 @@ const crearFacturaEmi = async (req, payload) => {
         }
         return acc;
       },
-      { total: 0, subtotal: 0, impuestos: 0 }
+      { total: 0, subtotal: 0, impuestos: 0 },
     );
     const { total, subtotal, impuestos } = totales;
 
@@ -612,7 +612,7 @@ const crearFacturaEmi = async (req, payload) => {
         cfdi?.Receiver?.TaxZipCode;
       if (!emisorCP) {
         throw new Error(
-          "ExpeditionPlace requerido: faltan CP del emisor (datos_empresa.expedition_cp o .cp)."
+          "ExpeditionPlace requerido: faltan CP del emisor (datos_empresa.expedition_cp o .cp).",
         );
       }
       cfdi.ExpeditionPlace = String(emisorCP);
@@ -940,13 +940,13 @@ const deleteFacturas = async (id) => {
         try {
           await connection.execute(
             `delete from facturas WHERE id_factura = ?;`,
-            [id]
+            [id],
           );
         } catch (error) {
           console.log(error);
           throw error;
         }
-      }
+      },
     );
 
     return { message: "success" };

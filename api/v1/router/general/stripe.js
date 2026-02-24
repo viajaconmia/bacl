@@ -27,6 +27,37 @@ router.post("/create-checkout-session", async (req, res) => {
     res.json(error);
   }
 });
+router.get("/trypi", async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    if (!id) {
+      return res.status(400).json({ error: "Missing paymentIntent id" });
+    }
+
+    // 1️⃣ Obtener PaymentIntent
+    const paymentIntent = await stripe.paymentIntents.retrieve(id);
+
+    if (!paymentIntent.payment_method) {
+      return res.json({
+        message: "No payment method attached",
+        paymentIntent,
+      });
+    }
+
+    // 2️⃣ Obtener PaymentMethod real
+    const paymentMethod = await stripe.paymentMethods.retrieve(
+      paymentIntent.payment_method,
+    );
+
+    res.json({
+      paymentMethod,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: error.message });
+  }
+});
 router.post("/save-payment-method", async (req, res) => {
   try {
     const { id_agente, paymentMethodId } = req.body;
@@ -36,12 +67,12 @@ router.post("/save-payment-method", async (req, res) => {
         "Falta un parametro",
         400,
         "MISSING",
-        Object.entries(req.body).filter(([, value]) => !!value)
+        Object.entries(req.body).filter(([, value]) => !!value),
       );
 
     const rows = await executeQuery(
       "SELECT id_cliente_stripe FROM clientes_stripe WHERE id_agente = ?;",
-      [id_agente]
+      [id_agente],
     );
 
     if (rows.length === 0)
@@ -49,7 +80,7 @@ router.post("/save-payment-method", async (req, res) => {
         "No se encontro el cliente de stripe para este agente",
         404,
         "NOT_FOUND",
-        null
+        null,
       );
 
     const customerId = rows[0].id_cliente_stripe;
@@ -77,7 +108,7 @@ router.post("/delete-payment-method", async (req, res) => {
     // Consultar el `customer_id` de la base de datos
     const [rows] = await executeQuery(
       "SELECT id_cliente_stripe FROM clientes_stripe WHERE id_agente = ?;",
-      [id_agente]
+      [id_agente],
     ).catch((err) => {
       console.error("Database query error:", err);
       throw new Error("Database connection error");
@@ -117,7 +148,7 @@ router.post("/make-payment", async (req, res) => {
     //Obtenemos el cliente de stripe
     const rows = await executeQuery(
       "SELECT id_cliente_stripe FROM clientes_stripe WHERE id_agente = ?;",
-      [id_agente]
+      [id_agente],
     );
     if (rows.length === 0)
       throw new ShortError("No se encontro el cliente de stripe", 404);
@@ -128,17 +159,17 @@ router.post("/make-payment", async (req, res) => {
       `SELECT * FROM solicitudes where id_solicitud in (${ids_solicitudes
         .map((id) => "?")
         .join(",")})`,
-      ids_solicitudes
+      ids_solicitudes,
     );
 
     const totalSolicitudes = solicitudes.reduce(
       (prev, current) => prev + Number(current.total),
-      0
+      0,
     );
     console.log(
       Number(totalSolicitudes.toFixed(2)),
       Number(amount.toFixed()) / 100,
-      Number(amount.toFixed()) / 100 - Number(totalSolicitudes.toFixed(2))
+      Number(amount.toFixed()) / 100 - Number(totalSolicitudes.toFixed(2)),
     );
     if (
       Number(amount.toFixed()) / 100 - Number(totalSolicitudes.toFixed(2)) <=
@@ -245,14 +276,14 @@ router.post("/make-payment", async (req, res) => {
           ids_solicitudes.map((id) =>
             conn.execute(
               `UPDATE solicitudes SET id_servicio = ? WHERE id_solicitud = ?`,
-              [id_servicio, id]
-            )
-          )
+              [id_servicio, id],
+            ),
+          ),
         );
         await Promise.all(
           ids_carrito.map((id) =>
-            conn.execute(`UPDATE cart SET active = 0 WHERE id = ?`, [id], [id])
-          )
+            conn.execute(`UPDATE cart SET active = 0 WHERE id = ?`, [id], [id]),
+          ),
         );
 
         return { paymentIntent };
@@ -261,7 +292,7 @@ router.post("/make-payment", async (req, res) => {
           error.message || "Error al intentar hacer el pago",
           error.status || error.statusCode || 500,
           "CREATE_PAYMENT_ERROR",
-          error
+          error,
         );
       }
     });
@@ -311,7 +342,7 @@ router.get("/get-payment-methods", async (req, res) => {
     // Consultar el `customer_id` de la base de datos
     const rows = await executeQuery(
       "SELECT id_cliente_stripe FROM clientes_stripe WHERE id_agente = ?;",
-      [id_agente]
+      [id_agente],
     );
 
     if (rows.length === 0)
@@ -319,7 +350,7 @@ router.get("/get-payment-methods", async (req, res) => {
         "No se encontro el cliente de stripe para este agente",
         404,
         "NOT_FOUND",
-        null
+        null,
       );
 
     const customerId = rows[0].id_cliente_stripe;
@@ -353,7 +384,7 @@ router.post("/create-setup-intent", async (req, res) => {
     // Consultar el `customer_id` de la base de datos
     const [rows] = await executeQuery(
       "SELECT id_cliente_stripe FROM clientes_stripe WHERE id_agente = ?;",
-      [id_agente]
+      [id_agente],
     ).catch((err) => {
       console.error("Database query error:", err);
       throw new Error("Database connection error");
@@ -487,7 +518,7 @@ router.post(
       event = stripe.webhooks.constructEvent(
         req.body,
         sig,
-        "whsec_nau4uGg351SWXP1PJAqhPUdRMqznaWZ9"
+        "whsec_nau4uGg351SWXP1PJAqhPUdRMqznaWZ9",
       );
     } catch (err) {
       return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -524,7 +555,7 @@ router.post(
     }
 
     res.json({ received: true });
-  }
+  },
 );
 
 module.exports = router;
