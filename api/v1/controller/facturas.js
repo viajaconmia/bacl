@@ -3076,6 +3076,32 @@ const asignarURLS_factura = async (req, res) => {
   }
 };
 
+const agentes_report_fac = async (req,res)=>{
+  const { id_agente } = req.query;
+
+  try {
+    if (!id_agente) {
+      throw new ShortError("No se encontro el id de agente", 404);
+    }
+    // 2. Ejecutar el Stored Procedure y pasar el ID del agente
+    const facturas = await executeSP("sp_facturas_agente_reservas", [id_agente]);
+
+    // 4. Enviar la respuesta con las facturas encontradas
+    res.status(200).json({
+      message: "Facturas del agente obtenidas correctamente.",
+      data: facturas,
+    });
+  } catch (error) {
+    // 5. Manejar errores
+    req.context.logStep("Error en sp_facturas_agente_reservas:", error);
+    res.status(500).json({
+      error: error,
+      message: error.message || "Error al obtener facturas",
+      data: null,
+    });
+  }
+}
+
 module.exports = {
   create,
   getFullDetalles,
@@ -3101,6 +3127,7 @@ module.exports = {
   updateDocumentosFacturas,
   getFacturasDetalles,
   getQuitarDetalles,
+  agentes_report_fac,
 };
 
 //ya quedo "#$%&/()="

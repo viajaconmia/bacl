@@ -19,6 +19,13 @@ router.post(
   controller.createEmi
 );
 
+router.get(
+  "/agentes_report_fac",
+  // middleware.validateParams(["info_user", "cfdi"]),
+  controller.agentes_report_fac
+);
+
+
 router.get("/detallesConexion", controller.getDetallesConexionesFactura);
 router.get("/eliminar factura");
 router.delete("/quitar_relacion",controller.getQuitarDetalles)

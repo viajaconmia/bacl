@@ -10,7 +10,6 @@ const {
   ajustarSolicitudPorAumentoCostoProveedor,
 } = require("../../../v2/controller/reservas.controller");
 
-
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
 
 //helpers
@@ -23,7 +22,9 @@ function money2(n) {
 }
 
 function mapPagoStatusFromFormaPago(formaPago) {
-  const fp = String(formaPago || "").trim().toLowerCase();
+  const fp = String(formaPago || "")
+    .trim()
+    .toLowerCase();
   if (fp === "card") return "PAGADO TARJETA";
   if (fp === "link") return "PAGADO LINK";
   if (fp === "transfer") return "PAGADO TRANSFERENCIA";
@@ -33,7 +34,9 @@ function mapPagoStatusFromFormaPago(formaPago) {
 }
 
 function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
-  const fp = String(formaPagoSolicitada || "").trim().toLowerCase();
+  const fp = String(formaPagoSolicitada || "")
+    .trim()
+    .toLowerCase();
   if (fp === "transfer") return "SPEI";
   if (fp === "link") return "LINK";
   if (fp === "card") return "LINK";
@@ -49,7 +52,9 @@ function randomTransactionId() {
 }
 
 function mapPaidStatusFromFormaPagoExceptCredit(formaPago) {
-  const fp = String(formaPago || "").trim().toLowerCase();
+  const fp = String(formaPago || "")
+    .trim()
+    .toLowerCase();
   if (fp === "transfer") return "PAGADO TRANSFERENCIA";
   if (fp === "card") return "PAGADO TARJETA";
   if (fp === "link") return "PAGADO LINK";
@@ -68,7 +73,9 @@ async function finalizarSiSaldoCero({
     return { did: false };
   }
 
-  const fp = String(forma_pago_solicitada || "").trim().toLowerCase();
+  const fp = String(forma_pago_solicitada || "")
+    .trim()
+    .toLowerCase();
 
   // siempre normaliza saldo a 0 cuando quedó en 0
   const paidStatus = mapPaidStatusFromFormaPagoExceptCredit(fp);
@@ -91,9 +98,13 @@ async function finalizarSiSaldoCero({
   `;
   await executeQuery(q, [paidStatus, id_solicitud_proveedor]);
 
-  return { did: true, estado_final: paidStatus, saldo_final: 0, keep_estado: false };
+  return {
+    did: true,
+    estado_final: paidStatus,
+    saldo_final: 0,
+    keep_estado: false,
+  };
 }
-
 
 //========cambio para controlar aumento o disminucion
 async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
@@ -104,7 +115,11 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
 }) {
   const id = Number(id_solicitud_proveedor);
   if (!Number.isFinite(id) || id <= 0) {
-    return { ok: false, reason: "INVALID_ID_SOLICITUD", id_solicitud_proveedor };
+    return {
+      ok: false,
+      reason: "INVALID_ID_SOLICITUD",
+      id_solicitud_proveedor,
+    };
   }
 
   const total_new = Number(nuevoMonto);
@@ -128,16 +143,33 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
   if (!rSol?.length) return { ok: false, reason: "SOLICITUD_NOT_FOUND", id };
 
   const estado = String(rSol[0].estado_solicitud ?? "").trim();
-  const forma_pago_solicitada = String(rSol[0].forma_pago_solicitada ?? "").trim();
+  const forma_pago_solicitada = String(
+    rSol[0].forma_pago_solicitada ?? "",
+  ).trim();
   const monto_old = Number(rSol[0].monto_solicitado ?? 0);
   const saldo_old = Number(rSol[0].saldo ?? 0);
 
   const delta = money2(total_new - monto_old);
   if (Math.abs(delta) <= EPS) {
-    return { ok: true, action: "NO_CHANGE", id, estado, monto_old, total_new, saldo_old };
+    return {
+      ok: true,
+      action: "NO_CHANGE",
+      id,
+      estado,
+      monto_old,
+      total_new,
+      saldo_old,
+    };
   }
   if (delta < -EPS) {
-    return { ok: false, reason: "NOT_AN_INCREASE", id, delta, monto_old, total_new };
+    return {
+      ok: false,
+      reason: "NOT_AN_INCREASE",
+      id,
+      delta,
+      monto_old,
+      total_new,
+    };
   }
 
   const isPagado =
@@ -227,15 +259,19 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
 }
 
 async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
-  executeQuery,     // idealmente txExecuteQuery
-  executeSP2,       // opcional
+  executeQuery, // idealmente txExecuteQuery
+  executeSP2, // opcional
   id_solicitud_proveedor,
   nuevoMonto,
   EPS = 0.01,
 }) {
   const id = Number(id_solicitud_proveedor);
   if (!Number.isFinite(id) || id <= 0) {
-    return { ok: false, reason: "INVALID_ID_SOLICITUD", id_solicitud_proveedor };
+    return {
+      ok: false,
+      reason: "INVALID_ID_SOLICITUD",
+      id_solicitud_proveedor,
+    };
   }
 
   const total_new = Number(nuevoMonto);
@@ -272,11 +308,26 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
 
   const delta = money2(total_new - monto_old);
   if (Math.abs(delta) <= EPS) {
-    return { ok: true, action: "NO_CHANGE", id, estado, monto_old, total_new, saldo_old };
+    return {
+      ok: true,
+      action: "NO_CHANGE",
+      id,
+      estado,
+      monto_old,
+      total_new,
+      saldo_old,
+    };
   }
 
   if (delta > EPS) {
-    return { ok: false, reason: "NOT_A_DECREASE", id, delta, monto_old, total_new };
+    return {
+      ok: false,
+      reason: "NOT_A_DECREASE",
+      id,
+      delta,
+      monto_old,
+      total_new,
+    };
   }
 
   // 2) Si está CANCELADA, normalmente no tocar (ajusta si tu negocio sí permite)
@@ -351,15 +402,21 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
     const id_saldo = makeIdSaldo();
     const transaction_id = randomTransactionId();
 
-    const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(forma_pago_solicitada);
+    const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(
+      forma_pago_solicitada,
+    );
 
     const referencia = `AJUSTE_LOW|SOL:${id}`;
     const motivo = "Ajuste por disminución de monto proveedor";
     const comentarios = [
       `Saldo quedó negativo: ${money2(saldo_new)}`,
       `Monto anterior: ${money2(monto_old)} | Nuevo: ${money2(total_new)} | Delta: ${money2(delta)}`,
-      comentarios_solicitud ? `Comentarios solicitud: ${comentarios_solicitud}` : null,
-    ].filter(Boolean).join(" | ");
+      comentarios_solicitud
+        ? `Comentarios solicitud: ${comentarios_solicitud}`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
 
     const qInsSaldo = `
       INSERT INTO saldos
@@ -412,7 +469,9 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
     `;
     await executeQuery(qAdj, [id]);
 
-    const fp = String(forma_pago_solicitada || "").trim().toLowerCase();
+    const fp = String(forma_pago_solicitada || "")
+      .trim()
+      .toLowerCase();
     if (fp === "transfer" && typeof executeSP2 === "function") {
       await executeSP2("sp_saldo_a_favor_proveedor", [id]);
       return {
@@ -430,7 +489,8 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
 
     return {
       ok: true,
-      action: fp === "transfer" ? "MARK_AJUSTE_TRANSFER_NO_SP" : "MARK_AJUSTE_NO_SP",
+      action:
+        fp === "transfer" ? "MARK_AJUSTE_TRANSFER_NO_SP" : "MARK_AJUSTE_NO_SP",
       id_solicitud_proveedor: id,
       estado,
       forma_pago_solicitada,
@@ -454,7 +514,6 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
     saldo_new,
   };
 }
-
 
 // Convierte valores "vacíos" a null (undefined, null, "", strings de puros espacios)
 const toNullableString = (value) => {
@@ -481,12 +540,12 @@ const createSolicitud = async (req, res) => {
 
     const {
       monto_a_pagar,
-      paymentMethod,   // transfer | card | link (a veces)
+      paymentMethod, // transfer | card | link (a veces)
       paymentStatus,
       comments,
       comments_cxp,
       date,
-      paymentType,     // credit (si aplica)
+      paymentType, // credit (si aplica)
       selectedCard,
       id_hospedaje,
       usuario_creador,
@@ -494,13 +553,12 @@ const createSolicitud = async (req, res) => {
       moneda,
     } = solicitud;
 
-    
     // ✅ Determina forma_pago_solicitada para el SP
     const formaPagoDB =
-    String(paymentType || "").toLowerCase() === "credit"
-    ? "credit"
-    : String(paymentMethod || "").toLowerCase();
-    
+      String(paymentType || "").toLowerCase() === "credit"
+        ? "credit"
+        : String(paymentMethod || "").toLowerCase();
+
     const allowed = new Set(["credit", "transfer", "card", "link"]);
     if (!allowed.has(formaPagoDB)) {
       return res.status(400).json({
@@ -508,33 +566,34 @@ const createSolicitud = async (req, res) => {
         message: `paymentMethod/paymentType inválido. Recibido: ${formaPagoDB}`,
       });
     }
-    
-// ✅ 1) Session seguro (no revienta si no hay sesión)
-const session = req.session?.user?.id ?? "";
 
-// ✅ 2) Fallback configurable: "" (vacío) o "cliente"
-const USER_FALLBACK = "cliente"; // <-- si quieres vacío: pon "";
+    // ✅ 1) Session seguro (no revienta si no hay sesión)
+    const session = req.session?.user?.id ?? "";
 
-// ✅ 3) Resolver userId: prioriza session, luego usuario_creador, luego fallback
-const resolveUserId = (...candidates) => {
-  const found = candidates
-    .map((v) => String(v ?? "").trim())
-    .find((v) => v.length > 0);
+    // ✅ 2) Fallback configurable: "" (vacío) o "cliente"
+    const USER_FALLBACK = "cliente"; // <-- si quieres vacío: pon "";
 
-  return found || USER_FALLBACK;
-};
+    // ✅ 3) Resolver userId: prioriza session, luego usuario_creador, luego fallback
+    const resolveUserId = (...candidates) => {
+      const found = candidates
+        .map((v) => String(v ?? "").trim())
+        .find((v) => v.length > 0);
 
-let userId = resolveUserId(session, usuario_creador);
+      return found || USER_FALLBACK;
+    };
 
-// (Opcional) si quieres que a DB llegue NULL en vez de "" cuando esté vacío:
-const userIdDB = userId === "" ? null : userId;
+    let userId = resolveUserId(session, usuario_creador);
 
-console.log("session:", session, " userId:", userId);
+    // (Opcional) si quieres que a DB llegue NULL en vez de "" cuando esté vacío:
+    const userIdDB = userId === "" ? null : userId;
 
+    console.log("session:", session, " userId:", userId);
 
     // ✅ Mapeos como ya los tienes
     const mapEstadoSolicitud = (status) => {
-      const s = String(status || "").trim().toLowerCase();
+      const s = String(status || "")
+        .trim()
+        .toLowerCase();
       if (s === "spei_solicitado") return "transferencia solicitada";
       if (s === "enviada_para_cobro") return "enviada a cobro";
       if (s === "pago_tdc") return "solicitud pago tdc";
@@ -544,12 +603,14 @@ console.log("session:", session, " userId:", userId);
     };
 
     const mapEstatusPagos = (estadoSolicitud) => {
-      const s = String(estadoSolicitud || "").trim().toLowerCase();
+      const s = String(estadoSolicitud || "")
+        .trim()
+        .toLowerCase();
       if (s === "pagada") return "pagado";
       return "enviado_a_pago";
     };
 
-              const insertPagoProveedorLinkSql = `
+    const insertPagoProveedorLinkSql = `
   INSERT INTO pago_proveedores (
     id_pago_dispersion,
     
@@ -590,7 +651,7 @@ console.log("session:", session, " userId:", userId);
     ?, ?, ?, ?
   );
 `;
-const insertPagoProveedorCardSql = `
+    const insertPagoProveedorCardSql = `
   INSERT INTO pago_proveedores (
     id_pago_dispersion,
     id_solicitud_proveedor,
@@ -630,22 +691,20 @@ const insertPagoProveedorCardSql = `
   );
 `;
 
-
     // ✅ Estado inicial EXACTO como tu enum real:
     const estado_solicitud_db =
       formaPagoDB === "credit"
         ? "CUPON ENVIADO"
         : formaPagoDB === "transfer"
           ? "TRANSFERENCIA_SOLICITADA"
-          : (formaPagoDB === "card")
+          : formaPagoDB === "card"
             ? "CARTA_ENVIADA"
-            : (formaPagoDB === "link")
+            : formaPagoDB === "link"
               ? "PAGADO_LINK"
-              :"CARTA_ENVIADA";
+              : "CARTA_ENVIADA";
 
     // ✅ estatus_pagos en tu tabla es varchar(45), puedes dejarlo así:
     const estatus_pagos_db = "enviado_a_pago";
-
 
     // ✅ schedule: solo card/link (como ya lo haces)
     const schedule =
@@ -670,7 +729,9 @@ const insertPagoProveedorCardSql = `
     }
 
     if (!id_hospedaje) {
-      return res.status(400).json({ ok: false, message: "Falta id_hospedaje." });
+      return res
+        .status(400)
+        .json({ ok: false, message: "Falta id_hospedaje." });
     }
     if (!date) {
       return res.status(400).json({ ok: false, message: "Falta date." });
@@ -678,32 +739,33 @@ const insertPagoProveedorCardSql = `
 
     const fechaSolicitud =
       formaPagoDB === "card" || formaPagoDB === "link"
-        ? (schedule?.[0]?.fecha_pago || date)
+        ? schedule?.[0]?.fecha_pago || date
         : date;
 
     // ✅ tarjeta SOLO card/link; transfer/credit => NULL
-    const cardId = (formaPagoDB === "card" || formaPagoDB === "link")
-      ? String(selectedCard)
-      : null;
+    const cardId =
+      formaPagoDB === "card" || formaPagoDB === "link"
+        ? String(selectedCard)
+        : null;
 
     const parametrosSP = [
-      Number(monto_a_pagar),     // p_monto_solicitado
-      formaPagoDB,               // p_forma_pago_solicitada (credit/transfer/card/link)
-      cardId,                    // p_id_tarjeta_solicitada (NULL para transfer/credit)
-      userId,                    // p_usuario_solicitante (UUID)
-      userId,                    // p_usuario_generador (UUID)
-      comments || "",            // p_comentarios
-      comments_cxp || "",        // p_comentario_cxp
-      userId,                    // p_id_creador (UUID)  <-- evita NULL
-      id_hospedaje,              // p_id_hospedaje
-      fechaSolicitud,            // p_fecha
-      estado_solicitud_db,       // p_estado_solicitud
-      estatus_pagos_db,          // p_estatus_pagos
+      Number(monto_a_pagar), // p_monto_solicitado
+      formaPagoDB, // p_forma_pago_solicitada (credit/transfer/card/link)
+      cardId, // p_id_tarjeta_solicitada (NULL para transfer/credit)
+      userId, // p_usuario_solicitante (UUID)
+      userId, // p_usuario_generador (UUID)
+      comments || "", // p_comentarios
+      comments_cxp || "", // p_comentario_cxp
+      userId, // p_id_creador (UUID)  <-- evita NULL
+      id_hospedaje, // p_id_hospedaje
+      fechaSolicitud, // p_fecha
+      estado_solicitud_db, // p_estado_solicitud
+      estatus_pagos_db, // p_estatus_pagos
     ];
 
     const spResp = await executeSP(
       STORED_PROCEDURE.POST.SOLICITUD_PAGO_PROVEEDOR,
-      parametrosSP
+      parametrosSP,
     );
 
     const idSolicitudProveedor =
@@ -722,154 +784,151 @@ const insertPagoProveedorCardSql = `
 
     // ✅ OJO: tu lógica de inserts a pago_proveedores la dejas SOLO card/link como ya está
     // Para credit/transfer normalmente no insertas N pagos aquí (depende tu negocio).
-// ... ya tienes idSolicitudProveedor validado arriba
+    // ... ya tienes idSolicitudProveedor validado arriba
 
-// Inserta en pago_proveedores SOLO para card/link (según lo que pediste)
-if (formaPagoDB === "link" || formaPagoDB === "card") {
-  // normaliza schedule (ya lo traes como `schedule`)
-  const rows = (Array.isArray(schedule) ? schedule : [])
-    .map((it) => ({
-      fecha_pago: it?.fecha_pago || date,
-      monto: Number(it?.monto || 0),
-    }))
-    .filter((it) => it.fecha_pago && Number.isFinite(it.monto) && it.monto > 0);
+    // Inserta en pago_proveedores SOLO para card/link (según lo que pediste)
+    if (formaPagoDB === "link" || formaPagoDB === "card") {
+      // normaliza schedule (ya lo traes como `schedule`)
+      const rows = (Array.isArray(schedule) ? schedule : [])
+        .map((it) => ({
+          fecha_pago: it?.fecha_pago || date,
+          monto: Number(it?.monto || 0),
+        }))
+        .filter(
+          (it) => it.fecha_pago && Number.isFinite(it.monto) && it.monto > 0,
+        );
 
-  if (rows.length === 0) {
-    return res.status(400).json({
-      ok: false,
-      message: "paymentSchedule inválido: no hay fechas/montos válidos para insertar en pago_proveedores",
-    });
-  }
+      if (rows.length === 0) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            "paymentSchedule inválido: no hay fechas/montos válidos para insertar en pago_proveedores",
+        });
+      }
 
-  const conceptoBase = `Pago proveedor (${formaPagoDB})`;
-  const descripcionBase = comments || "";
-  const monedaDB = moneda ?? null;
+      const conceptoBase = `Pago proveedor (${formaPagoDB})`;
+      const descripcionBase = comments || "";
+      const monedaDB = moneda ?? null;
 
-  // Usa el SQL correcto
-  const sql = formaPagoDB === "link"
-    ? insertPagoProveedorLinkSql
-    : insertPagoProveedorCardSql;
+      // Usa el SQL correcto
+      const sql =
+        formaPagoDB === "link"
+          ? insertPagoProveedorLinkSql
+          : insertPagoProveedorCardSql;
 
-  for (let i = 0; i < rows.length; i++) {
-    const { fecha_pago, monto } = rows[i];
+      for (let i = 0; i < rows.length; i++) {
+        const { fecha_pago, monto } = rows[i];
 
-    // Valores comunes (campos que NO tienes => NULL)
-    const common = {
-      id_pago_dispersion: null,
-      id_solicitud_proveedor: Number(idSolicitudProveedor),
-      codigo_dispersion: null,            // si quieres, aquí puedes generar un código
-      fecha_pago,
-      url_pdf: null,
-      monto_facturado: 0,                 // no hay factura todavía
-      url_factura: null,
-      id_factura: null,
-      user_update: null,                  // o userId si tú quieres
-      user_created: userId,
-      fecha_emision: null,
-      numero_comprobante: null,
-      cuenta_origen: null,
-      cuenta_destino: null,
-      monto,                              // el monto del schedule
-      moneda: monedaDB,
-      concepto: conceptoBase,
-      metodo_de_pago: formaPagoDB,        // "link" o "card"
-      referencia_pago: selectedCard ? String(selectedCard) : null,
-      nombre_pagador: null,
-      rfc_pagador: null,
-      domicilio_pagador: null,
-      nombre_beneficiario: null,
-      domicilio_beneficiario: null,
-      descripcion: descripcionBase,
-      iva: null,
-      total: monto,                       // si prefieres NULL, cámbialo aquí
-    };
+        // Valores comunes (campos que NO tienes => NULL)
+        const common = {
+          id_pago_dispersion: null,
+          id_solicitud_proveedor: Number(idSolicitudProveedor),
+          codigo_dispersion: null, // si quieres, aquí puedes generar un código
+          fecha_pago,
+          url_pdf: null,
+          monto_facturado: 0, // no hay factura todavía
+          url_factura: null,
+          id_factura: null,
+          user_update: null, // o userId si tú quieres
+          user_created: userId,
+          fecha_emision: null,
+          numero_comprobante: null,
+          cuenta_origen: null,
+          cuenta_destino: null,
+          monto, // el monto del schedule
+          moneda: monedaDB,
+          concepto: conceptoBase,
+          metodo_de_pago: formaPagoDB, // "link" o "card"
+          referencia_pago: selectedCard ? String(selectedCard) : null,
+          nombre_pagador: null,
+          rfc_pagador: null,
+          domicilio_pagador: null,
+          nombre_beneficiario: null,
+          domicilio_beneficiario: null,
+          descripcion: descripcionBase,
+          iva: null,
+          total: monto, // si prefieres NULL, cámbialo aquí
+        };
 
-    if (formaPagoDB === "link") {
-      // LINK: sí mandamos monto_pagado = monto
-      const params = [
-        common.id_pago_dispersion,
-        common.id_solicitud_proveedor,
-        common.codigo_dispersion,
-        monto,                 // monto_pagado (LINK)
-        common.fecha_pago,
-        common.url_pdf,
-        common.monto_facturado,
-        common.url_factura,
-        common.id_factura,
-        common.user_update,
-        common.user_created,
-        common.fecha_emision,
-        common.numero_comprobante,
-        common.cuenta_origen,
-        common.cuenta_destino,
-        common.monto,
-        common.moneda,
-        common.concepto,
-        common.metodo_de_pago,
-        common.referencia_pago,
-        common.nombre_pagador,
-        common.rfc_pagador,
-        common.domicilio_pagador,
-        common.nombre_beneficiario,
-        common.domicilio_beneficiario,
-        common.descripcion,
-        common.iva,
-        common.total,
-      ];
+        if (formaPagoDB === "link") {
+          // LINK: sí mandamos monto_pagado = monto
+          const params = [
+            common.id_pago_dispersion,
+            common.id_solicitud_proveedor,
+            common.codigo_dispersion,
+            monto, // monto_pagado (LINK)
+            common.fecha_pago,
+            common.url_pdf,
+            common.monto_facturado,
+            common.url_factura,
+            common.id_factura,
+            common.user_update,
+            common.user_created,
+            common.fecha_emision,
+            common.numero_comprobante,
+            common.cuenta_origen,
+            common.cuenta_destino,
+            common.monto,
+            common.moneda,
+            common.concepto,
+            common.metodo_de_pago,
+            common.referencia_pago,
+            common.nombre_pagador,
+            common.rfc_pagador,
+            common.domicilio_pagador,
+            common.nombre_beneficiario,
+            common.domicilio_beneficiario,
+            common.descripcion,
+            common.iva,
+            common.total,
+          ];
 
-      await executeQuery(sql, params);
-    } else {
-      // CARD: NO mandamos monto_pagado
-      const params = [
-        common.id_pago_dispersion,
-        common.id_solicitud_proveedor,
-        common.codigo_dispersion,
-        common.fecha_pago,
-        common.url_pdf,
-        common.monto_facturado,
-        common.url_factura,
-        common.id_factura,
-        common.user_update,
-        common.user_created,
-        common.fecha_emision,
-        common.numero_comprobante,
-        common.cuenta_origen,
-        common.cuenta_destino,
-        common.monto,
-        common.moneda,
-        common.concepto,
-        common.metodo_de_pago,
-        common.referencia_pago,
-        common.nombre_pagador,
-        common.rfc_pagador,
-        common.domicilio_pagador,
-        common.nombre_beneficiario,
-        common.domicilio_beneficiario,
-        common.descripcion,
-        common.iva,
-        common.total,
-      ];
+          await executeQuery(sql, params);
+        } else {
+          // CARD: NO mandamos monto_pagado
+          const params = [
+            common.id_pago_dispersion,
+            common.id_solicitud_proveedor,
+            common.codigo_dispersion,
+            common.fecha_pago,
+            common.url_pdf,
+            common.monto_facturado,
+            common.url_factura,
+            common.id_factura,
+            common.user_update,
+            common.user_created,
+            common.fecha_emision,
+            common.numero_comprobante,
+            common.cuenta_origen,
+            common.cuenta_destino,
+            common.monto,
+            common.moneda,
+            common.concepto,
+            common.metodo_de_pago,
+            common.referencia_pago,
+            common.nombre_pagador,
+            common.rfc_pagador,
+            common.domicilio_pagador,
+            common.nombre_beneficiario,
+            common.domicilio_beneficiario,
+            common.descripcion,
+            common.iva,
+            common.total,
+          ];
 
-      await executeQuery(sql, params);
+          await executeQuery(sql, params);
+        }
+      }
     }
-  }
-}
 
     return res.status(200).json({
       ok: true,
       message: "Solicitud creada con éxito",
       id_solicitud_proveedor: Number(idSolicitudProveedor),
     });
-
   } catch (error) {
     // ✅ logging útil de MySQL
-    console.error("❌ Error createSolicitud:", {
-      message: error?.message,
-      code: error?.code,
-      errno: error?.errno,
-      sqlState: error?.sqlState,
-      sqlMessage: error?.sqlMessage,
-    });
+    console.error("❌ Error createSolicitud:", error);
 
     return res.status(500).json({
       ok: false,
@@ -887,7 +946,9 @@ const createDispersion = async (req, res) => {
     const { id_dispersion, solicitudes } = req.body;
 
     if (!id_dispersion) {
-      return res.status(400).json({ ok: false, message: "id_dispersion es requerido" });
+      return res
+        .status(400)
+        .json({ ok: false, message: "id_dispersion es requerido" });
     }
 
     if (!Array.isArray(solicitudes) || solicitudes.length === 0) {
@@ -940,7 +1001,7 @@ const createDispersion = async (req, res) => {
       (saldoRows || []).map((r) => [
         String(r.id_solicitud_proveedor),
         Number(r.saldo ?? 0),
-      ])
+      ]),
     );
 
     // 4) validar que existan todas
@@ -949,7 +1010,8 @@ const createDispersion = async (req, res) => {
       await conn.rollback();
       return res.status(400).json({
         ok: false,
-        message: "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
+        message:
+          "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
         faltantes,
       });
     }
@@ -973,11 +1035,11 @@ const createDispersion = async (req, res) => {
       const saldoDb = Number(saldoMap.get(String(idSol)) ?? 0);
       return [
         String(idSol), // id_solicitud_proveedor
-        saldoDb,       // monto_solicitado
-        saldoDb,       // saldo
-        0,             // monto_pagado
+        saldoDb, // monto_solicitado
+        saldoDb, // saldo
+        0, // monto_pagado
         id_dispersion, // codigo_dispersion
-        null,          // fecha_pago
+        null, // fecha_pago
       ];
     });
 
@@ -1003,10 +1065,12 @@ const createDispersion = async (req, res) => {
       FROM dispersion_pagos_proveedor
       WHERE codigo_dispersion = ?;
     `;
-    const [lastInsertRows] = await conn.query(lastInsertIdQuery, [id_dispersion]);
+    const [lastInsertRows] = await conn.query(lastInsertIdQuery, [
+      id_dispersion,
+    ]);
 
     const id_pagos = (lastInsertRows || []).map((row) =>
-      String(row.id_dispersion_pagos_proveedor)
+      String(row.id_dispersion_pagos_proveedor),
     );
 
     await conn.commit();
@@ -1021,10 +1085,11 @@ const createDispersion = async (req, res) => {
         dbResult,
       },
     });
-
   } catch (error) {
     if (conn) {
-      try { await conn.rollback(); } catch (_) {}
+      try {
+        await conn.rollback();
+      } catch (_) {}
     }
     console.error("❌ Error en createDispersion:", error);
     return res.status(500).json({
@@ -1035,7 +1100,6 @@ const createDispersion = async (req, res) => {
     if (conn) conn.release();
   }
 };
-
 
 const createPago = async (req, res) => {
   try {
@@ -1111,7 +1175,7 @@ const createPago = async (req, res) => {
 
         if (!rowsDisp || rowsDisp.length === 0) {
           throw new Error(
-            `No existe registro en dispersion_pagos_proveedor (id=${id_dispersion_pagos_proveedor}, codigo=${codigo_dispersion})`
+            `No existe registro en dispersion_pagos_proveedor (id=${id_dispersion_pagos_proveedor}, codigo=${codigo_dispersion})`,
           );
         }
 
@@ -1120,7 +1184,7 @@ const createPago = async (req, res) => {
 
         if (saldoDisp <= 0) {
           throw new Error(
-            `Saldo en dispersion_pagos_proveedor es 0. No se permite registrar el pago. (id_dispersion=${id_dispersion_pagos_proveedor})`
+            `Saldo en dispersion_pagos_proveedor es 0. No se permite registrar el pago. (id_dispersion=${id_dispersion_pagos_proveedor})`,
           );
         }
       }
@@ -1128,7 +1192,7 @@ const createPago = async (req, res) => {
       // 2) Si dispersion NO tiene saldo 0 (o no aplica), validar en solicitudes_pago_proveedor
       if (!idSolicitud) {
         throw new Error(
-          `No se pudo determinar id_solicitud_proveedor para validar saldo en solicitudes_pago_proveedor`
+          `No se pudo determinar id_solicitud_proveedor para validar saldo en solicitudes_pago_proveedor`,
         );
       }
 
@@ -1142,14 +1206,14 @@ const createPago = async (req, res) => {
 
       if (!rowsSol || rowsSol.length === 0) {
         throw new Error(
-          `No existe registro en solicitudes_pago_proveedor (id=${idSolicitud})`
+          `No existe registro en solicitudes_pago_proveedor (id=${idSolicitud})`,
         );
       }
 
       const saldoSol = Number(rowsSol[0].saldo || 0);
       if (saldoSol <= 0) {
         throw new Error(
-          `Saldo en solicitudes_pago_proveedor es 0. No se permite registrar el pago. (id_solicitud=${idSolicitud})`
+          `Saldo en solicitudes_pago_proveedor es 0. No se permite registrar el pago. (id_solicitud=${idSolicitud})`,
         );
       }
 
@@ -1207,7 +1271,7 @@ const createPago = async (req, res) => {
 
       if (!rows || rows.length === 0) {
         throw new Error(
-          `No existe en dispersion_pagos_proveedor: id=${id_dispersion_pagos_proveedor}, codigo=${codigo_dispersion}`
+          `No existe en dispersion_pagos_proveedor: id=${id_dispersion_pagos_proveedor}, codigo=${codigo_dispersion}`,
         );
       }
 
@@ -1440,7 +1504,7 @@ const createPago = async (req, res) => {
             domicilio_pagador: toNull(csvRow["Domicilio del pagador"]),
             nombre_beneficiario: toNull(csvRow["Nombre del beneficiario"]),
             domicilio_beneficiario: toNull(
-              csvRow["Domicilio del beneficiario"]
+              csvRow["Domicilio del beneficiario"],
             ),
 
             user_created: userCreated,
@@ -1448,14 +1512,16 @@ const createPago = async (req, res) => {
           };
 
           if (!pagoData.id_pago_dispersion) {
-            throw new Error(`id_dispersion inválido: "${csvRow.id_dispersion}"`);
+            throw new Error(
+              `id_dispersion inválido: "${csvRow.id_dispersion}"`,
+            );
           }
           if (!pagoData.codigo_dispersion) {
             throw new Error(`codigo_dispersion no encontrado en fila ${i + 1}`);
           }
           if (!pagoData.monto_pagado || pagoData.monto_pagado <= 0) {
             throw new Error(
-              `Cargo inválido en fila ${i + 1}: "${csvRow["Cargo"]}"`
+              `Cargo inválido en fila ${i + 1}: "${csvRow["Cargo"]}"`,
             );
           }
 
@@ -1538,7 +1604,8 @@ const createPago = async (req, res) => {
           // id_solicitud sale de dispersion_pagos_proveedor
           await insertarPagoFacturaProveedor({
             id_pago_proveedor: idPagoInsertado,
-            id_solicitud: impacto.id_solicitud_proveedor || precheck.id_solicitud_proveedor,
+            id_solicitud:
+              impacto.id_solicitud_proveedor || precheck.id_solicitud_proveedor,
             monto_pago: pagoData.monto_pagado,
           });
 
@@ -1642,7 +1709,10 @@ function generarCodigoDispersion() {
 const getSolicitudes = async (req, res) => {
   try {
     // ---------------- helpers ----------------
-    const norm = (v) => String(v ?? "").trim().toLowerCase();
+    const norm = (v) =>
+      String(v ?? "")
+        .trim()
+        .toLowerCase();
     const num = (v) => {
       const n = Number(v);
       return Number.isFinite(n) ? n : 0;
@@ -1690,7 +1760,11 @@ const getSolicitudes = async (req, res) => {
       }
 
       const anyPagadoEstado =
-        p.some((x) => norm(x?.pago_estado_pago) === "pagado" || norm(x?.estado_pago) === "pagado") || false;
+        p.some(
+          (x) =>
+            norm(x?.pago_estado_pago) === "pagado" ||
+            norm(x?.estado_pago) === "pagado",
+        ) || false;
 
       return {
         count: p.length,
@@ -1711,12 +1785,16 @@ const getSolicitudes = async (req, res) => {
           row?.total_facturado_en_pfp ??
           row?.facturado ??
           row?.monto_facturas ??
-          0
+          0,
       );
 
       // si existe un "por_facturar" explícito, úsalo; si no, calcula.
-      const porFacturarRaw = row?.monto_por_facturar ?? row?.por_facturar ?? row?.saldo_por_facturar;
-      const porFacturar = porFacturarRaw != null ? num(porFacturarRaw) : Math.max(0, +(solicitado - fact).toFixed(2));
+      const porFacturarRaw =
+        row?.monto_por_facturar ?? row?.por_facturar ?? row?.saldo_por_facturar;
+      const porFacturar =
+        porFacturarRaw != null
+          ? num(porFacturarRaw)
+          : Math.max(0, +(solicitado - fact).toFixed(2));
 
       return { solicitado, facturado: fact, porFacturar };
     };
@@ -1730,7 +1808,9 @@ const getSolicitudes = async (req, res) => {
     const debug = Number(req.query.debug ?? 0) === 1;
 
     // ---------------- fetch SPs ----------------
-    const spRows = await executeSP(STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR);
+    const spRows = await executeSP(
+      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR,
+    );
 
     const ids = spRows
       .map((r) => r.id_solicitud_proveedor)
@@ -1988,8 +2068,6 @@ const getSolicitudes = async (req, res) => {
 
 module.exports = { getSolicitudes };
 
-
-
 const getDatosFiscalesProveedor = async (req, res) => {
   console.log("Entrando al controller proveedores datos fiscales");
   try {
@@ -2007,7 +2085,7 @@ const getDatosFiscalesProveedor = async (req, res) => {
         ON df.id = r.id_datos_fiscales
       WHERE r.id_proveedor = ?;
       `,
-      [id_proveedor]
+      [id_proveedor],
     );
 
     return res.status(200).json({ data });
@@ -2020,17 +2098,14 @@ const getDatosFiscalesProveedor = async (req, res) => {
   }
 };
 
-const editProveedores = async(req,res) =>{
-}
+const editProveedores = async (req, res) => {};
 
-const getProveedores = async(req,res) =>{
-
-}
+const getProveedores = async (req, res) => {};
 
 const cargarFactura = async (req, res) => {
   req.context.logStep(
     "crearFacturaDesdeCarga",
-    "Iniciando creación de factura desde carga (proveedores)"
+    "Iniciando creación de factura desde carga (proveedores)",
   );
 
   const {
@@ -2069,8 +2144,8 @@ const cargarFactura = async (req, res) => {
     const proveedoresArr = Array.isArray(proveedoresData)
       ? proveedoresData
       : proveedoresData
-      ? [proveedoresData]
-      : [];
+        ? [proveedoresData]
+        : [];
 
     if (proveedoresArr.length === 0) {
       return res.status(400).json({
@@ -2089,7 +2164,7 @@ const cargarFactura = async (req, res) => {
     const fechaFacturaSQL = toDateOnly(fecha_emision);
 
     const es_credito = Number(
-      proveedorFirst?.is_credito ?? (fecha_vencimiento ? 1 : 0)
+      proveedorFirst?.is_credito ?? (fecha_vencimiento ? 1 : 0),
     );
 
     // ✅ Normalizar JSON para SP (ARRAY siempre)
@@ -2102,27 +2177,27 @@ const cargarFactura = async (req, res) => {
 
       if (!id_solicitud_proveedor) {
         throw new Error(
-          `proveedoresData[${idx}] no trae id_solicitud / id_solicitud_proveedor`
+          `proveedoresData[${idx}] no trae id_solicitud / id_solicitud_proveedor`,
         );
       }
 
       const monto_solicitado = toNumber(
-        p?.solicitud_proveedor?.monto_solicitado ?? p?.monto_solicitado ?? 0
+        p?.solicitud_proveedor?.monto_solicitado ?? p?.monto_solicitado ?? 0,
       );
 
       const monto_facturado = toNumber(
-        p?.monto_asociar ?? p?.monto_facturado ?? 0
+        p?.monto_asociar ?? p?.monto_facturado ?? 0,
       );
 
       if (monto_facturado <= 0) {
         throw new Error(
-          `proveedoresData[${idx}] monto_asociar inválido (debe ser > 0)`
+          `proveedoresData[${idx}] monto_asociar inválido (debe ser > 0)`,
         );
       }
 
       if (monto_solicitado > 0 && monto_facturado > monto_solicitado) {
         throw new Error(
-          `proveedoresData[${idx}] monto_asociar (${monto_facturado}) excede monto_solicitado (${monto_solicitado})`
+          `proveedoresData[${idx}] monto_asociar (${monto_facturado}) excede monto_solicitado (${monto_solicitado})`,
         );
       }
 
@@ -2141,15 +2216,15 @@ const cargarFactura = async (req, res) => {
           id_solicitud_proveedor,
           monto_solicitado,
         },
-        monto_facturado,      // ✅ lo que el SP lee
-        pendiente_facturar,   // opcional
+        monto_facturado, // ✅ lo que el SP lee
+        pendiente_facturar, // opcional
       };
     });
 
     // ✅ SUMA TOTAL = p_monto_facturado
     const monto_facturado_total = detalle.reduce(
       (acc, x) => acc + toNumber(x.monto_facturado),
-      0
+      0,
     );
 
     const proveedoresDataSP = JSON.stringify(detalle);
@@ -2158,48 +2233,51 @@ const cargarFactura = async (req, res) => {
     const subtotalN = toNumber(subtotal);
     const impuestosN = toNumber(impuestos);
 
-    const saldo_x_aplicar_items = totalN-monto_facturado_total;
+    const saldo_x_aplicar_items = totalN - monto_facturado_total;
     const estado_factura = estado;
 
-    const response = await executeSP("sp_inserta_factura_desde_carga_proveedores", [
-      id_factura,
+    const response = await executeSP(
+      "sp_inserta_factura_desde_carga_proveedores",
+      [
+        id_factura,
 
-      uuid_factura,
-      rfc_emisor,
-      proveedor_razon_social,
-      monto_facturado_total, // ✅ AHORA SÍ
-      url_xml,
-      url_pdf,
-      fechaFacturaSQL,
-      es_credito,
-      estado_factura,
+        uuid_factura,
+        rfc_emisor,
+        proveedor_razon_social,
+        monto_facturado_total, // ✅ AHORA SÍ
+        url_xml,
+        url_pdf,
+        fechaFacturaSQL,
+        es_credito,
+        estado_factura,
 
-      fechaFacturaSQL,
-      estado,
-      usuario_creador,
-      id_agente,
-      totalN,
-      subtotalN,
-      impuestosN,
-      saldo_x_aplicar_items, // ✅ AHORA SÍ
-      rfc,
-      id_empresa,
-      fecha_vencimiento,
+        fechaFacturaSQL,
+        estado,
+        usuario_creador,
+        id_agente,
+        totalN,
+        subtotalN,
+        impuestosN,
+        saldo_x_aplicar_items, // ✅ AHORA SÍ
+        rfc,
+        id_empresa,
+        fecha_vencimiento,
 
-      proveedoresDataSP,     // ✅ ARRAY
-    ]);
+        proveedoresDataSP, // ✅ ARRAY
+      ],
+    );
 
     const idsSolicitudes = [
-  ...new Set(
-    detalle
-      .map((x) => x?.solicitud_proveedor?.id_solicitud_proveedor)
-      .filter(Boolean)
-  ),
-];
-if (idsSolicitudes.length > 0) {
-  const placeholders = idsSolicitudes.map(() => "?").join(",");
+      ...new Set(
+        detalle
+          .map((x) => x?.solicitud_proveedor?.id_solicitud_proveedor)
+          .filter(Boolean),
+      ),
+    ];
+    if (idsSolicitudes.length > 0) {
+      const placeholders = idsSolicitudes.map(() => "?").join(",");
 
-  const updateEstatus = `
+      const updateEstatus = `
     UPDATE solicitudes_pago_proveedor spp
     LEFT JOIN (
       SELECT
@@ -2243,10 +2321,9 @@ if (idsSolicitudes.length > 0) {
     WHERE spp.id_solicitud_proveedor IN (${placeholders});
   `;
 
-  // Se usan placeholders 2 veces: IN(subquery) + IN(where)
-  await executeQuery(updateEstatus, [...idsSolicitudes, ...idsSolicitudes]);
-}
-
+      // Se usan placeholders 2 veces: IN(subquery) + IN(where)
+      await executeQuery(updateEstatus, [...idsSolicitudes, ...idsSolicitudes]);
+    }
 
     return res.status(201).json({
       message: "Factura proveedor creada correctamente desde carga",
@@ -2258,7 +2335,6 @@ if (idsSolicitudes.length > 0) {
         response,
       },
     });
-
   } catch (error) {
     console.log(error);
     return res.status(500).json({
@@ -2267,8 +2343,6 @@ if (idsSolicitudes.length > 0) {
     });
   }
 };
-
-
 
 const EditCampos = async (req, res) => {
   try {
@@ -2286,7 +2360,8 @@ const EditCampos = async (req, res) => {
 
     if (keys.length === 0) {
       return res.status(400).json({
-        error: "No viene ningún campo para actualizar (además del id_solicitud_proveedor)",
+        error:
+          "No viene ningún campo para actualizar (además del id_solicitud_proveedor)",
       });
     }
 
@@ -2304,32 +2379,31 @@ const EditCampos = async (req, res) => {
     const FIELD_MAP = {
       comentarios_cxp: "comentario_CXP",
       comentarios_CXP: "comentario_CXP",
-      comentarios_ops:"comentarios"
+      comentarios_ops: "comentarios",
     };
 
     const dbField = FIELD_MAP[fieldFromClient] || fieldFromClient;
 
     // 4) Lista blanca de campos permitidos (SEGURIDAD)
     const ALLOWED_FIELDS = new Set([
-  "fecha_solicitud",
-  "monto_solicitado",
-  "saldo",
-  "forma_pago_solicitada",
-  "id_tarjeta_solicitada",
-  "usuario_solicitante",
-  "usuario_generador",
-  "comentarios",
-  "estado_solicitud",
-  "estado_facturacion",
-  "estatus_pagos",
-  "id_proveedor",
-  "monto_facturado",
-  "monto_por_facturar",
-  "comentario_CXP",
-  // ✅ nuevo
-  "consolidado",
-]);
-
+      "fecha_solicitud",
+      "monto_solicitado",
+      "saldo",
+      "forma_pago_solicitada",
+      "id_tarjeta_solicitada",
+      "usuario_solicitante",
+      "usuario_generador",
+      "comentarios",
+      "estado_solicitud",
+      "estado_facturacion",
+      "estatus_pagos",
+      "id_proveedor",
+      "monto_facturado",
+      "monto_por_facturar",
+      "comentario_CXP",
+      // ✅ nuevo
+      "consolidado",
+    ]);
 
     if (!ALLOWED_FIELDS.has(dbField)) {
       return res.status(400).json({
@@ -2340,92 +2414,98 @@ const EditCampos = async (req, res) => {
 
     // 5) Opcional: casteo numérico si lo necesitas
     const NUMERIC_FIELDS = new Set([
-  "monto_solicitado",
-  "saldo",
-  "id_tarjeta_solicitada",
-  "id_proveedor",
-  "monto_facturado",
-  "monto_por_facturar",
-  // ✅ nuevo
-  "consolidado",
-]);
-
+      "monto_solicitado",
+      "saldo",
+      "id_tarjeta_solicitada",
+      "id_proveedor",
+      "monto_facturado",
+      "monto_por_facturar",
+      // ✅ nuevo
+      "consolidado",
+    ]);
 
     const finalValue = NUMERIC_FIELDS.has(dbField)
-      ? (value === null || value === "" ? null : Number(value))
+      ? value === null || value === ""
+        ? null
+        : Number(value)
       : value;
 
-    if (NUMERIC_FIELDS.has(dbField) && finalValue !== null && Number.isNaN(finalValue)) {
+    if (
+      NUMERIC_FIELDS.has(dbField) &&
+      finalValue !== null &&
+      Number.isNaN(finalValue)
+    ) {
       return res.status(400).json({
         error: `El campo ${fieldFromClient} debe ser numérico`,
       });
     }
 
-        // ✅ Interceptar cambios de monto_solicitado para disparar lógica de ajuste
     // ✅ Interceptar cambios de monto_solicitado para disparar lógica de ajuste
-if (dbField === "monto_solicitado") {
-  const nuevoMonto = Number(finalValue);
-  if (!Number.isFinite(nuevoMonto)) {
-    return res.status(400).json({ error: "monto_solicitado debe ser numérico" });
-  }
+    // ✅ Interceptar cambios de monto_solicitado para disparar lógica de ajuste
+    if (dbField === "monto_solicitado") {
+      const nuevoMonto = Number(finalValue);
+      if (!Number.isFinite(nuevoMonto)) {
+        return res
+          .status(400)
+          .json({ error: "monto_solicitado debe ser numérico" });
+      }
 
-  const qOld = `
+      const qOld = `
     SELECT monto_solicitado
     FROM solicitudes_pago_proveedor
     WHERE id_solicitud_proveedor = ?
     LIMIT 1
   `;
-  const rOld = await executeQuery(qOld, [id_solicitud_proveedor]);
+      const rOld = await executeQuery(qOld, [id_solicitud_proveedor]);
 
-  if (!rOld?.length) {
-    return res.status(404).json({
-      error: "No se encontró la solicitud",
-      id_solicitud_proveedor,
-    });
-  }
+      if (!rOld?.length) {
+        return res.status(404).json({
+          error: "No se encontró la solicitud",
+          id_solicitud_proveedor,
+        });
+      }
 
-  const montoOld = Number(rOld[0].monto_solicitado ?? 0);
-  const EPS = 0.01;
+      const montoOld = Number(rOld[0].monto_solicitado ?? 0);
+      const EPS = 0.01;
 
-  let ajusteResp = { ok: true, action: "NO_CHANGE" };
+      let ajusteResp = { ok: true, action: "NO_CHANGE" };
 
-  if (nuevoMonto > montoOld + EPS) {
-    ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
-      executeQuery,
-      id_solicitud_proveedor,
-      nuevoMonto,
-      EPS,
-    });
-  } else if (nuevoMonto < montoOld - EPS) {
-    ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
-      executeQuery,
-      executeSP2, // si no existe aquí, bórralo
-      id_solicitud_proveedor,
-      nuevoMonto,
-      EPS,
-    });
-  }
+      if (nuevoMonto > montoOld + EPS) {
+        ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
+          executeQuery,
+          id_solicitud_proveedor,
+          nuevoMonto,
+          EPS,
+        });
+      } else if (nuevoMonto < montoOld - EPS) {
+        ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
+          executeQuery,
+          executeSP2, // si no existe aquí, bórralo
+          id_solicitud_proveedor,
+          nuevoMonto,
+          EPS,
+        });
+      }
 
-  const selectSql = `
+      const selectSql = `
     SELECT *
     FROM solicitudes_pago_proveedor
     WHERE id_solicitud_proveedor = ?
     LIMIT 1;
   `;
-  const rows = await executeQuery(selectSql, [id_solicitud_proveedor]);
-  const updated = Array.isArray(rows) ? rows[0] : rows?.[0];
+      const rows = await executeQuery(selectSql, [id_solicitud_proveedor]);
+      const updated = Array.isArray(rows) ? rows[0] : rows?.[0];
 
-  return res.status(200).json({
-    ok: true,
-    message: "Ajuste aplicado por cambio de monto_solicitado",
-    id_solicitud_proveedor,
-    montoOld,
-    montoNew: nuevoMonto,
-    ajuste: ajusteResp,
-    data: updated || null,
-  });
-}
-
+      return res.status(200).json({
+        ok: true,
+        message: "Ajuste aplicado por cambio de monto_solicitado",
+        id_solicitud_proveedor,
+        montoOld,
+        montoNew: nuevoMonto,
+        ajuste: ajusteResp,
+        data: updated || null,
+      });
+    }
 
     // 6) Ejecutar UPDATE (ojo: el nombre de columna NO va como "?" por seguridad)
     const updateSql = `
@@ -2480,12 +2560,8 @@ if (dbField === "monto_solicitado") {
 // controllers/pago_proveedor.js (o donde lo tengas)
 const Detalles = async (req, res) => {
   try {
-    const {
-      id_solicitud_proveedor,
-      id_proveedor,
-      id_facturas,
-      id_pagos,
-    } = req.body || {};
+    const { id_solicitud_proveedor, id_proveedor, id_facturas, id_pagos } =
+      req.body || {};
 
     // -----------------------------
     // 1) Validación mínima
@@ -2534,9 +2610,12 @@ const Detalles = async (req, res) => {
       LIMIT 1;
     `;
 
-    const solicitudRows = await executeQuery(solicitudSql, [id_solicitud_proveedor]);
-    const solicitud =
-      Array.isArray(solicitudRows) ? solicitudRows[0] : solicitudRows?.[0] ?? null;
+    const solicitudRows = await executeQuery(solicitudSql, [
+      id_solicitud_proveedor,
+    ]);
+    const solicitud = Array.isArray(solicitudRows)
+      ? solicitudRows[0]
+      : (solicitudRows?.[0] ?? null);
 
     // =========================================================
     // 4) CONSULTA: pagos_facturas_proveedores (PFPR)
@@ -2571,14 +2650,14 @@ const Detalles = async (req, res) => {
       `;
 
       const pfpRows = await executeQuery(pfpSql, params);
-      pfp = Array.isArray(pfpRows) ? pfpRows : pfpRows?.[0] ?? [];
+      pfp = Array.isArray(pfpRows) ? pfpRows : (pfpRows?.[0] ?? []);
     }
 
     // ✅ Auto-rellenar ids si vienen vacíos (tu caso)
     if (facturasArr.length === 0 && Array.isArray(pfp) && pfp.length > 0) {
       facturasArr = [
         ...new Set(
-          pfp.map((r) => String(r?.id_factura ?? "").trim()).filter(Boolean)
+          pfp.map((r) => String(r?.id_factura ?? "").trim()).filter(Boolean),
         ),
       ];
     }
@@ -2586,7 +2665,9 @@ const Detalles = async (req, res) => {
     if (pagosArr.length === 0 && Array.isArray(pfp) && pfp.length > 0) {
       pagosArr = [
         ...new Set(
-          pfp.map((r) => String(r?.id_pago_proveedor ?? "").trim()).filter(Boolean)
+          pfp
+            .map((r) => String(r?.id_pago_proveedor ?? "").trim())
+            .filter(Boolean),
         ),
       ];
     }
@@ -2607,7 +2688,9 @@ const Detalles = async (req, res) => {
       `;
 
       const factRowsMain = await executeQuery(facturasSqlMain, facturasArr);
-      facturas = Array.isArray(factRowsMain) ? factRowsMain : factRowsMain?.[0] ?? [];
+      facturas = Array.isArray(factRowsMain)
+        ? factRowsMain
+        : (factRowsMain?.[0] ?? []);
 
       // fallback: id_factura
       if (!facturas || facturas.length === 0) {
@@ -2616,10 +2699,13 @@ const Detalles = async (req, res) => {
           FROM facturas_pago_proveedor
           WHERE id_factura IN (${placeholders});
         `;
-        const factRowsFallback = await executeQuery(facturasSqlFallback, facturasArr);
+        const factRowsFallback = await executeQuery(
+          facturasSqlFallback,
+          facturasArr,
+        );
         const fb = Array.isArray(factRowsFallback)
           ? factRowsFallback
-          : factRowsFallback?.[0] ?? [];
+          : (factRowsFallback?.[0] ?? []);
         if (Array.isArray(fb) && fb.length > 0) facturas = fb;
       }
     }
@@ -2640,7 +2726,9 @@ const Detalles = async (req, res) => {
       `;
 
       const pagosRowsMain = await executeQuery(pagosSqlMain, pagosArr);
-      pagos = Array.isArray(pagosRowsMain) ? pagosRowsMain : pagosRowsMain?.[0] ?? [];
+      pagos = Array.isArray(pagosRowsMain)
+        ? pagosRowsMain
+        : (pagosRowsMain?.[0] ?? []);
 
       // fallback: id_pago_proveedor
       if (!pagos || pagos.length === 0) {
@@ -2649,10 +2737,13 @@ const Detalles = async (req, res) => {
           FROM pago_proveedores
           WHERE id_pago_proveedor IN (${placeholders});
         `;
-        const pagosRowsFallback = await executeQuery(pagosSqlFallback, pagosArr);
+        const pagosRowsFallback = await executeQuery(
+          pagosSqlFallback,
+          pagosArr,
+        );
         const fb = Array.isArray(pagosRowsFallback)
           ? pagosRowsFallback
-          : pagosRowsFallback?.[0] ?? [];
+          : (pagosRowsFallback?.[0] ?? []);
         if (Array.isArray(fb) && fb.length > 0) pagos = fb;
       }
     }
@@ -2751,8 +2842,6 @@ const Detalles = async (req, res) => {
   }
 };
 
-
-
 module.exports = {
   createSolicitud,
   Detalles,
@@ -2763,5 +2852,5 @@ module.exports = {
   editProveedores,
   getProveedores,
   cargarFactura,
-  EditCampos
+  EditCampos,
 };

@@ -36,6 +36,7 @@ async function executeQuery(query, params = []) {
     const [results] = response;
     return results;
   } catch (error) {
+    console.log("error execute query", error);
     throw new CustomError(
       error.sqlMessage ||
         error.message ||
@@ -56,7 +57,7 @@ async function executeSP(procedure, params = []) {
     const [rows] = result;
     return Array.isArray(rows[0]) ? rows[0] : rows;
   } catch (error) {
-    console.log(error)
+    console.log("error executeSP", error);
     throw new CustomError(
       error.sqlMessage,
       500,

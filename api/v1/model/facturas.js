@@ -165,6 +165,35 @@ const createFactura = async ({ cfdi, info_user, datos_empresa }, req) => {
   }
 };
 
+function num(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function sumTaxesByRate(items, rateTarget) {
+  const EPS = 1e-6;
+  let s = 0;
+  for (const it of items || []) {
+    for (const tx of it?.Taxes || []) {
+      const rate = num(tx?.Rate);
+      const isRetention = String(tx?.IsRetention) === "true";
+      const name = String(tx?.Name || "").toUpperCase();
+      if (!isRetention && name === "IVA" && Math.abs(rate - rateTarget) < EPS) {
+        s += num(tx?.Total);
+      }
+    }
+  }
+  return s;
+}
+
+function pickFirst(obj, keys) {
+  for (const k of keys) {
+    if (obj?.[k]) return obj[k];
+  }
+  return null;
+}
+
+
 const createFacturaCombinada = async (req, { cfdi, info_user }) => {
   req.context.logStep(
     "LLgando al model de crear factura combinada con los datos:",
@@ -233,43 +262,124 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         const id_factura = `fac-${uuidv4()}`;
         console.log("responses", info_user);
 
-        // 3. Insertar factura principal
-        const insertFacturaQuery = `
-        INSERT INTO facturas (
-          id_factura,
-          fecha_emision,
-          estado,
-          usuario_creador,
-          total,
-          subtotal,
-          impuestos,
-          id_facturama,
-          rfc,
-          id_empresa,
-          uuid_factura,
-          fecha_vencimiento,
-          saldo,
-          id_agente
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?,?);
-          `;
-        console.log(datos_empresa);
-        const results = await conn.execute(insertFacturaQuery, [
-          id_factura,
-          new Date(),
-          "Confirmada",
-          id_user,
-          total,
-          subtotal,
-          impuestos,
-          response_factura.data.Id,
-          datos_empresa.rfc,
-          datos_empresa.id_empresa,
-          response_factura.data.Complement.TaxStamp.Uuid,
-          //fecha de vencimiento
-          info_user.fecha_vencimiento,
-          total,
-          id_user,
-        ]);
+        const receiver = cfdi?.Receiver || {};
+const items = cfdi?.Items || [];
+
+const total = items.reduce((a, it) => a + num(it?.Total), 0);
+const subtotal = items.reduce((a, it) => a + num(it?.Subtotal), 0);
+const impuestos = items.reduce((a, it) => {
+  const t = (it?.Taxes || []).reduce((b, tx) => b + num(tx?.Total), 0);
+  return a + t;
+}, 0);
+
+const iva16 = sumTaxesByRate(items, 0.16);
+const iva8  = sumTaxesByRate(items, 0.08);
+
+
+const taxStamp = response_factura?.data?.Complement?.TaxStamp || {};
+
+// Facturama suele traer algo tipo Timestamp/Date/etc (depende del SDK/versión)
+const fechaTimbradoRaw = pickFirst(taxStamp, [
+  "Timestamp",
+  "Date",
+  "FechaTimbrado",
+  "DateTime",
+  "CreatedAt",
+]);
+
+const cfdiVersion = pickFirst(response_factura?.data, ["CfdiVersion", "Version", "CFDIversion"]);
+
+const estadoSat = pickFirst(response_factura?.data, ["Status", "EstadoSat", "SatStatus"]);
+
+const issuer = response_factura?.data?.Issuer || response_factura?.data?.Emisor || response_factura?.data?.Emitter || {};
+
+const fechaEmision = cfdi?.Date ? new Date(cfdi.Date) : new Date();
+const fechaTimbrado = fechaTimbradoRaw ? new Date(fechaTimbradoRaw) : null;
+
+// 👇 Guarda conceptos + observations en un solo longtext JSON
+const conceptosJson = JSON.stringify({
+  observations: cfdi?.Observations ?? null,
+  items: cfdi?.Items ?? [],
+});
+
+const insertFacturaQuery = `
+  INSERT INTO facturas (
+    id_factura,
+    fecha_emision,
+    fecha_timbrado,
+    serie,
+    folio,
+    estado,
+    estado_sat,
+    cfdi_version,
+    cfdi_tipo,
+    usuario_creador,
+    total,
+    subtotal,
+    iva_16,
+    iva_8,
+    impuestos,
+    regimen_fiscal_receptor,
+    domicilio_fiscal_receptor,
+    id_facturama,
+    rfc,
+    id_empresa,
+    uuid_factura,
+    rfc_emisor,
+    nombre_emisor,
+    lugar_expedicion,
+    rfc_receptor,
+    nombre_receptor,
+    uso_cfdi,
+    moneda,
+    forma_pago,
+    metodo_pago,
+    condicion_pago,
+    conceptos,
+    saldo,
+    id_agente,
+    fecha_vencimiento
+  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
+`;
+
+await conn.execute(insertFacturaQuery, [
+  id_factura,                     // id_factura
+  fechaEmision,                   // fecha_emision (DATE)
+  fechaTimbrado,                  // fecha_timbrado (DATETIME)
+  cfdi?.Serie ?? null,            // serie
+  cfdi?.Folio != null ? String(cfdi.Folio) : null, // folio
+  "Confirmada",                   // estado
+  estadoSat ?? null,              // estado_sat
+  cfdiVersion ?? null,            // cfdi_version
+  cfdi?.CfdiType ?? null,         // cfdi_tipo
+  id_user,                        // usuario_creador
+  total,                          // total
+  subtotal,                       // subtotal
+  iva16 || null,                  // iva_16
+  iva8 || null,                   // iva_8
+  impuestos,                      // impuestos
+  receiver?.FiscalRegime ?? null, // regimen_fiscal_receptor
+  receiver?.TaxZipCode ?? null,   // domicilio_fiscal_receptor
+  response_factura?.data?.Id ?? null, // id_facturama
+  datos_empresa?.rfc ?? receiver?.Rfc ?? null, // rfc (tu columna legacy)
+  datos_empresa?.id_empresa ?? null, // id_empresa
+  taxStamp?.Uuid ?? response_factura?.data?.Complement?.TaxStamp?.Uuid, // uuid_factura (NOT NULL)
+  issuer?.Rfc ?? null,            // rfc_emisor
+  issuer?.Name ?? null,           // nombre_emisor
+  cfdi?.ExpeditionPlace ?? null,  // lugar_expedicion
+  receiver?.Rfc ?? null,          // rfc_receptor
+  receiver?.Name ? String(receiver.Name).trim() : null, // nombre_receptor
+  receiver?.CfdiUse ?? null,      // uso_cfdi
+  cfdi?.Currency ?? null,         // moneda
+  cfdi?.PaymentForm ?? null,      // forma_pago
+  cfdi?.PaymentMethod ?? null,    // metodo_pago
+  null,                           // condicion_pago (no viene en tu objeto)
+  conceptosJson,                  // conceptos (longtext)
+  total,                          // saldo
+  id_user,                        // id_agente
+  info_user?.fecha_vencimiento ?? null, // fecha_vencimiento
+]);
+
 
         // 4. Actualizar solo los items seleccionados
         // const updateItemsSql = `

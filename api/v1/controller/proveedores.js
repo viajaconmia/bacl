@@ -26,7 +26,6 @@ const getProveedores = async (req, res) => {
         status == null ? null : status == "activo" ? true : false,
         proveedor,
         rfc,
-        intermediario,
         page,
         size,
       ],
