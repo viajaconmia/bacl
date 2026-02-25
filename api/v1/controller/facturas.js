@@ -3075,32 +3075,99 @@ const asignarURLS_factura = async (req, res) => {
     });
   }
 };
+// Normaliza: minúsculas, sin acentos, sin dobles espacios, etc.
+function normalizeEstado(s) {
+  return String(s ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "") // quita zero-width
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // quita acentos
+    .replace(/\s+/g, " ");
+}
 
-const agentes_report_fac = async (req,res)=>{
+const CLAVE_ESTADOS = {
+  "aguascalientes": "AGS",
+  "baja california": "BC",
+  "baja california norte": "BC",
+  "baja california sur": "BCS",
+  "campeche": "CAMP",
+  "chiapas": "CHIS",
+  "chihuahua": "CHIH",
+  "ciudad de mexico": "CDMX",
+  "cdmx": "CDMX",
+  "coahuila": "COAH",
+  "colima": "COL",
+  "durango": "DGO",
+  "guanajuato": "GTO",
+  "guerrero": "GRO",
+  "hidalgo": "HGO",
+  "jalisco": "JAL",
+  "mexico": "EDO MÉXD",
+  "estado de mexico": "EDO MÉXD",
+  "michoacan": "MICH",
+  "morelos": "MOR",
+  "nayarit": "NAY",
+  "nuevo leon": "NL",
+  "oaxaca": "OAX",
+  "puebla": "PUE",
+  "queretaro": "QRO",
+  "quintana roo": "Q ROOF",
+  "san luis potosi": "SLP",
+  "sinaloa": "SIN",
+  "sonora": "SON",
+  "tabasco": "TAB",
+  "tamaulipas": "TAMPS",
+  "tlaxcala": "TLAX",
+  "veracruz": "VER",
+  "yucatan": "YUC",
+  "zacatecas": "ZAC",
+};
+
+// Si ya viene como clave, la deja; si viene como nombre, la convierte
+const VALID_KEYS = new Set([
+  "AGS","BC","BCS","CAMP","CHIS","CHIH","CDMX","COAH","COL","DGO","GTO","GRO",
+  "HGO","JAL","EDO MÉXD","MICH","MOR","NAY","NL","OAX","PUE","QRO","Q ROOF",
+  "SLP","SIN","SON","TAB","TAMPS","TLAX","VER","YUC","ZAC"
+]);
+
+function mapEstadoToClave(estado_reserva) {
+  const raw = String(estado_reserva ?? "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  if (!raw) return raw;
+
+  if (VALID_KEYS.has(raw)) return raw; // ya es clave exacta
+  const norm = normalizeEstado(raw);
+  return CLAVE_ESTADOS[norm] ?? raw; // si no encuentra, deja lo original
+}
+
+const agentes_report_fac = async (req, res) => {
   const { id_agente } = req.query;
 
   try {
     if (!id_agente) {
       throw new ShortError("No se encontro el id de agente", 404);
     }
-    // 2. Ejecutar el Stored Procedure y pasar el ID del agente
+
     const facturas = await executeSP("sp_facturas_agente_reservas", [id_agente]);
 
-    // 4. Enviar la respuesta con las facturas encontradas
+    const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => ({
+      ...row,
+      estado_reserva: mapEstadoToClave(row.estado_reserva),
+    }));
+
     res.status(200).json({
       message: "Facturas del agente obtenidas correctamente.",
-      data: facturas,
+      data: facturasConClave,
     });
   } catch (error) {
-    // 5. Manejar errores
     req.context.logStep("Error en sp_facturas_agente_reservas:", error);
     res.status(500).json({
-      error: error,
+      error,
       message: error.message || "Error al obtener facturas",
       data: null,
     });
   }
-}
+};
 
 module.exports = {
   create,
