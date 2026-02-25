@@ -21,9 +21,10 @@ const getCupon = async (id) => {
     if (reserva.id_viaje_aereo) {
       const [result, vuelos] = await Promise.all([
         executeQuery(
-          `SELECT v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno, va.id_viaje_aereo, va.ciudad_origen as origen, va.ciudad_destino as destino, va.trip_type as tipo, va.codigo_confirmacion FROM viajes_aereos va
+          `SELECT b.total, v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno, va.id_viaje_aereo, va.ciudad_origen as origen, va.ciudad_destino as destino, va.trip_type as tipo, va.codigo_confirmacion FROM viajes_aereos va
           left join viajeros v on va.id_viajero = v.id_viajero
-          WHERE id_viaje_aereo = ?`,
+          left join bookings b on b.id_booking = va.id_booking
+          WHERE va.id_viaje_aereo = ?`,
           [reserva.id_viaje_aereo],
         ),
         executeQuery(
@@ -41,6 +42,7 @@ const getCupon = async (id) => {
       return {
         ...rest,
         vuelos,
+        id_solicitud: id,
         type: "vuelo",
         viajero: [
           primer_nombre,
