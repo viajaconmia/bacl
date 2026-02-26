@@ -426,9 +426,6 @@ const asignarFacturaItems = async (req, res) => {
       WHERE id_factura = ?;
     `;
 
-    // --- Transacción (si tu executeQuery soporta múltiples statements, ajusta) ---
-    await executeQuery("START TRANSACTION;");
-
     // Bloquea la fila de factura para evitar carreras
     const saldo_factura = await executeQuery(
       `select saldo from facturas where id_factura = ? FOR UPDATE;`,
@@ -3141,19 +3138,36 @@ function mapEstadoToClave(estado_reserva) {
 }
 
 const agentes_report_fac = async (req, res) => {
-  const { id_agente } = req.query;
+  const { id_agente, fecha_desde, fecha_hasta } = req.query;
 
   try {
     if (!id_agente) {
       throw new ShortError("No se encontro el id de agente", 404);
     }
 
-    const facturas = await executeSP("sp_facturas_agente_reservas", [id_agente]);
+    // Normaliza fechas: si no vienen o vienen vacías -> null
+    const normalizeDate = (v) => {
+      if (v === undefined || v === null) return null;
+      const s = String(v).trim();
+      return s.length ? s : null; // espera formato YYYY-MM-DD
+    };
 
-    const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => ({
-      ...row,
-      estado_reserva: mapEstadoToClave(row.estado_reserva),
-    }));
+    const p_fecha_desde = normalizeDate(fecha_desde);
+    const p_fecha_hasta = normalizeDate(fecha_hasta);
+
+    // ⚠️ Importante: ahora tu SP recibe 3 params (id_agente, fecha_desde, fecha_hasta)
+    const facturas = await executeSP("sp_facturas_agente_reservas", [
+      id_agente,
+      p_fecha_desde,
+      p_fecha_hasta,
+    ]);
+
+    const facturasConClave = (Array.isArray(facturas) ? facturas : []).map(
+      (row) => ({
+        ...row,
+        estado_reserva: mapEstadoToClave(row.estado_reserva),
+      })
+    );
 
     res.status(200).json({
       message: "Facturas del agente obtenidas correctamente.",
