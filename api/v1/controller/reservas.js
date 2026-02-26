@@ -1781,7 +1781,7 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
         .json({ message: "Reservas encontradas", data: reservas });
     }
   } catch (error) {
-    console.error(error);
+    console.error(error); 
     return res
       .status(500)
       .json({ error: "Internal Server Error", details: error.message });
