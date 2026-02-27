@@ -2962,6 +2962,8 @@ const getFullDetalles = async (req, res) => {
   }
 };
 
+//const response = await model.cancelarCfdi(id_cfdi, motive, type);
+//Hacer validacion der que tenga id_facturama
 const getQuitarDetalles = async (req, res) => {
   try {
     console.log("📦 recibido getQuitarDetalles");
@@ -3084,52 +3086,83 @@ function normalizeEstado(s) {
 }
 
 const CLAVE_ESTADOS = {
-  "aguascalientes": "AGS",
+  aguascalientes: "AGS",
   "baja california": "BC",
   "baja california norte": "BC",
   "baja california sur": "BCS",
-  "campeche": "CAMP",
-  "chiapas": "CHIS",
-  "chihuahua": "CHIH",
+  campeche: "CAMP",
+  chiapas: "CHIS",
+  chihuahua: "CHIH",
   "ciudad de mexico": "CDMX",
-  "cdmx": "CDMX",
-  "coahuila": "COAH",
-  "colima": "COL",
-  "durango": "DGO",
-  "guanajuato": "GTO",
-  "guerrero": "GRO",
-  "hidalgo": "HGO",
-  "jalisco": "JAL",
-  "mexico": "EDO MÉXD",
+  cdmx: "CDMX",
+  coahuila: "COAH",
+  colima: "COL",
+  durango: "DGO",
+  guanajuato: "GTO",
+  guerrero: "GRO",
+  hidalgo: "HGO",
+  jalisco: "JAL",
+  mexico: "EDO MÉXD",
   "estado de mexico": "EDO MÉXD",
-  "michoacan": "MICH",
-  "morelos": "MOR",
-  "nayarit": "NAY",
+  michoacan: "MICH",
+  morelos: "MOR",
+  nayarit: "NAY",
   "nuevo leon": "NL",
-  "oaxaca": "OAX",
-  "puebla": "PUE",
-  "queretaro": "QRO",
+  oaxaca: "OAX",
+  puebla: "PUE",
+  queretaro: "QRO",
   "quintana roo": "Q ROOF",
   "san luis potosi": "SLP",
-  "sinaloa": "SIN",
-  "sonora": "SON",
-  "tabasco": "TAB",
-  "tamaulipas": "TAMPS",
-  "tlaxcala": "TLAX",
-  "veracruz": "VER",
-  "yucatan": "YUC",
-  "zacatecas": "ZAC",
+  sinaloa: "SIN",
+  sonora: "SON",
+  tabasco: "TAB",
+  tamaulipas: "TAMPS",
+  tlaxcala: "TLAX",
+  veracruz: "VER",
+  yucatan: "YUC",
+  zacatecas: "ZAC",
 };
 
 // Si ya viene como clave, la deja; si viene como nombre, la convierte
 const VALID_KEYS = new Set([
-  "AGS","BC","BCS","CAMP","CHIS","CHIH","CDMX","COAH","COL","DGO","GTO","GRO",
-  "HGO","JAL","EDO MÉXD","MICH","MOR","NAY","NL","OAX","PUE","QRO","Q ROOF",
-  "SLP","SIN","SON","TAB","TAMPS","TLAX","VER","YUC","ZAC"
+  "AGS",
+  "BC",
+  "BCS",
+  "CAMP",
+  "CHIS",
+  "CHIH",
+  "CDMX",
+  "COAH",
+  "COL",
+  "DGO",
+  "GTO",
+  "GRO",
+  "HGO",
+  "JAL",
+  "EDO MÉXD",
+  "MICH",
+  "MOR",
+  "NAY",
+  "NL",
+  "OAX",
+  "PUE",
+  "QRO",
+  "Q ROOF",
+  "SLP",
+  "SIN",
+  "SON",
+  "TAB",
+  "TAMPS",
+  "TLAX",
+  "VER",
+  "YUC",
+  "ZAC",
 ]);
 
 function mapEstadoToClave(estado_reserva) {
-  const raw = String(estado_reserva ?? "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  const raw = String(estado_reserva ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
   if (!raw) return raw;
 
   if (VALID_KEYS.has(raw)) return raw; // ya es clave exacta
@@ -3166,7 +3199,7 @@ const agentes_report_fac = async (req, res) => {
       (row) => ({
         ...row,
         estado_reserva: mapEstadoToClave(row.estado_reserva),
-      })
+      }),
     );
 
     res.status(200).json({
