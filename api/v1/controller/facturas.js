@@ -3085,6 +3085,24 @@ function normalizeEstado(s) {
     .replace(/\s+/g, " ");
 }
 
+function getCiudad(locationStr) {
+  const raw = String(locationStr ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "") // quita zero-width
+    .trim();
+
+  if (!raw) return raw;
+
+  // Caso típico: "Mexico City, Distrito Federal, Mexico (MEX/MMMX ...)"
+  const commaIdx = raw.indexOf(",");
+  if (commaIdx !== -1) return raw.slice(0, commaIdx).trim();
+
+  // Fallback: "Cancún (CUN/MMUN ...)" (sin comas)
+  const parenIdx = raw.indexOf("(");
+  if (parenIdx !== -1) return raw.slice(0, parenIdx).trim();
+
+  return raw; // si no hay comas ni paréntesis, ya es "ciudad"
+}
+
 const CLAVE_ESTADOS = {
   aguascalientes: "AGS",
   "baja california": "BC",
@@ -3195,12 +3213,14 @@ const agentes_report_fac = async (req, res) => {
       p_fecha_hasta,
     ]);
 
-    const facturasConClave = (Array.isArray(facturas) ? facturas : []).map(
-      (row) => ({
-        ...row,
-        estado_reserva: mapEstadoToClave(row.estado_reserva),
-      }),
-    );
+
+    const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => ({
+  ...row,
+  estado_reserva: mapEstadoToClave(row.estado_reserva),
+  origen: getCiudad(row.origen),
+  destino: getCiudad(row.destino),
+}));
+
 
     res.status(200).json({
       message: "Facturas del agente obtenidas correctamente.",
