@@ -3228,11 +3228,6 @@ const agentes_report_fac = async (req, res) => {
 const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => ({
   ...row,
   estado_reserva: mapEstadoToClave(row.estado_reserva),
-
-  // si aún quieres ciudad:
-  origen_ciudad: getCiudad(row.origen),
-  destino_ciudad: getCiudad(row.destino),
-
   // claves por estado:
   origen_estado: getEstadoClaveFromLocation(row.origen),
   destino_estado: getEstadoClaveFromLocation(row.destino),
