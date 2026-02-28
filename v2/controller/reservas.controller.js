@@ -1725,14 +1725,15 @@ const editar_reserva_definitivo = async (req, res) => {
       }
 
       console.log(metadata.id_booking, "👍👍👍👍");
-      const diferencia_proveedor =
-        Number(proveedor?.current?.total || 0) -
-        Number(metadata?.costo_total || 0);
 
-      // Si hay decimales, mejor con tolerancia:
-      const EPS = 0.01;
+      if (false) {
+        const diferencia_proveedor =
+          Number(proveedor?.current?.total || 0) -
+          Number(metadata?.costo_total || 0);
 
-      if (Math.abs(diferencia_proveedor) > EPS) {
+        // Si hay decimales, mejor con tolerancia:
+        const EPS = 0.01;
+        //if (Math.abs(diferencia_proveedor) > EPS) {
         console.log(diferencia_proveedor, "diff ✅✅✅✅");
 
         if (diferencia_proveedor > 0) {
