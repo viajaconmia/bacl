@@ -1078,7 +1078,7 @@ async function caso_base_tolerante({
 ====================================
 Cambio de pagos proveedores desde reserva cambio de costo
 ===================================
-*/ 
+*/
 
 /**
  * Ajusta solicitudes_pago_proveedor cuando sube el costo del proveedor (solo caso aumento).
@@ -1125,12 +1125,17 @@ function makeIdSaldo() {
     return crypto.randomUUID();
   } catch {
     // fallback
-    return `saldo_${Date.now()}_${Math.floor(Math.random() * 1e6)}`.slice(0, 40);
+    return `saldo_${Date.now()}_${Math.floor(Math.random() * 1e6)}`.slice(
+      0,
+      40,
+    );
   }
 }
 
 function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
-  const fp = String(formaPagoSolicitada || "").trim().toLowerCase();
+  const fp = String(formaPagoSolicitada || "")
+    .trim()
+    .toLowerCase();
 
   // Ajusta si tu negocio define distinto:
   // - transfer => SPEI (transferencia bancaria)
@@ -1142,7 +1147,7 @@ function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
   return "TRANSFERENCIA";
 }
 
- async function ajustarSolicitudPorAumentoCostoProveedor({
+async function ajustarSolicitudPorAumentoCostoProveedor({
   executeQuery, // OJO: aquí le pasaremos txExecuteQuery
   metadata,
   proveedorTotal,
@@ -1173,7 +1178,10 @@ function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
     : null;
 
   if (!id_solicitud) {
-    console.log("🧾 [AJUSTE] booking_solicitud sin id_solicitud para:", id_booking);
+    console.log(
+      "🧾 [AJUSTE] booking_solicitud sin id_solicitud para:",
+      id_booking,
+    );
     return { ok: false, reason: "NO_ID_SOLICITUD", id_booking };
   }
 
@@ -1188,7 +1196,10 @@ function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
   const rSol = await executeQuery(qSol, [id_solicitud]);
 
   if (!rSol?.length) {
-    console.log("🧾 [AJUSTE] no existe solicitudes_pago_proveedor:", id_solicitud);
+    console.log(
+      "🧾 [AJUSTE] no existe solicitudes_pago_proveedor:",
+      id_solicitud,
+    );
     return { ok: false, reason: "SOLICITUD_NOT_FOUND", id_solicitud };
   }
 
@@ -1326,7 +1337,7 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
   if (!id_solicitud) {
     console.log(
       "🧾 [AJUSTE-LOW] booking_solicitud sin id_solicitud para:",
-      id_booking
+      id_booking,
     );
     return { ok: false, reason: "NO_ID_SOLICITUD", id_booking };
   }
@@ -1350,7 +1361,10 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
   const rSol = await executeQuery(qSol, [id_solicitud]);
 
   if (!rSol?.length) {
-    console.log("🧾 [AJUSTE-LOW] no existe solicitudes_pago_proveedor:", id_solicitud);
+    console.log(
+      "🧾 [AJUSTE-LOW] no existe solicitudes_pago_proveedor:",
+      id_solicitud,
+    );
     return { ok: false, reason: "SOLICITUD_NOT_FOUND", id_solicitud };
   }
 
@@ -1381,7 +1395,11 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
         saldo = COALESCE(saldo, 0) + ?
       WHERE id_solicitud_proveedor = ?
     `;
-    await executeQuery(qUp, [money2(total_new), money2(delta), id_solicitud_proveedor]);
+    await executeQuery(qUp, [
+      money2(total_new),
+      money2(delta),
+      id_solicitud_proveedor,
+    ]);
 
     // Releer saldo para decidir (≈0 / positivo / negativo)
     const qSaldo = `
@@ -1394,7 +1412,7 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
 
     const saldo_new = Number(rSaldo?.[0]?.saldo ?? 0);
     const fp_now = String(
-      rSaldo?.[0]?.forma_pago_solicitada ?? forma_pago_solicitada
+      rSaldo?.[0]?.forma_pago_solicitada ?? forma_pago_solicitada,
     ).trim();
 
     // 3.1) Si saldo ~ 0 => marcar PAGADO según forma_pago_solicitada
@@ -1431,7 +1449,10 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
         };
       }
 
-      console.warn("🧾 [AJUSTE-LOW] saldo≈0 pero forma_pago_solicitada desconocida:", fp_now);
+      console.warn(
+        "🧾 [AJUSTE-LOW] saldo≈0 pero forma_pago_solicitada desconocida:",
+        fp_now,
+      );
       return {
         ok: true,
         action: "UPDATE_MONTO_SALDO_SALDO_ZERO_UNKNOWN_PAYMENT",
@@ -1472,7 +1493,9 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
       const comentarios = [
         `Saldo quedó negativo: ${money2(saldo_new)}`,
         `Monto anterior: ${money2(monto_old)} | Nuevo: ${money2(total_new)} | Delta: ${money2(delta)}`,
-        comentarios_solicitud ? `Comentarios solicitud: ${comentarios_solicitud}` : null,
+        comentarios_solicitud
+          ? `Comentarios solicitud: ${comentarios_solicitud}`
+          : null,
       ]
         .filter(Boolean)
         .join(" | ");
@@ -1499,14 +1522,17 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
         comentarios,
       ]);
 
-      console.log("🧾 [AJUSTE-LOW] saldo negativo -> is_ajuste=1 + INSERT saldos:", {
-        id_solicitud_proveedor,
-        id_saldo,
-        transaction_id,
-        credito,
-        saldo_new,
-        forma_pago_saldo,
-      });
+      console.log(
+        "🧾 [AJUSTE-LOW] saldo negativo -> is_ajuste=1 + INSERT saldos:",
+        {
+          id_solicitud_proveedor,
+          id_saldo,
+          transaction_id,
+          credito,
+          saldo_new,
+          forma_pago_saldo,
+        },
+      );
 
       return {
         ok: true,
@@ -1570,16 +1596,23 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
     await executeQuery(qAdj, [id_solicitud_proveedor]);
 
     // Si forma_pago_solicitada === transfer => llamar SP
-    const fp = String(forma_pago_solicitada ?? "").trim().toLowerCase();
+    const fp = String(forma_pago_solicitada ?? "")
+      .trim()
+      .toLowerCase();
 
     if (fp === "transfer") {
       if (typeof executeSP2 === "function") {
         // Ajusta params si tu SP requiere más cosas
-        await executeSP2("sp_saldo_a_favor_proveedor", [id_solicitud_proveedor]);
-
-        console.log("🧾 [AJUSTE-LOW] transfer -> SP sp_saldo_a_favor_proveedor llamada:", {
+        await executeSP2("sp_saldo_a_favor_proveedor", [
           id_solicitud_proveedor,
-        });
+        ]);
+
+        console.log(
+          "🧾 [AJUSTE-LOW] transfer -> SP sp_saldo_a_favor_proveedor llamada:",
+          {
+            id_solicitud_proveedor,
+          },
+        );
 
         return {
           ok: true,
@@ -1603,11 +1636,14 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
     }
 
     // card o link o credit => solo is_ajuste=1 (sin SP)
-    console.log("🧾 [AJUSTE-LOW] estado fuera de lista -> is_ajuste=1 (sin SP):", {
-      id_solicitud_proveedor,
-      estado,
-      forma_pago_solicitada,
-    });
+    console.log(
+      "🧾 [AJUSTE-LOW] estado fuera de lista -> is_ajuste=1 (sin SP):",
+      {
+        id_solicitud_proveedor,
+        estado,
+        forma_pago_solicitada,
+      },
+    );
 
     return {
       ok: true,
@@ -1634,8 +1670,6 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
     estado,
   };
 }
-
-
 
 /* =========================
  * CONTROLADOR PRINCIPAL
@@ -1690,27 +1724,32 @@ const editar_reserva_definitivo = async (req, res) => {
         );
       }
 
-      console.log(metadata.id_booking,"👍👍👍👍")
+      console.log(metadata.id_booking, "👍👍👍👍");
       const diferencia_proveedor =
-        Number(proveedor.current.total) - Number(metadata.costo_total);
+        Number(proveedor?.current?.total || 0) -
+        Number(metadata?.costo_total || 0);
 
       // Si hay decimales, mejor con tolerancia:
       const EPS = 0.01;
 
       if (Math.abs(diferencia_proveedor) > EPS) {
-
         console.log(diferencia_proveedor, "diff ✅✅✅✅");
 
         if (diferencia_proveedor > 0) {
-          console.log(diferencia_proveedor, "se aumentó el costo proveedor 🚓🚓");
-              await ajustarSolicitudPorAumentoCostoProveedor({
-                executeQuery,
-                metadata,
-                proveedorTotal: proveedor.current.total,
-              });
-
+          console.log(
+            diferencia_proveedor,
+            "se aumentó el costo proveedor 🚓🚓",
+          );
+          await ajustarSolicitudPorAumentoCostoProveedor({
+            executeQuery,
+            metadata,
+            proveedorTotal: proveedor.current.total,
+          });
         } else {
-          console.log(diferencia_proveedor, "se disminuyó el costo proveedor 1️⃣1️⃣1️⃣1️⃣1️⃣");
+          console.log(
+            diferencia_proveedor,
+            "se disminuyó el costo proveedor 1️⃣1️⃣1️⃣1️⃣1️⃣",
+          );
           await ajustarSolicitudPorDisminucionCostoProveedor({
             executeQuery,
             executeSP2, // tu SP caller (pool). Solo si forma_pago_solicitada es transfer se usa
@@ -1722,7 +1761,6 @@ const editar_reserva_definitivo = async (req, res) => {
       } else {
         console.log(diferencia_proveedor, "sin cambio (≈0)");
       }
-
 
       const hayCambioPrecio = hasPrecioChange(venta);
       const hayCambioNoches = hasNochesChange(noches);
