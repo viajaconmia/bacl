@@ -1727,6 +1727,7 @@ const editar_reserva_definitivo = async (req, res) => {
       console.log(metadata.id_booking, "👍👍👍👍");
 
       if (false) {
+        /*
         const diferencia_proveedor =
           Number(proveedor?.current?.total || 0) -
           Number(metadata?.costo_total || 0);
@@ -1758,9 +1759,9 @@ const editar_reserva_definitivo = async (req, res) => {
             proveedorTotal: proveedor.current.total,
             EPS: 0.01,
           });
-        }
+        }*/
       } else {
-        console.log(diferencia_proveedor, "sin cambio (≈0)");
+        console.log("sin cambio (≈0)");
       }
 
       const hayCambioPrecio = hasPrecioChange(venta);
