@@ -2291,13 +2291,14 @@ const filtrarFacturas = async (req, res) => {
     cliente,
     uuid,
     rfc,
-    page = 1,
-    length = 100,
+    page = null,
+    length = null,
+    startDate = null,
+    endDate = null,
   } = req.body;
   try {
-    console.log(estatusFactura);
     const result = await executeQuery(
-      "Call sp_filtrar_facturas(?, ?, ?, ?, ?, ?, ?, ?)",
+      "Call sp_filtrar_facturas(?, ?, ?, ?, ?, ?, ?, ?,?,?)",
       [
         estatusFactura || null,
         id_factura || null,
@@ -2307,11 +2308,12 @@ const filtrarFacturas = async (req, res) => {
         rfc || null,
         page,
         length,
+        startDate,
+        endDate,
       ],
     );
 
-    console.log(result);
-    if (!result[0]) {
+    if (result[0].length == 0) {
       return res.status(404).json({
         message: "No se encontraron facturas con el parametro deseado",
       });
@@ -3108,48 +3110,79 @@ const CLAVE_ESTADOS = {
   "baja california": "BC",
   "baja california norte": "BC",
   "baja california sur": "BCS",
-  "campeche": "CAMP",
-  "chiapas": "CHIS",
-  "chihuahua": "CHIH",
+  campeche: "CAMP",
+  chiapas: "CHIS",
+  chihuahua: "CHIH",
   "ciudad de mexico": "CDMX",
-  "cdmx": "CDMX",
-  "coahuila": "COAH",
-  "colima": "COL",
-  "durango": "DGO",
-  "guanajuato": "GTO",
-  "guerrero": "GRO",
-  "hidalgo": "HGO",
-  "jalisco": "JAL",
-  "mexico": "EDO MÉXD",
+  cdmx: "CDMX",
+  coahuila: "COAH",
+  colima: "COL",
+  durango: "DGO",
+  guanajuato: "GTO",
+  guerrero: "GRO",
+  hidalgo: "HGO",
+  jalisco: "JAL",
+  mexico: "EDO MÉXD",
   "estado de mexico": "EDO MÉXD",
-  "michoacan": "MICH",
-  "morelos": "MOR",
-  "nayarit": "NAY",
+  michoacan: "MICH",
+  morelos: "MOR",
+  nayarit: "NAY",
   "nuevo leon": "NL",
-  "oaxaca": "OAX",
-  "puebla": "PUE",
-  "queretaro": "QRO",
+  oaxaca: "OAX",
+  puebla: "PUE",
+  queretaro: "QRO",
   "quintana roo": "Q ROOF",
   "san luis potosi": "SLP",
-  "sinaloa": "SIN",
-  "sonora": "SON",
-  "tabasco": "TAB",
-  "tamaulipas": "TAMPS",
-  "tlaxcala": "TLAX",
-  "veracruz": "VER",
-  "yucatan": "YUC",
-  "zacatecas": "ZAC",
+  sinaloa: "SIN",
+  sonora: "SON",
+  tabasco: "TAB",
+  tamaulipas: "TAMPS",
+  tlaxcala: "TLAX",
+  veracruz: "VER",
+  yucatan: "YUC",
+  zacatecas: "ZAC",
 };
 
 // Si ya viene como clave, la deja; si viene como nombre, la convierte
 const VALID_KEYS = new Set([
-  "AGS","BC","BCS","CAMP","CHIS","CHIH","CDMX","COAH","COL","DGO","GTO","GRO",
-  "HGO","JAL","EDO MÉXD","MICH","MOR","NAY","NL","OAX","PUE","QRO","Q ROOF",
-  "SLP","SIN","SON","TAB","TAMPS","TLAX","VER","YUC","ZAC"
+  "AGS",
+  "BC",
+  "BCS",
+  "CAMP",
+  "CHIS",
+  "CHIH",
+  "CDMX",
+  "COAH",
+  "COL",
+  "DGO",
+  "GTO",
+  "GRO",
+  "HGO",
+  "JAL",
+  "EDO MÉXD",
+  "MICH",
+  "MOR",
+  "NAY",
+  "NL",
+  "OAX",
+  "PUE",
+  "QRO",
+  "Q ROOF",
+  "SLP",
+  "SIN",
+  "SON",
+  "TAB",
+  "TAMPS",
+  "TLAX",
+  "VER",
+  "YUC",
+  "ZAC",
 ]);
 
 function mapEstadoToClave(estado_reserva) {
-  const raw = String(estado_reserva ?? "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  const raw = String(estado_reserva ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
   if (!raw) return raw;
 
   if (VALID_KEYS.has(raw)) return raw; // ya es clave exacta
@@ -3225,6 +3258,7 @@ const agentes_report_fac = async (req, res) => {
       p_fecha_hasta,
     ]);
 
+
 const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => ({
   ...row,
   estado_reserva: mapEstadoToClave(row.estado_reserva),
@@ -3232,6 +3266,7 @@ const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => 
   origen_estado: getEstadoClaveFromLocation(row.origen),
   destino_estado: getEstadoClaveFromLocation(row.destino),
 }));
+
 
     res.status(200).json({
       message: "Facturas del agente obtenidas correctamente.",
