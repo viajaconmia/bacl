@@ -2291,13 +2291,14 @@ const filtrarFacturas = async (req, res) => {
     cliente,
     uuid,
     rfc,
-    page = 1,
-    length = 100,
+    page = null,
+    length = null,
+    startDate = null,
+    endDate = null,
   } = req.body;
   try {
-    console.log(estatusFactura);
     const result = await executeQuery(
-      "Call sp_filtrar_facturas(?, ?, ?, ?, ?, ?, ?, ?)",
+      "Call sp_filtrar_facturas(?, ?, ?, ?, ?, ?, ?, ?,?,?)",
       [
         estatusFactura || null,
         id_factura || null,
@@ -2307,11 +2308,12 @@ const filtrarFacturas = async (req, res) => {
         rfc || null,
         page,
         length,
+        startDate,
+        endDate,
       ],
     );
 
-    console.log(result);
-    if (!result[0]) {
+    if (result[0].length == 0) {
       return res.status(404).json({
         message: "No se encontraron facturas con el parametro deseado",
       });
@@ -3083,58 +3085,152 @@ function normalizeEstado(s) {
     .replace(/\s+/g, " ");
 }
 
+function getCiudad(locationStr) {
+  const raw = String(locationStr ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "") // quita zero-width
+    .trim();
+
+  if (!raw) return raw;
+
+  // Caso típico: "Mexico City, Distrito Federal, Mexico (MEX/MMMX ...)"
+  const commaIdx = raw.indexOf(",");
+  if (commaIdx !== -1) return raw.slice(0, commaIdx).trim();
+
+  // Fallback: "Cancún (CUN/MMUN ...)" (sin comas)
+  const parenIdx = raw.indexOf("(");
+  if (parenIdx !== -1) return raw.slice(0, parenIdx).trim();
+
+  return raw; // si no hay comas ni paréntesis, ya es "ciudad"
+}
+
 const CLAVE_ESTADOS = {
+  "distrito federal": "CDMX",
+  "df": "CDMX",
   "aguascalientes": "AGS",
   "baja california": "BC",
   "baja california norte": "BC",
   "baja california sur": "BCS",
-  "campeche": "CAMP",
-  "chiapas": "CHIS",
-  "chihuahua": "CHIH",
+  campeche: "CAMP",
+  chiapas: "CHIS",
+  chihuahua: "CHIH",
   "ciudad de mexico": "CDMX",
-  "cdmx": "CDMX",
-  "coahuila": "COAH",
-  "colima": "COL",
-  "durango": "DGO",
-  "guanajuato": "GTO",
-  "guerrero": "GRO",
-  "hidalgo": "HGO",
-  "jalisco": "JAL",
-  "mexico": "EDO MÉXD",
+  cdmx: "CDMX",
+  coahuila: "COAH",
+  colima: "COL",
+  durango: "DGO",
+  guanajuato: "GTO",
+  guerrero: "GRO",
+  hidalgo: "HGO",
+  jalisco: "JAL",
+  mexico: "EDO MÉXD",
   "estado de mexico": "EDO MÉXD",
-  "michoacan": "MICH",
-  "morelos": "MOR",
-  "nayarit": "NAY",
+  michoacan: "MICH",
+  morelos: "MOR",
+  nayarit: "NAY",
   "nuevo leon": "NL",
-  "oaxaca": "OAX",
-  "puebla": "PUE",
-  "queretaro": "QRO",
+  oaxaca: "OAX",
+  puebla: "PUE",
+  queretaro: "QRO",
   "quintana roo": "Q ROOF",
   "san luis potosi": "SLP",
-  "sinaloa": "SIN",
-  "sonora": "SON",
-  "tabasco": "TAB",
-  "tamaulipas": "TAMPS",
-  "tlaxcala": "TLAX",
-  "veracruz": "VER",
-  "yucatan": "YUC",
-  "zacatecas": "ZAC",
+  sinaloa: "SIN",
+  sonora: "SON",
+  tabasco: "TAB",
+  tamaulipas: "TAMPS",
+  tlaxcala: "TLAX",
+  veracruz: "VER",
+  yucatan: "YUC",
+  zacatecas: "ZAC",
 };
 
 // Si ya viene como clave, la deja; si viene como nombre, la convierte
 const VALID_KEYS = new Set([
-  "AGS","BC","BCS","CAMP","CHIS","CHIH","CDMX","COAH","COL","DGO","GTO","GRO",
-  "HGO","JAL","EDO MÉXD","MICH","MOR","NAY","NL","OAX","PUE","QRO","Q ROOF",
-  "SLP","SIN","SON","TAB","TAMPS","TLAX","VER","YUC","ZAC"
+  "AGS",
+  "BC",
+  "BCS",
+  "CAMP",
+  "CHIS",
+  "CHIH",
+  "CDMX",
+  "COAH",
+  "COL",
+  "DGO",
+  "GTO",
+  "GRO",
+  "HGO",
+  "JAL",
+  "EDO MÉXD",
+  "MICH",
+  "MOR",
+  "NAY",
+  "NL",
+  "OAX",
+  "PUE",
+  "QRO",
+  "Q ROOF",
+  "SLP",
+  "SIN",
+  "SON",
+  "TAB",
+  "TAMPS",
+  "TLAX",
+  "VER",
+  "YUC",
+  "ZAC",
 ]);
 
 function mapEstadoToClave(estado_reserva) {
-  const raw = String(estado_reserva ?? "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  const raw = String(estado_reserva ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
   if (!raw) return raw;
 
   if (VALID_KEYS.has(raw)) return raw; // ya es clave exacta
   const norm = normalizeEstado(raw);
   return CLAVE_ESTADOS[norm] ?? raw; // si no encuentra, deja lo original
+}
+
+function getEstadoClaveFromLocation(locationStr) {
+  const raw = String(locationStr ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
+
+  if (!raw) return raw;
+
+  // Quita paréntesis para parsear comas sin ruido
+  const noParen = raw.replace(/\s*\([^)]*\)\s*/g, "").trim();
+
+  // Split por comas: "Ciudad, Estado, País"
+  const parts = noParen.split(",").map((p) => p.trim()).filter(Boolean);
+
+  // 1) Caso normal: "Ciudad, Estado, Mexico ..."
+  if (parts.length >= 2) {
+    return mapEstadoToClave(parts[1]); // <- Estado (2º segmento)
+  }
+
+  // 2) Si no hay comas (ej. solo nombre aeropuerto), intenta inferir por IATA
+  // Formato típico: "(MEX/MMMX ...)" o "(NLU/MMSM)"
+  const iata = (raw.match(/\(([A-Z]{3})\//) || [])[1];
+
+  // Mapea IATA -> CLAVE_ESTADO (pon aquí los que uses más)
+  const AIRPORT_STATE_BY_IATA = {
+    MEX: "CDMX",
+    NLU: "EDO MÉXD",
+    MTY: "NL",
+    QRO: "QRO",
+    GDL: "JAL",
+    CUN: "Q ROOF",
+    TIJ: "BC",
+    SJD: "BCS",
+    PVR: "JAL",
+  };
+
+  if (iata && AIRPORT_STATE_BY_IATA[iata]) return AIRPORT_STATE_BY_IATA[iata];
+
+  // 3) Último fallback: intenta mapear usando TODO el texto (si trae algo tipo "Nuevo Leon")
+  // (Evita agarrar "Mexico" país: tu mapEstadoToClave sólo convierte si coincide con un estado)
+  const clave = mapEstadoToClave(noParen);
+  return clave;
 }
 
 const agentes_report_fac = async (req, res) => {
@@ -3162,12 +3258,15 @@ const agentes_report_fac = async (req, res) => {
       p_fecha_hasta,
     ]);
 
-    const facturasConClave = (Array.isArray(facturas) ? facturas : []).map(
-      (row) => ({
-        ...row,
-        estado_reserva: mapEstadoToClave(row.estado_reserva),
-      })
-    );
+
+const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => ({
+  ...row,
+  estado_reserva: mapEstadoToClave(row.estado_reserva),
+  // claves por estado:
+  origen_estado: getEstadoClaveFromLocation(row.origen),
+  destino_estado: getEstadoClaveFromLocation(row.destino),
+}));
+
 
     res.status(200).json({
       message: "Facturas del agente obtenidas correctamente.",
