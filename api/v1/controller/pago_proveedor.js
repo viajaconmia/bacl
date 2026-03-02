@@ -613,6 +613,7 @@ const createSolicitud = async (req, res) => {
     const insertPagoProveedorLinkSql = `
   INSERT INTO pago_proveedores (
     id_pago_dispersion,
+    
     id_solicitud_proveedor,
     codigo_dispersion,
     monto_pagado,
@@ -2097,6 +2098,25 @@ const getDatosFiscalesProveedor = async (req, res) => {
   }
 };
 
+const saldo_a_favor = async (req, res) => {
+  try {
+    const { id_proveedor } = req.query; // puede venir undefined
+
+    const data = await executeSP(
+      "sp_obtener_saldo_a_favor_proveedor",
+      [id_proveedor ?? null], // MUY IMPORTANTE: pasar null si no viene
+    );
+
+    return res.status(200).json({ data }); // data = array rows del SP
+  } catch (error) {
+    console.error(error);
+    return res.status(error.statusCode || 500).json({
+      error: "Error en el servidor",
+      details: error?.message ?? error,
+    });
+  }
+};
+
 const editProveedores = async (req, res) => {};
 
 const getProveedores = async (req, res) => {};
@@ -2342,6 +2362,25 @@ const cargarFactura = async (req, res) => {
     });
   }
 };
+
+// const saldo_a_favor = async (req, res) => {
+//   try {
+//     const { id_proveedor } = req.query; // puede venir undefined
+
+//     const data = await executeSP(
+//       "sp_obtener_saldo_a_favor_proveedor",
+//       [id_proveedor ?? null] // MUY IMPORTANTE: pasar null si no viene
+//     );
+
+//     return res.status(200).json({ data }); // data = array rows del SP
+//   } catch (error) {
+//     console.error(error);
+//     return res.status(error.statusCode || 500).json({
+//       error: "Error en el servidor",
+//       details: error?.message ?? error,
+//     });
+//   }
+// };
 
 const EditCampos = async (req, res) => {
   try {
@@ -2847,9 +2886,11 @@ module.exports = {
   getSolicitudes,
   createDispersion,
   createPago,
+  saldo_a_favor,
   getDatosFiscalesProveedor,
   editProveedores,
   getProveedores,
   cargarFactura,
   EditCampos,
+  saldo_a_favor,
 };
