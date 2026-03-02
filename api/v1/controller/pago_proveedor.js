@@ -2104,7 +2104,7 @@ const saldo_a_favor = async (req, res) => {
 
     const data = await executeSP(
       "sp_obtener_saldo_a_favor_proveedor",
-      [id_proveedor ?? null] // MUY IMPORTANTE: pasar null si no viene
+      [id_proveedor ?? null], // MUY IMPORTANTE: pasar null si no viene
     );
 
     return res.status(200).json({ data }); // data = array rows del SP
@@ -2363,24 +2363,24 @@ const cargarFactura = async (req, res) => {
   }
 };
 
-const saldo_a_favor = async (req, res) => {
-  try {
-    const { id_proveedor } = req.query; // puede venir undefined
+// const saldo_a_favor = async (req, res) => {
+//   try {
+//     const { id_proveedor } = req.query; // puede venir undefined
 
-    const data = await executeSP(
-      "sp_obtener_saldo_a_favor_proveedor",
-      [id_proveedor ?? null] // MUY IMPORTANTE: pasar null si no viene
-    );
+//     const data = await executeSP(
+//       "sp_obtener_saldo_a_favor_proveedor",
+//       [id_proveedor ?? null] // MUY IMPORTANTE: pasar null si no viene
+//     );
 
-    return res.status(200).json({ data }); // data = array rows del SP
-  } catch (error) {
-    console.error(error);
-    return res.status(error.statusCode || 500).json({
-      error: "Error en el servidor",
-      details: error?.message ?? error,
-    });
-  }
-};
+//     return res.status(200).json({ data }); // data = array rows del SP
+//   } catch (error) {
+//     console.error(error);
+//     return res.status(error.statusCode || 500).json({
+//       error: "Error en el servidor",
+//       details: error?.message ?? error,
+//     });
+//   }
+// };
 
 const EditCampos = async (req, res) => {
   try {
@@ -2892,9 +2892,5 @@ module.exports = {
   getProveedores,
   cargarFactura,
   EditCampos,
-<<<<<<< HEAD
   saldo_a_favor,
 };
-=======
-};
->>>>>>> 0b1bf0d4b084de81cd7d434572dbd38ed2af77d5
