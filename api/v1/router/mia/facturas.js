@@ -2,6 +2,7 @@ const router = require("express").Router();
 const middleware = require("../../middleware/validateParams");
 const controller = require("../../controller/facturas");
 const v2 = require("../../../../v2/controller/facturas.controller");
+const { hasPermission } = require("../../../../middleware/verifyPermission");
 
 router.post("/filtrarFacturas", controller.filtrarFacturas);
 router.post(
@@ -23,9 +24,8 @@ router.post(
 router.get(
   "/agentes_report_fac",
   // middleware.validateParams(["info_user", "cfdi"]),
-  controller.agentes_report_fac
+  controller.agentes_report_fac,
 );
-
 
 router.get("/detallesConexion", controller.getDetallesConexionesFactura);
 router.get("/eliminar factura");
@@ -93,4 +93,8 @@ module.exports = router;
  * V2
  */
 
-router.delete("/:id", v2.cancelarFacturaById);
+router.delete(
+  "/:id",
+  hasPermission("facturacion.cancelacion.facturas_meses_pasados"),
+  v2.cancelarFacturaById,
+);
