@@ -25,7 +25,7 @@ const crearCliente = (data) => facturama.Clients.Create(data);
 const cancelarCfdi = async (
   idCfdi,
   motive = "03",
-  type = "issuedddddddddddddddddd",
+  type = "issued",
 ) => {
   try {
     return await facturama.Cfdi.Cancel(

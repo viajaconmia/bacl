@@ -98,3 +98,7 @@ router.delete(
   hasPermission("facturacion.cancelacion.facturas_meses_pasados"),
   v2.cancelarFacturaById,
 );
+router.get(
+  "/:id",
+  v2.obtenerFacturaById,
+);

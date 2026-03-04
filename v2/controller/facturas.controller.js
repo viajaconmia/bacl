@@ -1,7 +1,28 @@
-const { cancelarCfdi } = require("../../api/v1/model/facturamaModel");
+const { cancelarCfdi, getCfdi } = require("../../api/v1/model/facturamaModel");
 const { executeQuery, runTransaction } = require("../../config/db");
 const { isSameMonth } = require("../../lib/utils/calculates");
 
+
+const obtenerFacturaById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user } = req.session;
+    const [factura] = await executeQuery(
+      `SELECT * 
+  FROM facturas 
+  WHERE id_factura = ?`,
+      [id],
+    );
+    const cfdi = await getCfdi(factura.id_facturama, "issued");
+
+    return res.status(200).json({ message: "Factura obtenida correctamente", data: cfdi });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(error.status || error.statusCode || 500)
+      .json({ message: error.message || "Error al obtener la factura" });
+  }
+};
 const cancelarFacturaById = async (req, res) => {
   try {
     const { motive, type, comentarios, force = false } = req.query;
@@ -47,7 +68,8 @@ const cancelarFacturaById = async (req, res) => {
           [
             user.id,
             response.CancelationDate || null,
-            response.Status || null,
+            "pending",
+            // response.Status || null,
             comentarios || null,
             id,
           ],
@@ -60,7 +82,7 @@ const cancelarFacturaById = async (req, res) => {
           [response.RequestDate || null, id],
         );
 
-        if (response.status) {
+        if (response.Status == "canceled") {
           await conn.query(deleteItemsFacturasSQL, [id]);
           await conn.query(deleteSaldos, [id]);
           await conn.query(updateItemsSQL, [id]);
@@ -91,4 +113,4 @@ WHERE id_factura = ?`;
 const deleteSaldos = ` DELETE FROM facturas_pagos_y_saldos
 WHERE id_factura = ?`;
 
-module.exports = { cancelarFacturaById };
+module.exports = { cancelarFacturaById, obtenerFacturaById };
