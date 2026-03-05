@@ -2452,12 +2452,8 @@ const EditCampos = async (req, res) => {
 
     // 5) Opcional: casteo numérico si lo necesitas
     const NUMERIC_FIELDS = new Set([
-      "monto_solicitado",
-      "saldo",
-      "id_tarjeta_solicitada",
+
       "id_proveedor",
-      "monto_facturado",
-      "monto_por_facturar",
       // ✅ nuevo
       "consolidado",
     ]);
