@@ -1706,6 +1706,367 @@ function generarCodigoDispersion() {
   return `DISP-${timestamp}-${random.toString().padStart(3, "0")}`;
 }
 
+// const getSolicitudes = async (req, res) => {
+//   try {
+//     // ---------------- helpers ----------------
+//     const norm = (v) =>
+//       String(v ?? "")
+//         .trim()
+//         .toLowerCase();
+//     const num = (v) => {
+//       const n = Number(v);
+//       return Number.isFinite(n) ? n : 0;
+//     };
+
+//     const safeJsonParse = (v) => {
+//       if (v == null) return null;
+//       if (Array.isArray(v) || typeof v === "object") return v;
+//       if (typeof v !== "string") return null;
+//       const s = v.trim();
+//       if (!s) return null;
+//       if (!(s.startsWith("{") || s.startsWith("["))) return null;
+//       try {
+//         return JSON.parse(s);
+//       } catch {
+//         return null;
+//       }
+//     };
+
+//     const toArray = (v) => {
+//       const parsed = safeJsonParse(v);
+//       if (Array.isArray(parsed)) return parsed;
+//       if (parsed && typeof parsed === "object") return [parsed];
+//       return [];
+//     };
+
+//     const flattenPagosArr = (v) => {
+//       // soporta: array, string JSON, mezcla
+//       const arr = Array.isArray(v) ? v : toArray(v);
+//       const lvl1 = arr.flatMap((x) => (Array.isArray(x) ? x : [x]));
+//       const lvl2 = lvl1.flatMap((x) => (Array.isArray(x) ? x : [x]));
+//       return lvl2.filter(Boolean);
+//     };
+
+//     const getPagoStats = (pagos) => {
+//       const p = flattenPagosArr(pagos);
+//       let solicitado = 0;
+//       let pagado = 0;
+//       let conFecha = 0;
+
+//       for (const x of p) {
+//         solicitado += num(x?.monto_solicitado ?? 0);
+//         pagado += num(x?.monto_pagado ?? 0);
+//         if (x?.fecha_pago) conFecha += 1;
+//       }
+
+//       const anyPagadoEstado =
+//         p.some(
+//           (x) =>
+//             norm(x?.pago_estado_pago) === "pagado" ||
+//             norm(x?.estado_pago) === "pagado",
+//         ) || false;
+
+//       return {
+//         count: p.length,
+//         solicitado,
+//         pagado,
+//         conFecha,
+//         anyPagadoEstado,
+//       };
+//     };
+
+//     // Facturación en tu SP: no diste esquema fijo.
+//     // Intentamos detectar en `rest` varios nombres típicos.
+//     const getFacturaNums = (row) => {
+//       const solicitado = num(row?.monto_solicitado);
+//       const fact = num(
+//         row?.monto_facturado ??
+//           row?.total_facturado ??
+//           row?.total_facturado_en_pfp ??
+//           row?.facturado ??
+//           row?.monto_facturas ??
+//           0,
+//       );
+
+//       // si existe un "por_facturar" explícito, úsalo; si no, calcula.
+//       const porFacturarRaw =
+//         row?.monto_por_facturar ?? row?.por_facturar ?? row?.saldo_por_facturar;
+//       const porFacturar =
+//         porFacturarRaw != null
+//           ? num(porFacturarRaw)
+//           : Math.max(0, +(solicitado - fact).toFixed(2));
+
+//       return { solicitado, facturado: fact, porFacturar };
+//     };
+
+//     const isSinPagosAsociados = (pagosArray) => {
+//       const p = flattenPagosArr(pagosArray);
+//       return p.length === 0;
+//     };
+
+//     // ---------------- inputs ----------------
+//     const debug = Number(req.query.debug ?? 0) === 1;
+
+//     // ---------------- fetch SPs ----------------
+//     const spRows = await executeSP(
+//       STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR,
+//     );
+
+//     const ids = spRows
+//       .map((r) => r.id_solicitud_proveedor)
+//       .filter((id) => id !== null && id !== undefined);
+
+//     let pagosRaw = [];
+//     if (ids.length > 0) {
+//       // NOTE: hoy traes todos los pagos del SP, no filtras por ids.
+//       // Está OK para funcionalidad, pero puede pegar en performance.
+//       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
+//     }
+
+//     // ---------------- index pagos by solicitud ----------------
+//     const pagosBySolicitud = pagosRaw.reduce((acc, row) => {
+//       const key = String(row.id_solicitud_proveedor);
+
+//       // en tu código original: push(row.dispersiones_json, row.pagos_json)
+//       // aquí: parsea y flatten para que el front tenga un array usable
+//       const dispersiones = toArray(row.dispersiones_json);
+//       const pagos = toArray(row.pagos_json);
+
+//       (acc[key] ||= []).push(...dispersiones, ...pagos);
+//       return acc;
+//     }, {});
+
+//     // ---------------- normalize rows ----------------
+//     const data = spRows.map((r) => {
+//       // destructuring con tus campos + rest
+//       const {
+//         id_solicitud_proveedor,
+//         fecha_solicitud,
+//         monto_solicitado,
+//         saldo,
+//         forma_pago_solicitada,
+//         id_tarjeta_solicitada,
+//         usuario_solicitante,
+//         usuario_generador,
+//         comentarios,
+//         estado_solicitud,
+//         estado_facturacion,
+//         ultimos_4,
+//         banco_emisor,
+//         tipo_tarjeta,
+//         rfc,
+//         razon_social,
+//         estatus_pagos,
+//         ...rest
+//       } = r;
+
+//       const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
+//       const forma = norm(forma_pago_solicitada);
+
+//       const pagoStats = getPagoStats(pagos);
+
+//       const saldoNum = num(saldo);
+//       const estaPagada =
+//         norm(estatus_pagos) === "pagado" ||
+//         saldoNum === 0 ||
+//         pagoStats.anyPagadoEstado ||
+//         pagoStats.pagado >= num(monto_solicitado);
+
+//       // Facturas (si vienen dentro de rest en tu SP)
+//       const factNums = getFacturaNums({ ...r, ...rest });
+
+//       // devolvemos el shape que tu front ya espera + extras para que “muestres todo”
+//       return {
+//         ...rest,
+
+//         estatus_pagos,
+//         // NOTA: ya no calculamos filtro_pago en back como antes para no perder registros.
+//         // Lo vamos a calcular al agrupar, pero dejamos forma/saldo aquí accesibles.
+//         solicitud_proveedor: {
+//           id_solicitud_proveedor,
+//           fecha_solicitud,
+//           monto_solicitado,
+//           saldo,
+//           forma_pago_solicitada,
+//           id_tarjeta_solicitada,
+//           usuario_solicitante,
+//           usuario_generador,
+//           comentarios,
+//           estado_solicitud,
+//           estado_facturacion,
+//         },
+//         tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
+//         proveedor: { rfc, razon_social },
+//         pagos,
+
+//         __computed: {
+//           forma,
+//           estaPagada,
+//           pagos_count: pagoStats.count,
+//           pagos_total_pagado: pagoStats.pagado,
+//           pagos_total_solicitado_sum: pagoStats.solicitado,
+//           facturado: factNums.facturado,
+//           por_facturar: factNums.porFacturar,
+//           solicitado: factNums.solicitado,
+//         },
+//       };
+//     });
+
+//     // ---------------- buckets para front ----------------
+//     // reglas que pediste (front), pero aquí ya te lo acomodamos en el back
+//     const todos = data;
+
+//     const spei_solicitado = data.filter((d) => {
+//       const forma = d.__computed?.forma;
+//       return forma === "transfer" && isSinPagosAsociados(d.pagos);
+//     });
+
+//     const pago_tdc = data.filter((d) => {
+//       const forma = d.__computed?.forma;
+//       return forma === "card" && isSinPagosAsociados(d.pagos);
+//     });
+
+//     const pago_link = data.filter((d) => {
+//       const forma = d.__computed?.forma;
+//       return forma === "link" && isSinPagosAsociados(d.pagos);
+//     });
+
+//     // Carta enviada: credit y (sin facturar / parcial / por facturar == solicitado)
+//     const carta_enviada = data.filter((d) => {
+//       const forma = d.__computed?.forma;
+//       if (forma !== "credit") return false;
+
+//       const solicitado = num(d.__computed?.solicitado);
+//       const facturado = num(d.__computed?.facturado);
+//       const porFacturar = num(d.__computed?.por_facturar);
+
+//       // condiciones que diste (equivalentes en práctica)
+//       const sinFacturar = facturado <= 0;
+//       const parcial = facturado > 0 && facturado < solicitado;
+//       const porFacturarIgualSolicitado = porFacturar === solicitado;
+
+//       return sinFacturar || parcial || porFacturarIgualSolicitado;
+//     });
+
+//     // Carta garantía: credit y (facturado == solicitado) y (por facturar == 0)
+//     const carta_garantia = data.filter((d) => {
+//       const forma = d.__computed?.forma;
+//       if (forma !== "credit") return false;
+
+//       const solicitado = num(d.__computed?.solicitado);
+//       const facturado = num(d.__computed?.facturado);
+//       const porFacturar = num(d.__computed?.por_facturar);
+
+//       return facturado === solicitado && porFacturar === 0;
+//     });
+
+//     // Pagada (carpeta): marcadas como pagadas por regla de negocio
+//     // Nota: puedes ajustar si “pagada” solo aplica a transfer, etc.
+//     const pagada = data.filter((d) => !!d.__computed?.estaPagada);
+
+//     // Histórico vacío por ahora (como pediste)
+//     const historico = [];
+
+//     // Otros: lo que no cayó en ninguna categoría (para no “perder” registros)
+//     const inAny = new Set();
+//     const addIds = (arr) => {
+//       for (const x of arr) {
+//         const id = x?.solicitud_proveedor?.id_solicitud_proveedor;
+//         if (id != null) inAny.add(String(id));
+//       }
+//     };
+//     addIds(spei_solicitado);
+//     addIds(pago_tdc);
+//     addIds(pago_link);
+//     addIds(carta_enviada);
+//     addIds(carta_garantia);
+//     addIds(pagada);
+
+//     const otros = data.filter((d) => {
+//       const id = d?.solicitud_proveedor?.id_solicitud_proveedor;
+//       if (id == null) return true;
+//       return !inAny.has(String(id));
+//     });
+
+//     // ---------------- debug meta ----------------
+//     const responseData = {
+//       todos,
+//       spei_solicitado,
+//       pago_tdc,
+//       pago_link,
+//       carta_enviada,
+//       carta_garantia,
+//       pagada,
+//       historico,
+//       otros,
+//     };
+
+//     if (debug) {
+//       const byForma = data.reduce((acc, d) => {
+//         const f = d.__computed?.forma || "(vacio)";
+//         acc[f] = (acc[f] || 0) + 1;
+//         return acc;
+//       }, {});
+
+//       const counts = {
+//         spRows_len: spRows.length,
+//         mapped_len: data.length,
+//         pagosRaw_len: pagosRaw.length,
+//         ids_null: spRows.filter((x) => x.id_solicitud_proveedor == null).length,
+//       };
+
+//       const buckets = {
+//         todos: todos.length,
+//         spei_solicitado: spei_solicitado.length,
+//         pago_tdc: pago_tdc.length,
+//         pago_link: pago_link.length,
+//         carta_enviada: carta_enviada.length,
+//         carta_garantia: carta_garantia.length,
+//         pagada: pagada.length,
+//         historico: historico.length,
+//         otros: otros.length,
+//       };
+
+//       responseData.meta = {
+//         counts,
+//         byForma,
+//         buckets,
+//         ejemplo_otros: otros.slice(0, 15).map((d) => ({
+//           id: d?.solicitud_proveedor?.id_solicitud_proveedor,
+//           forma: d?.solicitud_proveedor?.forma_pago_solicitada,
+//           saldo: d?.solicitud_proveedor?.saldo,
+//           estatus_pagos: d?.estatus_pagos,
+//           pagos_count: d.__computed?.pagos_count,
+//           facturado: d.__computed?.facturado,
+//           por_facturar: d.__computed?.por_facturar,
+//           solicitado: d.__computed?.solicitado,
+//         })),
+//       };
+//     }
+
+//     // ---------------- response ----------------
+//     res.set({
+//       "Cache-Control": "no-store",
+//       Pragma: "no-cache",
+//       Expires: "0",
+//     });
+
+//     return res.status(200).json({
+//       message: "Registros obtenidos con exito",
+//       ok: true,
+//       data: responseData,
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     return res.status(500).json({
+//       ok: false,
+//       error: "Internal Server Error",
+//       details: error?.message || error,
+//     });
+//   }
+// };
+
+// controller/getSolicitudes.js
 const getSolicitudes = async (req, res) => {
   try {
     // ---------------- helpers ----------------
@@ -1713,6 +2074,7 @@ const getSolicitudes = async (req, res) => {
       String(v ?? "")
         .trim()
         .toLowerCase();
+
     const num = (v) => {
       const n = Number(v);
       return Number.isFinite(n) ? n : 0;
@@ -1775,8 +2137,7 @@ const getSolicitudes = async (req, res) => {
       };
     };
 
-    // Facturación en tu SP: no diste esquema fijo.
-    // Intentamos detectar en `rest` varios nombres típicos.
+    // Facturación: intenta usar campos típicos de tu SP
     const getFacturaNums = (row) => {
       const solicitado = num(row?.monto_solicitado);
       const fact = num(
@@ -1788,9 +2149,9 @@ const getSolicitudes = async (req, res) => {
           0,
       );
 
-      // si existe un "por_facturar" explícito, úsalo; si no, calcula.
       const porFacturarRaw =
         row?.monto_por_facturar ?? row?.por_facturar ?? row?.saldo_por_facturar;
+
       const porFacturar =
         porFacturarRaw != null
           ? num(porFacturarRaw)
@@ -1799,9 +2160,76 @@ const getSolicitudes = async (req, res) => {
       return { solicitado, facturado: fact, porFacturar };
     };
 
-    const isSinPagosAsociados = (pagosArray) => {
-      const p = flattenPagosArr(pagosArray);
-      return p.length === 0;
+    // “Facturada” (ajústalo si tu negocio es distinto)
+    // - 1) si estado_facturacion == facturada => true
+    // - 2) fallback: facturado >= solicitado && por_facturar == 0
+    const isFacturada = (d) => {
+      const estadoFact = norm(
+        d?.solicitud_proveedor?.estado_facturacion ?? d?.estado_facturacion,
+      );
+      if (estadoFact === "facturada") return true;
+
+      const solicitado = num(d?.solicitud_proveedor?.monto_solicitado);
+      const facturado =
+        num(d?.monto_facturado) ||
+        num(d?.total_facturado_en_pfp) ||
+        num(d?.__computed?.facturado);
+
+      const porFacturar =
+        d?.monto_por_facturar != null
+          ? num(d?.monto_por_facturar)
+          : num(d?.__computed?.por_facturar);
+
+      return solicitado > 0 && facturado >= solicitado && porFacturar === 0;
+    };
+
+    // id_dispersado:
+    // - 1) si viene como columna, úsalo
+    // - 2) si no viene, intenta inferirlo de pagos/dispersiones
+    const getIdDispersado = (d) => {
+      const direct =
+        d?.id_dispersado ??
+        d?.__computed?.id_dispersado ??
+        d?.solicitud_proveedor?.id_dispersado;
+      if (direct != null) return num(direct);
+
+      const pagos = Array.isArray(d?.pagos) ? d.pagos : [];
+      // si cualquier item trae id_dispersado=1, lo tomamos como dispersado
+      return pagos.some((x) => num(x?.id_dispersado) === 1) ? 1 : 0;
+    };
+
+    // Orden por id_hospedaje “más reciente -> más antiguo” (DESC).
+    // NOTA: si id_hospedaje viene NULL, lo manda al final; desempata por booking_updated_at/fecha_solicitud.
+    const sortByHospedajeReciente = (arr) => {
+      const toTime = (v) => {
+        const t = new Date(v ?? "").getTime();
+        return Number.isFinite(t) ? t : 0;
+      };
+
+      return [...arr].sort((a, b) => {
+        const ah = a?.id_hospedaje == null ? null : Number(a.id_hospedaje);
+        const bh = b?.id_hospedaje == null ? null : Number(b.id_hospedaje);
+
+        if (ah == null && bh == null) {
+          // desempate por booking_updated_at desc, luego fecha_solicitud desc
+          const abu = toTime(a?.booking_updated_at);
+          const bbu = toTime(b?.booking_updated_at);
+          if (bbu !== abu) return bbu - abu;
+
+          const af = toTime(a?.solicitud_proveedor?.fecha_solicitud ?? a?.fecha_solicitud);
+          const bf = toTime(b?.solicitud_proveedor?.fecha_solicitud ?? b?.fecha_solicitud);
+          return bf - af;
+        }
+        if (ah == null) return 1;
+        if (bh == null) return -1;
+
+        if (bh !== ah) return bh - ah;
+
+        // si empatan id_hospedaje, desempata por booking_updated_at desc
+        const abu = toTime(a?.booking_updated_at);
+        const bbu = toTime(b?.booking_updated_at);
+        return bbu - abu;
+      });
     };
 
     // ---------------- inputs ----------------
@@ -1812,23 +2240,20 @@ const getSolicitudes = async (req, res) => {
       STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR,
     );
 
-    const ids = spRows
+    const ids = (spRows || [])
       .map((r) => r.id_solicitud_proveedor)
       .filter((id) => id !== null && id !== undefined);
 
     let pagosRaw = [];
     if (ids.length > 0) {
-      // NOTE: hoy traes todos los pagos del SP, no filtras por ids.
-      // Está OK para funcionalidad, pero puede pegar en performance.
+      // hoy traes todos los pagos del SP; OK funcionalmente, pero ojo performance
       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
     }
 
     // ---------------- index pagos by solicitud ----------------
-    const pagosBySolicitud = pagosRaw.reduce((acc, row) => {
+    const pagosBySolicitud = (pagosRaw || []).reduce((acc, row) => {
       const key = String(row.id_solicitud_proveedor);
 
-      // en tu código original: push(row.dispersiones_json, row.pagos_json)
-      // aquí: parsea y flatten para que el front tenga un array usable
       const dispersiones = toArray(row.dispersiones_json);
       const pagos = toArray(row.pagos_json);
 
@@ -1837,8 +2262,7 @@ const getSolicitudes = async (req, res) => {
     }, {});
 
     // ---------------- normalize rows ----------------
-    const data = spRows.map((r) => {
-      // destructuring con tus campos + rest
+    const data = (spRows || []).map((r) => {
       const {
         id_solicitud_proveedor,
         fecha_solicitud,
@@ -1872,16 +2296,17 @@ const getSolicitudes = async (req, res) => {
         pagoStats.anyPagadoEstado ||
         pagoStats.pagado >= num(monto_solicitado);
 
-      // Facturas (si vienen dentro de rest en tu SP)
       const factNums = getFacturaNums({ ...r, ...rest });
 
-      // devolvemos el shape que tu front ya espera + extras para que “muestres todo”
+      // si existe id_dispersado en el row/rest, lo guardamos para usarlo fácil
+      const idDispersado =
+        r?.id_dispersado != null ? num(r.id_dispersado) : (rest?.id_dispersado != null ? num(rest.id_dispersado) : null);
+
       return {
         ...rest,
 
         estatus_pagos,
-        // NOTA: ya no calculamos filtro_pago en back como antes para no perder registros.
-        // Lo vamos a calcular al agrupar, pero dejamos forma/saldo aquí accesibles.
+
         solicitud_proveedor: {
           id_solicitud_proveedor,
           fecha_solicitud,
@@ -1895,12 +2320,15 @@ const getSolicitudes = async (req, res) => {
           estado_solicitud,
           estado_facturacion,
         },
+
         tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
         proveedor: { rfc, razon_social },
+
         pagos,
 
         __computed: {
           forma,
+          estado_solicitud_norm: norm(estado_solicitud),
           estaPagada,
           pagos_count: pagoStats.count,
           pagos_total_pagado: pagoStats.pagado,
@@ -1908,103 +2336,86 @@ const getSolicitudes = async (req, res) => {
           facturado: factNums.facturado,
           por_facturar: factNums.porFacturar,
           solicitado: factNums.solicitado,
+          id_dispersado: idDispersado, // puede quedar null; getIdDispersado hace fallback a pagos
         },
       };
     });
 
-    // ---------------- buckets para front ----------------
-    // reglas que pediste (front), pero aquí ya te lo acomodamos en el back
-    const todos = data;
+    // ---------------- buckets POR estado_solicitud ----------------
+    // Mapeo pedido:
+    // spei_solicitado: DISPERSION, TRANSFERENCIA_SOLICITADA
+    // pago_tdc: CARTA_ENVIADA
+    // pago_link: PAGADO LINK
+    // carta_enviada: CUPON ENVIADO
+    // carta_garantia: CUPON ENVIADO + facturada + id_dispersado=1  (exclusivo para no empalmar)
+    // pagada: PAGADO LINK, PAGADO TRANSFERENCIA, PAGADO TARJETA
+    // canceladas: CANCELADA
 
-    const spei_solicitado = data.filter((d) => {
-      const forma = d.__computed?.forma;
-      return forma === "transfer" && isSinPagosAsociados(d.pagos);
-    });
+    const carta_garantia = sortByHospedajeReciente(
+      data.filter((d) => {
+        const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
+        return estado === "cupon enviado" && isFacturada(d) && getIdDispersado(d) === 1;
+      }),
+    );
 
-    const pago_tdc = data.filter((d) => {
-      const forma = d.__computed?.forma;
-      return forma === "card" && isSinPagosAsociados(d.pagos);
-    });
+    const spei_solicitado = sortByHospedajeReciente(
+      data.filter((d) => {
+        const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
+        return estado === "dispersion" || estado === "transferencia_solicitada";
+      }),
+    );
 
-    const pago_link = data.filter((d) => {
-      const forma = d.__computed?.forma;
-      return forma === "link" && isSinPagosAsociados(d.pagos);
-    });
+    const pago_tdc = sortByHospedajeReciente(
+      data.filter((d) => norm(d?.solicitud_proveedor?.estado_solicitud) === "carta_enviada"),
+    );
 
-    // Carta enviada: credit y (sin facturar / parcial / por facturar == solicitado)
-    const carta_enviada = data.filter((d) => {
-      const forma = d.__computed?.forma;
-      if (forma !== "credit") return false;
+    const pago_link = sortByHospedajeReciente(
+      data.filter((d) => norm(d?.solicitud_proveedor?.estado_solicitud) === "pagado link"),
+    );
 
-      const solicitado = num(d.__computed?.solicitado);
-      const facturado = num(d.__computed?.facturado);
-      const porFacturar = num(d.__computed?.por_facturar);
+    // EXCLUSIVO para no empalmar con carta_garantia
+    const carta_enviada = sortByHospedajeReciente(
+      data.filter((d) => {
+        const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
+        if (estado !== "cupon enviado") return false;
+        const esGarantia = isFacturada(d) && getIdDispersado(d) === 1;
+        return !esGarantia;
+      }),
+    );
 
-      // condiciones que diste (equivalentes en práctica)
-      const sinFacturar = facturado <= 0;
-      const parcial = facturado > 0 && facturado < solicitado;
-      const porFacturarIgualSolicitado = porFacturar === solicitado;
+    const pagada = sortByHospedajeReciente(
+      data.filter((d) => {
+        const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
+        return (
+          estado === "pagado link" ||
+          estado === "pagado transferencia" ||
+          estado === "pagado tarjeta"
+        );
+      }),
+    );
 
-      return sinFacturar || parcial || porFacturarIgualSolicitado;
-    });
+    const canceladas = sortByHospedajeReciente(
+      data.filter((d) => norm(d?.solicitud_proveedor?.estado_solicitud) === "cancelada"),
+    );
 
-    // Carta garantía: credit y (facturado == solicitado) y (por facturar == 0)
-    const carta_garantia = data.filter((d) => {
-      const forma = d.__computed?.forma;
-      if (forma !== "credit") return false;
+    // ⚠️ Si NO quieres que "PAGADO LINK" se repita en pago_link y pagada:
+    // - comenta pago_link o quita "pagado link" del filtro de pagada.
 
-      const solicitado = num(d.__computed?.solicitado);
-      const facturado = num(d.__computed?.facturado);
-      const porFacturar = num(d.__computed?.por_facturar);
-
-      return facturado === solicitado && porFacturar === 0;
-    });
-
-    // Pagada (carpeta): marcadas como pagadas por regla de negocio
-    // Nota: puedes ajustar si “pagada” solo aplica a transfer, etc.
-    const pagada = data.filter((d) => !!d.__computed?.estaPagada);
-
-    // Histórico vacío por ahora (como pediste)
-    const historico = [];
-
-    // Otros: lo que no cayó en ninguna categoría (para no “perder” registros)
-    const inAny = new Set();
-    const addIds = (arr) => {
-      for (const x of arr) {
-        const id = x?.solicitud_proveedor?.id_solicitud_proveedor;
-        if (id != null) inAny.add(String(id));
-      }
-    };
-    addIds(spei_solicitado);
-    addIds(pago_tdc);
-    addIds(pago_link);
-    addIds(carta_enviada);
-    addIds(carta_garantia);
-    addIds(pagada);
-
-    const otros = data.filter((d) => {
-      const id = d?.solicitud_proveedor?.id_solicitud_proveedor;
-      if (id == null) return true;
-      return !inAny.has(String(id));
-    });
-
-    // ---------------- debug meta ----------------
     const responseData = {
-      todos,
       spei_solicitado,
       pago_tdc,
       pago_link,
       carta_enviada,
       carta_garantia,
       pagada,
-      historico,
-      otros,
+      canceladas,
     };
 
+    // ---------------- debug meta ----------------
     if (debug) {
-      const byForma = data.reduce((acc, d) => {
-        const f = d.__computed?.forma || "(vacio)";
-        acc[f] = (acc[f] || 0) + 1;
+      const byEstado = data.reduce((acc, d) => {
+        const e = norm(d?.solicitud_proveedor?.estado_solicitud) || "(vacio)";
+        acc[e] = (acc[e] || 0) + 1;
         return acc;
       }, {});
 
@@ -2016,30 +2427,26 @@ const getSolicitudes = async (req, res) => {
       };
 
       const buckets = {
-        todos: todos.length,
         spei_solicitado: spei_solicitado.length,
         pago_tdc: pago_tdc.length,
         pago_link: pago_link.length,
         carta_enviada: carta_enviada.length,
         carta_garantia: carta_garantia.length,
         pagada: pagada.length,
-        historico: historico.length,
-        otros: otros.length,
+        canceladas: canceladas.length,
       };
 
       responseData.meta = {
         counts,
-        byForma,
+        byEstado,
         buckets,
-        ejemplo_otros: otros.slice(0, 15).map((d) => ({
+        ejemplo_carta_garantia: carta_garantia.slice(0, 10).map((d) => ({
           id: d?.solicitud_proveedor?.id_solicitud_proveedor,
-          forma: d?.solicitud_proveedor?.forma_pago_solicitada,
-          saldo: d?.solicitud_proveedor?.saldo,
-          estatus_pagos: d?.estatus_pagos,
-          pagos_count: d.__computed?.pagos_count,
-          facturado: d.__computed?.facturado,
-          por_facturar: d.__computed?.por_facturar,
-          solicitado: d.__computed?.solicitado,
+          estado_solicitud: d?.solicitud_proveedor?.estado_solicitud,
+          estado_facturacion: d?.solicitud_proveedor?.estado_facturacion,
+          id_hospedaje: d?.id_hospedaje ?? null,
+          id_dispersado: getIdDispersado(d),
+          facturada: isFacturada(d),
         })),
       };
     }
@@ -2065,8 +2472,6 @@ const getSolicitudes = async (req, res) => {
     });
   }
 };
-
-module.exports = { getSolicitudes };
 
 const getDatosFiscalesProveedor = async (req, res) => {
   console.log("Entrando al controller proveedores datos fiscales");
