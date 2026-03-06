@@ -3159,7 +3159,7 @@ const VALID_KEYS = new Set([
   "GRO",
   "HGO",
   "JAL",
-  "EDO MÉXD",
+  "EDO MEXD",
   "MICH",
   "MOR",
   "NAY",
