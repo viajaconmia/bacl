@@ -2,20 +2,47 @@ const { cancelarCfdi, getCfdi } = require("../../api/v1/model/facturamaModel");
 const { executeQuery, runTransaction } = require("../../config/db");
 const { isSameMonth } = require("../../lib/utils/calculates");
 
+const getFacturas = async (req, res) => {
+  try {
+    const { estado } = req.query;
+
+    let estados = estado;
+    if (!Array.isArray(estado)) {
+      estados = [estado];
+    }
+
+    const facturas = await executeQuery(
+      `SELECT f.*, ad.id_agente, ad.nombre_comercial FROM facturas f
+      LEFT JOIN agente_details ad ON ad.id_agente = f.usuario_creador
+      WHERE f.estado IN (${estados.map((_) => `?`).join(",")})`,
+      estados,
+    );
+
+    return res.status(200).json({ message: "Factura obtenida correctamente", data: facturas });
+  } catch (error) {
+    console.log(error);
+    return res
+      .status(error.status || error.statusCode || 500)
+      .json({ message: error.message || "Error al obtener la factura" });
+  }
+}
+
 
 const obtenerFacturaById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { user } = req.session;
-    const [factura] = await executeQuery(
-      `SELECT * 
-  FROM facturas 
-  WHERE id_factura = ?`,
-      [id],
-    );
+    const [factura] = await executeQuery(`SELECT * FROM facturas WHERE id_factura = ?`, [id]);
+    if (!factura.id_facturama) {
+      throw new Error("La factura no se genero en MIA, no se puede obtener el cfdi");
+    }
     const cfdi = await getCfdi(factura.id_facturama, "issued");
+    if (factura.estado == cfdi.Status) throw new Error("No hay cambios en el estado de la factura");
 
-    return res.status(200).json({ message: "Factura obtenida correctamente", data: cfdi });
+    await executeQuery(`UPDATE facturas  SET estado = ? WHERE id_factura = ?`, [cfdi.Status, id]);
+
+    const [facturaActualizada] = await executeQuery(`SELECT * FROM facturas WHERE id_factura = ?`, [id]);
+
+    return res.status(200).json({ message: "Factura obtenida correctamente", data: facturaActualizada, metadata: { message: "¿Deseas soltar la factura de las reservas y pagos asignados?" } });
   } catch (error) {
     console.log(error);
     return res
@@ -68,8 +95,8 @@ const cancelarFacturaById = async (req, res) => {
           [
             user.id,
             response.CancelationDate || null,
-            "pending",
-            // response.Status || null,
+            // "pending",
+            response.Status || null,
             comentarios || null,
             id,
           ],
@@ -113,4 +140,4 @@ WHERE id_factura = ?`;
 const deleteSaldos = ` DELETE FROM facturas_pagos_y_saldos
 WHERE id_factura = ?`;
 
-module.exports = { cancelarFacturaById, obtenerFacturaById };
+module.exports = { cancelarFacturaById, obtenerFacturaById, getFacturas };

@@ -494,7 +494,7 @@ const asignarFacturaItems = async (req, res) => {
   } catch (error) {
     try {
       await executeQuery("ROLLBACK;");
-    } catch (_) {}
+    } catch (_) { }
 
     return res.status(500).json({
       error: "Error al asignar items a la factura",
@@ -1192,7 +1192,7 @@ const asignarFacturaPagos2 = async (req, res) => {
     try {
       await executeQuery("ROLLBACK");
       console.log("[TX] ROLLBACK por error");
-    } catch (_) {}
+    } catch (_) { }
     console.error("Error en asignarFacturaPagos:", error);
     return res.status(500).json({
       error: "Error al asignar pagos a las facturas",
@@ -1802,9 +1802,9 @@ const asignarFacturaPagos = async (req, res) => {
           need: fromCents(need),
           picked: picked
             ? {
-                id_saldo: picked.id_saldo,
-                remaining: fromCents(picked.remaining),
-              }
+              id_saldo: picked.id_saldo,
+              remaining: fromCents(picked.remaining),
+            }
             : null,
         });
 
@@ -1879,9 +1879,9 @@ const asignarFacturaPagos = async (req, res) => {
           need: fromCents(need),
           picked: picked
             ? {
-                id_saldo: picked.id_saldo,
-                remaining: fromCents(picked.remaining),
-              }
+              id_saldo: picked.id_saldo,
+              remaining: fromCents(picked.remaining),
+            }
             : null,
         });
 
@@ -2581,10 +2581,10 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
           facturama:
             source === "facturama"
               ? {
-                  Id: facturamaData?.Id,
-                  Uuid: row.uuid_factura,
-                  links: { pdf: row.url_pdf, xml: row.url_xml },
-                }
+                Id: facturamaData?.Id,
+                Uuid: row.uuid_factura,
+                links: { pdf: row.url_pdf, xml: row.url_xml },
+              }
               : undefined,
         },
       });
@@ -2833,10 +2833,10 @@ const crearFacturaMultiplesPagos = async (req, res) => {
             facturama:
               source === "facturama"
                 ? {
-                    Id: facturamaData?.Id,
-                    Uuid: rowFactura.uuid_factura,
-                    links: { pdf: rowFactura.url_pdf, xml: rowFactura.url_xml },
-                  }
+                  Id: facturamaData?.Id,
+                  Uuid: rowFactura.uuid_factura,
+                  links: { pdf: rowFactura.url_pdf, xml: rowFactura.url_xml },
+                }
                 : undefined,
           },
         });
@@ -3011,7 +3011,7 @@ const getQuitarDetalles = async (req, res) => {
       // 2) Vacía id_factura en items
       const [upd] = await connection.query(updateItemsSQL, [id_factura]);
 
-      return res.status(200).json({
+      return res.status(204).json({
         ok: true,
         message: "Detalles quitados correctamente",
         data: {

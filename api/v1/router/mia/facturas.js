@@ -102,3 +102,7 @@ router.get(
   "/:id",
   v2.obtenerFacturaById,
 );
+router.get(
+  "/",
+  v2.getFacturas,
+);
