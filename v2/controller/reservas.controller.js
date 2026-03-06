@@ -538,8 +538,7 @@ async function asociar_factura_items_logica(
   facturas_disponibles,
 ) {
   console.log(
-    `🧾 [FISCAL] Iniciando herencia fiscal (items=${
-      items_a_vincular.length
+    `🧾 [FISCAL] Iniciando herencia fiscal (items=${items_a_vincular.length
     }, facturas=${facturas_disponibles?.length || 0})`,
   );
 
@@ -566,8 +565,8 @@ async function asociar_factura_items_logica(
         f.saldo_interpretado_para_items !== null
         ? f.saldo_interpretado_para_items
         : (f.saldo_x_aplicar_items == null
-            ? f.total
-            : f.saldo_x_aplicar_items) || 0,
+          ? f.total
+          : f.saldo_x_aplicar_items) || 0,
     ),
   }));
 
@@ -2419,7 +2418,7 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
                 const fecha_ultima =
                   items_activos_actuales.length > 0
                     ? items_activos_actuales[items_activos_actuales.length - 1]
-                        .fecha_uso
+                      .fecha_uso
                     : check_in?.current;
 
                 // pasar precio 0 para que el item nuevo tenga total 0
@@ -2559,8 +2558,8 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
 
         saldos_aplicados = Array.isArray(saldos)
           ? saldos.filter(
-              (s) => s.usado === true && parseFloat(s.saldo_usado || 0) > 0,
-            )
+            (s) => s.usado === true && parseFloat(s.saldo_usado || 0) > 0,
+          )
           : [];
 
         // <<<< REDEFINICIÓN USADA >>>>
@@ -2620,7 +2619,7 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
             const fecha_ultima =
               items_activos_actuales.length > 0
                 ? items_activos_actuales[items_activos_actuales.length - 1]
-                    .fecha_uso
+                  .fecha_uso
                 : check_in?.current;
 
             const noches_finales = toNumber(noches?.current, 0);
@@ -2747,17 +2746,17 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
             estado_fiscal?.facturas,
           )
             ? estado_fiscal.facturas.map((f) => {
-                const total = Number(f.total || 0);
-                const facturado = Number(f.monto_reserva_facturado || 0);
+              const total = Number(f.total || 0);
+              const facturado = Number(f.monto_reserva_facturado || 0);
 
-                // Espacio fiscal REAL disponible
-                const espacioDisponible = Math.max(total - facturado, 0);
+              // Espacio fiscal REAL disponible
+              const espacioDisponible = Math.max(total - facturado, 0);
 
-                return {
-                  id_factura: String(f.id_factura),
-                  saldo_interpretado_para_items: espacioDisponible,
-                };
-              })
+              return {
+                id_factura: String(f.id_factura),
+                saldo_interpretado_para_items: espacioDisponible,
+              };
+            })
             : [];
 
           console.log(
@@ -2866,14 +2865,14 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
         if (saldos_aplicados.length > 0) {
           const walletDisponible = Array.isArray(saldos_aplicados)
             ? saldos_aplicados.reduce((acc, s) => {
-                const v =
-                  Number(s?.saldo_usado) ??
-                  Number(s?.saldo_disponible) ??
-                  Number(s?.saldo) ??
-                  Number(s?.monto) ??
-                  0;
-                return acc + (Number.isFinite(v) ? v : 0);
-              }, 0)
+              const v =
+                Number(s?.saldo_usado) ??
+                Number(s?.saldo_disponible) ??
+                Number(s?.saldo) ??
+                Number(s?.monto) ??
+                0;
+              return acc + (Number.isFinite(v) ? v : 0);
+            }, 0)
             : 0;
 
           let restanteWallet = Math.min(
@@ -3339,27 +3338,51 @@ const obtener = async (req, res) => {
 
 const cancelarBooking = async (req, res) => {
   const { id_booking } = req.body;
-  const cancelar = async (conn, id_booking) => {
-    try {
-      conn.execute(
-        `UPDATE bookings SET estado = "Cancelada" WHERE id_booking = ?`,
-        [id_booking],
-      );
-    } catch (error) {
-      throw error;
-    }
-  };
   try {
     const response = await runTransaction(async (conn) => {
-      await cancelar(conn, id_booking);
+      const response = await cancelar(conn, id_booking);
+      return response;
     });
-    res.status(200).json({ message: "obtenido bien", data: { response } });
+    res.status(200).json({ message: "obtenido bien", data: response });
   } catch (error) {
     res.status(error.status || error.statusCode || 500).json({
       message: error.message || "Error al obtenr los datos",
       error,
       data: null,
     });
+  }
+};
+
+const cancelar = async (conn, id_booking) => {
+  try {
+    const [reserva] = await conn.execute(
+      `SELECT * FROM vw_new_reservas WHERE id_booking = ?`,
+      [id_booking],
+    );
+    if (!reserva) {
+      throw new CustomError(
+        "No se encontro la reservacion",
+        404,
+        "ERROR_NOT_FOUND",
+        null,
+      );
+    }
+    console.log(reserva);
+    const [response] = await conn.execute(
+      `UPDATE bookings SET estado = "Cancelada" WHERE id_booking = ?`,
+      [id_booking],
+    );
+    const response2 = await conn.execute(
+      "UPDATE viajes_aereos SET codigo_confirmacion = CONCAT(codigo_confirmacion,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+      [id_booking],
+    );
+    const response3 = await conn.execute(
+      "UPDATE renta_autos SET codigo_renta_carro = CONCAT(codigo_renta_carro,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+      [id_booking],
+    );
+    return response;
+  } catch (error) {
+    throw error;
   }
 };
 

@@ -3233,6 +3233,48 @@ function getEstadoClaveFromLocation(locationStr) {
   return clave;
 }
 
+function getCodigoConfirmacionBase(codigo_confirmacion) {
+  const raw = String(codigo_confirmacion ?? "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
+
+  if (!raw) return raw;
+
+  // Solo aplica si empieza con HJK (case-insensitive). Si no, lo deja igual.
+  if (/^HJK/i.test(raw)) {
+    // "HJK11497-YH58PG" -> "HJK11497"
+    return raw.split("-")[0].trim();
+  }
+
+  return raw;
+}
+
+function toYMD(value) {
+  if (value === undefined || value === null) return value;
+
+  // Si MySQL/driver te lo da como Date
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const y = value.getUTCFullYear();
+    const mo = String(value.getUTCMonth() + 1).padStart(2, "0");
+    const da = String(value.getUTCDate()).padStart(2, "0");
+    return `${y}-${mo}-${da}`;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return raw;
+
+  // "2026-02-27T06:00:00.000Z" -> "2026-02-27"
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const da = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${da}`;
+}
 const agentes_report_fac = async (req, res) => {
   const { id_agente, fecha_desde, fecha_hasta } = req.query;
 
@@ -3259,13 +3301,33 @@ const agentes_report_fac = async (req, res) => {
     ]);
 
 
-const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => ({
-  ...row,
-  estado_reserva: mapEstadoToClave(row.estado_reserva),
-  // claves por estado:
-  origen_estado: getEstadoClaveFromLocation(row.origen),
-  destino_estado: getEstadoClaveFromLocation(row.destino),
-}));
+const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => {
+  const origen_estado = getEstadoClaveFromLocation(row.origen);
+  const destino_estado = getEstadoClaveFromLocation(row.destino);
+
+  const estado_reserva_original = mapEstadoToClave(row.estado_reserva);
+  const estado_reserva_ruta =
+    [origen_estado, destino_estado].filter(Boolean).join("-") || estado_reserva_original;
+
+  // ❌ no mandar columnas redundantes
+  const { origen, destino, ...rest } = row;
+
+  return {
+    ...rest,
+
+    // ✅ solo estas fechas sin hora
+    chin: toYMD(row.chin),
+    chout: toYMD(row.chout),
+
+    // ✅ confirmación base
+    codigo_confirmacion_base: getCodigoConfirmacionBase(row.codigo_confirmacion),
+
+    // ✅ estados
+    origen_estado,
+    destino_estado,
+    estado_reserva: estado_reserva_ruta,
+  };
+});
 
 
     res.status(200).json({
