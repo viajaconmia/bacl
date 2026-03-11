@@ -938,8 +938,203 @@ const createSolicitud = async (req, res) => {
   }
 };
 
-const createDispersion = async (req, res) => {
+// const createDispersion = async (req, res) => {
 
+//   try {
+//     console.log("📥 Datos recibidos en createDispersion:", req.body);
+
+//     const {
+//       id_dispersion,
+//       referencia_numerica,
+//       motivo_pago,
+//       layoutUrl,
+//       solicitudes = [],
+//     } = req.body;
+
+//     if (!id_dispersion) {
+//       return res.status(400).json({
+//         ok: false,
+//         message: "id_dispersion es requerido",
+//       });
+//     }
+
+//     if (!Array.isArray(solicitudes) || solicitudes.length === 0) {
+//       return res.status(400).json({
+//         ok: false,
+//         message: "Debe haber al menos una solicitud en la dispersión",
+//       });
+//     }
+
+//     // Normaliza IDs y elimina duplicados
+//     const ids = [
+//       ...new Set(
+//         solicitudes
+//           .map((s) => Number(s?.id_solicitud_proveedor))
+//           .filter((id) => Number.isInteger(id) && id > 0)
+//       ),
+//     ];
+
+//     if (ids.length === 0) {
+//       return res.status(400).json({
+//         ok: false,
+//         message: "Las solicitudes no traen id_solicitud_proveedor válido",
+//       });
+//     }
+
+//     // Mapa para recuperar datos del payload por id_solicitud_proveedor
+//     const solicitudMap = new Map(
+//       solicitudes.map((s) => [Number(s.id_solicitud_proveedor), s])
+//     );
+
+
+//     const inPlaceholders = ids.map(() => "?").join(", ");
+
+//     // 1) Bloquea y obtiene las solicitudes
+//     const saldoSql = `
+//       SELECT
+//         id_solicitud_proveedor,
+//         saldo,
+//         estado_solicitud
+//       FROM solicitudes_pago_proveedor
+//       WHERE id_solicitud_proveedor IN (${inPlaceholders})
+//       FOR UPDATE;
+//     `;
+
+//     const [saldoRows] = await conn.execute(saldoSql, ids);
+
+//     const saldoMap = new Map(
+//       (saldoRows || []).map((r) => [
+//         Number(r.id_solicitud_proveedor),
+//         {
+//           saldo: Number(r.saldo ?? 0),
+//           estado_solicitud: String(r.estado_solicitud ?? "").trim(),
+//         },
+//       ])
+//     );
+
+//     // 2) Validar que existan todas
+//     const faltantes = ids.filter((id) => !saldoMap.has(id));
+//     if (faltantes.length > 0) {
+//       await conn.rollback();
+//       return res.status(400).json({
+//         ok: false,
+//         message:
+//           "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
+//         faltantes,
+//       });
+//     }
+
+//     // 3) Evitar duplicar dentro de la misma dispersión
+//     const duplicateSql = `
+//       SELECT id_solicitud_proveedor
+//       FROM dispersion_pagos_proveedor
+//       WHERE codigo_dispersion = ?
+//         AND id_solicitud_proveedor IN (${inPlaceholders});
+//     `;
+
+//     const [duplicateRows] = await conn.execute(duplicateSql, [
+//       id_dispersion,
+//       ...ids,
+//     ]);
+
+//     if ((duplicateRows || []).length > 0) {
+//       await conn.rollback();
+//       return res.status(400).json({
+//         ok: false,
+//         message:
+//           "Ya existen solicitudes registradas en dispersion_pagos_proveedor para este codigo_dispersion",
+//         duplicados: duplicateRows.map((r) => Number(r.id_solicitud_proveedor)),
+//       });
+//     }
+
+//     // 4) Insertar en dispersion_pagos_proveedor usando el saldo actual de BD
+//     const values = ids.map((idSol) => {
+//       const dataDb = saldoMap.get(idSol);
+//       const itemPayload = solicitudMap.get(idSol);
+
+//       const saldoDb = Number(dataDb?.saldo ?? 0);
+//       const fechaPago = itemPayload?.fecha_pago ?? null;
+
+//       return [
+//         idSol,           // id_solicitud_proveedor
+//         saldoDb,         // monto_solicitado
+//         saldoDb,         // saldo
+//         0,               // monto_pagado
+//         id_dispersion,   // codigo_dispersion
+//         fechaPago,       // fecha_pago
+//       ];
+//     });
+
+//     const insertPlaceholders = values.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+
+//     const insertSql = `
+//       INSERT INTO dispersion_pagos_proveedor (
+//         id_solicitud_proveedor,
+//         monto_solicitado,
+//         saldo,
+//         monto_pagado,
+//         codigo_dispersion,
+//         fecha_pago
+//       ) VALUES ${insertPlaceholders};
+//     `;
+
+//     const [insertResult] = await conn.execute(insertSql, values.flat());
+
+//     // 5) Actualizar estado de las solicitudes
+//     const updateSql = `
+//       UPDATE solicitudes_pago_proveedor
+//       SET estado_solicitud = 'DISPERSION'
+//       WHERE id_solicitud_proveedor IN (${inPlaceholders});
+//     `;
+
+//     await conn.execute(updateSql, ids);
+
+//     // 6) Commit
+//     await conn.commit();
+
+//     // 7) Construir ids insertados a partir del insertId
+//     const firstInsertId = Number(insertResult?.insertId ?? 0);
+//     const insertedCount = Number(insertResult?.affectedRows ?? 0);
+
+//     const id_pagos =
+//       firstInsertId > 0 && insertedCount > 0
+//         ? Array.from({ length: insertedCount }, (_, i) =>
+//             String(firstInsertId + i)
+//           )
+//         : [];
+
+//     return res.status(200).json({
+//       ok: true,
+//       message: "Dispersión creada y registros guardados correctamente",
+//       data: {
+//         id_dispersion,
+//         referencia_numerica: referencia_numerica ?? null,
+//         motivo_pago: motivo_pago ?? null,
+//         layoutUrl: layoutUrl ?? null,
+//         id_pagos,
+//         total_registros: ids.length,
+//       },
+//     });
+//   } catch (error) {
+//     if (conn) {
+//       try {
+//         await conn.rollback();
+//       } catch (_) {}
+//     }
+
+//     console.error("❌ Error en createDispersion:", error);
+
+//     return res.status(500).json({
+//       ok: false,
+//       error: "Internal Server Error",
+//       details: error?.sqlMessage || error?.message,
+//     });
+//   } finally {
+//     if (conn) conn.release();
+//   }
+// };
+
+const createDispersion = async (req, res) => {
   try {
     console.log("📥 Datos recibidos en createDispersion:", req.body);
 
@@ -965,7 +1160,6 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // Normaliza IDs y elimina duplicados
     const ids = [
       ...new Set(
         solicitudes
@@ -981,26 +1175,23 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // Mapa para recuperar datos del payload por id_solicitud_proveedor
     const solicitudMap = new Map(
       solicitudes.map((s) => [Number(s.id_solicitud_proveedor), s])
     );
 
-
     const inPlaceholders = ids.map(() => "?").join(", ");
 
-    // 1) Bloquea y obtiene las solicitudes
+    // 1) Obtener solicitudes
     const saldoSql = `
       SELECT
         id_solicitud_proveedor,
         saldo,
         estado_solicitud
       FROM solicitudes_pago_proveedor
-      WHERE id_solicitud_proveedor IN (${inPlaceholders})
-      FOR UPDATE;
+      WHERE id_solicitud_proveedor IN (${inPlaceholders});
     `;
 
-    const [saldoRows] = await conn.execute(saldoSql, ids);
+    const saldoRows = await executeQuery(saldoSql, ids);
 
     const saldoMap = new Map(
       (saldoRows || []).map((r) => [
@@ -1012,10 +1203,8 @@ const createDispersion = async (req, res) => {
       ])
     );
 
-    // 2) Validar que existan todas
     const faltantes = ids.filter((id) => !saldoMap.has(id));
     if (faltantes.length > 0) {
-      await conn.rollback();
       return res.status(400).json({
         ok: false,
         message:
@@ -1024,7 +1213,7 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // 3) Evitar duplicar dentro de la misma dispersión
+    // 2) Evitar duplicar dentro de la misma dispersión
     const duplicateSql = `
       SELECT id_solicitud_proveedor
       FROM dispersion_pagos_proveedor
@@ -1032,13 +1221,12 @@ const createDispersion = async (req, res) => {
         AND id_solicitud_proveedor IN (${inPlaceholders});
     `;
 
-    const [duplicateRows] = await conn.execute(duplicateSql, [
+    const duplicateRows = await executeQuery(duplicateSql, [
       id_dispersion,
       ...ids,
     ]);
 
     if ((duplicateRows || []).length > 0) {
-      await conn.rollback();
       return res.status(400).json({
         ok: false,
         message:
@@ -1047,7 +1235,7 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // 4) Insertar en dispersion_pagos_proveedor usando el saldo actual de BD
+    // 3) Insertar en dispersion_pagos_proveedor
     const values = ids.map((idSol) => {
       const dataDb = saldoMap.get(idSol);
       const itemPayload = solicitudMap.get(idSol);
@@ -1056,12 +1244,12 @@ const createDispersion = async (req, res) => {
       const fechaPago = itemPayload?.fecha_pago ?? null;
 
       return [
-        idSol,           // id_solicitud_proveedor
-        saldoDb,         // monto_solicitado
-        saldoDb,         // saldo
-        0,               // monto_pagado
-        id_dispersion,   // codigo_dispersion
-        fechaPago,       // fecha_pago
+        idSol,
+        saldoDb,
+        saldoDb,
+        0,
+        id_dispersion,
+        fechaPago,
       ];
     });
 
@@ -1078,21 +1266,17 @@ const createDispersion = async (req, res) => {
       ) VALUES ${insertPlaceholders};
     `;
 
-    const [insertResult] = await conn.execute(insertSql, values.flat());
+    const insertResult = await executeQuery(insertSql, values.flat());
 
-    // 5) Actualizar estado de las solicitudes
+    // 4) Actualizar estado
     const updateSql = `
       UPDATE solicitudes_pago_proveedor
       SET estado_solicitud = 'DISPERSION'
       WHERE id_solicitud_proveedor IN (${inPlaceholders});
     `;
 
-    await conn.execute(updateSql, ids);
+    await executeQuery(updateSql, ids);
 
-    // 6) Commit
-    await conn.commit();
-
-    // 7) Construir ids insertados a partir del insertId
     const firstInsertId = Number(insertResult?.insertId ?? 0);
     const insertedCount = Number(insertResult?.affectedRows ?? 0);
 
@@ -1116,12 +1300,6 @@ const createDispersion = async (req, res) => {
       },
     });
   } catch (error) {
-    if (conn) {
-      try {
-        await conn.rollback();
-      } catch (_) {}
-    }
-
     console.error("❌ Error en createDispersion:", error);
 
     return res.status(500).json({
@@ -1129,8 +1307,6 @@ const createDispersion = async (req, res) => {
       error: "Internal Server Error",
       details: error?.sqlMessage || error?.message,
     });
-  } finally {
-    if (conn) conn.release();
   }
 };
 
@@ -3568,57 +3744,90 @@ function makeTransactionId() {
 async function crearSaldoFavorPorMontoPagado({
   executeQuery,
   id_solicitud_proveedor,
-  solicitudRow,      // debe traer: id_proveedor, forma_pago_solicitada, comentarios
+  solicitudRow,
   usuario = "system",
+  montoPagadoOverride = null,
+  origen = "pago_proveedores",
+  dispersionRows = [],
 }) {
-  // 1) leer pagos de proveedor (neto = pagos - devoluciones)
-  const qPagos = `
-    SELECT
-      id_pago_proveedores,
-      monto_pagado,
-      monto,
-      total,
-      metodo_de_pago,
-      referencia_pago,
-      concepto,
-      numero_comprobante,
-      codigo_dispersion,
-      descripcion,
-      is_devolucion,
-      fecha_pago,
-      fecha_emision
-    FROM pago_proveedores
-    WHERE id_solicitud_proveedor = ?
-    ORDER BY COALESCE(fecha_pago, fecha_emision) DESC, id_pago_proveedores DESC
-  `;
-  const rowsPagos = await executeQuery(qPagos, [id_solicitud_proveedor]);
-
-  if (!rowsPagos?.length) {
-    return {
-      ok: false,
-      error: "NO_PAGOS",
-      message: `La solicitud ${id_solicitud_proveedor} está PAGADA pero no tiene pagos en pago_proveedores.`,
-    };
-  }
-
+  let rowsPagos = [];
   let monto_pagado_neto = 0;
-  for (const p of rowsPagos) {
-    const montoRow = toMoneyNumber(p?.monto_pagado) || toMoneyNumber(p?.total) || toMoneyNumber(p?.monto);
-    const isDevolucion = Number(p?.is_devolucion || 0) === 1;
-    monto_pagado_neto += isDevolucion ? -montoRow : montoRow;
-  }
-  monto_pagado_neto = money2(monto_pagado_neto);
+  let pagoBase = null;
 
-  if (monto_pagado_neto <= 0) {
-    return {
-      ok: false,
-      error: "MONTO_NETO_INVALIDO",
-      message: `Monto pagado neto inválido: ${monto_pagado_neto}`,
-    };
+  // ---------------------------------------------------------
+  // CASO A: viene override desde dispersion_pagos_proveedor
+  // ---------------------------------------------------------
+  if (montoPagadoOverride != null) {
+    monto_pagado_neto = money2(Number(montoPagadoOverride) || 0);
+
+    if (monto_pagado_neto <= 0) {
+      return {
+        ok: false,
+        error: "MONTO_OVERRIDE_INVALIDO",
+        message: `Monto override inválido: ${monto_pagado_neto}`,
+      };
+    }
+
+    rowsPagos = Array.isArray(dispersionRows) ? dispersionRows : [];
+    pagoBase = rowsPagos[0] || null;
+  } else {
+    // ---------------------------------------------------------
+    // CASO B: comportamiento original con pago_proveedores
+    // ---------------------------------------------------------
+    const qPagos = `
+      SELECT
+        id_pago_proveedores,
+        monto_pagado,
+        monto,
+        total,
+        metodo_de_pago,
+        referencia_pago,
+        concepto,
+        numero_comprobante,
+        codigo_dispersion,
+        descripcion,
+        is_devolucion,
+        fecha_pago,
+        fecha_emision
+      FROM pago_proveedores
+      WHERE id_solicitud_proveedor = ?
+      ORDER BY COALESCE(fecha_pago, fecha_emision) DESC, id_pago_proveedores DESC
+    `;
+    rowsPagos = await executeQuery(qPagos, [id_solicitud_proveedor]);
+
+    if (!rowsPagos?.length) {
+      return {
+        ok: false,
+        error: "NO_PAGOS",
+        message: `La solicitud ${id_solicitud_proveedor} está PAGADA pero no tiene pagos en pago_proveedores.`,
+      };
+    }
+
+    for (const p of rowsPagos) {
+      const montoRow =
+        toMoneyNumber(p?.monto_pagado) ||
+        toMoneyNumber(p?.total) ||
+        toMoneyNumber(p?.monto);
+
+      const isDevolucion = Number(p?.is_devolucion || 0) === 1;
+      monto_pagado_neto += isDevolucion ? -montoRow : montoRow;
+    }
+
+    monto_pagado_neto = money2(monto_pagado_neto);
+
+    if (monto_pagado_neto <= 0) {
+      return {
+        ok: false,
+        error: "MONTO_NETO_INVALIDO",
+        message: `Monto pagado neto inválido: ${monto_pagado_neto}`,
+      };
+    }
+
+    pagoBase =
+      rowsPagos.find((x) => Number(x?.is_devolucion || 0) !== 1) || rowsPagos[0];
   }
 
-  // 2) idempotencia simple: evita duplicar saldo por esta solicitud
-  // (si tú SÍ quieres permitir duplicados, elimina este bloque)
+  // 2) idempotencia simple
   const qExiste = `
     SELECT id_saldo
     FROM saldos
@@ -3627,6 +3836,7 @@ async function crearSaldoFavorPorMontoPagado({
     LIMIT 1
   `;
   const rExiste = await executeQuery(qExiste, [id_solicitud_proveedor]);
+
   if (rExiste?.length) {
     return {
       ok: true,
@@ -3634,34 +3844,47 @@ async function crearSaldoFavorPorMontoPagado({
       id_saldo: rExiste[0].id_saldo,
       monto_pagado_neto,
       pagos_encontrados: rowsPagos.length,
+      origen,
     };
   }
 
-  const pagoBase =
-    rowsPagos.find((x) => Number(x?.is_devolucion || 0) !== 1) || rowsPagos[0];
-
   const id_saldo = makeIdSaldo();
   const transaction_id = makeTransactionId();
-  const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(solicitudRow?.forma_pago_solicitada);
+  const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(
+    solicitudRow?.forma_pago_solicitada
+  );
 
   const referencia = `EDITCAMPOS_CANCEL_PAGADA|SOL:${id_solicitud_proveedor}`;
   const motivo = "Saldo a favor por cancelación de solicitud pagada";
 
   const comentariosSaldo = [
     `Solicitud cancelada desde EditCampos.`,
+    `Origen saldo: ${origen}.`,
     `Monto pagado neto: ${monto_pagado_neto}.`,
-    pagoBase?.id_pago_proveedores ? `Pago base: ${pagoBase.id_pago_proveedores}.` : null,
+    pagoBase?.id_pago_proveedores
+      ? `Pago base: ${pagoBase.id_pago_proveedores}.`
+      : null,
+    pagoBase?.id_dispersion_pagos_proveedor
+      ? `Dispersion base: ${pagoBase.id_dispersion_pagos_proveedor}.`
+      : null,
     pagoBase?.metodo_de_pago ? `Método: ${pagoBase.metodo_de_pago}.` : null,
     pagoBase?.referencia_pago ? `Referencia: ${pagoBase.referencia_pago}.` : null,
-    pagoBase?.numero_comprobante ? `Comprobante: ${pagoBase.numero_comprobante}.` : null,
-    pagoBase?.codigo_dispersion ? `Dispersión: ${pagoBase.codigo_dispersion}.` : null,
+    pagoBase?.numero_comprobante
+      ? `Comprobante: ${pagoBase.numero_comprobante}.`
+      : null,
+    pagoBase?.codigo_dispersion
+      ? `Dispersión: ${pagoBase.codigo_dispersion}.`
+      : null,
     pagoBase?.concepto ? `Concepto: ${pagoBase.concepto}.` : null,
     pagoBase?.descripcion ? `Descripción: ${pagoBase.descripcion}.` : null,
-    solicitudRow?.comentarios ? `Comentarios solicitud: ${solicitudRow.comentarios}` : null,
+    solicitudRow?.comentarios
+      ? `Comentarios solicitud: ${solicitudRow.comentarios}`
+      : null,
     usuario ? `Usuario: ${usuario}.` : null,
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  // 3) insertar saldo
   const qInsertSaldo = `
     INSERT INTO saldos (
       id_saldo,
@@ -3690,7 +3913,7 @@ async function crearSaldoFavorPorMontoPagado({
     forma_pago_saldo,
     new Date(),
     referencia,
-    null,               // EditCampos no trae id_hospedaje; ponlo si lo tienes
+    null,
     transaction_id,
     motivo,
     comentariosSaldo,
@@ -3705,20 +3928,16 @@ async function crearSaldoFavorPorMontoPagado({
     transaction_id,
     monto_pagado_neto,
     pagos_encontrados: rowsPagos.length,
+    origen,
   };
 }
 
 const calcularMontoPagadoDesdeDispersiones = (rows = []) => {
-  return rows.reduce((acc, row) => {
-    const montoPagado = Number(row?.monto_pagado ?? 0);
-    if (montoPagado > 0) return acc + montoPagado;
-
-    const montoSolicitado = Number(row?.monto_solicitado ?? 0);
-    const saldo = Number(row?.saldo ?? 0);
-
-    // fallback si monto_pagado viene nulo
-    return acc + Math.max(0, montoSolicitado - saldo);
-  }, 0);
+  return money2(
+    rows.reduce((acc, row) => {
+      return acc + Number(row?.monto_solicitado ?? 0);
+    }, 0)
+  );
 };
 
 const EditCampos = async (req, res) => {
@@ -3826,17 +4045,24 @@ const EditCampos = async (req, res) => {
       updatesMap.set(dbField, finalValue);
     }
 
+    const pagadoFlagBody = updatesMap.has("pagado")
+  ? Number(updatesMap.get("pagado"))
+  : null;
+
+// ✅ pagado NO es columna, solo bandera de control
+updatesMap.delete("pagado");
+
     let ajusteInfo = null;
     let estadoEspecialInfo = null;
 
 let handledEstadoPagadoCombo = false;
 
-if (updatesMap.has("estado_solicitud") && updatesMap.has("pagado")) {
+if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
   const nuevoEstadoSolicitado = normalizeEstado(
     updatesMap.get("estado_solicitud")
   );
 
-  const pagadoFlag = Number(updatesMap.get("pagado"));
+  const pagadoFlag = Number(pagadoFlagBody);
 
   if (![0, 1].includes(pagadoFlag)) {
     return res.status(400).json({
@@ -3875,7 +4101,6 @@ if (updatesMap.has("estado_solicitud") && updatesMap.has("pagado")) {
   // Solo cambia estado_solicitud al recibido y guarda pagado=0
   if (pagadoFlag === 0) {
     updatesMap.set("estado_solicitud", nuevoEstadoSolicitado);
-    updatesMap.set("pagado", 0);
 
     estadoEspecialInfo = {
       ok: true,
@@ -3946,16 +4171,15 @@ if (updatesMap.has("estado_solicitud") && updatesMap.has("pagado")) {
       dispersionRows,
     });
 
-    if (!saldoResp?.ok) {
-      return res.status(400).json({
-        error:
-          "No se pudo generar saldo a favor con base en dispersion_pagos_proveedor",
-        details: saldoResp,
-      });
-    }
+    // if (!saldoResp?.ok) {
+    //   return res.status(400).json({
+    //     error:
+    //       "No se pudo generar saldo a favor con base en dispersion_pagos_proveedor",
+    //     details: saldoResp,
+    //   });
+    // }
 
     updatesMap.set("estado_solicitud", nuevoEstadoSolicitado);
-    updatesMap.set("pagado", 1);
     updatesMap.set("is_ajuste", 1);
     updatesMap.set(
       "comentario_ajuste",
@@ -4265,6 +4489,7 @@ if (
     });
   }
 };
+
 // controllers/pago_proveedor.js (o donde lo tengas)
 const Detalles = async (req, res) => {
   try {
