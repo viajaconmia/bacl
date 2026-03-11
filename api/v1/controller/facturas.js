@@ -772,8 +772,8 @@ const asignarFacturaPagos2 = async (req, res) => {
       const phHosp = hospedajesUnicos.map(() => "?").join(",");
       const queryVistaReservas = `
         SELECT id_hospedaje, id_servicio
-        FROM vw_reservas_client
-        WHERE id_hospedaje IN (${phHosp});
+        FROM vw_new_reservas
+        WHERE id_relacion IN (${phHosp});
       `;
       const rowsVista = await executeQuery(
         queryVistaReservas,
