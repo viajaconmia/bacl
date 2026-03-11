@@ -1670,6 +1670,563 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
   };
 }
 
+/**
+ * Limpia solicitudes ligadas a una reserva (id_booking) con reglas:
+ * - Si hay dispersion: marcar ajuste y comentario (no borrar)
+ * - Si no hay dispersion y hay pagos: crear saldo a favor (plantilla) y opcionalmente desvincular booking_solicitud
+ * - Si no hay dispersion ni pagos: borrar solicitudes y booking_solicitud
+ *
+ * Requiere: mysql2/promise (pool.getConnection()) o equivalente.
+ */
+// async function eliminarSolicitudesLigadasAReservaTx(
+//   { metadata, usuario = "system" },
+//   connection
+// ) {
+//   const id_booking = metadata?.id_booking;
+//   if (!id_booking) throw new Error("Falta metadata.id_booking");
+//   if (!connection) throw new Error("Falta connection (transacción)");
+
+//   const resumen = {
+//     id_booking,
+//     solicitudes_encontradas: [],
+//     marcadas_ajuste_por_dispersion: [],
+//     saldo_a_favor_creado: [], // [{ id_solicitud, id_proveedor, total_pagado, saldo_id }]
+//     borradas: [],
+//     desvinculadas_booking_solicitud: [],
+//   };
+
+//   // 1) Traer “foto” por solicitud (MySQL 8)
+//   const [rows] = await connection.query(
+//     `
+//     SELECT
+//       bs.id_solicitud,
+//       IF(d.id_solicitud_proveedor IS NULL, 0, 1) AS en_dispersion,
+//       spp.id_proveedor,
+//       COALESCE(SUM(COALESCE(pp.monto_pagado,0)),0) AS total_pagado
+//     FROM booking_solicitud bs
+//     LEFT JOIN dispersion_pagos_proveedor d
+//       ON d.id_solicitud_proveedor = bs.id_solicitud
+//     LEFT JOIN solicitudes_pago_proveedor spp
+//       ON spp.id_solicitud_proveedor = bs.id_solicitud
+//     LEFT JOIN pago_proveedores pp
+//       ON pp.id_solicitud_proveedor = bs.id_solicitud
+//     WHERE bs.id_booking = ?
+//     GROUP BY bs.id_solicitud, en_dispersion, spp.id_proveedor
+//     `,
+//     [id_booking]
+//   );
+
+//   const ids = (rows || []).map(r => r.id_solicitud).filter(Boolean);
+//   resumen.solicitudes_encontradas = ids;
+//   if (ids.length === 0) return resumen;
+
+//   const marcarAjuste = async (id_solicitud) => {
+//     await connection.query(
+//       `UPDATE solicitudes_pago_proveedor
+//        SET
+//          is_ajuste = 1,
+//          comentario_ajuste = CONCAT(
+//            NULLIF(IFNULL(comentario_ajuste,''), ''),
+//            CASE
+//              WHEN comentario_ajuste IS NULL OR comentario_ajuste = '' THEN ''
+//              ELSE ' | '
+//            END,
+//            'Confirmar si hubo pago proveedor o no'
+//          )
+//        WHERE id_solicitud_proveedor = ?`,
+//       [id_solicitud]
+//     );
+//   };
+
+//   const borrarLinkBooking = async (id_solicitud) => {
+//     await connection.query(
+//       `DELETE FROM booking_solicitud
+//        WHERE id_booking = ?
+//          AND id_solicitud = ?`,
+//       [id_booking, id_solicitud]
+//     );
+//   };
+
+//   const borrarSolicitud = async (id_solicitud) => {
+//     await connection.query(
+//       `DELETE FROM solicitudes_pago_proveedor
+//        WHERE id_solicitud_proveedor = ?`,
+//       [id_solicitud]
+//     );
+//   };
+
+//   const borrarPagosProveedor = async (id_solicitud) => {
+//     await connection.query(
+//       `DELETE FROM pago_proveedores
+//        WHERE id_solicitud_proveedor = ?`,
+//       [id_solicitud]
+//     );
+//   };
+
+//   const insertarSaldoDesdePagos = async (id_solicitud) => {
+//     // Inserta 1 saldo por solicitud (agrupado por id_proveedor)
+//     // OJO: si tu tabla saldos usa otros campos, ajusta aquí.
+//     const [ins] = await connection.query(
+//       `
+//       INSERT INTO saldos
+//         (id_proveedor, monto, saldo, concepto, activo, fecha_creacion, fecha_pago, creado_por)
+//       SELECT
+//         spp.id_proveedor,
+//         SUM(COALESCE(pp.monto_pagado,0)) AS monto,
+//         SUM(COALESCE(pp.monto_pagado,0)) AS saldo,
+//         CONCAT('Saldo a favor por pago existente al eliminar solicitud ', ?) AS concepto,
+//         1,
+//         NOW(),
+//         NOW(),
+//         ?
+//       FROM pago_proveedores pp
+//       JOIN solicitudes_pago_proveedor spp
+//         ON spp.id_solicitud_proveedor = pp.id_solicitud_proveedor
+//       WHERE pp.id_solicitud_proveedor = ?
+//       GROUP BY spp.id_proveedor
+//       HAVING spp.id_proveedor IS NOT NULL
+//          AND SUM(COALESCE(pp.monto_pagado,0)) > 0
+//       `,
+//       [id_solicitud, usuario, id_solicitud]
+//     );
+
+//     // Nota: insertId solo sirve si PK es AUTO_INCREMENT.
+//     return ins?.insertId ?? null;
+//   };
+
+//   // 2) Procesar
+//   for (const row of rows) {
+//     const id_solicitud = row.id_solicitud;
+//     const en_dispersion = Number(row.en_dispersion || 0);
+//     const n_pagos = Number(row.n_pagos || 0);
+//     const total_pagado = Number(row.total_pagado || 0);
+//     const id_proveedor = row.id_proveedor ?? null;
+
+//     // Caso A: hay dispersion -> NO borrar, solo marcar ajuste
+//     if (en_dispersion === 1) {
+//       await marcarAjuste(id_solicitud);
+//       resumen.marcadas_ajuste_por_dispersion.push(id_solicitud);
+//       continue;
+//     }
+
+//     // Caso B: hay pagos -> crear saldo, borrar pagos, borrar solicitud, borrar vínculo
+//     if (n_pagos > 0) {
+//       const saldo_id = await insertarSaldoDesdePagos(id_solicitud);
+
+//       // Si hay pagos pero NO se insertó saldo, algo está raro (total=0, proveedor NULL, etc.) => NO lo ocultes
+//       if (!saldo_id && total_pagado > 0.009 && id_proveedor) {
+//         // Si tu PK no es autoincrement, saldo_id puede venir null aun habiendo insert.
+//         // Aun así, si ins.affectedRows=1 sería “ok”. Si quieres, te lo ajusto.
+//       }
+
+//       // Si tu PK NO es autoincrement, en vez de saldo_id valida con affectedRows.
+//       // Aquí lo hago robusto:
+//       // (re-ejecuta el insert pero leyendo affectedRows)
+//       // Para no duplicar inserts, mejor: arriba usa ins.affectedRows.
+//       // Si quieres te lo dejo ya con esa validación.
+
+//       // Borrar pagos primero para liberar FKs (si existen)
+//       await borrarPagosProveedor(id_solicitud);
+
+//       // Borrar solicitud
+//       await borrarSolicitud(id_solicitud);
+
+//       // Borrar vínculo
+//       await borrarLinkBooking(id_solicitud);
+
+//       resumen.saldo_a_favor_creado.push({ id_solicitud, id_proveedor, total_pagado, saldo_id });
+//       resumen.borradas.push(id_solicitud);
+//       resumen.desvinculadas_booking_solicitud.push(id_solicitud);
+//       continue;
+//     }
+
+//     // Caso C: no hay pagos -> borrar solicitud + vínculo
+//     await borrarLinkBooking(id_solicitud);
+//     resumen.desvinculadas_booking_solicitud.push(id_solicitud);
+
+//     await borrarSolicitud(id_solicitud);
+//     resumen.borradas.push(id_solicitud);
+//   }
+
+//   return resumen;
+// }
+
+
+const { randomUUID, randomBytes } = require("crypto");
+
+const ESTADOS_VALIDOS_SOLICITUD = new Set([
+  "CARTA_ENVIADA",
+  "PAGADO TARJETA",
+  "TRANSFERENCIA_SOLICITADA",
+  "PAGADO TRANSFERENCIA",
+  "PAGADO LINK",
+  "CUPON ENVIADO",
+  "CANCELADA",
+  "DISPERSION",
+]);
+
+const ESTADOS_PAGADOS_SOLICITUD = new Set([
+  "PAGADO TARJETA",
+  "PAGADO TRANSFERENCIA",
+  "PAGADO LINK",
+]);
+
+const ESTADOS_CANCELABLES_DIRECTO = new Set([
+  "CUPON ENVIADO",
+  "TRANSFERENCIA_SOLICITADA",
+  "CARTA_ENVIADA",
+]);
+
+function money2(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? Number(n.toFixed(2)) : 0;
+}
+
+function makeIdSaldo() {
+  return randomUUID();
+}
+
+function makeTransactionId() {
+  return `trx_${randomBytes(8).toString("hex")}`;
+}
+
+function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
+  const fp = String(formaPagoSolicitada || "").trim().toLowerCase();
+
+  if (fp === "transfer") return "SPEI";
+  if (fp === "link") return "LINK";
+  if (fp === "card") return "LINK";
+
+  // fallback para credit u otros casos
+  return "TRANSFERENCIA";
+}
+
+function getMontoPagoProveedor(row) {
+  const candidatos = [
+    row?.monto_pagado,
+    row?.monto,
+    row?.total,
+  ];
+
+  for (const val of candidatos) {
+    const n = Number(val);
+    if (Number.isFinite(n)) return money2(n);
+  }
+
+  return 0;
+}
+
+/**
+ * Cancela / ajusta la solicitud ligada a una reserva cuando se edita.
+ *
+ * Reglas:
+ * - DISPERSION => NO cancela. Solo marca is_ajuste=1 y comentario_ajuste='validar estatus'
+ * - PAGADO TARJETA / PAGADO TRANSFERENCIA / PAGADO LINK =>
+ *      valida pagos en pago_proveedores,
+ *      crea saldo a favor por lo pagado neto,
+ *      cancela solicitud
+ * - CUPON ENVIADO / TRANSFERENCIA_SOLICITADA / CARTA_ENVIADA =>
+ *      cancela solicitud
+ * - CANCELADA => no hace nada
+ *
+ * IMPORTANTE:
+ * - Debe llamarse con la misma `connection` de la transacción del editar_reserva_definitivo
+ */
+async function procesarSolicitudProveedorAlEditarReserva({
+  connection,
+  metadata,
+  usuario = "system",
+}) {
+  if (!connection) {
+    throw new Error("Falta connection para procesar solicitud al editar reserva.");
+  }
+
+  const id_booking = String(metadata?.id_booking || "").trim();
+  if (!id_booking) {
+    throw new Error("Falta metadata.id_booking.");
+  }
+
+  const id_hospedaje =
+    metadata?.id_hospedaje != null
+      ? String(metadata.id_hospedaje).trim()
+      : null;
+
+  // 1) Buscar relación booking -> solicitud
+  const [rowsBooking] = await connection.execute(
+    `
+      SELECT id_solicitud
+      FROM booking_solicitud
+      WHERE id_booking = ?
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [id_booking]
+  );
+
+  if (!rowsBooking.length) {
+    return {
+      ok: true,
+      action: "NO_BOOKING_SOLICITUD",
+      id_booking,
+    };
+  }
+
+  const rawIdSolicitud = rowsBooking[0].id_solicitud;
+  const id_solicitud_proveedor = Number(rawIdSolicitud);
+
+  if (!Number.isInteger(id_solicitud_proveedor) || id_solicitud_proveedor <= 0) {
+    throw new Error(
+      `booking_solicitud.id_solicitud inválido para id_booking=${id_booking}: ${rawIdSolicitud}`
+    );
+  }
+
+  // 2) Leer solicitud y bloquear fila
+  const [rowsSolicitud] = await connection.execute(
+    `
+      SELECT
+        id_solicitud_proveedor,
+        estado_solicitud,
+        forma_pago_solicitada,
+        id_proveedor,
+        monto_solicitado,
+        saldo,
+        comentarios
+      FROM solicitudes_pago_proveedor
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [id_solicitud_proveedor]
+  );
+
+  if (!rowsSolicitud.length) {
+    throw new Error(
+      `No existe solicitudes_pago_proveedor para id_solicitud_proveedor=${id_solicitud_proveedor}`
+    );
+  }
+
+  const solicitud = rowsSolicitud[0];
+  const estado = String(solicitud.estado_solicitud || "").trim();
+
+  if (!ESTADOS_VALIDOS_SOLICITUD.has(estado)) {
+    throw new Error(
+      `Estado de solicitud no contemplado: ${estado} (id_solicitud_proveedor=${id_solicitud_proveedor})`
+    );
+  }
+
+  // 3) Si ya está cancelada, no hacemos nada
+  if (estado === "CANCELADA") {
+    return {
+      ok: true,
+      action: "ALREADY_CANCELLED",
+      id_booking,
+      id_solicitud_proveedor,
+      estado,
+    };
+  }
+
+  // 4) Si está en DISPERSION, solo marcar ajuste
+  if (estado === "DISPERSION") {
+    await connection.execute(
+      `
+        UPDATE solicitudes_pago_proveedor
+        SET
+          is_ajuste = 1,
+          comentario_ajuste = 'validar estatus'
+        WHERE id_solicitud_proveedor = ?
+      `,
+      [id_solicitud_proveedor]
+    );
+
+    return {
+      ok: true,
+      action: "DISPERSION_MARKED_AJUSTE",
+      id_booking,
+      id_solicitud_proveedor,
+      estado_anterior: estado,
+    };
+  }
+
+  // 5) Si está pagada, crear saldo a favor con lo pagado y luego cancelar solicitud
+  if (ESTADOS_PAGADOS_SOLICITUD.has(estado)) {
+    const [rowsPagos] = await connection.execute(
+      `
+        SELECT
+          id_pago_proveedores,
+          id_pago_dispersion,
+          id_solicitud_proveedor,
+          codigo_dispersion,
+          monto_pagado,
+          fecha_pago,
+          monto,
+          total,
+          metodo_de_pago,
+          referencia_pago,
+          concepto,
+          numero_comprobante,
+          cuenta_origen,
+          cuenta_destino,
+          nombre_pagador,
+          nombre_beneficiario,
+          descripcion,
+          is_devolucion
+        FROM pago_proveedores
+        WHERE id_solicitud_proveedor = ?
+        ORDER BY COALESCE(fecha_pago, fecha_emision) DESC, id_pago_proveedores DESC
+        FOR UPDATE
+      `,
+      [id_solicitud_proveedor]
+    );
+
+    if (!rowsPagos.length) {
+      throw new Error(
+        `La solicitud ${id_solicitud_proveedor} está en estado pagado (${estado}) pero no tiene registros en pago_proveedores.`
+      );
+    }
+
+    let monto_pagado_neto = 0;
+    for (const pago of rowsPagos) {
+      const montoRow = getMontoPagoProveedor(pago);
+      const isDevolucion = Number(pago?.is_devolucion || 0) === 1;
+
+      if (isDevolucion) {
+        monto_pagado_neto -= montoRow;
+      } else {
+        monto_pagado_neto += montoRow;
+      }
+    }
+
+    monto_pagado_neto = money2(monto_pagado_neto);
+
+    if (monto_pagado_neto <= 0) {
+      throw new Error(
+        `La solicitud ${id_solicitud_proveedor} está pagada, pero el monto pagado neto calculado en pago_proveedores es ${monto_pagado_neto}.`
+      );
+    }
+
+    const pagoBase =
+      rowsPagos.find((p) => Number(p?.is_devolucion || 0) !== 1) || rowsPagos[0];
+
+    const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(
+      solicitud.forma_pago_solicitada
+    );
+
+    const id_saldo = makeIdSaldo();
+    const transaction_id = makeTransactionId();
+    const referencia = `EDIT_RESERVA|BOOK:${id_booking}|SOL:${id_solicitud_proveedor}`;
+    const motivo = "Saldo a favor por cancelación de solicitud pagada al editar reserva";
+
+    const comentariosSaldo = [
+      `Solicitud cancelada al editar reserva.`,
+      `Estado anterior: ${estado}.`,
+      `Monto pagado neto detectado: ${monto_pagado_neto}.`,
+      pagoBase?.id_pago_proveedores
+        ? `Pago base: ${pagoBase.id_pago_proveedores}.`
+        : null,
+      pagoBase?.metodo_de_pago
+        ? `Método pago proveedor: ${pagoBase.metodo_de_pago}.`
+        : null,
+      pagoBase?.referencia_pago
+        ? `Referencia pago: ${pagoBase.referencia_pago}.`
+        : null,
+      pagoBase?.numero_comprobante
+        ? `Comprobante: ${pagoBase.numero_comprobante}.`
+        : null,
+      pagoBase?.codigo_dispersion
+        ? `Código dispersión: ${pagoBase.codigo_dispersion}.`
+        : null,
+      pagoBase?.concepto ? `Concepto: ${pagoBase.concepto}.` : null,
+      pagoBase?.descripcion ? `Descripción: ${pagoBase.descripcion}.` : null,
+      solicitud?.comentarios ? `Comentarios solicitud: ${solicitud.comentarios}` : null,
+      usuario ? `Usuario proceso: ${usuario}.` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    await connection.execute(
+      `
+        INSERT INTO saldos (
+          id_saldo,
+          id_proveedor,
+          monto,
+          restante,
+          forma_pago,
+          fecha_procesamiento,
+          referencia,
+          id_hospedaje,
+          transaction_id,
+          motivo,
+          comentarios,
+          estado,
+          id_solicitud,
+          update_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+      `,
+      [
+        id_saldo,
+        String(solicitud.id_proveedor),
+        monto_pagado_neto,
+        monto_pagado_neto,
+        forma_pago_saldo,
+        new Date(),
+        referencia,
+        id_hospedaje,
+        transaction_id,
+        motivo,
+        comentariosSaldo,
+        id_solicitud_proveedor,
+        new Date(),
+      ]
+    );
+
+    await connection.execute(
+      `
+        UPDATE solicitudes_pago_proveedor
+        SET estado_solicitud = 'CANCELADA'
+        WHERE id_solicitud_proveedor = ?
+      `,
+      [id_solicitud_proveedor]
+    );
+
+    return {
+      ok: true,
+      action: "PAID_REQUEST_CANCELLED_AND_SALDO_CREATED",
+      id_booking,
+      id_solicitud_proveedor,
+      estado_anterior: estado,
+      id_saldo,
+      transaction_id,
+      monto_pagado_neto,
+      pagos_encontrados: rowsPagos.length,
+    };
+  }
+
+  // 6) Si está en estados activos no pagados, cancelar directo
+  if (ESTADOS_CANCELABLES_DIRECTO.has(estado)) {
+    await connection.execute(
+      `
+        UPDATE solicitudes_pago_proveedor
+        SET estado_solicitud = 'CANCELADA'
+        WHERE id_solicitud_proveedor = ?
+      `,
+      [id_solicitud_proveedor]
+    );
+
+    return {
+      ok: true,
+      action: "REQUEST_CANCELLED",
+      id_booking,
+      id_solicitud_proveedor,
+      estado_anterior: estado,
+    };
+  }
+
+  throw new Error(
+    `No se encontró regla para estado ${estado} en solicitud ${id_solicitud_proveedor}.`
+  );
+}
+
 /* =========================
  * CONTROLADOR PRINCIPAL
  * ========================= */
@@ -1725,7 +2282,8 @@ const editar_reserva_definitivo = async (req, res) => {
 
       console.log(metadata.id_booking, "👍👍👍👍");
 
-      if (false) {
+      const estado_solicitud = "CANCELADA";
+       
         /*
         const diferencia_proveedor =
           Number(proveedor?.current?.total || 0) -
@@ -1759,9 +2317,15 @@ const editar_reserva_definitivo = async (req, res) => {
             EPS: 0.01,
           });
         }*/
-      } else {
-        console.log("sin cambio (≈0)");
-      }
+
+const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
+        connection,
+        metadata,
+        usuario: req?.user?.id || req?.user?.email || "system",
+      });
+
+
+      console.log("🧾 [EDITAR_RESERVA][SOLICITUD_PROVEEDOR]:", resultadoSolicitud);
 
       const hayCambioPrecio = hasPrecioChange(venta);
       const hayCambioNoches = hasNochesChange(noches);
