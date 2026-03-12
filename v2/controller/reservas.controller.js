@@ -538,7 +538,8 @@ async function asociar_factura_items_logica(
   facturas_disponibles,
 ) {
   console.log(
-    `🧾 [FISCAL] Iniciando herencia fiscal (items=${items_a_vincular.length
+    `🧾 [FISCAL] Iniciando herencia fiscal (items=${
+      items_a_vincular.length
     }, facturas=${facturas_disponibles?.length || 0})`,
   );
 
@@ -565,8 +566,8 @@ async function asociar_factura_items_logica(
         f.saldo_interpretado_para_items !== null
         ? f.saldo_interpretado_para_items
         : (f.saldo_x_aplicar_items == null
-          ? f.total
-          : f.saldo_x_aplicar_items) || 0,
+            ? f.total
+            : f.saldo_x_aplicar_items) || 0,
     ),
   }));
 
@@ -1851,7 +1852,6 @@ async function ajustarSolicitudPorDisminucionCostoProveedor({
 //   return resumen;
 // }
 
-
 const { randomUUID, randomBytes } = require("crypto");
 
 const ESTADOS_VALIDOS_SOLICITUD = new Set([
@@ -1891,7 +1891,9 @@ function makeTransactionId() {
 }
 
 function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
-  const fp = String(formaPagoSolicitada || "").trim().toLowerCase();
+  const fp = String(formaPagoSolicitada || "")
+    .trim()
+    .toLowerCase();
 
   if (fp === "transfer") return "SPEI";
   if (fp === "link") return "LINK";
@@ -1902,11 +1904,7 @@ function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
 }
 
 function getMontoPagoProveedor(row) {
-  const candidatos = [
-    row?.monto_pagado,
-    row?.monto,
-    row?.total,
-  ];
+  const candidatos = [row?.monto_pagado, row?.monto, row?.total];
 
   for (const val of candidatos) {
     const n = Number(val);
@@ -1938,7 +1936,9 @@ async function procesarSolicitudProveedorAlEditarReserva({
   usuario = "system",
 }) {
   if (!connection) {
-    throw new Error("Falta connection para procesar solicitud al editar reserva.");
+    throw new Error(
+      "Falta connection para procesar solicitud al editar reserva.",
+    );
   }
 
   const id_booking = String(metadata?.id_booking || "").trim();
@@ -1960,7 +1960,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
       LIMIT 1
       FOR UPDATE
     `,
-    [id_booking]
+    [id_booking],
   );
 
   if (!rowsBooking.length) {
@@ -1974,9 +1974,12 @@ async function procesarSolicitudProveedorAlEditarReserva({
   const rawIdSolicitud = rowsBooking[0].id_solicitud;
   const id_solicitud_proveedor = Number(rawIdSolicitud);
 
-  if (!Number.isInteger(id_solicitud_proveedor) || id_solicitud_proveedor <= 0) {
+  if (
+    !Number.isInteger(id_solicitud_proveedor) ||
+    id_solicitud_proveedor <= 0
+  ) {
     throw new Error(
-      `booking_solicitud.id_solicitud inválido para id_booking=${id_booking}: ${rawIdSolicitud}`
+      `booking_solicitud.id_solicitud inválido para id_booking=${id_booking}: ${rawIdSolicitud}`,
     );
   }
 
@@ -1996,12 +1999,12 @@ async function procesarSolicitudProveedorAlEditarReserva({
       LIMIT 1
       FOR UPDATE
     `,
-    [id_solicitud_proveedor]
+    [id_solicitud_proveedor],
   );
 
   if (!rowsSolicitud.length) {
     throw new Error(
-      `No existe solicitudes_pago_proveedor para id_solicitud_proveedor=${id_solicitud_proveedor}`
+      `No existe solicitudes_pago_proveedor para id_solicitud_proveedor=${id_solicitud_proveedor}`,
     );
   }
 
@@ -2010,7 +2013,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
 
   if (!ESTADOS_VALIDOS_SOLICITUD.has(estado)) {
     throw new Error(
-      `Estado de solicitud no contemplado: ${estado} (id_solicitud_proveedor=${id_solicitud_proveedor})`
+      `Estado de solicitud no contemplado: ${estado} (id_solicitud_proveedor=${id_solicitud_proveedor})`,
     );
   }
 
@@ -2035,7 +2038,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
           comentario_ajuste = 'validar estatus'
         WHERE id_solicitud_proveedor = ?
       `,
-      [id_solicitud_proveedor]
+      [id_solicitud_proveedor],
     );
 
     return {
@@ -2075,12 +2078,12 @@ async function procesarSolicitudProveedorAlEditarReserva({
         ORDER BY COALESCE(fecha_pago, fecha_emision) DESC, id_pago_proveedores DESC
         FOR UPDATE
       `,
-      [id_solicitud_proveedor]
+      [id_solicitud_proveedor],
     );
 
     if (!rowsPagos.length) {
       throw new Error(
-        `La solicitud ${id_solicitud_proveedor} está en estado pagado (${estado}) pero no tiene registros en pago_proveedores.`
+        `La solicitud ${id_solicitud_proveedor} está en estado pagado (${estado}) pero no tiene registros en pago_proveedores.`,
       );
     }
 
@@ -2100,21 +2103,23 @@ async function procesarSolicitudProveedorAlEditarReserva({
 
     if (monto_pagado_neto <= 0) {
       throw new Error(
-        `La solicitud ${id_solicitud_proveedor} está pagada, pero el monto pagado neto calculado en pago_proveedores es ${monto_pagado_neto}.`
+        `La solicitud ${id_solicitud_proveedor} está pagada, pero el monto pagado neto calculado en pago_proveedores es ${monto_pagado_neto}.`,
       );
     }
 
     const pagoBase =
-      rowsPagos.find((p) => Number(p?.is_devolucion || 0) !== 1) || rowsPagos[0];
+      rowsPagos.find((p) => Number(p?.is_devolucion || 0) !== 1) ||
+      rowsPagos[0];
 
     const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(
-      solicitud.forma_pago_solicitada
+      solicitud.forma_pago_solicitada,
     );
 
     const id_saldo = makeIdSaldo();
     const transaction_id = makeTransactionId();
     const referencia = `EDIT_RESERVA|BOOK:${id_booking}|SOL:${id_solicitud_proveedor}`;
-    const motivo = "Saldo a favor por cancelación de solicitud pagada al editar reserva";
+    const motivo =
+      "Saldo a favor por cancelación de solicitud pagada al editar reserva";
 
     const comentariosSaldo = [
       `Solicitud cancelada al editar reserva.`,
@@ -2137,7 +2142,9 @@ async function procesarSolicitudProveedorAlEditarReserva({
         : null,
       pagoBase?.concepto ? `Concepto: ${pagoBase.concepto}.` : null,
       pagoBase?.descripcion ? `Descripción: ${pagoBase.descripcion}.` : null,
-      solicitud?.comentarios ? `Comentarios solicitud: ${solicitud.comentarios}` : null,
+      solicitud?.comentarios
+        ? `Comentarios solicitud: ${solicitud.comentarios}`
+        : null,
       usuario ? `Usuario proceso: ${usuario}.` : null,
     ]
       .filter(Boolean)
@@ -2177,7 +2184,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
         comentariosSaldo,
         id_solicitud_proveedor,
         new Date(),
-      ]
+      ],
     );
 
     await connection.execute(
@@ -2186,7 +2193,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
         SET estado_solicitud = 'CANCELADA'
         WHERE id_solicitud_proveedor = ?
       `,
-      [id_solicitud_proveedor]
+      [id_solicitud_proveedor],
     );
 
     return {
@@ -2210,7 +2217,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
         SET estado_solicitud = 'CANCELADA'
         WHERE id_solicitud_proveedor = ?
       `,
-      [id_solicitud_proveedor]
+      [id_solicitud_proveedor],
     );
 
     return {
@@ -2223,7 +2230,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
   }
 
   throw new Error(
-    `No se encontró regla para estado ${estado} en solicitud ${id_solicitud_proveedor}.`
+    `No se encontró regla para estado ${estado} en solicitud ${id_solicitud_proveedor}.`,
   );
 }
 
@@ -2283,8 +2290,8 @@ const editar_reserva_definitivo = async (req, res) => {
       console.log(metadata.id_booking, "👍👍👍👍");
 
       const estado_solicitud = "CANCELADA";
-       
-        /*
+
+      /*
         const diferencia_proveedor =
           Number(proveedor?.current?.total || 0) -
           Number(metadata?.costo_total || 0);
@@ -2318,14 +2325,17 @@ const editar_reserva_definitivo = async (req, res) => {
           });
         }*/
 
-const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
-        connection,
-        metadata,
-        usuario: req?.user?.id || req?.user?.email || "system",
-      });
+      const resultadoSolicitud =
+        await procesarSolicitudProveedorAlEditarReserva({
+          connection,
+          metadata,
+          usuario: req?.user?.id || req?.user?.email || "system",
+        });
 
-
-      console.log("🧾 [EDITAR_RESERVA][SOLICITUD_PROVEEDOR]:", resultadoSolicitud);
+      console.log(
+        "🧾 [EDITAR_RESERVA][SOLICITUD_PROVEEDOR]:",
+        resultadoSolicitud,
+      );
 
       const hayCambioPrecio = hasPrecioChange(venta);
       const hayCambioNoches = hasNochesChange(noches);
@@ -2418,7 +2428,7 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
                 const fecha_ultima =
                   items_activos_actuales.length > 0
                     ? items_activos_actuales[items_activos_actuales.length - 1]
-                      .fecha_uso
+                        .fecha_uso
                     : check_in?.current;
 
                 // pasar precio 0 para que el item nuevo tenga total 0
@@ -2558,8 +2568,8 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
 
         saldos_aplicados = Array.isArray(saldos)
           ? saldos.filter(
-            (s) => s.usado === true && parseFloat(s.saldo_usado || 0) > 0,
-          )
+              (s) => s.usado === true && parseFloat(s.saldo_usado || 0) > 0,
+            )
           : [];
 
         // <<<< REDEFINICIÓN USADA >>>>
@@ -2619,7 +2629,7 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
             const fecha_ultima =
               items_activos_actuales.length > 0
                 ? items_activos_actuales[items_activos_actuales.length - 1]
-                  .fecha_uso
+                    .fecha_uso
                 : check_in?.current;
 
             const noches_finales = toNumber(noches?.current, 0);
@@ -2746,17 +2756,17 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
             estado_fiscal?.facturas,
           )
             ? estado_fiscal.facturas.map((f) => {
-              const total = Number(f.total || 0);
-              const facturado = Number(f.monto_reserva_facturado || 0);
+                const total = Number(f.total || 0);
+                const facturado = Number(f.monto_reserva_facturado || 0);
 
-              // Espacio fiscal REAL disponible
-              const espacioDisponible = Math.max(total - facturado, 0);
+                // Espacio fiscal REAL disponible
+                const espacioDisponible = Math.max(total - facturado, 0);
 
-              return {
-                id_factura: String(f.id_factura),
-                saldo_interpretado_para_items: espacioDisponible,
-              };
-            })
+                return {
+                  id_factura: String(f.id_factura),
+                  saldo_interpretado_para_items: espacioDisponible,
+                };
+              })
             : [];
 
           console.log(
@@ -2865,14 +2875,14 @@ const resultadoSolicitud = await procesarSolicitudProveedorAlEditarReserva({
         if (saldos_aplicados.length > 0) {
           const walletDisponible = Array.isArray(saldos_aplicados)
             ? saldos_aplicados.reduce((acc, s) => {
-              const v =
-                Number(s?.saldo_usado) ??
-                Number(s?.saldo_disponible) ??
-                Number(s?.saldo) ??
-                Number(s?.monto) ??
-                0;
-              return acc + (Number.isFinite(v) ? v : 0);
-            }, 0)
+                const v =
+                  Number(s?.saldo_usado) ??
+                  Number(s?.saldo_disponible) ??
+                  Number(s?.saldo) ??
+                  Number(s?.monto) ??
+                  0;
+                return acc + (Number.isFinite(v) ? v : 0);
+              }, 0)
             : 0;
 
           let restanteWallet = Math.min(

@@ -1223,107 +1223,160 @@ ORDER BY s.created_at DESC;`;
   }
 };
 
-const getReservaAllFacturacion = async () => {
+// const getReservaAllFacturacion = async () => {
+//   try {
+//     const query = `
+// SELECT
+//   v.id_agente                  AS id_usuario_generador,
+//   v.id_servicio,
+//   v.estado                     AS estado_reserva,
+//   v.created_at_reserva         AS created_at,
+//   v.id_solicitud,
+//   v.id_viajero_reserva         AS id_viajero,
+//   v.hotel_reserva              AS hotel,
+//   v.check_in,
+//   v.check_out,
+//   v.room,
+//   v.tipo_cuarto,
+//   v.total,
+//   v.nombre_viajero_reservacion AS nombre_viajero,
+//   v.id_booking,
+//   v.updated_at,
+//   v.costo_total,
+//   v.id_relacion,              -- <-- aquí viene tu id_relacion (hotel/vuelo/auto)
+//   v.comments,
+//   v.codigo_reservacion_hotel,
+//   v.id_pago,
+//   v.id_credito,
+//   v.nombre_cliente             AS nombre_agente_completo,
+//   v.correo,
+//   v.telefono,
+//   v.nombre_comercial as razon_social,
+//   v.rfc,
+//   v.tipo_persona,
+
+//   /* =========================
+//      FACTURAS asociadas a la reserva (por items_facturas.id_relacion)
+//      ========================= */
+//   (
+//     SELECT COALESCE(
+//       JSON_ARRAYAGG(
+//         JSON_OBJECT(
+//           'id_factura',               t.id_factura,
+//           'monto_reserva_facturado',  t.monto_reserva_facturado,
+//           'total',                    t.total_factura,
+//           'id_facturama',             t.id_facturama
+//         )
+//       ),
+//       JSON_ARRAY()
+//     )
+//     FROM (
+//       SELECT
+//         ifa.id_factura,
+//         SUM(COALESCE(ifa.monto, 0))      AS monto_reserva_facturado,
+//         MAX(COALESCE(f.total, 0))        AS total_factura,
+//         MAX(f.id_facturama)              AS id_facturama
+//       FROM items_facturas ifa
+//       JOIN facturas f
+//         ON f.id_factura = ifa.id_factura
+//       WHERE ifa.id_relacion = v.id_relacion
+//       GROUP BY ifa.id_factura
+//     ) t
+//   ) AS facturas_asociadas,
+
+//   /* =========================
+//      ITEMS pendientes (NO ligados en items_facturas para ESTE id_relacion)
+//      ========================= */
+//   (
+//     SELECT COALESCE(
+//       JSON_ARRAYAGG(
+//         JSON_OBJECT(
+//           'id_item',         i.id_item,
+//           'fecha_uso',       i.fecha_uso,
+//           'total',           i.total,
+//           'subtotal',        i.subtotal,
+//           'impuestos',       i.impuestos,
+//           'costo_total',     i.costo_total,
+//           'costo_subtotal',  i.costo_subtotal,
+//           'costo_impuestos', i.costo_impuestos,
+//           'saldo',           i.saldo,
+//           'is_facturado',    i.is_facturado,
+//           'id_factura',      i.id_factura
+//         )
+//       ),
+//       JSON_ARRAY()
+//     )
+//     FROM items i
+//     WHERE
+//       i.estado = 1
+//       AND COALESCE(i.id_hospedaje, i.id_viaje_aereo, i.id_renta_carro) = v.id_relacion
+//       AND NOT EXISTS (
+//         SELECT 1
+//         FROM items_facturas ifa
+//         WHERE ifa.id_item = i.id_item
+//           AND ifa.id_relacion = v.id_relacion
+//       )
+//   ) AS items
+
+// FROM vw_reservas_a_credito_sin_facturas_all v
+// ORDER BY v.created_at_reserva DESC;
+// `;
+
+//     const response = await executeQuery(query);
+//     return response;
+//   } catch (error) {
+//     throw error;
+//   }
+// };
+
+const parseJsonSafe = (value) => {
+  if (Array.isArray(value)) return value;
+  if (value === null || value === undefined || value === "") return [];
   try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
+};
+
+const getReservaAllFacturacion = async (filters = {}) => {
+  try {
+    const params = [
+      filters.id_booking ?? null,
+      filters.id_servicio ?? null,
+      filters.id_solicitud ?? null,
+      filters.id_relacion ?? null,
+      filters.estado_reserva ?? null,
+      filters.codigo_reservacion ?? null,
+      filters.nombre_viajero ?? filters.traveler ?? null,
+      filters.hotel ?? null,
+      filters.nombre_agente ?? filters.client ?? null,
+      filters.correo ?? null,
+      filters.rfc ?? null,
+      filters.created_start ?? null,
+      filters.created_end ?? null,
+      filters.check_in_start ?? null,
+      filters.check_in_end ?? null,
+      filters.check_out_start ?? null,
+      filters.check_out_end ?? null,
+    ];
+
     const query = `
-SELECT
-  v.id_agente                  AS id_usuario_generador,
-  v.id_servicio,
-  v.estado                     AS estado_reserva,
-  v.created_at_reserva         AS created_at,
-  v.id_solicitud,
-  v.id_viajero_reserva         AS id_viajero,
-  v.hotel_reserva              AS hotel,
-  v.check_in,
-  v.check_out,
-  v.room,
-  v.tipo_cuarto,
-  v.total,
-  v.nombre_viajero_reservacion AS nombre_viajero,
-  v.id_booking,
-  v.updated_at,
-  v.costo_total,
-  v.id_relacion,              -- <-- aquí viene tu id_relacion (hotel/vuelo/auto)
-  v.comments,
-  v.codigo_reservacion_hotel,
-  v.id_pago,
-  v.id_credito,
-  v.nombre_cliente             AS nombre_agente_completo,
-  v.correo,
-  v.telefono,
-  v.nombre_comercial as razon_social,
-  v.rfc,
-  v.tipo_persona,
+      CALL sp_get_reserva_all_facturacion(
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      );
+    `;
 
-  /* =========================
-     FACTURAS asociadas a la reserva (por items_facturas.id_relacion)
-     ========================= */
-  (
-    SELECT COALESCE(
-      JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'id_factura',               t.id_factura,
-          'monto_reserva_facturado',  t.monto_reserva_facturado,
-          'total',                    t.total_factura,
-          'id_facturama',             t.id_facturama
-        )
-      ),
-      JSON_ARRAY()
-    )
-    FROM (
-      SELECT
-        ifa.id_factura,
-        SUM(COALESCE(ifa.monto, 0))      AS monto_reserva_facturado,
-        MAX(COALESCE(f.total, 0))        AS total_factura,
-        MAX(f.id_facturama)              AS id_facturama
-      FROM items_facturas ifa
-      JOIN facturas f
-        ON f.id_factura = ifa.id_factura
-      WHERE ifa.id_relacion = v.id_relacion
-      GROUP BY ifa.id_factura
-    ) t
-  ) AS facturas_asociadas,
+    const response = await executeQuery(query, params);
 
-  /* =========================
-     ITEMS pendientes (NO ligados en items_facturas para ESTE id_relacion)
-     ========================= */
-  (
-    SELECT COALESCE(
-      JSON_ARRAYAGG(
-        JSON_OBJECT(
-          'id_item',         i.id_item,
-          'fecha_uso',       i.fecha_uso,
-          'total',           i.total,
-          'subtotal',        i.subtotal,
-          'impuestos',       i.impuestos,
-          'costo_total',     i.costo_total,
-          'costo_subtotal',  i.costo_subtotal,
-          'costo_impuestos', i.costo_impuestos,
-          'saldo',           i.saldo,
-          'is_facturado',    i.is_facturado,
-          'id_factura',      i.id_factura
-        )
-      ),
-      JSON_ARRAY()
-    )
-    FROM items i
-    WHERE
-      i.estado = 1
-      AND COALESCE(i.id_hospedaje, i.id_viaje_aereo, i.id_renta_carro) = v.id_relacion
-      AND NOT EXISTS (
-        SELECT 1
-        FROM items_facturas ifa
-        WHERE ifa.id_item = i.id_item
-          AND ifa.id_relacion = v.id_relacion
-      )
-  ) AS items
+    // mysql2 normalmente regresa [[rows], ...] en CALL
+    const rows = Array.isArray(response?.[0]) ? response[0] : response;
 
-FROM vw_reservas_a_credito_sin_facturas_all v
-ORDER BY v.created_at_reserva DESC;
-`;
-
-    const response = await executeQuery(query);
-    return response;
+    return rows.map((row) => ({
+      ...row,
+      facturas_asociadas: parseJsonSafe(row.facturas_asociadas),
+      items: parseJsonSafe(row.items),
+    }));
   } catch (error) {
     throw error;
   }
