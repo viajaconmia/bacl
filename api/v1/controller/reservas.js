@@ -1523,17 +1523,36 @@ const readAll = async (req, res) => {
   }
 };
 
+// const readAllFacturacion = async (req, res) => {
+//   try {
+//     let response = await model.getReservaAllFacturacion();
+//     res.status(201).json(response);
+//   } catch (error) {
+//     console.error(error);
+//     res
+//       .status(500)
+//       .json({ error: "Internal Server Error", details: error.message });
+//   }
+// };
+
 const readAllFacturacion = async (req, res) => {
   try {
-    let response = await model.getReservaAllFacturacion();
-    res.status(201).json(response);
+    const filters = req.query || {};
+    console.log(filters)
+
+    const data = await model.getReservaAllFacturacion(filters);
+
+    return res.status(200).json(data);
   } catch (error) {
-    console.error(error);
-    res
-      .status(500)
-      .json({ error: "Internal Server Error", details: error.message });
+    console.error("Error getReservasAllFacturacionController:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Error al obtener reservas de facturación",
+      error: error.message,
+    });
   }
 };
+
 const getItemsFromBooking = async (req, res) => {
   try {
     const { id_hospedaje } = req.query;
