@@ -1339,26 +1339,63 @@ const parseJsonSafe = (value) => {
   }
 };
 
+const nullIfEmpty = (value) => {
+  if (value === undefined || value === null) return null;
+  const str = String(value).trim();
+  return str === "" ? null : str;
+};
+
 const getReservaAllFacturacion = async (filters = {}) => {
   try {
+    let created_start = null;
+    let created_end = null;
+    let check_in_start = null;
+    let check_in_end = null;
+    let check_out_start = null;
+    let check_out_end = null;
+
+    const startDate = nullIfEmpty(filters.startDate);
+    const endDate = nullIfEmpty(filters.endDate);
+    const filterType = nullIfEmpty(filters.filterType);
+
+    if (startDate || endDate) {
+      switch (filterType) {
+        case "Creacion":
+          created_start = startDate;
+          created_end = endDate;
+          break;
+
+        case "Check-out":
+          check_out_start = startDate;
+          check_out_end = endDate;
+          break;
+
+        case "Check-in":
+        default:
+          check_in_start = startDate;
+          check_in_end = endDate;
+          break;
+      }
+    }
+
     const params = [
-      filters.id_booking ?? null,
-      filters.id_servicio ?? null,
-      filters.id_solicitud ?? null,
-      filters.id_relacion ?? null,
-      filters.estado_reserva ?? null,
-      filters.codigo_reservacion ?? null,
-      filters.nombre_viajero ?? filters.traveler ?? null,
-      filters.hotel ?? null,
-      filters.nombre_agente ?? filters.client ?? null,
-      filters.correo ?? null,
-      filters.rfc ?? null,
-      filters.created_start ?? null,
-      filters.created_end ?? null,
-      filters.check_in_start ?? null,
-      filters.check_in_end ?? null,
-      filters.check_out_start ?? null,
-      filters.check_out_end ?? null,
+      nullIfEmpty(filters.id_booking),
+      nullIfEmpty(filters.id_servicio),
+      nullIfEmpty(filters.id_solicitud),
+      nullIfEmpty(filters.id_relacion),
+      nullIfEmpty(filters.estado_reserva),
+      nullIfEmpty(filters.codigo_reservacion),
+      nullIfEmpty(filters.nombre_viajero ?? filters.traveler),
+      nullIfEmpty(filters.hotel),
+      nullIfEmpty(filters.nombre_agente ?? filters.client),
+      nullIfEmpty(filters.correo),
+      nullIfEmpty(filters.rfc),
+      created_start,
+      created_end,
+      check_in_start,
+      check_in_end,
+      check_out_start,
+      check_out_end,
     ];
 
     const query = `
@@ -1368,8 +1405,6 @@ const getReservaAllFacturacion = async (filters = {}) => {
     `;
 
     const response = await executeQuery(query, params);
-
-    // mysql2 normalmente regresa [[rows], ...] en CALL
     const rows = Array.isArray(response?.[0]) ? response[0] : response;
 
     return rows.map((row) => ({
