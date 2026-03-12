@@ -81,7 +81,7 @@ const saldosAgrupadosPorMetodoPorIdClient = async (req, res) => {
     }
     const agente = await executeQuery(
       `SELECT * from agente_details where id_agente = ?`,
-      [id_agente]
+      [id_agente],
     );
     if (!agente[0]) {
       throw new CustomError("No existe ese agente", 404, "CLIENT_ERROR", null);
@@ -94,14 +94,14 @@ const saldosAgrupadosPorMetodoPorIdClient = async (req, res) => {
         and metodo_pago not in("tarjeta_de_credito","tarjeta_de_debito","")
         and activo = 1
       group by metodo_pago;`,
-      [id_agente]
+      [id_agente],
     );
     if (saldo.length == 0) {
       throw new CustomError(
         "No se encontraron registros en el saldo del usuario",
         404,
         "NO_DATA_FOUND",
-        null
+        null,
       );
     }
     res
@@ -132,7 +132,7 @@ const saldosByType = async (req, res) => {
         "Falta el tipo de saldo o el id_agente o el id_hospedajje",
         400,
         "CLIENT_ERROR",
-        req.query
+        req.query,
       );
     }
     const saldos = await executeQuery(
@@ -141,22 +141,22 @@ const saldosByType = async (req, res) => {
       //   WHERE saf.metodo_pago = ?
       //   AND saf.id_agente = ? AND saf.saldo > 0 AND saf.activo = 1;`,
       `SELECT * FROM saldos_a_favor WHERE metodo_pago = ? AND id_agente = ? AND saldo > 0 AND activo = 1;`,
-      [type, id_agente]
+      [type, id_agente],
     );
 
     if (saldos.length == 0)
       throw new Error(
-        `No hay encontramos saldos, muestra a sistemas esto: ${id_agente}, ${type}`
+        `No hay encontramos saldos, muestra a sistemas esto: ${id_agente}, ${type}`,
       );
 
     const items = await executeQuery(
       `SELECT * FROM items WHERE id_hospedaje = ? LIMIT 1`,
-      [id_hospedaje]
+      [id_hospedaje],
     );
 
     if (items.length == 0)
       throw new Error(
-        `No hay items, muestra a sistemas este mensaje y el id hospedaje siguiente: ${id_hospedaje}`
+        `No hay items, muestra a sistemas este mensaje y el id hospedaje siguiente: ${id_hospedaje}`,
       );
 
     const item = items[0];
@@ -209,7 +209,7 @@ LEFT JOIN vw_pagos_prepago_facturables AS v
   ON v.raw_id = sf.id_saldos
   where sf.id_agente = ? and sf.is_cancelado =0
   ;`,
-      [id]
+      [id],
     );
     // console.log(saldo);
     res
@@ -285,7 +285,7 @@ const createNewSaldo = async (req, res) => {
     console.log("Valores para el stored procedure:", values);
     const response = await executeTransactionSP(
       STORED_PROCEDURE.POST.SALDO_A_FAVOR_INSERTAR,
-      values
+      values,
     );
     res
       .status(201)
@@ -346,7 +346,7 @@ const update_saldo_by_id = async (req, res) => {
         numero_autorizacion,
         banco_tarjeta,
         is_cancelado,
-      ]
+      ],
     );
     console.log("Resultado de la actualización:", result);
     if (!result || result.length === 0) {
@@ -386,7 +386,7 @@ const facturas_pagos_y_saldos = async (req, res) => {
       WHERE tipo_pago = 'Wallet'
         AND raw_id = ?
       `,
-      [String(idSaldo)]
+      [String(idSaldo)],
     );
 
     if (!rows || rows.length === 0) {
@@ -405,6 +405,28 @@ const facturas_pagos_y_saldos = async (req, res) => {
     });
   }
 };
+const saldosUsados = async (req, res) => {
+  try {
+    const saldos = await executeQuery(
+      `SELECT sf.*, UPPER(ad.nombre_comercial) as nombre FROM saldos_a_favor sf 
+      LEFT JOIN agente_details ad ON ad.id_agente = sf.id_agente
+      WHERE sf.saldo = "0.00" AND sf.activo = 0
+      order by sf.created_at desc;`,
+      [],
+    );
+    return res.status(200).json({
+      message: "Saldos usados obtenidos correctamente",
+      data: saldos,
+    });
+  } catch (error) {
+    console.error("saldosUsados error:", error);
+    return res.status(500).json({
+      message: error.message || "Error interno",
+      error: String(error?.message || error),
+      data: null,
+    });
+  }
+};
 
 module.exports = {
   create,
@@ -416,4 +438,5 @@ module.exports = {
   saldosByType,
   getStripeInfo,
   facturas_pagos_y_saldos,
+  saldosUsados,
 };

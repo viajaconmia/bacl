@@ -6,6 +6,7 @@ const { formateoViajeAereo } = require("../../../lib/utils/formats");
 const ERROR = require("../../../lib/utils/messages");
 const Servicio = require("../../../v2/model/servicios.model");
 const ViajeAereo = require("../../../v2/model/viaje_aereo.model");
+const { ca } = require("zod/locales");
 // const Booking = require("../../../v2/model/bookings.model");
 // const Item = require("../../../v2/model/model/item.model");
 
@@ -125,22 +126,24 @@ const getVuelosCupon = async (req, res) => {
 const getVueloById = async (req, res) => {
   try {
     const { id } = req.query;
+    console.log("\n\nid del vuelo", id);
 
     const [viaje_aereo] = await executeQuery(
-      `SELECT * FROM viajes_aereos WHERE id_viaje_aereo = ?`,
+      `SELECT * FROM viajes_aereos WHERE id_booking = ?`,
       [id],
     );
+    if (!viaje_aereo) throw new Error("No se encontró el viaje aéreo");
 
     let vuelos = await executeQuery(
       `select * from vuelos where id_viaje_aereo = ?`,
-      [id],
+      [viaje_aereo.id_viaje_aereo],
     );
 
     const [viajero] = await executeQuery(
       `SELECT av.id_agente, v.*, CONCAT_WS(' ', v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno) AS nombre_completo FROM agentes_viajeros av
       LEFT JOIN viajeros v on v.id_viajero = av.id_viajero
     WHERE av.id_viajero = ?`,
-      [vuelos[0].id_viajero],
+      [viaje_aereo.id_viajero],
     );
 
     const aeropuertos = await executeQuery(
@@ -155,15 +158,23 @@ const getVueloById = async (req, res) => {
 
     const [booking] = await executeQuery(
       `select * from bookings where id_booking = ?`,
-      [viaje_aereo.id_booking],
+      [id],
     );
 
     const proveedores = await executeQuery(
-      `SELECT * FROM proveedores WHERE id in (${vuelos
-        .map(() => "?")
+      `SELECT * FROM proveedores WHERE id in (${[
+        ...vuelos.map(() => "?"),
+        viaje_aereo.id_intermediario ? "?" : null,
+      ]
+        .filter(Boolean)
         .join(",")})`,
-      vuelos.map((v) => v.airline_code),
+      [
+        ...vuelos.map((v) => v.id_proveedor),
+        viaje_aereo.id_intermediario ? viaje_aereo.id_intermediario : null,
+      ].filter(Boolean),
     );
+
+    console.log(proveedores);
 
     const vuelosFromViaje = vuelos.map((vuelo) => ({
       id: vuelo.id_vuelo,
@@ -181,11 +192,14 @@ const getVueloById = async (req, res) => {
       check_out: `${vuelo.arrival_date.toISOString().split("T")[0]}T${
         vuelo.arrival_time
       }`,
-      aerolinea: proveedores.find((p) => p.id == vuelo.airline_code),
+      aerolinea: proveedores.find((p) => p.id == vuelo.id_proveedor),
       asiento: vuelo.seat_number,
       ubicacion_asiento: vuelo.seat_location,
       comentarios: vuelo.comentarios,
       tipo_tarifa: vuelo.rate_type,
+      eq_mano: vuelo.eq_mano,
+      eq_personal: vuelo.eq_personal,
+      eq_documentado: vuelo.eq_documentado,
     }));
 
     res.status(200).json({
@@ -194,6 +208,9 @@ const getVueloById = async (req, res) => {
         precio: viaje_aereo.total,
         codigo: viaje_aereo.codigo_confirmacion,
         costo: booking.costo_total,
+        intermediario: proveedores.find(
+          (p) => p.id == viaje_aereo.id_intermediario,
+        ),
         vuelos: vuelosFromViaje,
         viajero,
       },
@@ -231,19 +248,9 @@ const crearVuelo = async (req, res) => {
       req.body.vuelos,
     );
 
-    console.log(vuelos);
-    //FORMATO DE LAS TABLAS PARA UN MANEJO MAS SENCILLO
-    //VUELOS
     const id_solicitud = `sol-${uuidv4()}`;
     const id_transaccion = `tra-${uuidv4()}`;
-    console.log("THIS IS THE VUELOS:", vuelos);
 
-    //VALIDACIONES DE LOS DATOS DEL FRONT CON LOS DE LA BASE DE DATOS
-    /**
-     * credito del cliente
-     * saldo de los saldos
-     *
-     */
     const [agente] = await executeQuery(
       `SELECT * FROM agente_details where id_agente = ?`,
       [id_agente],
@@ -694,24 +701,186 @@ const crearVuelo = async (req, res) => {
 
 const editarVuelo = async (req, res) => {
   try {
-    const { cambios, before, viaje_aereo } = req.body;
+    const { cambios, viaje_aereo: data_meta } = req.body;
+
+    const [viaje_aereo_db] = await executeQuery(
+      `SELECT * FROM vw_new_reservas WHERE id_booking = ?`,
+      [data_meta.id_booking],
+    );
+    if (!viaje_aereo_db || viaje_aereo_db.length === 0) {
+      throw new Error("No se encontró el viaje aéreo");
+    }
 
     const formaters = formateoViajeAereo(
-      req.body.faltante,
+      req.body?.faltante || 0,
       req.body.current,
-      req.body.saldos,
+      req.body?.saldos || [],
       req.body.current.vuelos,
-      viaje_aereo,
+      viaje_aereo_db,
+    );
+    const { vuelos, viaje_aereo, reserva } = formaters;
+    const {
+      vuelos: vuelosBefore,
+      viaje_aereo: viaje_aereoBefore,
+      reserva: reservaBefore,
+    } = formateoViajeAereo(
+      req.body?.faltante || 0,
+      req.body.before,
+      req.body?.saldos || [],
+      req.body.before.vuelos,
+      viaje_aereo_db,
     );
 
     if (cambios.keys.length == 0) throw new Error(ERROR.CHANGES.EMPTY);
+    const response = await runTransaction(async (connection) => {
+      try {
+        //Inicia verificación de cambios en vuelos
+        if (cambios.keys.includes("vuelos")) {
+          await connection.execute(
+            `DELETE FROM vuelos WHERE id_viaje_aereo = ?`,
+            [viaje_aereo_db.id_viaje_aereo],
+          );
+          const insertVuelosQuery = `
+          INSERT INTO vuelos (
+            id_viaje_aereo,
+            flight_number,
+            airline,
+            id_proveedor,
+            departure_airport,
+            departure_airport_code,
+            departure_city,
+            departure_country,
+            departure_date,
+            departure_time,
+            arrival_airport,
+            arrival_airport_code,
+            arrival_city,
+            arrival_country,
+            arrival_date,
+            arrival_time,
+            has_stops,
+            stop_count,
+            stops,
+            seat_number,
+            seat_location,
+            id_usuario_creador,
+            rate_type,
+            comentarios,
+            fly_type,
+            eq_mano,
+            eq_personal,
+            eq_documentado
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`;
 
-    let diferencia;
-    if (cambios.keys.includes("precio")) {
-      let cambio =
-        cambios.logs.precio.current - Number(cambios.logs.precio.before);
-      diferencia = cambio != 0 ? cambio : undefined;
-    }
+          console.log("INSERT VUELOS QUERY:", vuelos);
+
+          await Promise.all(
+            vuelos.map((vuelo) =>
+              connection.execute(insertVuelosQuery, [
+                vuelo.id_viaje_aereo || null, // No es NULL, no tiene valor por defecto.
+                vuelo.flight_number || null, // Puede ser NULL.
+                vuelo.aerolinea.proveedor || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.airline_code || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.departure.airport || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.departure.airport_code || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.departure.city || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.departure.country || "", // No es NULL||null, no tiene valor por defecto.
+                vuelo.departure.date || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.departure.time || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.arrival.airport || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.arrival.airport_code || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.arrival.city || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.arrival.country || "", // No es NULL||null, no tiene valor por defecto.
+                vuelo.arrival.date || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.arrival.time,
+                vuelo.has_stops || null, // Puede ser NULL y tiene un valor por defecto de '0'.
+                vuelo.stop_count || null, // Puede ser NULL y tiene un valor por defecto de '0'.
+                vuelo.stops || null, // Puede ser NULL.
+                vuelo.seat_number || null, // No es NULL||null, no tiene valor por defecto.
+                vuelo.seat_location || null, // No es NULL||null, no tiene valor por defecto.
+                req?.session?.id || "general" || null, // Puede ser NULL.
+                vuelo.rate_type || null, // Puede ser NULL.
+                vuelo.comentarios || null, // Puede ser NULL.
+                vuelo.fly_type || null, // Puede ser NULL.
+                vuelo.eq_mano || null,
+                vuelo.eq_personal || null,
+                vuelo.eq_documentado || null,
+              ]),
+            ),
+          );
+          if (
+            vuelosBefore[0].check_in !== vuelos[0].check_in ||
+            vuelosBefore[vuelosBefore.length - 1].check_out !==
+              vuelos[vuelos.length - 1].check_out
+          ) {
+            await connection.execute(
+              `UPDATE bookings SET check_in = ?, check_out = ? WHERE id_booking = ?`,
+              [
+                vuelos[0].check_in,
+                vuelos[vuelos.length - 1].check_out,
+                viaje_aereo_db.id_booking,
+              ],
+            );
+          }
+          if (
+            viaje_aereo.trip_type !== viaje_aereoBefore.trip_type ||
+            viaje_aereo.ida.origen.aeropuerto !==
+              viaje_aereoBefore.ida.origen.aeropuerto ||
+            viaje_aereo.ida.destino.aeropuerto !==
+              viaje_aereoBefore.ida.destino.aeropuerto ||
+            viaje_aereo.regreso?.origen.aeropuerto !==
+              viaje_aereoBefore.regreso?.origen.aeropuerto ||
+            viaje_aereo.regreso?.destino.aeropuerto !==
+              viaje_aereoBefore.regreso?.destino.aeropuerto
+          ) {
+            await connection.execute(
+              `UPDATE viajes_aereos SET trip_type = ?, aeropuerto_origen = ?, ciudad_origen = ?, aeropuerto_destino = ?, ciudad_destino = ?, regreso_aeropuerto_origen = ?, regreso_ciudad_origen = ?, regreso_aeropuerto_destino = ?, regreso_ciudad_destino = ? WHERE id_viaje_aereo = ?`,
+              [
+                viaje_aereo.trip_type,
+                viaje_aereo.ida.origen.aeropuerto,
+                viaje_aereo.ida.origen.ciudad,
+                viaje_aereo.ida.destino.aeropuerto,
+                viaje_aereo.ida.destino.ciudad,
+                viaje_aereo.regreso?.origen.aeropuerto || null,
+                viaje_aereo.regreso?.origen.ciudad || null,
+                viaje_aereo.regreso?.destino.aeropuerto || null,
+                viaje_aereo.regreso?.destino.ciudad || null,
+                viaje_aereo.id_viaje_aereo,
+              ],
+            );
+          }
+        }
+        console.log(
+          "\n\nSe actualiza código de confirmación, intermediario o viajero",
+          reserva.viajero?.id_viajero,
+        );
+        if (
+          viaje_aereo.codigo_confirmation !==
+            viaje_aereoBefore.codigo_confirmation ||
+          reserva?.intermediario?.id !== reservaBefore?.intermediario?.id ||
+          reserva?.viajero?.id_viajero !== reservaBefore?.viajero?.id_viajero
+        ) {
+          await connection.execute(
+            `UPDATE viajes_aereos SET codigo_confirmacion = ?, id_intermediario = ?, id_viajero = ? WHERE id_viaje_aereo = ?`,
+            [
+              viaje_aereo.codigo_confirmation,
+              reserva?.intermediario?.id || null,
+              reserva?.viajero?.id_viajero || null,
+              viaje_aereo.id_viaje_aereo,
+            ],
+          );
+        }
+        //Termina verificación de cambios en vuelos
+      } catch (error) {
+        throw error;
+      }
+    });
+
+    // // let diferencia;
+    // //   let cambio =
+    // //     cambios.logs.precio.current - Number(cambios.logs.precio.before);
+    // //   diferencia = cambio != 0 ? cambio : undefined;
+    // // }
     /**VALIDAR SALDOS */
     /**VALIDAR QUE TENGA CREDITO */
     /**HACER EL COBRO O RETORNO DE DINERO - tomar en cuenta que puede ser regresando un wallet no facurabe y ya, o tambien por credito*/
@@ -747,48 +916,48 @@ const editarVuelo = async (req, res) => {
      * - Se debe regresar el credito que no esta pagado, y se debe regresar los saldos que fueron pagados,
      * - Se debe cancelar la reserva, cambiando el status en bookings (Verificar como esta escrito y el enum)         *
      * */
-    const [servicio] = await executeQuery(
-      `SELECT * FROM servicios where id_servicio = ?`,
-      [viaje_aereo.id_servicio],
-    );
+    // const [servicio] = await executeQuery(
+    //   `SELECT * FROM servicios where id_servicio = ?`,
+    //   [viaje_aereo.id_servicio],
+    // );
 
-    const [viaje] = await executeQuery(
-      `SELECT * FROM viajes_aereos WHERE id_viaje_aereo = ?`,
-      [viaje_aereo.id_viaje_aereo],
-    );
+    // const [viaje] = await executeQuery(
+    //   `SELECT * FROM viajes_aereos WHERE id_viaje_aereo = ?`,
+    //   [viaje_aereo.id_viaje_aereo],
+    // );
 
-    const BEFORE = {
-      servicio,
-      viaje_aereo: viaje,
-    };
+    // const BEFORE = {
+    //   servicio,
+    //   viaje_aereo: viaje,
+    // };
 
-    await runTransaction(async (connection) => {
-      try {
-        const updateService = Calculo.cleanEmpty({
-          total: diferencia
-            ? Number(BEFORE.servicio.total) + diferencia
-            : undefined,
-        });
-        await Servicio.update(connection, {
-          ...updateService,
-          id_servicio: BEFORE.viaje_aereo.id_servicio,
-        });
+    // await runTransaction(async (connection) => {
+    //   try {
+    //     const updateService = Calculo.cleanEmpty({
+    //       total: diferencia
+    //         ? Number(BEFORE.servicio.total) + diferencia
+    //         : undefined,
+    //     });
+    //     await Servicio.update(connection, {
+    //       ...updateService,
+    //       id_servicio: BEFORE.viaje_aereo.id_servicio,
+    //     });
 
-        const updateViajeAereo = Calculo.cleanEmpty({
-          total: diferencia
-            ? Number(BEFORE.viaje_aereo.total) + diferencia
-            : undefined,
-        });
-        await ViajeAereo.update(connection, {
-          ...updateViajeAereo,
-          id_viaje_aereo: BEFORE.viaje_aereo.id_viaje_aereo,
-        });
+    //     const updateViajeAereo = Calculo.cleanEmpty({
+    //       total: diferencia
+    //         ? Number(BEFORE.viaje_aereo.total) + diferencia
+    //         : undefined,
+    //     });
+    //     await ViajeAereo.update(connection, {
+    //       ...updateViajeAereo,
+    //       id_viaje_aereo: BEFORE.viaje_aereo.id_viaje_aereo,
+    //     });
 
-        console.log(diferencia, updateService);
-      } catch (error) {
-        throw error;
-      }
-    });
+    //     console.log(diferencia, updateService);
+    //   } catch (error) {
+    //     throw error;
+    //   }
+    // });
 
     res.status(200).json({
       message: "Reservación creada con exito",

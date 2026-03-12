@@ -220,10 +220,6 @@ const getFacturasDetalles = async (req, res) => {
 
     const safe = (i) => (Array.isArray(sets?.[i]) ? sets[i] : []);
 
-    // Contrato del SP (como lo dejamos):
-    // 0: pagos.*
-    // 1: saldos_a_favor.*
-    // 2: reservas (vw_reservas_client...)
     const pagos = safe(0);
     const saldos = safe(1);
     const reservas = safe(2);
@@ -2926,20 +2922,14 @@ const getFullDetalles = async (req, res) => {
     if (first.startsWith("hos")) tipo = "reserva";
     else if (first.startsWith("fac")) tipo = "factura";
 
-    // Llamada al SP: SIEMPRE JSON (array)
     const sets = await executeSP2(
       "sp_get_conexion_full",
-      [id_agente, tipo, id_buscar_json], // <— JSON array
+      [id_agente, tipo, id_buscar_json],
       { allSets: true },
     );
 
-    // Normalizar juegos de resultados
     const safe = (i) => (Array.isArray(sets?.[i]) ? sets[i] : []);
 
-    // Mapeo según contrato
-    // - origen = 'reserva'  -> [facturas, pagos]
-    // - origen = 'pago'     -> [facturas, reservas]
-    // - origen = 'factura'  -> [pagos, reservas]
     let payload = {};
     if (tipo === "reserva") {
       payload = { facturas: safe(0), pagos: safe(1) };
@@ -2978,11 +2968,6 @@ const getQuitarDetalles = async (req, res) => {
         message: "Se requiere id_factura",
       });
     }
-
-    // Opcional: valida formato si tus facturas son "fac-xxxx"
-    // if (!/^fac-[a-z0-9-]+$/i.test(id_factura)) {
-    //   return res.status(400).json({ ok: false, message: "id_factura inválido" });
-    // }
 
     const deleteItemsFacturasSQL = `
       DELETE FROM items_facturas
@@ -3105,8 +3090,8 @@ function getCiudad(locationStr) {
 
 const CLAVE_ESTADOS = {
   "distrito federal": "CDMX",
-  "df": "CDMX",
-  "aguascalientes": "AGS",
+  df: "CDMX",
+  aguascalientes: "AGS",
   "baja california": "BC",
   "baja california norte": "BC",
   "baja california sur": "BCS",
@@ -3201,7 +3186,10 @@ function getEstadoClaveFromLocation(locationStr) {
   const noParen = raw.replace(/\s*\([^)]*\)\s*/g, "").trim();
 
   // Split por comas: "Ciudad, Estado, País"
-  const parts = noParen.split(",").map((p) => p.trim()).filter(Boolean);
+  const parts = noParen
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
 
   // 1) Caso normal: "Ciudad, Estado, Mexico ..."
   if (parts.length >= 2) {
@@ -3275,6 +3263,7 @@ function toYMD(value) {
   const da = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${mo}-${da}`;
 }
+
 const agentes_report_fac = async (req, res) => {
   const { id_agente, fecha_desde, fecha_hasta } = req.query;
 
@@ -3300,35 +3289,38 @@ const agentes_report_fac = async (req, res) => {
       p_fecha_hasta,
     ]);
 
+    const facturasConClave = (Array.isArray(facturas) ? facturas : []).map(
+      (row) => {
+        const origen_estado = getEstadoClaveFromLocation(row.origen);
+        const destino_estado = getEstadoClaveFromLocation(row.destino);
 
-const facturasConClave = (Array.isArray(facturas) ? facturas : []).map((row) => {
-  const origen_estado = getEstadoClaveFromLocation(row.origen);
-  const destino_estado = getEstadoClaveFromLocation(row.destino);
+        const estado_reserva_original = mapEstadoToClave(row.estado_reserva);
+        const estado_reserva_ruta =
+          [origen_estado, destino_estado].filter(Boolean).join("-") ||
+          estado_reserva_original;
 
-  const estado_reserva_original = mapEstadoToClave(row.estado_reserva);
-  const estado_reserva_ruta =
-    [origen_estado, destino_estado].filter(Boolean).join("-") || estado_reserva_original;
+        // ❌ no mandar columnas redundantes
+        const { origen, destino, ...rest } = row;
 
-  // ❌ no mandar columnas redundantes
-  const { origen, destino, ...rest } = row;
+        return {
+          ...rest,
 
-  return {
-    ...rest,
+          // ✅ solo estas fechas sin hora
+          chin: toYMD(row.chin),
+          chout: toYMD(row.chout),
 
-    // ✅ solo estas fechas sin hora
-    chin: toYMD(row.chin),
-    chout: toYMD(row.chout),
+          // ✅ confirmación base
+          codigo_confirmacion_base: getCodigoConfirmacionBase(
+            row.codigo_confirmacion,
+          ),
 
-    // ✅ confirmación base
-    codigo_confirmacion_base: getCodigoConfirmacionBase(row.codigo_confirmacion),
-
-    // ✅ estados
-    origen_estado,
-    destino_estado,
-    estado_reserva: estado_reserva_ruta,
-  };
-});
-
+          // ✅ estados
+          origen_estado,
+          destino_estado,
+          estado_reserva: estado_reserva_ruta,
+        };
+      },
+    );
 
     res.status(200).json({
       message: "Facturas del agente obtenidas correctamente.",

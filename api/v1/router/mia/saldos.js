@@ -15,12 +15,13 @@ router.post(
   //   "forma_pago",
   //   "fecha_pago",
   // ]),
-  controller.createNewSaldo
+  controller.createNewSaldo,
 );
 router.patch("/actualizar-saldo-a-favor", controller.update_saldo_by_id);
 router.get("/stripe-info", controller.getStripeInfo);
+router.get("/facturas_saldos", controller.facturas_pagos_y_saldos);
+router.get("/usados", controller.saldosUsados);
 router.get("/:id", controller.readSaldoByAgente);
-router.get("/facturas_saldos",controller.facturas_pagos_y_saldos)
 // router.patch("/actualizar-saldo-a-favor", controller.update_saldo_by_id);
 
 module.exports = router;
