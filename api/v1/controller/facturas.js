@@ -3194,10 +3194,6 @@ function getEstadoClaveFromLocation(locationStr) {
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
-  const parts = noParen
-    .split(",")
-    .map((p) => p.trim())
-    .filter(Boolean);
 
   // 1) Caso normal: "Ciudad, Estado, Mexico ..."
   if (parts.length >= 2) {
@@ -3296,16 +3292,6 @@ const agentes_report_fac = async (req, res) => {
       p_fecha_desde,
       p_fecha_hasta,
     ]);
-
-    const facturasConClave = (Array.isArray(facturas) ? facturas : []).map(
-      (row) => ({
-        ...row,
-        estado_reserva: mapEstadoToClave(row.estado_reserva),
-        // claves por estado:
-        origen_estado: getEstadoClaveFromLocation(row.origen),
-        destino_estado: getEstadoClaveFromLocation(row.destino),
-      }),
-    );
     const facturasConClave = (Array.isArray(facturas) ? facturas : []).map(
       (row) => {
         const origen_estado = getEstadoClaveFromLocation(row.origen);
