@@ -2954,6 +2954,8 @@ const getFullDetalles = async (req, res) => {
   }
 };
 
+//const response = await model.cancelarCfdi(id_cfdi, motive, type);
+//Hacer validacion der que tenga id_facturama
 const getQuitarDetalles = async (req, res) => {
   try {
     console.log("📦 recibido getQuitarDetalles");
@@ -2994,7 +2996,7 @@ const getQuitarDetalles = async (req, res) => {
       // 2) Vacía id_factura en items
       const [upd] = await connection.query(updateItemsSQL, [id_factura]);
 
-      return res.status(200).json({
+      return res.status(204).json({
         ok: true,
         message: "Detalles quitados correctamente",
         data: {
@@ -3089,9 +3091,11 @@ function getCiudad(locationStr) {
 }
 
 const CLAVE_ESTADOS = {
+  aguascalientes: "AGS",
   "distrito federal": "CDMX",
   df: "CDMX",
   aguascalientes: "AGS",
+
   "baja california": "BC",
   "baja california norte": "BC",
   "baja california sur": "BCS",
@@ -3186,6 +3190,10 @@ function getEstadoClaveFromLocation(locationStr) {
   const noParen = raw.replace(/\s*\([^)]*\)\s*/g, "").trim();
 
   // Split por comas: "Ciudad, Estado, País"
+  const parts = noParen
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
   const parts = noParen
     .split(",")
     .map((p) => p.trim())
@@ -3289,6 +3297,15 @@ const agentes_report_fac = async (req, res) => {
       p_fecha_hasta,
     ]);
 
+    const facturasConClave = (Array.isArray(facturas) ? facturas : []).map(
+      (row) => ({
+        ...row,
+        estado_reserva: mapEstadoToClave(row.estado_reserva),
+        // claves por estado:
+        origen_estado: getEstadoClaveFromLocation(row.origen),
+        destino_estado: getEstadoClaveFromLocation(row.destino),
+      }),
+    );
     const facturasConClave = (Array.isArray(facturas) ? facturas : []).map(
       (row) => {
         const origen_estado = getEstadoClaveFromLocation(row.origen);

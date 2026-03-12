@@ -22,8 +22,24 @@ const crearCfdi = (req, cfdi_data) => {
 
 const crearCliente = (data) => facturama.Clients.Create(data);
 
-const cancelarCfdi = (idCfdi, motive = "03", type = "issued") =>
-  facturama.Cfdi.Cancel(`${idCfdi}?type=${type}&motive=${motive}`);
+const cancelarCfdi = async (
+  idCfdi,
+  motive = "03",
+  type = "issued",
+) => {
+  try {
+    return await facturama.Cfdi.Cancel(
+      `${idCfdi}?type=${type}&motive=${motive}`,
+    );
+  } catch (error) {
+    console.log(error);
+    const message =
+      error?.response?.data?.Message ||
+      error.message ||
+      "Error en facturama no detectado revisar consola";
+    throw new Error(message);
+  }
+};
 
 const getCfdi = (idCfdi, type) => facturama.Cfdi.Get(idCfdi, type);
 

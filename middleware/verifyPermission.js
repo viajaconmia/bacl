@@ -7,7 +7,7 @@ const verificarPermiso = (permiso) => {
       if (!user) throw new Error("No se encontro el usuario");
       const [acceso] = await executeQuery(
         `SELECT * FROM vw_permisos_by_user WHERE user_id = ? AND name = ?;`,
-        [user.id, permiso]
+        [user.id, permiso],
       );
       if (!acceso) throw new Error("No tienes acceso a este recurso");
       next();
@@ -20,4 +20,26 @@ const verificarPermiso = (permiso) => {
     }
   };
 };
-module.exports = { verificarPermiso };
+
+const hasPermission = (permiso) => {
+  return async (req, res, next) => {
+    try {
+      const { user } = req.session;
+      if (!user) throw new Error("No se encontro el usuario");
+      const [acceso] = await executeQuery(
+        `SELECT * FROM vw_permisos_by_user WHERE user_id = ? AND name = ?;`,
+        [user.id, permiso],
+      );
+      req.session.permisos = { ...req.session.permisos, [permiso]: !!acceso };
+      next();
+    } catch (error) {
+      res.status(404).json({
+        message: error.message || "Error al verificar permisos de usuario",
+        error,
+        data: null,
+      });
+    }
+  };
+};
+
+module.exports = { verificarPermiso, hasPermission };
