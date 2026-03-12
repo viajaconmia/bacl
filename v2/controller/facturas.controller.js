@@ -18,31 +18,51 @@ const getFacturas = async (req, res) => {
       estados,
     );
 
-    return res.status(200).json({ message: "Factura obtenida correctamente", data: facturas });
+    return res
+      .status(200)
+      .json({ message: "Factura obtenida correctamente", data: facturas });
   } catch (error) {
     console.log(error);
     return res
       .status(error.status || error.statusCode || 500)
       .json({ message: error.message || "Error al obtener la factura" });
   }
-}
-
+};
 
 const obtenerFacturaById = async (req, res) => {
   try {
     const { id } = req.params;
-    const [factura] = await executeQuery(`SELECT * FROM facturas WHERE id_factura = ?`, [id]);
+    const [factura] = await executeQuery(
+      `SELECT * FROM facturas WHERE id_factura = ?`,
+      [id],
+    );
     if (!factura.id_facturama) {
-      throw new Error("La factura no se genero en MIA, no se puede obtener el cfdi");
+      throw new Error(
+        "La factura no se genero en MIA, no se puede obtener el cfdi",
+      );
     }
     const cfdi = await getCfdi(factura.id_facturama, "issued");
-    if (factura.estado == cfdi.Status) throw new Error("No hay cambios en el estado de la factura");
+    console.log(cfdi);
+    if (factura.estado == cfdi.Status)
+      throw new Error("No hay cambios en el estado de la factura");
 
-    await executeQuery(`UPDATE facturas  SET estado = ? WHERE id_factura = ?`, [cfdi.Status, id]);
+    await executeQuery(`UPDATE facturas  SET estado = ? WHERE id_factura = ?`, [
+      cfdi.Status,
+      id,
+    ]);
 
-    const [facturaActualizada] = await executeQuery(`SELECT * FROM facturas WHERE id_factura = ?`, [id]);
+    const [facturaActualizada] = await executeQuery(
+      `SELECT * FROM facturas WHERE id_factura = ?`,
+      [id],
+    );
 
-    return res.status(200).json({ message: "Factura obtenida correctamente", data: facturaActualizada, metadata: { message: "¿Deseas soltar la factura de las reservas y pagos asignados?" } });
+    return res.status(200).json({
+      message: "Factura obtenida correctamente",
+      data: facturaActualizada,
+      metadata: {
+        message: "¿Deseas soltar la factura de las reservas y pagos asignados?",
+      },
+    });
   } catch (error) {
     console.log(error);
     return res
@@ -82,6 +102,7 @@ const cancelarFacturaById = async (req, res) => {
     await runTransaction(async (conn) => {
       try {
         const response = await cancelarCfdi(factura.id_facturama, motive, type);
+        console.log(response);
         acuse = response?.AcuseXmlBase64;
         message = response.Message;
 
