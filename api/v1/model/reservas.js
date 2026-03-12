@@ -1356,7 +1356,7 @@ const getReservaAllFacturacion = async (filters = {}) => {
 
     const startDate = nullIfEmpty(filters.startDate);
     const endDate = nullIfEmpty(filters.endDate);
-    const filterType = nullIfEmpty(filters.filterType);
+	const filterType = nullIfEmpty("Creacion");
 
     if (startDate || endDate) {
       switch (filterType) {
