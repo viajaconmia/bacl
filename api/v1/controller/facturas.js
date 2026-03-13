@@ -119,18 +119,7 @@ const getfacturasPagoPendiente = async (req, res) => {
 
 const resumenFacturasCxC = async (req, res) => {
   try {
-    const {
-      id_agente = null,
-      fecha_vencimiento_inicio = null,
-      fecha_vencimiento_fin = null,
-    } = req.body || {};
-
-    const data = await model.getResumenFacturasCxC({
-      id_agente,
-      fecha_vencimiento_inicio,
-      fecha_vencimiento_fin,
-    });
-
+    const data = await model.getResumenFacturasCxC();
     res.status(200).json(data);
   } catch (error) {
     console.error("Error resumenFacturasCxC:", error);

@@ -1356,24 +1356,44 @@ const getReservaAllFacturacion = async (filters = {}) => {
 
     const startDate = nullIfEmpty(filters.startDate);
     const endDate = nullIfEmpty(filters.endDate);
-    const filterType = nullIfEmpty("Creacion");
+    const filterType = nullIfEmpty(filters.filterType) || "Creacion";
 
-    if (startDate || endDate) {
+    const formatDate = (date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    // Si no manda fechas, por defecto: hoy y 15 días atrás
+    let effectiveStartDate = startDate;
+    let effectiveEndDate = endDate;
+
+    if (!effectiveStartDate && !effectiveEndDate) {
+      const today = new Date();
+      const past15 = new Date();
+      past15.setDate(today.getDate() - 15);
+
+      effectiveStartDate = formatDate(past15);
+      effectiveEndDate = formatDate(today);
+    }
+
+    if (effectiveStartDate || effectiveEndDate) {
       switch (filterType) {
         case "Creacion":
-          created_start = startDate;
-          created_end = endDate;
+          created_start = effectiveStartDate;
+          created_end = effectiveEndDate;
           break;
 
         case "Check-out":
-          check_out_start = startDate;
-          check_out_end = endDate;
+          check_out_start = effectiveStartDate;
+          check_out_end = effectiveEndDate;
           break;
 
         case "Check-in":
         default:
-          check_in_start = startDate;
-          check_in_end = endDate;
+          check_in_start = effectiveStartDate;
+          check_in_end = effectiveEndDate;
           break;
       }
     }
