@@ -117,6 +117,50 @@ const getfacturasPagoPendiente = async (req, res) => {
   }
 };
 
+const resumenFacturasCxC = async (req, res) => {
+  try {
+    const {
+      id_agente = null,
+      fecha_vencimiento_inicio = null,
+      fecha_vencimiento_fin = null,
+    } = req.body || {};
+
+    const data = await model.getResumenFacturasCxC({
+      id_agente,
+      fecha_vencimiento_inicio,
+      fecha_vencimiento_fin,
+    });
+
+    res.status(200).json(data);
+  } catch (error) {
+    console.error("Error resumenFacturasCxC:", error);
+    res.status(500).json({ error: "Error al obtener resumen de cuentas por cobrar" });
+  }
+};
+
+const detalleFacturasCxC = async (req, res) => {
+  try {
+    const {
+      bucket = "all",
+      id_agente = null,
+      fecha_vencimiento_inicio = null,
+      fecha_vencimiento_fin = null,
+    } = req.body || {};
+
+    const data = await model.getDetalleFacturasCxC({
+      bucket,
+      id_agente,
+      fecha_vencimiento_inicio,
+      fecha_vencimiento_fin,
+    });
+
+    res.status(200).json(data);
+  } catch (error) {
+    console.error("Error detalleFacturasCxC:", error);
+    res.status(500).json({ error: "Error al obtener detalle de facturas" });
+  }
+};
+
 const getfacturasPagoPendienteByAgente = async (req, res) => {
   try {
     const id_agente = req.body.id_agente;
@@ -2671,6 +2715,8 @@ module.exports = {
   getFacturasDetalles,
   getQuitarDetalles,
   agentes_report_fac,
+  detalleFacturasCxC,
+  resumenFacturasCxC,
 };
 
 //ya quedo "#$%&/()="
