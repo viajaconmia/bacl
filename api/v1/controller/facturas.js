@@ -128,7 +128,7 @@ const resumenFacturasCxC = async (req, res) => {
 };
 
 const detalleFacturasCxC = async (req, res) => {
-  try {
+ try {
     const {
       bucket = "all",
       id_agente = null,
@@ -136,17 +136,20 @@ const detalleFacturasCxC = async (req, res) => {
       fecha_vencimiento_fin = null,
     } = req.body || {};
 
-    const data = await model.getDetalleFacturasCxC({
+    const response = await model.getDetalleFacturasCxC({
       bucket,
       id_agente,
       fecha_vencimiento_inicio,
       fecha_vencimiento_fin,
     });
 
-    res.status(200).json(data);
+    return res.status(200).json(response);
   } catch (error) {
-    console.error("Error detalleFacturasCxC:", error);
-    res.status(500).json({ error: "Error al obtener detalle de facturas" });
+    console.error("Error en postDetalleFacturasCxC:", error);
+    return res.status(500).json({
+      message: "Error al obtener el detalle de facturas",
+      error: error.message,
+    });
   }
 };
 

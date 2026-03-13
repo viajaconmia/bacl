@@ -1185,57 +1185,122 @@ const getResumenFacturasCxC = async () => {
     throw error;
   }
 };
+
 const getDetalleFacturasCxC = async ({
   bucket = "all",
   id_agente = null,
   fecha_vencimiento_inicio = null,
   fecha_vencimiento_fin = null,
-}) => {
+} = {}) => {
   try {
-    const bucketWhere = getBucketWhere(bucket);
+    const allowedBuckets = {
+      all: "1=1",
+      vigentes: "fb.dias_atraso <= 0",
+      "1_7": "fb.dias_atraso BETWEEN 1 AND 7",
+      "8_15": "fb.dias_atraso BETWEEN 8 AND 15",
+      "16_20": "fb.dias_atraso BETWEEN 16 AND 20",
+      "21_30": "fb.dias_atraso BETWEEN 21 AND 30",
+      mas_30: "fb.dias_atraso > 30",
+    };
+
+    const bucketWhere = allowedBuckets[bucket] || allowedBuckets.all;
 
     const query = `
-      SELECT DISTINCT
-        vf.*,
-        CASE
-          WHEN vf.fecha_vencimiento IS NULL THEN 0
-          ELSE DATEDIFF(CURDATE(), DATE(vf.fecha_vencimiento))
-        END AS dias_vencida
-      FROM vw_facturas vf
-      JOIN (
+      WITH facturas_pendientes AS (
         SELECT
-          uuid_factura,
-          fecha_emision,
-          total,
-          subtotal,
-          impuestos,
-          rfc
-        FROM vw_facturas
-        GROUP BY
-          uuid_factura, fecha_emision, total, subtotal, impuestos, rfc
-        HAVING SUM(COALESCE(JSON_LENGTH(pagos_asociados), 0)) = 0
-      ) g
-        ON g.uuid_factura = vf.uuid_factura
-       AND g.fecha_emision = vf.fecha_emision
-       AND g.total = vf.total
-       AND g.subtotal = vf.subtotal
-       AND g.impuestos = vf.impuestos
-       AND g.rfc = vf.rfc
-      WHERE
-        (? IS NULL OR vf.id_agente = ?)
-        AND (? IS NULL OR DATE(vf.fecha_vencimiento) >= ?)
-        AND (? IS NULL OR DATE(vf.fecha_vencimiento) <= ?)
-        AND ${bucketWhere}
-      ORDER BY vf.fecha_vencimiento ASC, vf.uuid_factura ASC;
+          itf.id_factura
+        FROM items_facturas itf
+        LEFT JOIN items_pagos ip
+          ON ip.id_relacion = itf.id_relacion
+        WHERE ip.id_relacion IS NULL
+        GROUP BY itf.id_factura
+      ),
+      facturas_base AS (
+        SELECT
+          f.id_factura,
+          f.uuid_factura,
+          f.id_agente,
+          COALESCE(a.nombre, 'Sin asignar') AS nombre_agente,
+          f.id_empresa,
+          f.id_facturama,
+          f.rfc,
+          f.rfc_emisor,
+          f.subtotal,
+          f.impuestos,
+          f.total,
+          CASE
+            WHEN f.saldo IS NOT NULL THEN f.saldo
+            ELSE f.total
+          END AS saldo,
+          f.estado,
+          f.url_pdf,
+          f.url_xml,
+          f.fecha_emision,
+          f.fecha_vencimiento,
+          f.created_at,
+          f.updated_at,
+          DATEDIFF(CURDATE(), DATE(f.fecha_vencimiento)) AS dias_atraso,
+          CASE
+            WHEN f.saldo IS NOT NULL THEN f.saldo
+            ELSE f.total
+          END AS monto_pendiente
+        FROM facturas f
+        INNER JOIN facturas_pendientes fp
+          ON fp.id_factura = f.id_factura
+        LEFT JOIN agentes a
+          ON a.id_agente = f.id_agente
+        WHERE COALESCE(
+          CASE
+            WHEN f.saldo IS NOT NULL THEN f.saldo
+            ELSE f.total
+          END,
+          0
+        ) > 0
+          AND (? IS NULL OR f.id_agente = ?)
+          AND (? IS NULL OR DATE(f.fecha_vencimiento) >= ?)
+          AND (? IS NULL OR DATE(f.fecha_vencimiento) <= ?)
+      )
+      SELECT
+        fb.id_factura,
+        fb.uuid_factura,
+        fb.id_agente,
+        fb.nombre_agente,
+        fb.id_empresa,
+        fb.id_facturama,
+        fb.rfc,
+        fb.rfc_emisor,
+        fb.subtotal,
+        fb.impuestos,
+        fb.total,
+        fb.saldo,
+        fb.estado,
+        fb.url_pdf,
+        fb.url_xml,
+        fb.fecha_emision,
+        fb.fecha_vencimiento,
+        fb.created_at,
+        fb.updated_at,
+        fb.dias_atraso,
+        fb.monto_pendiente
+      FROM facturas_base fb
+      WHERE ${bucketWhere}
+      ORDER BY
+        fb.nombre_agente ASC,
+        fb.fecha_vencimiento ASC,
+        fb.created_at DESC;
     `;
 
     const params = [
-      id_agente, id_agente,
-      fecha_vencimiento_inicio, fecha_vencimiento_inicio,
-      fecha_vencimiento_fin, fecha_vencimiento_fin,
+      id_agente,
+      id_agente,
+      fecha_vencimiento_inicio,
+      fecha_vencimiento_inicio,
+      fecha_vencimiento_fin,
+      fecha_vencimiento_fin,
     ];
 
-    return await executeQuery(query, params);
+    const response = await executeQuery(query, params);
+    return response;
   } catch (error) {
     throw error;
   }
