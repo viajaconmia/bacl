@@ -408,10 +408,19 @@ const facturas_pagos_y_saldos = async (req, res) => {
 const saldosUsados = async (req, res) => {
   try {
     const saldos = await executeQuery(
-      `SELECT sf.*, UPPER(ad.nombre_comercial) as nombre FROM saldos_a_favor sf 
-      LEFT JOIN agente_details ad ON ad.id_agente = sf.id_agente
-      WHERE sf.saldo = "0.00" AND sf.activo = 0
-      order by sf.created_at desc;`,
+      `select 
+vw.agente, vw.type as tipo_servicio, vw.codigo_confirmacion, vw.total as total_reserva, vw.created_at as fecha_creacion_reserva,
+f.uuid_factura, f.total as total_factura, f.created_at as fecha_creacion_factura, fps.monto as monto_pago_asignado_a_factura,
+sf.id_saldos, sf.monto, sf.created_at as fecha_creacion_pago
+from saldos_a_favor sf
+left join facturas_pagos_y_saldos fps on fps.id_saldo_a_favor = sf.id_saldos
+left join pagos p on p.id_saldo_a_favor = sf.id_saldos
+left join items_pagos ip on ip.id_pago = p.id_pago 
+inner join items_facturas fi on fi.id_factura = fps.id_factura
+left join facturas f on f.id_factura = fi.id_factura
+left join vw_new_reservas vw on vw.id_relacion = fi.id_relacion
+where vw.metodo_pago = "credito"
+group by sf.id_saldos, fps.id_factura, fi.id_relacion;`,
       [],
     );
     return res.status(200).json({
