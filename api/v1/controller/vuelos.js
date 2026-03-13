@@ -7,6 +7,9 @@ const ERROR = require("../../../lib/utils/messages");
 const Servicio = require("../../../v2/model/servicios.model");
 const ViajeAereo = require("../../../v2/model/viaje_aereo.model");
 const { ca } = require("zod/locales");
+const {
+  procesarSolicitudProveedorAlEditarReserva,
+} = require("../../../v2/controller/reservas.controller");
 // const Booking = require("../../../v2/model/bookings.model");
 // const Item = require("../../../v2/model/model/item.model");
 
@@ -734,6 +737,32 @@ const editarVuelo = async (req, res) => {
     if (cambios.keys.length == 0) throw new Error(ERROR.CHANGES.EMPTY);
     const response = await runTransaction(async (connection) => {
       try {
+        await procesarSolicitudProveedorAlEditarReserva({
+          connection,
+          metadata: {
+            id_booking: viaje_aereo_db.id_booking,
+            cambios,
+            viaje_aereo,
+            viaje_aereoBefore,
+            vuelos,
+            vuelosBefore,
+            reserva,
+            reservaBefore,
+          },
+          usuario: req?.session?.user?.id || req?.user?.email || "system",
+        });
+        console.log("cambios", viaje_aereo_db);
+        console.log("reserva", reserva);
+        if (cambios.keys.includes("costo")) {
+          await connection.execute(
+            `UPDATE bookings SET costo_total = ? WHERE id_booking = ?`,
+            [reserva.costo, viaje_aereo_db.id_booking],
+          );
+          await connection.execute(
+            `UPDATE items SET costo_total = ? WHERE id_viaje_aereo = ?`,
+            [reserva.costo, viaje_aereo_db.id_viaje_aereo],
+          );
+        }
         //Inicia verificación de cambios en vuelos
         if (cambios.keys.includes("vuelos")) {
           await connection.execute(

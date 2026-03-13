@@ -3443,4 +3443,9 @@ const get_reservasClient_by_id_agente = async (body) => {
   }
 };
 
-module.exports = { editar_reserva_definitivo, obtener, cancelarBooking };
+module.exports = {
+  editar_reserva_definitivo,
+  obtener,
+  cancelarBooking,
+  procesarSolicitudProveedorAlEditarReserva,
+};
