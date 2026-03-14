@@ -1128,9 +1128,22 @@ const getResumenFacturasCxC = async () => {
       facturas_base AS (
         SELECT
           f.id_factura,
-          f.id_agente,
-          COALESCE(a.nombre, 'Sin asignar') AS nombre_agente,
+
+          COALESCE(
+            NULLIF(TRIM(a_id.id_agente), ''),
+            NULLIF(TRIM(a_usr.id_agente), ''),
+            NULLIF(TRIM(f.id_agente), ''),
+            NULLIF(TRIM(f.usuario_creador), '')
+          ) AS id_agente,
+
+          COALESCE(
+            NULLIF(TRIM(a_id.nombre), ''),
+            NULLIF(TRIM(a_usr.nombre), ''),
+            'Sin asignar'
+          ) AS nombre_agente,
+
           DATEDIFF(CURDATE(), DATE(f.fecha_vencimiento)) AS dias_atraso,
+
           CASE
             WHEN f.saldo IS NOT NULL THEN f.saldo
             ELSE f.total
@@ -1138,8 +1151,10 @@ const getResumenFacturasCxC = async () => {
         FROM facturas f
         INNER JOIN facturas_pendientes fp
           ON fp.id_factura = f.id_factura
-        LEFT JOIN agentes a
-          ON a.id_agente = f.id_agente
+        LEFT JOIN agentes a_id
+          ON a_id.id_agente = NULLIF(TRIM(f.id_agente), '')
+        LEFT JOIN agentes a_usr
+          ON a_usr.id_agente = NULLIF(TRIM(f.usuario_creador), '')
         WHERE COALESCE(
           CASE
             WHEN f.saldo IS NOT NULL THEN f.saldo
@@ -1219,8 +1234,20 @@ const getDetalleFacturasCxC = async ({
         SELECT
           f.id_factura,
           f.uuid_factura,
-          f.id_agente,
-          COALESCE(a.nombre, 'Sin asignar') AS nombre_agente,
+
+          COALESCE(
+            NULLIF(TRIM(a_id.id_agente), ''),
+            NULLIF(TRIM(a_usr.id_agente), ''),
+            NULLIF(TRIM(f.id_agente), ''),
+            NULLIF(TRIM(f.usuario_creador), '')
+          ) AS id_agente,
+
+          COALESCE(
+            NULLIF(TRIM(a_id.nombre), ''),
+            NULLIF(TRIM(a_usr.nombre), ''),
+            'Sin asignar'
+          ) AS nombre_agente,
+
           f.id_empresa,
           f.id_facturama,
           f.rfc,
@@ -1247,8 +1274,10 @@ const getDetalleFacturasCxC = async ({
         FROM facturas f
         INNER JOIN facturas_pendientes fp
           ON fp.id_factura = f.id_factura
-        LEFT JOIN agentes a
-          ON a.id_agente = f.id_agente
+        LEFT JOIN agentes a_id
+          ON a_id.id_agente = NULLIF(TRIM(f.id_agente), '')
+        LEFT JOIN agentes a_usr
+          ON a_usr.id_agente = NULLIF(TRIM(f.usuario_creador), '')
         WHERE COALESCE(
           CASE
             WHEN f.saldo IS NOT NULL THEN f.saldo
@@ -1256,7 +1285,6 @@ const getDetalleFacturasCxC = async ({
           END,
           0
         ) > 0
-          AND (? IS NULL OR f.id_agente = ?)
           AND (? IS NULL OR DATE(f.fecha_vencimiento) >= ?)
           AND (? IS NULL OR DATE(f.fecha_vencimiento) <= ?)
       )
@@ -1284,6 +1312,7 @@ const getDetalleFacturasCxC = async ({
         fb.monto_pendiente
       FROM facturas_base fb
       WHERE ${bucketWhere}
+        AND (? IS NULL OR fb.id_agente = ?)
       ORDER BY
         fb.nombre_agente ASC,
         fb.fecha_vencimiento ASC,
@@ -1291,12 +1320,12 @@ const getDetalleFacturasCxC = async ({
     `;
 
     const params = [
-      id_agente,
-      id_agente,
       fecha_vencimiento_inicio,
       fecha_vencimiento_inicio,
       fecha_vencimiento_fin,
       fecha_vencimiento_fin,
+      id_agente,
+      id_agente,
     ];
 
     const response = await executeQuery(query, params);

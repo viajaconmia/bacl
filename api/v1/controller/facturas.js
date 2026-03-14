@@ -335,11 +335,84 @@ const updateDocumentosFacturas = async (req, res) => {
   }
 };
 
+// const crearFacturaDesdeCarga = async (req, res) => {
+//   req.context.logStep(
+//     "crearFacturaDesdeCarga",
+//     "Iniciando creación de factura desde carga",
+//   );
+//   const {
+//     fecha_emision,
+//     estado,
+//     usuario_creador,
+//     id_agente,
+//     total,
+//     subtotal,
+//     impuestos,
+//     saldo,
+//     rfc,
+//     id_empresa,
+//     uuid_factura,
+//     rfc_emisor,
+//     url_pdf,
+//     url_xml,
+//     items,
+//     fecha_vencimiento,
+//   } = req.body;
+//   const id_factura = "fac-" + uuidv4();
+
+//   console.log(items, "estos son los items 👌👌👌👌👌👌👌👌");
+
+//   try {
+//     console.log("😒😒😒😒😒", req.body);
+//     const response = await executeSP("sp_inserta_factura_desde_carga", [
+//       id_factura,
+//       fecha_emision,
+//       estado,
+//       usuario_creador,
+//       id_agente,
+//       total,
+//       subtotal,
+//       impuestos,
+//       saldo,
+//       rfc,
+//       id_empresa,
+//       uuid_factura,
+//       rfc_emisor,
+//       url_pdf,
+//       url_xml,
+//       items,
+//       fecha_vencimiento,
+//     ]);
+
+//     if (!response) {
+//       req.context.logStep(
+//         "crearFacturaDesdeCarga:",
+//         "Error al crear factura desde carga",
+//       );
+//       throw new Error("No se pudo crear la factura desde carga");
+//     } else {
+//       console.log(id_factura, response, items);
+//       res.status(201).json({
+//         message: "Factura creada correctamente desde carga",
+//         data: { id_factura, ...response },
+//       });
+//     }
+//   } catch (error) {
+//     req.context.logStep("Error en crearFacturaDesdeCarga:", error);
+//     res.status(500).json({
+//       error: "Error al crear factura desde carga",
+//       details: error.message || error,
+//       otherDetails: error.response?.data || null,
+//     });
+//   }
+// };
+
 const crearFacturaDesdeCarga = async (req, res) => {
   req.context.logStep(
     "crearFacturaDesdeCarga",
     "Iniciando creación de factura desde carga",
   );
+
   const {
     fecha_emision,
     estado,
@@ -357,49 +430,99 @@ const crearFacturaDesdeCarga = async (req, res) => {
     url_xml,
     items,
     fecha_vencimiento,
+    facturas,
   } = req.body;
+
   const id_factura = "fac-" + uuidv4();
 
-  console.log(items, "estos son los items 👌👌👌👌👌👌👌👌");
-
   try {
-    console.log("😒😒😒😒😒", req.body);
+    const facturaData = facturas?.facturaData || {};
+    const comprobante = facturaData?.comprobante || {};
+    const emisor = facturaData?.emisor || {};
+    const receptor = facturaData?.receptor || {};
+    const conceptosArr = facturaData?.conceptos || [];
+    const timbreFiscal = facturaData?.timbreFiscal || {};
+
+    const itemsNormalizados =
+      typeof items === "string" ? JSON.parse(items) : items || [];
+
+    const itemsJson = JSON.stringify(itemsNormalizados);
+
+    const conceptosJson = JSON.stringify({
+      comprobante,
+      emisor,
+      receptor,
+      conceptos: conceptosArr,
+      impuestos: facturaData?.impuestos || null,
+      timbreFiscal,
+    });
+
+    let iva16 = 0;
+    let iva8 = 0;
+
+    for (const concepto of conceptosArr) {
+      const imp = concepto?.impuestos;
+      if (!imp) continue;
+
+      const tasa = Number(imp?.tasaOCuota || 0);
+      const importe = Number(imp?.importe || 0);
+
+      if (tasa === 0.16) iva16 += importe;
+      if (tasa === 0.08) iva8 += importe;
+    }
+
     const response = await executeSP("sp_inserta_factura_desde_carga", [
-      id_factura,
-      fecha_emision,
-      estado,
-      usuario_creador,
-      id_agente,
-      total,
-      subtotal,
-      impuestos,
-      saldo,
-      rfc,
-      id_empresa,
-      uuid_factura,
-      rfc_emisor,
-      url_pdf,
-      url_xml,
-      items,
-      fecha_vencimiento,
+      id_factura,                                  // 1
+      fecha_emision || comprobante?.fecha || null, // 2
+      timbreFiscal?.fechaTimbrado || null,         // 3
+      comprobante?.serie || null,                  // 4
+      comprobante?.folio || null,                  // 5
+      estado || "Confirmada",                      // 6
+      timbreFiscal?.uuid ? "Vigente" : null,       // 7 estado_sat
+      "4.0",                                       // 8 cfdi_version
+      comprobante?.tipoDeComprobante || null,      // 9
+      usuario_creador,                             // 10
+      id_agente,                                   // 11
+      Number(total) || 0,                          // 12
+      Number(subtotal) || 0,                       // 13
+      iva16 || 0,                                  // 14
+      iva8 || 0,                                   // 15
+      Number(impuestos) || 0,                      // 16
+      receptor?.regimenFiscal || null,             // 17
+      receptor?.domicilioFiscal || null,           // 18
+      null,                                        // 19 id_facturama
+      rfc || receptor?.rfc || null,                // 20
+      id_empresa,                                  // 21
+      uuid_factura || timbreFiscal?.uuid || null,  // 22
+      rfc_emisor || emisor?.rfc || null,           // 23
+      emisor?.nombre || null,                      // 24
+      comprobante?.lugarExpedicion || null,        // 25
+      receptor?.rfc || null,                       // 26
+      receptor?.nombre || null,                    // 27
+      receptor?.usoCFDI || null,                   // 28
+      comprobante?.moneda || null,                 // 29
+      comprobante?.formaPago || null,              // 30
+      comprobante?.metodoPago || null,             // 31
+      comprobante?.condicionesDePago || null,      // 32
+      conceptosJson,                               // 33
+      Number(saldo) || 0,                          // 34
+      url_pdf || null,                             // 35
+      url_xml || null,                             // 36
+      itemsJson,                                   // 37
+      fecha_vencimiento || null,                   // 38
     ]);
 
     if (!response) {
-      req.context.logStep(
-        "crearFacturaDesdeCarga:",
-        "Error al crear factura desde carga",
-      );
       throw new Error("No se pudo crear la factura desde carga");
-    } else {
-      console.log(id_factura, response, items);
-      res.status(201).json({
-        message: "Factura creada correctamente desde carga",
-        data: { id_factura, ...response },
-      });
     }
+
+    return res.status(201).json({
+      message: "Factura creada correctamente desde carga",
+      data: { id_factura, ...response },
+    });
   } catch (error) {
     req.context.logStep("Error en crearFacturaDesdeCarga:", error);
-    res.status(500).json({
+    return res.status(500).json({
       error: "Error al crear factura desde carga",
       details: error.message || error,
       otherDetails: error.response?.data || null,
