@@ -2275,19 +2275,6 @@ const editar_reserva_definitivo = async (req, res) => {
           error: "Faltan IDs clave (id_servicio, id_hospedaje, id_booking).",
         });
       }
-
-      if (
-        estado_reserva?.before === "Confirmada" &&
-        estado_reserva?.current === "Cancelada"
-      ) {
-        const response = await executeQuery(
-          "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_hospedaje, '-', ''), 8)) WHERE id_hospedaje = ?",
-          [metadata.id_hospedaje],
-        );
-      }
-
-      console.log(metadata.id_booking, "👍👍👍👍");
-
       const estado_solicitud = "CANCELADA";
 
       /*
@@ -3370,6 +3357,12 @@ const cancelarBooking = async (req, res) => {
   try {
     const response = await runTransaction(async (conn) => {
       const response = await cancelar(conn, id_booking);
+
+      await procesarSolicitudProveedorAlEditarReserva({
+        connection: conn,
+        metadata: { id_booking },
+        usuario: req?.user?.id || req?.user?.email || "system",
+      });
       return response;
     });
     res.status(200).json({ message: "obtenido bien", data: response });
@@ -3409,6 +3402,11 @@ const cancelar = async (conn, id_booking) => {
       "UPDATE renta_autos SET codigo_renta_carro = CONCAT(codigo_renta_carro,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
       [id_booking],
     );
+    const response4 = await executeQuery(
+      "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+      [id_booking],
+    );
+
     return response;
   } catch (error) {
     throw error;
