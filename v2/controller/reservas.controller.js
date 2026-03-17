@@ -3356,13 +3356,23 @@ const cancelarBooking = async (req, res) => {
   const { id_booking } = req.body;
   try {
     const response = await runTransaction(async (conn) => {
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
+        id_booking,
+      );
       const response = await cancelar(conn, id_booking);
-
-      await procesarSolicitudProveedorAlEditarReserva({
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor...",
+      );
+      const res = await procesarSolicitudProveedorAlEditarReserva({
         connection: conn,
         metadata: { id_booking },
         usuario: req?.user?.id || req?.user?.email || "system",
       });
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Solicitud al proveedor procesada:",
+        res,
+      );
       return response;
     });
     res.status(200).json({ message: "obtenido bien", data: response });
