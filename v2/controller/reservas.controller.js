@@ -3412,7 +3412,7 @@ const cancelar = async (conn, id_booking) => {
       "UPDATE renta_autos SET codigo_renta_carro = CONCAT(codigo_renta_carro,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
       [id_booking],
     );
-    const response4 = await executeQuery(
+    const response4 = await conn.execute(
       "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
       [id_booking],
     );
