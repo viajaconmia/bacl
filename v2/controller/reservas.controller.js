@@ -2071,7 +2071,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
           cuenta_destino,
           nombre_pagador,
           nombre_beneficiario,
-          descripcion,
+          descripcion
         FROM pago_proveedores
         WHERE id_solicitud_proveedor = ?
         ORDER BY COALESCE(fecha_pago, fecha_emision) DESC, id_pago_proveedores DESC
