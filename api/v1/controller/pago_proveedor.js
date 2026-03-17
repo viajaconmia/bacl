@@ -938,202 +938,6 @@ const createSolicitud = async (req, res) => {
   }
 };
 
-// const createDispersion = async (req, res) => {
-
-//   try {
-//     console.log("📥 Datos recibidos en createDispersion:", req.body);
-
-//     const {
-//       id_dispersion,
-//       referencia_numerica,
-//       motivo_pago,
-//       layoutUrl,
-//       solicitudes = [],
-//     } = req.body;
-
-//     if (!id_dispersion) {
-//       return res.status(400).json({
-//         ok: false,
-//         message: "id_dispersion es requerido",
-//       });
-//     }
-
-//     if (!Array.isArray(solicitudes) || solicitudes.length === 0) {
-//       return res.status(400).json({
-//         ok: false,
-//         message: "Debe haber al menos una solicitud en la dispersión",
-//       });
-//     }
-
-//     // Normaliza IDs y elimina duplicados
-//     const ids = [
-//       ...new Set(
-//         solicitudes
-//           .map((s) => Number(s?.id_solicitud_proveedor))
-//           .filter((id) => Number.isInteger(id) && id > 0)
-//       ),
-//     ];
-
-//     if (ids.length === 0) {
-//       return res.status(400).json({
-//         ok: false,
-//         message: "Las solicitudes no traen id_solicitud_proveedor válido",
-//       });
-//     }
-
-//     // Mapa para recuperar datos del payload por id_solicitud_proveedor
-//     const solicitudMap = new Map(
-//       solicitudes.map((s) => [Number(s.id_solicitud_proveedor), s])
-//     );
-
-
-//     const inPlaceholders = ids.map(() => "?").join(", ");
-
-//     // 1) Bloquea y obtiene las solicitudes
-//     const saldoSql = `
-//       SELECT
-//         id_solicitud_proveedor,
-//         saldo,
-//         estado_solicitud
-//       FROM solicitudes_pago_proveedor
-//       WHERE id_solicitud_proveedor IN (${inPlaceholders})
-//       FOR UPDATE;
-//     `;
-
-//     const [saldoRows] = await conn.execute(saldoSql, ids);
-
-//     const saldoMap = new Map(
-//       (saldoRows || []).map((r) => [
-//         Number(r.id_solicitud_proveedor),
-//         {
-//           saldo: Number(r.saldo ?? 0),
-//           estado_solicitud: String(r.estado_solicitud ?? "").trim(),
-//         },
-//       ])
-//     );
-
-//     // 2) Validar que existan todas
-//     const faltantes = ids.filter((id) => !saldoMap.has(id));
-//     if (faltantes.length > 0) {
-//       await conn.rollback();
-//       return res.status(400).json({
-//         ok: false,
-//         message:
-//           "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
-//         faltantes,
-//       });
-//     }
-
-//     // 3) Evitar duplicar dentro de la misma dispersión
-//     const duplicateSql = `
-//       SELECT id_solicitud_proveedor
-//       FROM dispersion_pagos_proveedor
-//       WHERE codigo_dispersion = ?
-//         AND id_solicitud_proveedor IN (${inPlaceholders});
-//     `;
-
-//     const [duplicateRows] = await conn.execute(duplicateSql, [
-//       id_dispersion,
-//       ...ids,
-//     ]);
-
-//     if ((duplicateRows || []).length > 0) {
-//       await conn.rollback();
-//       return res.status(400).json({
-//         ok: false,
-//         message:
-//           "Ya existen solicitudes registradas en dispersion_pagos_proveedor para este codigo_dispersion",
-//         duplicados: duplicateRows.map((r) => Number(r.id_solicitud_proveedor)),
-//       });
-//     }
-
-//     // 4) Insertar en dispersion_pagos_proveedor usando el saldo actual de BD
-//     const values = ids.map((idSol) => {
-//       const dataDb = saldoMap.get(idSol);
-//       const itemPayload = solicitudMap.get(idSol);
-
-//       const saldoDb = Number(dataDb?.saldo ?? 0);
-//       const fechaPago = itemPayload?.fecha_pago ?? null;
-
-//       return [
-//         idSol,           // id_solicitud_proveedor
-//         saldoDb,         // monto_solicitado
-//         saldoDb,         // saldo
-//         0,               // monto_pagado
-//         id_dispersion,   // codigo_dispersion
-//         fechaPago,       // fecha_pago
-//       ];
-//     });
-
-//     const insertPlaceholders = values.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
-
-//     const insertSql = `
-//       INSERT INTO dispersion_pagos_proveedor (
-//         id_solicitud_proveedor,
-//         monto_solicitado,
-//         saldo,
-//         monto_pagado,
-//         codigo_dispersion,
-//         fecha_pago
-//       ) VALUES ${insertPlaceholders};
-//     `;
-
-//     const [insertResult] = await conn.execute(insertSql, values.flat());
-
-//     // 5) Actualizar estado de las solicitudes
-//     const updateSql = `
-//       UPDATE solicitudes_pago_proveedor
-//       SET estado_solicitud = 'DISPERSION'
-//       WHERE id_solicitud_proveedor IN (${inPlaceholders});
-//     `;
-
-//     await conn.execute(updateSql, ids);
-
-//     // 6) Commit
-//     await conn.commit();
-
-//     // 7) Construir ids insertados a partir del insertId
-//     const firstInsertId = Number(insertResult?.insertId ?? 0);
-//     const insertedCount = Number(insertResult?.affectedRows ?? 0);
-
-//     const id_pagos =
-//       firstInsertId > 0 && insertedCount > 0
-//         ? Array.from({ length: insertedCount }, (_, i) =>
-//             String(firstInsertId + i)
-//           )
-//         : [];
-
-//     return res.status(200).json({
-//       ok: true,
-//       message: "Dispersión creada y registros guardados correctamente",
-//       data: {
-//         id_dispersion,
-//         referencia_numerica: referencia_numerica ?? null,
-//         motivo_pago: motivo_pago ?? null,
-//         layoutUrl: layoutUrl ?? null,
-//         id_pagos,
-//         total_registros: ids.length,
-//       },
-//     });
-//   } catch (error) {
-//     if (conn) {
-//       try {
-//         await conn.rollback();
-//       } catch (_) {}
-//     }
-
-//     console.error("❌ Error en createDispersion:", error);
-
-//     return res.status(500).json({
-//       ok: false,
-//       error: "Internal Server Error",
-//       details: error?.sqlMessage || error?.message,
-//     });
-//   } finally {
-//     if (conn) conn.release();
-//   }
-// };
-
 const createDispersion = async (req, res) => {
   try {
     console.log("📥 Datos recibidos en createDispersion:", req.body);
@@ -1146,7 +950,12 @@ const createDispersion = async (req, res) => {
       solicitudes = [],
     } = req.body;
 
-    if (!id_dispersion) {
+    const idDispersion = String(id_dispersion ?? "").trim();
+    const referenciaNumerica = String(referencia_numerica ?? "").trim() || null;
+    const motivoPago = String(motivo_pago ?? "").trim() || null;
+    const layoutUrlSafe = String(layoutUrl ?? "").trim() || null;
+
+    if (!idDispersion) {
       return res.status(400).json({
         ok: false,
         message: "id_dispersion es requerido",
@@ -1160,6 +969,7 @@ const createDispersion = async (req, res) => {
       });
     }
 
+    // 1) IDs únicos válidos
     const ids = [
       ...new Set(
         solicitudes
@@ -1175,13 +985,61 @@ const createDispersion = async (req, res) => {
       });
     }
 
+    // 2) Normalizar payload recibido
     const solicitudMap = new Map(
-      solicitudes.map((s) => [Number(s.id_solicitud_proveedor), s])
+      solicitudes.map((s) => {
+        const idSolProv = Number(s?.id_solicitud_proveedor);
+
+        return [
+          idSolProv,
+          {
+            ...s,
+            id_solicitud: s?.id_solicitud != null ? String(s.id_solicitud) : null,
+            id_solicitud_proveedor: Number.isInteger(idSolProv) && idSolProv > 0 ? idSolProv : null,
+            id_pago: s?.id_pago != null ? String(s.id_pago) : null,
+
+            id_proveedor:
+              s?.id_proveedor != null && s.id_proveedor !== ""
+                ? Number(s.id_proveedor)
+                : null,
+
+            clave_proveedor:
+              s?.clave_proveedor != null && s.clave_proveedor !== ""
+                ? String(s.clave_proveedor).trim()
+                : null,
+
+            cuenta_de_deposito:
+              s?.cuenta_de_deposito != null && s.cuenta_de_deposito !== ""
+                ? String(s.cuenta_de_deposito).trim()
+                : null,
+
+            tipo_cuenta:
+              s?.tipo_cuenta != null && s.tipo_cuenta !== ""
+                ? String(s.tipo_cuenta).trim()
+                : null,
+
+            costo_proveedor:
+              s?.costo_proveedor != null && s.costo_proveedor !== ""
+                ? Number(s.costo_proveedor)
+                : null,
+
+            codigo_hotel:
+              s?.codigo_hotel != null && s.codigo_hotel !== ""
+                ? String(s.codigo_hotel).trim()
+                : null,
+
+            fecha_pago:
+              s?.fecha_pago != null && s.fecha_pago !== ""
+                ? s.fecha_pago
+                : null,
+          },
+        ];
+      })
     );
 
     const inPlaceholders = ids.map(() => "?").join(", ");
 
-    // 1) Obtener solicitudes
+    // 3) Obtener saldo y estado actual de las solicitudes
     const saldoSql = `
       SELECT
         id_solicitud_proveedor,
@@ -1213,7 +1071,7 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // 2) Evitar duplicar dentro de la misma dispersión
+    // 4) Evitar repetir solicitudes en el mismo código de dispersión
     const duplicateSql = `
       SELECT id_solicitud_proveedor
       FROM dispersion_pagos_proveedor
@@ -1222,7 +1080,7 @@ const createDispersion = async (req, res) => {
     `;
 
     const duplicateRows = await executeQuery(duplicateSql, [
-      id_dispersion,
+      idDispersion,
       ...ids,
     ]);
 
@@ -1235,7 +1093,8 @@ const createDispersion = async (req, res) => {
       });
     }
 
-    // 3) Insertar en dispersion_pagos_proveedor
+    // 5) Insertar registros en dispersion_pagos_proveedor
+    // Aquí seguimos usando el saldo de DB como monto oficial
     const values = ids.map((idSol) => {
       const dataDb = saldoMap.get(idSol);
       const itemPayload = solicitudMap.get(idSol);
@@ -1244,12 +1103,12 @@ const createDispersion = async (req, res) => {
       const fechaPago = itemPayload?.fecha_pago ?? null;
 
       return [
-        idSol,
-        saldoDb,
-        saldoDb,
-        0,
-        id_dispersion,
-        fechaPago,
+        idSol,          // id_solicitud_proveedor
+        saldoDb,        // monto_solicitado
+        saldoDb,        // saldo
+        0,              // monto_pagado
+        idDispersion,   // codigo_dispersion
+        fechaPago,      // fecha_pago
       ];
     });
 
@@ -1268,7 +1127,7 @@ const createDispersion = async (req, res) => {
 
     const insertResult = await executeQuery(insertSql, values.flat());
 
-    // 4) Actualizar estado
+    // 6) Actualizar estado de las solicitudes
     const updateSql = `
       UPDATE solicitudes_pago_proveedor
       SET estado_solicitud = 'DISPERSION'
@@ -1277,6 +1136,7 @@ const createDispersion = async (req, res) => {
 
     await executeQuery(updateSql, ids);
 
+    // 7) Reconstruir IDs insertados
     const firstInsertId = Number(insertResult?.insertId ?? 0);
     const insertedCount = Number(insertResult?.affectedRows ?? 0);
 
@@ -1287,16 +1147,36 @@ const createDispersion = async (req, res) => {
           )
         : [];
 
+    // 8) Resumen útil para revisar qué recibió el backend
+    const solicitudesProcesadas = ids.map((idSol, index) => {
+      const payload = solicitudMap.get(idSol);
+      const saldoInfo = saldoMap.get(idSol);
+
+      return {
+        id_pago: id_pagos[index] ?? null,
+        id_solicitud_proveedor: idSol,
+        id_solicitud: payload?.id_solicitud ?? null,
+        id_proveedor: payload?.id_proveedor ?? null,
+        clave_proveedor: payload?.clave_proveedor ?? null,
+        cuenta_de_deposito: payload?.cuenta_de_deposito ?? null,
+        tipo_cuenta: payload?.tipo_cuenta ?? null,
+        codigo_hotel: payload?.codigo_hotel ?? null,
+        fecha_pago: payload?.fecha_pago ?? null,
+        saldo_db: Number(saldoInfo?.saldo ?? 0),
+      };
+    });
+
     return res.status(200).json({
       ok: true,
       message: "Dispersión creada y registros guardados correctamente",
       data: {
-        id_dispersion,
-        referencia_numerica: referencia_numerica ?? null,
-        motivo_pago: motivo_pago ?? null,
-        layoutUrl: layoutUrl ?? null,
+        id_dispersion: idDispersion,
+        referencia_numerica: referenciaNumerica,
+        motivo_pago: motivoPago,
+        layoutUrl: layoutUrlSafe,
         id_pagos,
         total_registros: ids.length,
+        solicitudes_procesadas: solicitudesProcesadas,
       },
     });
   } catch (error) {

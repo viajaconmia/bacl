@@ -7,7 +7,7 @@ router.post("/solicitud", controller.createSolicitud);
 router.get("/saldo_a_favor", controller.saldo_a_favor)
 router.post("/cambio_de_estatus", controller.cambio_estatus)
 router.post("/dispersion", controller.createDispersion)
-router.post("/pago", controller.createPago)
+router.post("/pago", controller.createPago) 
 router.get("/datosFiscales",controller.getDatosFiscalesProveedor);
 router.get("/saldos",controller.saldos)
 router.post("/editProveedor",controller.editProveedores);
