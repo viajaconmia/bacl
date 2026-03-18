@@ -3084,41 +3084,43 @@ const getSolicitudes2 = async (req, res) => {
     // ---------------- inputs GET ----------------
     const debug = Number(req.query.debug ?? 0) === 1;
 
-    const filters = {
-      folio: clean(req.query.folio),
-      cliente: clean(req.query.cliente),
-      viajero: clean(req.query.viajero),
-      hotel: clean(req.query.hotel),
-      estado_solicitud: clean(req.query.estado_solicitud),
-      forma_pago: clean(req.query.forma_pago),
+const filters = {
+  folio: clean(req.query.folio),
+  cliente: clean(req.query.cliente),
+  viajero: clean(req.query.viajero),
+  hotel: clean(req.query.hotel),
+  estado_solicitud: clean(req.query.estado_solicitud),
+  estado_facturacion: clean(req.query.estado_facturacion),
+  forma_pago: clean(req.query.forma_pago),
 
-      created_start: toDateStart(req.query.created_start),
-      created_end: toDateEnd(req.query.created_end),
+  created_start: toDateStart(req.query.created_start),
+  created_end: toDateEnd(req.query.created_end),
 
-      check_in_start: clean(req.query.check_in_start),
-      check_in_end: clean(req.query.check_in_end),
-      check_out_start: clean(req.query.check_out_start),
-      check_out_end: clean(req.query.check_out_end),
-    };
+  check_in_start: clean(req.query.check_in_start),
+  check_in_end: clean(req.query.check_in_end),
+  check_out_start: clean(req.query.check_out_start),
+  check_out_end: clean(req.query.check_out_end),
+};
 
     // ---------------- fetch SP filtrado ----------------
-    const spRows = await executeSP(
-      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
-      [
-        filters.folio,
-        filters.cliente,
-        filters.viajero,
-        filters.hotel,
-        filters.estado_solicitud,
-        filters.forma_pago,
-        filters.created_start,
-        filters.created_end,
-        filters.check_in_start,
-        filters.check_in_end,
-        filters.check_out_start,
-        filters.check_out_end,
-      ]
-    );
+const spRows = await executeSP(
+  STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
+  [
+    filters.folio,
+    filters.cliente,
+    filters.viajero,
+    filters.hotel,
+    filters.estado_solicitud,
+    filters.estado_facturacion,
+    filters.forma_pago,
+    filters.created_start,
+    filters.created_end,
+    filters.check_in_start,
+    filters.check_in_end,
+    filters.check_out_start,
+    filters.check_out_end,
+  ]
+);
 
     const ids = (spRows || [])
       .map((r) => r.id_solicitud_proveedor)
@@ -3141,7 +3143,6 @@ const getSolicitudes2 = async (req, res) => {
     }, {});
 
     // ---------------- normalize rows ----------------
-    // OJO: aquí ya NO uses sortByHospedajeReciente
     const data = (spRows || []).map((r) => {
       const {
         id_solicitud_proveedor,
@@ -3158,11 +3159,19 @@ const getSolicitudes2 = async (req, res) => {
         ultimos_4,
         banco_emisor,
         tipo_tarjeta,
-        rfc,
-        razon_social,
         estatus_pagos,
         is_ajuste,
         comentario_ajuste,
+
+        // nuevos campos del SP
+        pagos_facturas_proveedores_json,
+        uuids_facturas_json,
+        rfcs_facturas_json,
+        razones_sociales_facturas_json,
+        uuid_factura_principal,
+        rfc_factura_principal,
+        razon_social_factura_principal,
+
         ...rest
       } = r;
 
@@ -3172,6 +3181,11 @@ const getSolicitudes2 = async (req, res) => {
       const pagoStats = getPagoStats(pagos);
       const saldoNum = num(saldo);
       const factNums = getFacturaNums({ ...r, ...rest });
+
+      const facturasProveedor = toArray(pagos_facturas_proveedores_json);
+      const uuidsFacturas = toArray(uuids_facturas_json);
+      const rfcsFacturas = toArray(rfcs_facturas_json);
+      const razonesSocialesFacturas = toArray(razones_sociales_facturas_json);
 
       const estaPagada =
         norm(estatus_pagos) === "pagado" ||
@@ -3211,8 +3225,18 @@ const getSolicitudes2 = async (req, res) => {
         },
 
         proveedor: {
-          rfc,
-          razon_social,
+          rfc: rfc_factura_principal,
+          razon_social: razon_social_factura_principal,
+        },
+
+        facturas_proveedor: {
+          uuid_factura_principal,
+          rfc_factura_principal,
+          razon_social_factura_principal,
+          uuids_facturas: uuidsFacturas,
+          rfcs_facturas: rfcsFacturas,
+          razones_sociales_facturas: razonesSocialesFacturas,
+          facturas: facturasProveedor,
         },
 
         pagos,
@@ -3470,6 +3494,10 @@ const cargarFactura = async (req, res) => {
       });
     }
 
+    const totalN = toNumber(total);
+    const subtotalN = toNumber(subtotal);
+    const impuestosN = toNumber(impuestos);
+
     const proveedorFirst = proveedoresArr[0];
 
     const proveedor_razon_social =
@@ -3488,7 +3516,7 @@ const cargarFactura = async (req, res) => {
       const id_solicitud_proveedor =
         p?.solicitud_proveedor?.id_solicitud_proveedor ??
         p?.id_solicitud_proveedor ??
-        p?.id_solicitud ?? // payload múltiple
+        p?.id_solicitud ??
         null;
 
       if (!id_solicitud_proveedor) {
@@ -3498,19 +3526,23 @@ const cargarFactura = async (req, res) => {
       }
 
       const monto_solicitado = toNumber(
-        p?.solicitud_proveedor?.monto_solicitado ?? p?.monto_solicitado ?? 0,
+        p?.solicitud_proveedor?.monto_solicitado ??
+        p?.monto_solicitado ??
+        0,
       );
 
       const monto_facturado = toNumber(
         p?.monto_asociar ?? p?.monto_facturado ?? 0,
       );
 
-      if (monto_facturado <= 0) {
+      // ✅ Permitimos 0, solo rechazamos negativos
+      if (monto_facturado < 0) {
         throw new Error(
-          `proveedoresData[${idx}] monto_asociar inválido (debe ser > 0)`,
+          `proveedoresData[${idx}] monto_asociar inválido (no puede ser negativo)`,
         );
       }
 
+      // ✅ Si viene monto_solicitado, no debe excederlo
       if (monto_solicitado > 0 && monto_facturado > monto_solicitado) {
         throw new Error(
           `proveedoresData[${idx}] monto_asociar (${monto_facturado}) excede monto_solicitado (${monto_solicitado})`,
@@ -3532,22 +3564,26 @@ const cargarFactura = async (req, res) => {
           id_solicitud_proveedor,
           monto_solicitado,
         },
-        monto_facturado, // ✅ lo que el SP lee
-        pendiente_facturar, // opcional
+        monto_facturado,       // ✅ puede ser 0
+        pendiente_facturar,
       };
     });
 
-    // ✅ SUMA TOTAL = p_monto_facturado
+    // ✅ SUMA TOTAL ASOCIADA
     const monto_facturado_total = detalle.reduce(
       (acc, x) => acc + toNumber(x.monto_facturado),
       0,
     );
 
-    const proveedoresDataSP = JSON.stringify(detalle);
+    // ✅ Validación global: lo asociado no puede exceder el total de la factura
+    if (monto_facturado_total > totalN) {
+      return res.status(400).json({
+        error: "Monto asociado inválido",
+        message: `La suma de monto_asociar (${monto_facturado_total}) no puede ser mayor al total de la factura (${totalN}).`,
+      });
+    }
 
-    const totalN = toNumber(total);
-    const subtotalN = toNumber(subtotal);
-    const impuestosN = toNumber(impuestos);
+    const proveedoresDataSP = JSON.stringify(detalle);
 
     const saldo_x_aplicar_items = totalN - monto_facturado_total;
     const estado_factura = estado;
@@ -3560,7 +3596,7 @@ const cargarFactura = async (req, res) => {
         uuid_factura,
         rfc_emisor,
         proveedor_razon_social,
-        monto_facturado_total, // ✅ AHORA SÍ
+        monto_facturado_total,
         url_xml,
         url_pdf,
         fechaFacturaSQL,
@@ -3574,12 +3610,12 @@ const cargarFactura = async (req, res) => {
         totalN,
         subtotalN,
         impuestosN,
-        saldo_x_aplicar_items, // ✅ AHORA SÍ
+        saldo_x_aplicar_items,
         rfc,
         id_empresa,
         fecha_vencimiento,
 
-        proveedoresDataSP, // ✅ ARRAY
+        proveedoresDataSP,
       ],
     );
 
@@ -3590,54 +3626,47 @@ const cargarFactura = async (req, res) => {
           .filter(Boolean),
       ),
     ];
+
     if (idsSolicitudes.length > 0) {
       const placeholders = idsSolicitudes.map(() => "?").join(",");
 
       const updateEstatus = `
-    UPDATE solicitudes_pago_proveedor spp
-    LEFT JOIN (
-      SELECT
-        pfp.id_solicitud,
-        SUM(
-          CAST(COALESCE(NULLIF(pfp.monto_facturado, ''), '0') AS DECIMAL(12,2))
-        ) AS total_facturado
-      FROM pagos_facturas_proveedores pfp
-      WHERE pfp.id_solicitud IN (${placeholders})
-      GROUP BY pfp.id_solicitud
-    ) agg
-      ON agg.id_solicitud = spp.id_solicitud_proveedor
-    SET
-      -- Guardamos total facturado (opcional, pero recomendado)
-      spp.monto_facturado = IFNULL(agg.total_facturado, 0),
+        UPDATE solicitudes_pago_proveedor spp
+        LEFT JOIN (
+          SELECT
+            pfp.id_solicitud,
+            SUM(
+              CAST(COALESCE(NULLIF(pfp.monto_facturado, ''), '0') AS DECIMAL(12,2))
+            ) AS total_facturado
+          FROM pagos_facturas_proveedores pfp
+          WHERE pfp.id_solicitud IN (${placeholders})
+          GROUP BY pfp.id_solicitud
+        ) agg
+          ON agg.id_solicitud = spp.id_solicitud_proveedor
+        SET
+          spp.monto_facturado = IFNULL(agg.total_facturado, 0),
+          spp.monto_por_facturar = GREATEST(
+            CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
+            0
+          ),
+          spp.estado_facturacion = CASE
+            WHEN GREATEST(
+              CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
+              0
+            ) = 0 THEN 'facturado'
+            WHEN GREATEST(
+              CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
+              0
+            ) <> CAST(spp.monto_solicitado AS DECIMAL(12,2)) THEN 'parcial'
+            ELSE 'pendiente'
+          END,
+          spp.estatus_pagos = CASE
+            WHEN CAST(COALESCE(NULLIF(spp.saldo, ''), '0') AS DECIMAL(12,2)) = 0 THEN 'pagado'
+            ELSE spp.estatus_pagos
+          END
+        WHERE spp.id_solicitud_proveedor IN (${placeholders});
+      `;
 
-      -- Recalculamos monto_por_facturar
-      spp.monto_por_facturar = GREATEST(
-        CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
-        0
-      ),
-
-      -- Estado facturacion según tus reglas
-      spp.estado_facturacion = CASE
-        WHEN GREATEST(
-          CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
-          0
-        ) = 0 THEN 'facturado'
-        WHEN GREATEST(
-          CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
-          0
-        ) <> CAST(spp.monto_solicitado AS DECIMAL(12,2)) THEN 'parcial'
-        ELSE 'pendiente'
-      END,
-
-      -- Estatus pagos: si saldo=0 => pagado
-      spp.estatus_pagos = CASE
-        WHEN CAST(COALESCE(NULLIF(spp.saldo, ''), '0') AS DECIMAL(12,2)) = 0 THEN 'pagado'
-        ELSE spp.estatus_pagos
-      END
-    WHERE spp.id_solicitud_proveedor IN (${placeholders});
-  `;
-
-      // Se usan placeholders 2 veces: IN(subquery) + IN(where)
       await executeQuery(updateEstatus, [...idsSolicitudes, ...idsSolicitudes]);
     }
 
