@@ -2242,19 +2242,6 @@ const editar_reserva_definitivo = async (req, res) => {
           error: "Faltan IDs clave (id_servicio, id_hospedaje, id_booking).",
         });
       }
-
-      if (
-        estado_reserva?.before === "Confirmada" &&
-        estado_reserva?.current === "Cancelada"
-      ) {
-        const response = await executeQuery(
-          "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_hospedaje, '-', ''), 8)) WHERE id_hospedaje = ?",
-          [metadata.id_hospedaje],
-        );
-      }
-
-      console.log(metadata.id_booking, "👍👍👍👍");
-
       const estado_solicitud = "CANCELADA";
 
       /*
@@ -3336,7 +3323,23 @@ const cancelarBooking = async (req, res) => {
   const { id_booking } = req.body;
   try {
     const response = await runTransaction(async (conn) => {
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
+        id_booking,
+      );
       const response = await cancelar(conn, id_booking);
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor...",
+      );
+      const res = await procesarSolicitudProveedorAlEditarReserva({
+        connection: conn,
+        metadata: { id_booking },
+        usuario: req?.user?.id || req?.user?.email || "system",
+      });
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Solicitud al proveedor procesada:",
+        res,
+      );
       return response;
     });
     res.status(200).json({ message: "obtenido bien", data: response });
@@ -3376,6 +3379,11 @@ const cancelar = async (conn, id_booking) => {
       "UPDATE renta_autos SET codigo_renta_carro = CONCAT(codigo_renta_carro,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
       [id_booking],
     );
+    const response4 = await conn.execute(
+      "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+      [id_booking],
+    );
+
     return response;
   } catch (error) {
     throw error;
