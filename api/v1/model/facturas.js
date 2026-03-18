@@ -954,6 +954,26 @@ order by fecha_emision desc;`;
   }
 };
 
+const getBucketWhere = (bucket) => {
+  switch (bucket) {
+    case "vigentes":
+      return `(fecha_vencimiento IS NULL OR DATEDIFF(CURDATE(), DATE(fecha_vencimiento)) <= 0)`;
+    case "1_7":
+      return `DATEDIFF(CURDATE(), DATE(fecha_vencimiento)) BETWEEN 1 AND 7`;
+    case "8_15":
+      return `DATEDIFF(CURDATE(), DATE(fecha_vencimiento)) BETWEEN 8 AND 15`;
+    case "16_20":
+      return `DATEDIFF(CURDATE(), DATE(fecha_vencimiento)) BETWEEN 16 AND 20`;
+    case "21_30":
+      return `DATEDIFF(CURDATE(), DATE(fecha_vencimiento)) BETWEEN 21 AND 30`;
+    case "mas_30":
+      return `DATEDIFF(CURDATE(), DATE(fecha_vencimiento)) > 30`;
+    case "all":
+    default:
+      return `1=1`;
+  }
+};
+
 const getAllFacturasPagosPendientes = async () => {
   try {
     const query = `SELECT vf.*
@@ -976,8 +996,339 @@ USING (uuid_factura, fecha_emision, total, subtotal, impuestos, rfc)
 -- (Opcional) si además quieres limitar a saldo = 0 o NULL:
 -- WHERE vf.saldo = 0 OR vf.saldo IS NULL
 ORDER BY vf.uuid_factura, vf.fecha_emision;`;
-    let response = await executeQuery(query, []);
+    let  response = await executeQuery(query, []);
 
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// const getResumenFacturasCxC = async ({
+//   id_agente = null,
+//   fecha_vencimiento_inicio = null,
+//   fecha_vencimiento_fin = null,
+// }) => {
+//   try {
+//     const query = `
+//       WITH facturas_pendientes AS (
+//         SELECT DISTINCT
+//           vf.uuid_factura,
+//           vf.id_factura,
+//           vf.id_agente,
+//           COALESCE(vf.nombre_agente, 'Sin asignar') AS nombre_agente,
+//           vf.fecha_vencimiento,
+//           vf.created_at,
+//           COALESCE(vf.saldo, 0) AS saldo,
+//           vf.fecha_emision,
+//           vf.total,
+//           vf.subtotal,
+//           vf.impuestos,
+//           vf.rfc
+//         FROM vw_facturas vf
+//         JOIN (
+//           SELECT
+//             uuid_factura,
+//             fecha_emision,
+//             total,
+//             subtotal,
+//             impuestos,
+//             rfc
+//           FROM vw_facturas
+//           GROUP BY
+//             uuid_factura, fecha_emision, total, subtotal, impuestos, rfc
+//           HAVING SUM(COALESCE(JSON_LENGTH(pagos_asociados), 0)) = 0
+//         ) g
+//           ON g.uuid_factura = vf.uuid_factura
+//          AND g.fecha_emision = vf.fecha_emision
+//          AND g.total = vf.total
+//          AND g.subtotal = vf.subtotal
+//          AND g.impuestos = vf.impuestos
+//          AND g.rfc = vf.rfc
+//         WHERE
+//           (? IS NULL OR vf.id_agente = ?)
+//           AND (? IS NULL OR DATE(vf.fecha_vencimiento) >= ?)
+//           AND (? IS NULL OR DATE(vf.fecha_vencimiento) <= ?)
+//       ),
+//       facturas_con_bucket AS (
+//         SELECT
+//           fp.*,
+//           CASE
+//             WHEN fp.fecha_vencimiento IS NULL THEN 'vigentes'
+//             WHEN DATEDIFF(CURDATE(), DATE(fp.fecha_vencimiento)) <= 0 THEN 'vigentes'
+//             WHEN DATEDIFF(CURDATE(), DATE(fp.fecha_vencimiento)) BETWEEN 1 AND 7 THEN '1_7'
+//             WHEN DATEDIFF(CURDATE(), DATE(fp.fecha_vencimiento)) BETWEEN 8 AND 15 THEN '8_15'
+//             WHEN DATEDIFF(CURDATE(), DATE(fp.fecha_vencimiento)) BETWEEN 16 AND 20 THEN '16_20'
+//             WHEN DATEDIFF(CURDATE(), DATE(fp.fecha_vencimiento)) BETWEEN 21 AND 30 THEN '21_30'
+//             ELSE 'mas_30'
+//           END AS bucket,
+//           CASE
+//             WHEN fp.fecha_vencimiento IS NULL THEN 0
+//             ELSE DATEDIFF(CURDATE(), DATE(fp.fecha_vencimiento))
+//           END AS dias_vencida
+//         FROM facturas_pendientes fp
+//       )
+//       SELECT
+//         id_agente AS id_cliente,
+//         nombre_agente AS nombre_cliente,
+
+//         COUNT(*) AS total_facturas,
+//         SUM(saldo) AS adeudo_total,
+
+//         SUM(CASE WHEN bucket = 'vigentes' THEN 1 ELSE 0 END) AS vigentes,
+//         SUM(CASE WHEN bucket = 'vigentes' THEN saldo ELSE 0 END) AS total_vigente,
+
+//         SUM(CASE WHEN bucket <> 'vigentes' THEN 1 ELSE 0 END) AS vencidas,
+//         SUM(CASE WHEN bucket <> 'vigentes' THEN saldo ELSE 0 END) AS total_vencido,
+
+//         SUM(CASE WHEN bucket = '1_7' THEN 1 ELSE 0 END) AS total1a7,
+//         SUM(CASE WHEN bucket = '1_7' THEN saldo ELSE 0 END) AS dia_7,
+
+//         SUM(CASE WHEN bucket = '8_15' THEN 1 ELSE 0 END) AS total8a15,
+//         SUM(CASE WHEN bucket = '8_15' THEN saldo ELSE 0 END) AS dia_15,
+
+//         SUM(CASE WHEN bucket = '16_20' THEN 1 ELSE 0 END) AS total16a20,
+//         SUM(CASE WHEN bucket = '16_20' THEN saldo ELSE 0 END) AS dia_20,
+
+//         SUM(CASE WHEN bucket = '21_30' THEN 1 ELSE 0 END) AS total21a30,
+//         SUM(CASE WHEN bucket = '21_30' THEN saldo ELSE 0 END) AS dias_30,
+
+//         SUM(CASE WHEN bucket = 'mas_30' THEN 1 ELSE 0 END) AS totalMas30,
+//         SUM(CASE WHEN bucket = 'mas_30' THEN saldo ELSE 0 END) AS mas_30
+
+//       FROM facturas_con_bucket
+//       GROUP BY id_agente, nombre_agente
+//       ORDER BY nombre_agente ASC;
+//     `;
+
+//     const params = [
+//       id_agente, id_agente,
+//       fecha_vencimiento_inicio, fecha_vencimiento_inicio,
+//       fecha_vencimiento_fin, fecha_vencimiento_fin,
+//     ];
+
+//     return await executeQuery(query, params);
+//   } catch (error) {
+//     throw error;
+//   }
+// };
+
+const getResumenFacturasCxC = async () => {
+  try {
+    const query = `
+      WITH facturas_pendientes AS (
+        SELECT
+          itf.id_factura
+        FROM items_facturas itf
+        LEFT JOIN items_pagos ip
+          ON ip.id_relacion = itf.id_relacion
+        WHERE ip.id_relacion IS NULL
+        GROUP BY itf.id_factura
+      ),
+      facturas_base AS (
+        SELECT
+          f.id_factura,
+
+          COALESCE(
+            NULLIF(TRIM(a_id.id_agente), ''),
+            NULLIF(TRIM(a_usr.id_agente), ''),
+            NULLIF(TRIM(f.id_agente), ''),
+            NULLIF(TRIM(f.usuario_creador), '')
+          ) AS id_agente,
+
+          COALESCE(
+            NULLIF(TRIM(a_id.nombre), ''),
+            NULLIF(TRIM(a_usr.nombre), ''),
+            'Sin asignar'
+          ) AS nombre_agente,
+
+          DATEDIFF(CURDATE(), DATE(f.fecha_vencimiento)) AS dias_atraso,
+
+          CASE
+            WHEN f.saldo IS NOT NULL THEN f.saldo
+            ELSE f.total
+          END AS monto_pendiente
+        FROM facturas f
+        INNER JOIN facturas_pendientes fp
+          ON fp.id_factura = f.id_factura
+        LEFT JOIN agentes a_id
+          ON a_id.id_agente = NULLIF(TRIM(f.id_agente), '')
+        LEFT JOIN agentes a_usr
+          ON a_usr.id_agente = NULLIF(TRIM(f.usuario_creador), '')
+        WHERE COALESCE(
+          CASE
+            WHEN f.saldo IS NOT NULL THEN f.saldo
+            ELSE f.total
+          END,
+          0
+        ) > 0
+      )
+      SELECT
+        fb.id_agente,
+        fb.nombre_agente,
+
+        COUNT(*) AS total_facturas,
+
+        SUM(CASE WHEN fb.dias_atraso <= 0 THEN 1 ELSE 0 END) AS vigentes,
+
+        SUM(CASE WHEN fb.dias_atraso BETWEEN 1 AND 7 THEN 1 ELSE 0 END) AS total1a7,
+        ROUND(SUM(CASE WHEN fb.dias_atraso BETWEEN 1 AND 7 THEN fb.monto_pendiente ELSE 0 END), 2) AS dia_7,
+
+        SUM(CASE WHEN fb.dias_atraso BETWEEN 8 AND 15 THEN 1 ELSE 0 END) AS total8a15,
+        ROUND(SUM(CASE WHEN fb.dias_atraso BETWEEN 8 AND 15 THEN fb.monto_pendiente ELSE 0 END), 2) AS dia_15,
+
+        SUM(CASE WHEN fb.dias_atraso BETWEEN 16 AND 20 THEN 1 ELSE 0 END) AS total16a20,
+        ROUND(SUM(CASE WHEN fb.dias_atraso BETWEEN 16 AND 20 THEN fb.monto_pendiente ELSE 0 END), 2) AS dia_20,
+
+        SUM(CASE WHEN fb.dias_atraso BETWEEN 21 AND 30 THEN 1 ELSE 0 END) AS total21a30,
+        ROUND(SUM(CASE WHEN fb.dias_atraso BETWEEN 21 AND 30 THEN fb.monto_pendiente ELSE 0 END), 2) AS dias_30,
+
+        SUM(CASE WHEN fb.dias_atraso > 30 THEN 1 ELSE 0 END) AS totalMas30,
+        ROUND(SUM(CASE WHEN fb.dias_atraso > 30 THEN fb.monto_pendiente ELSE 0 END), 2) AS mas_30,
+
+        ROUND(SUM(fb.monto_pendiente), 2) AS adeudo_total,
+        ROUND(SUM(CASE WHEN fb.dias_atraso <= 0 THEN fb.monto_pendiente ELSE 0 END), 2) AS total_vigente,
+        ROUND(SUM(CASE WHEN fb.dias_atraso > 0 THEN fb.monto_pendiente ELSE 0 END), 2) AS total_vencido
+      FROM facturas_base fb
+      GROUP BY fb.id_agente, fb.nombre_agente
+      ORDER BY fb.nombre_agente;
+    `;
+
+    const response = await executeQuery(query, []);
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+const getDetalleFacturasCxC = async ({
+  bucket = "all",
+  id_agente = null,
+  fecha_vencimiento_inicio = null,
+  fecha_vencimiento_fin = null,
+} = {}) => {
+  try {
+    const allowedBuckets = {
+      all: "1=1",
+      vigentes: "fb.dias_atraso <= 0",
+      "1_7": "fb.dias_atraso BETWEEN 1 AND 7",
+      "8_15": "fb.dias_atraso BETWEEN 8 AND 15",
+      "16_20": "fb.dias_atraso BETWEEN 16 AND 20",
+      "21_30": "fb.dias_atraso BETWEEN 21 AND 30",
+      mas_30: "fb.dias_atraso > 30",
+    };
+
+    const bucketWhere = allowedBuckets[bucket] || allowedBuckets.all;
+
+    const query = `
+      WITH facturas_pendientes AS (
+        SELECT
+          itf.id_factura
+        FROM items_facturas itf
+        LEFT JOIN items_pagos ip
+          ON ip.id_relacion = itf.id_relacion
+        WHERE ip.id_relacion IS NULL
+        GROUP BY itf.id_factura
+      ),
+      facturas_base AS (
+        SELECT
+          f.id_factura,
+          f.uuid_factura,
+
+          COALESCE(
+            NULLIF(TRIM(a_id.id_agente), ''),
+            NULLIF(TRIM(a_usr.id_agente), ''),
+            NULLIF(TRIM(f.id_agente), ''),
+            NULLIF(TRIM(f.usuario_creador), '')
+          ) AS id_agente,
+
+          COALESCE(
+            NULLIF(TRIM(a_id.nombre), ''),
+            NULLIF(TRIM(a_usr.nombre), ''),
+            'Sin asignar'
+          ) AS nombre_agente,
+
+          f.id_empresa,
+          f.id_facturama,
+          f.rfc,
+          f.rfc_emisor,
+          f.subtotal,
+          f.impuestos,
+          f.total,
+          CASE
+            WHEN f.saldo IS NOT NULL THEN f.saldo
+            ELSE f.total
+          END AS saldo,
+          f.estado,
+          f.url_pdf,
+          f.url_xml,
+          f.fecha_emision,
+          f.fecha_vencimiento,
+          f.created_at,
+          f.updated_at,
+          DATEDIFF(CURDATE(), DATE(f.fecha_vencimiento)) AS dias_atraso,
+          CASE
+            WHEN f.saldo IS NOT NULL THEN f.saldo
+            ELSE f.total
+          END AS monto_pendiente
+        FROM facturas f
+        INNER JOIN facturas_pendientes fp
+          ON fp.id_factura = f.id_factura
+        LEFT JOIN agentes a_id
+          ON a_id.id_agente = NULLIF(TRIM(f.id_agente), '')
+        LEFT JOIN agentes a_usr
+          ON a_usr.id_agente = NULLIF(TRIM(f.usuario_creador), '')
+        WHERE COALESCE(
+          CASE
+            WHEN f.saldo IS NOT NULL THEN f.saldo
+            ELSE f.total
+          END,
+          0
+        ) > 0
+          AND (? IS NULL OR DATE(f.fecha_vencimiento) >= ?)
+          AND (? IS NULL OR DATE(f.fecha_vencimiento) <= ?)
+      )
+      SELECT
+        fb.id_factura,
+        fb.uuid_factura,
+        fb.id_agente,
+        fb.nombre_agente,
+        fb.id_empresa,
+        fb.id_facturama,
+        fb.rfc,
+        fb.rfc_emisor,
+        fb.subtotal,
+        fb.impuestos,
+        fb.total,
+        fb.saldo,
+        fb.estado,
+        fb.url_pdf,
+        fb.url_xml,
+        fb.fecha_emision,
+        fb.fecha_vencimiento,
+        fb.created_at,
+        fb.updated_at,
+        fb.dias_atraso,
+        fb.monto_pendiente
+      FROM facturas_base fb
+      WHERE ${bucketWhere}
+        AND (? IS NULL OR fb.id_agente = ?)
+      ORDER BY
+        fb.nombre_agente ASC,
+        fb.fecha_vencimiento ASC,
+        fb.created_at DESC;
+    `;
+
+    const params = [
+      fecha_vencimiento_inicio,
+      fecha_vencimiento_inicio,
+      fecha_vencimiento_fin,
+      fecha_vencimiento_fin,
+      id_agente,
+      id_agente,
+    ];
+
+    const response = await executeQuery(query, params);
     return response;
   } catch (error) {
     throw error;
@@ -1077,4 +1428,6 @@ module.exports = {
   isFacturada,
   crearFacturaEmi,
   facturasPagoPendiente,
+  getResumenFacturasCxC,
+  getDetalleFacturasCxC
 };

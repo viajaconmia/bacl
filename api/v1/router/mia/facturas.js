@@ -50,6 +50,10 @@ router.post(
   "/CrearFacturasMultiplesPagos",
   controller.crearFacturaMultiplesPagos,
 );
+
+router.post("/resumen", controller.resumenFacturasCxC);
+router.post("/detalle", controller.detalleFacturasCxC);
+
 router.patch("/AsignarFacturaItems", controller.asignarFacturaItems);
 router.patch("/AsignarFacturaPagos", controller.asignarFacturaPagos);
 router.get("/getFacturas", controller.readAllFacturas);

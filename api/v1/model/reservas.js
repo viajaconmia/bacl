@@ -1358,8 +1358,9 @@ const getReservaAllFacturacion = async (filters = {}) => {
     const endDate = nullIfEmpty(filters.endDate);
     const filterType = nullIfEmpty(filters.filterType);
 
+    // Solo si vienen fechas, decidimos a qué campo aplicarlas
     if (startDate || endDate) {
-      switch (filterType) {
+      switch (filterType || "Creacion") {
         case "Creacion":
           created_start = startDate;
           created_end = endDate;
@@ -1416,6 +1417,7 @@ const getReservaAllFacturacion = async (filters = {}) => {
     throw error;
   }
 };
+
 
 const getOnlyReservaByID = async (id) => {
   try {

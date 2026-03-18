@@ -16,16 +16,18 @@ const getProveedores = async (req, res) => {
       status = null,
       rfc = null,
       intermediario = null,
+      id_hotel = null,
     } = req.query;
 
     const [[{ total }], data] = await executeQuery(
-      "call sp_filtro_proveedores(?,?,?,?,?,?,?)",
+      "call sp_filtro_proveedores(?,?,?,?,?,?,?,?)",
       [
         type,
         id,
         status == null ? null : status == "activo" ? true : false,
         proveedor,
         rfc,
+        id_hotel,
         page,
         size,
       ],
@@ -439,7 +441,10 @@ const updateDatosFiscales = async (req, res) => {
     );
 
     const response = await executeQuery(
-      `select * from proveedores_cuentas where id_proveedor = ?;`,
+      `SELECT pdf.id, pdf.rfc, pdf.alias, pdf.razon_social FROM proveedores_datos_fiscales pdf
+left join proveedores_datos_fiscales_relacion rel on rel.id_datos_fiscales = pdf.id
+WHERE rel.id_proveedor = ?
+group by pdf.id;`,
       [id_proveedor],
     );
 

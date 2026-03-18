@@ -2071,8 +2071,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
           cuenta_destino,
           nombre_pagador,
           nombre_beneficiario,
-          descripcion,
-          is_devolucion
+          descripcion
         FROM pago_proveedores
         WHERE id_solicitud_proveedor = ?
         ORDER BY COALESCE(fecha_pago, fecha_emision) DESC, id_pago_proveedores DESC
@@ -2276,19 +2275,6 @@ const editar_reserva_definitivo = async (req, res) => {
           error: "Faltan IDs clave (id_servicio, id_hospedaje, id_booking).",
         });
       }
-
-      if (
-        estado_reserva?.before === "Confirmada" &&
-        estado_reserva?.current === "Cancelada"
-      ) {
-        const response = await executeQuery(
-          "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_hospedaje, '-', ''), 8)) WHERE id_hospedaje = ?",
-          [metadata.id_hospedaje],
-        );
-      }
-
-      console.log(metadata.id_booking, "👍👍👍👍");
-
       const estado_solicitud = "CANCELADA";
 
       /*
@@ -3185,7 +3171,13 @@ const editar_reserva_definitivo = async (req, res) => {
 };
 
 const obtener = async (req, res) => {
-  let { page, length, usuario_creador, is_client } = req.query;
+  let {
+    page,
+    length,
+    usuario_creador,
+    is_client,
+    finanzas = false,
+  } = req.query;
 
   if (usuario_creador && !req.query.id_client) {
     throw new Error("No puede existir un usuario creador sin un id cliente");
@@ -3207,60 +3199,66 @@ const obtener = async (req, res) => {
   /* =========================
      FILTROS
   ==========================*/
-  where.push(`(admin_creador <> ? OR admin_creador is null)`);
-  params.push("cef88247-b690-11f0-9e79-06cc8e8ac9fd");
+  // where.push(`(vw.admin_creador <> ? OR vw.admin_creador is null)`);
+  // params.push("cef88247-b690-11f0-9e79-06cc8e8ac9fd");
 
   // Código reservación
   if (req.query.codigo_reservacion) {
-    where.push(`codigo_confirmacion LIKE CONCAT('%', ?, '%')`);
+    where.push(`vw.codigo_confirmacion LIKE CONCAT('%', ?, '%')`);
     params.push(req.query.codigo_reservacion);
   }
 
   // Proveedor
   if (req.query.proveedor) {
-    where.push(`proveedor LIKE CONCAT('%', ?, '%')`);
+    where.push(`vw.proveedor LIKE CONCAT('%', ?, '%')`);
     params.push(req.query.proveedor);
+  }
+
+  // Monto
+  if (req.query.monto) {
+    where.push(`vw.costo_total = ?`);
+    params.push(req.query.monto);
   }
 
   // ID cliente
   if (req.query.id_client) {
-    where.push(`id_agente LIKE CONCAT('%', ?, '%')`);
+    where.push(`vw.id_agente LIKE CONCAT('%', ?, '%')`);
     params.push(req.query.id_client);
   }
 
   // Cliente (nombre agente)
   if (req.query.cliente) {
-    where.push(`agente LIKE CONCAT('%', ?, '%')`);
+    where.push(`vw.agente LIKE CONCAT('%', ?, '%')`);
     params.push(req.query.cliente);
   }
 
   // Viajero
   if (req.query.traveler) {
-    where.push(`viajero LIKE CONCAT('%', ?, '%')`);
+    where.push(`vw.viajero LIKE CONCAT('%', ?, '%')`);
     params.push(req.query.traveler);
   }
 
   // Estado
   if (req.query.status) {
-    where.push(`estado = ?`);
+    where.push(`vw.estado = ?`);
     params.push(req.query.status);
   }
 
   // Etapa reservación
   if (req.query.reservationStage) {
-    where.push(`etapa_reservacion = ?`);
+    where.push(`vw.etapa_reservacion = ?`);
     params.push(req.query.reservationStage);
   }
 
   // Reservante
   if (req.query.reservante) {
-    where.push(`reservante = ?`);
+    where.push(`vw.reservante = ?`);
     params.push(req.query.reservante);
   }
 
   // Método de pago
   if (req.query.paymentMethod) {
-    where.push(`metodo_pago = ?`);
+    where.push(`vw.metodo_pago = ?`);
     params.push(req.query.paymentMethod);
   }
 
@@ -3281,14 +3279,14 @@ const obtener = async (req, res) => {
       if (type === "transaccion") column = "created_at";
     }
     if (startDate && endDate) {
-      where.push(`${column} >= ? AND ${column} <= ?`);
+      where.push(`vw.${column} >= ? AND vw.${column} <= ?`);
       params.push(startDate + " 00:00:00", endDate + " 23:59:59");
       console.log(startDate, endDate);
     } else if (startDate) {
-      where.push(`${column} >= ?`);
+      where.push(`vw.${column} >= ?`);
       params.push(startDate + " 00:00:00");
     } else if (endDate) {
-      where.push(`${column} <= ?`);
+      where.push(`vw.${column} <= ?`);
       params.push(endDate + " 23:59:59");
     }
   }
@@ -3297,22 +3295,30 @@ const obtener = async (req, res) => {
 
   const sqlTotal = `
     SELECT COUNT(*) AS total
-    FROM vw_new_reservas
-    ${whereSQL}
+    FROM vw_new_reservas vw
+${whereSQL}
   `;
 
   const sqlData = `
-  SELECT *
-  FROM vw_new_reservas
-  ${whereSQL}
-  ORDER BY created_at DESC
+  SELECT 
+  ${finanzas ? `vw.*, f.uuid_factura, f.total as total_factura` : "vw.*"}
+  FROM vw_new_reservas vw
+${
+  finanzas
+    ? `LEFT JOIN items_facturas fi ON vw.id_relacion = fi.id_relacion LEFT JOIN facturas f ON fi.id_factura = f.id_factura`
+    : ""
+}
+${whereSQL}
+${finanzas ? "GROUP BY vw.id_booking, f.id_factura" : ""}
+  ORDER BY vw.created_at DESC
   ${hasPagination ? `LIMIT ${length} OFFSET ${offset}` : ""}
 `;
 
   try {
-    const [{ total }] = await executeQuery(sqlTotal, params);
-
     let data = await executeQuery(sqlData, [...params]);
+    const response_tracker = await executeQuery(sqlTotal, params);
+    console.log("🔍 [SQL] Total obtenido:", response_tracker);
+    const [{ total }] = response_tracker;
 
     if (is_client) {
       console.log("🔍 [FILTRO CLIENTE] Datos del cliente:", data);
@@ -3350,7 +3356,23 @@ const cancelarBooking = async (req, res) => {
   const { id_booking } = req.body;
   try {
     const response = await runTransaction(async (conn) => {
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
+        id_booking,
+      );
       const response = await cancelar(conn, id_booking);
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor...",
+      );
+      const res = await procesarSolicitudProveedorAlEditarReserva({
+        connection: conn,
+        metadata: { id_booking },
+        usuario: req?.user?.id || req?.user?.email || "system",
+      });
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Solicitud al proveedor procesada:",
+        res,
+      );
       return response;
     });
     res.status(200).json({ message: "obtenido bien", data: response });
@@ -3390,6 +3412,11 @@ const cancelar = async (conn, id_booking) => {
       "UPDATE renta_autos SET codigo_renta_carro = CONCAT(codigo_renta_carro,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
       [id_booking],
     );
+    const response4 = await conn.execute(
+      "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+      [id_booking],
+    );
+
     return response;
   } catch (error) {
     throw error;
@@ -3443,4 +3470,9 @@ const get_reservasClient_by_id_agente = async (body) => {
   }
 };
 
-module.exports = { editar_reserva_definitivo, obtener, cancelarBooking };
+module.exports = {
+  editar_reserva_definitivo,
+  obtener,
+  cancelarBooking,
+  procesarSolicitudProveedorAlEditarReserva,
+};
