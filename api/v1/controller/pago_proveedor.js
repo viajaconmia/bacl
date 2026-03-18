@@ -4675,9 +4675,6 @@ const Detalles = async (req, res) => {
     const { id_solicitud_proveedor, id_proveedor, id_facturas, id_pagos } =
       req.body || {};
 
-    // -----------------------------
-    // 1) Validación mínima
-    // -----------------------------
     if (!id_solicitud_proveedor) {
       return res.status(400).json({
         ok: false,
@@ -4685,12 +4682,10 @@ const Detalles = async (req, res) => {
       });
     }
 
-    // -----------------------------
-    // 2) Normalización de arrays
-    // -----------------------------
     const normalizeArray = (v) => {
       if (!v) return [];
       if (Array.isArray(v)) return v;
+
       if (typeof v === "string") {
         const s = v.trim();
         if (!s) return [];
@@ -4701,8 +4696,16 @@ const Detalles = async (req, res) => {
           return [s];
         }
       }
+
       return [v];
     };
+
+    const toNum = (v) => {
+      const n = Number(String(v ?? "").trim());
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const nearZero = (n) => Math.abs(Number(n || 0)) < 0.000001;
 
     let facturasArr = normalizeArray(id_facturas)
       .map((x) => String(x ?? "").trim())
@@ -4712,8 +4715,12 @@ const Detalles = async (req, res) => {
       .map((x) => String(x ?? "").trim())
       .filter(Boolean);
 
+    console.log("📥 BODY Detalles:", req.body);
+    console.log("🧾 facturasArr inicial:", facturasArr);
+    console.log("💳 pagosArr inicial:", pagosArr);
+
     // -----------------------------
-    // 3) Traer info base de solicitud
+    // 1) Solicitud
     // -----------------------------
     const solicitudSql = `
       SELECT *
@@ -4722,29 +4729,35 @@ const Detalles = async (req, res) => {
       LIMIT 1;
     `;
 
+    console.log("🔎 Query solicitudSql:", solicitudSql);
+    console.log("📌 Params solicitudSql:", [id_solicitud_proveedor]);
+
     const solicitudRows = await executeQuery(solicitudSql, [
       id_solicitud_proveedor,
     ]);
+
+    console.log("✅ Resultado solicitudRows:", solicitudRows);
+
     const solicitud = Array.isArray(solicitudRows)
       ? solicitudRows[0]
       : (solicitudRows?.[0] ?? null);
 
-    // =========================================================
-    // 4) CONSULTA: pagos_facturas_proveedores (PFPR)
-    // =========================================================
-    // Tabla: id, id_pago_proveedor, id_solicitud, id_factura,
-    // monto_facturado, monto_pago, created_at, updated_at
-    let pfp = [];
+    console.log("📄 solicitud final:", solicitud);
+
+    // -----------------------------
+    // 2) Pagos
+    // -----------------------------
+    let pagos = [];
     {
       const where = [];
       const params = [];
 
-      where.push(`id_solicitud = ?`);
+      where.push(`id_solicitud_proveedor = ?`);
       params.push(Number(id_solicitud_proveedor));
 
       if (pagosArr.length > 0) {
         const ph = pagosArr.map(() => "?").join(",");
-        where.push(`id_pago_proveedor IN (${ph})`);
+        where.push(`id_pago_proveedores IN (${ph})`);
         params.push(...pagosArr.map((x) => Number(x)));
       }
 
@@ -4754,121 +4767,113 @@ const Detalles = async (req, res) => {
         params.push(...facturasArr);
       }
 
+      const pagosSql = `
+        SELECT *
+        FROM pago_proveedores
+        WHERE ${where.join(" AND ")}
+        ORDER BY fecha_emision DESC, id_pago_proveedores DESC;
+      `;
+
+      console.log("🔎 Query pagosSql:", pagosSql);
+      console.log("📌 Params pagosSql:", params);
+
+      const pagosRows = await executeQuery(pagosSql, params);
+
+      console.log("✅ Resultado pagosRows:", pagosRows);
+
+      pagos = Array.isArray(pagosRows) ? pagosRows : (pagosRows?.[0] ?? []);
+    }
+
+    console.log("💳 pagos final:", pagos);
+    console.log("📊 pagos final length:", pagos.length);
+
+    if (pagosArr.length === 0 && pagos.length > 0) {
+      pagosArr = [
+        ...new Set(
+          pagos
+            .map((r) => String(r?.id_pago_proveedores ?? "").trim())
+            .filter(Boolean)
+        ),
+      ];
+    }
+
+    console.log("💳 pagosArr después de auto-rellenar:", pagosArr);
+
+    // -----------------------------
+    // 3) Relación pago-factura
+    // -----------------------------
+    let pfp = [];
+    {
       const pfpSql = `
         SELECT *
         FROM pagos_facturas_proveedores
-        WHERE ${where.join(" AND ")}
+        WHERE id_solicitud = ?
         ORDER BY created_at DESC;
       `;
 
-      const pfpRows = await executeQuery(pfpSql, params);
+      console.log("🔎 Query pfpSql:", pfpSql);
+      console.log("📌 Params pfpSql:", [Number(id_solicitud_proveedor)]);
+
+      const pfpRows = await executeQuery(pfpSql, [
+        Number(id_solicitud_proveedor),
+      ]);
+
+      console.log("✅ Resultado pfpRows:", pfpRows);
+
       pfp = Array.isArray(pfpRows) ? pfpRows : (pfpRows?.[0] ?? []);
     }
 
-    // ✅ Auto-rellenar ids si vienen vacíos (tu caso)
-    if (facturasArr.length === 0 && Array.isArray(pfp) && pfp.length > 0) {
-      facturasArr = [
-        ...new Set(
-          pfp.map((r) => String(r?.id_factura ?? "").trim()).filter(Boolean),
-        ),
-      ];
-    }
-
-    if (pagosArr.length === 0 && Array.isArray(pfp) && pfp.length > 0) {
-      pagosArr = [
-        ...new Set(
-          pfp
-            .map((r) => String(r?.id_pago_proveedor ?? "").trim())
-            .filter(Boolean),
-        ),
-      ];
-    }
+    console.log("🔗 pfp final:", pfp);
+    console.log("📊 pfp final length:", pfp.length);
 
     // -----------------------------
-    // 5) FACTURAS
+    // 4) Facturas
+    //    SOLO por:
+    //    facturas_pago_proveedor.id_factura_proveedor = pfp.id_factura
     // -----------------------------
+    facturasArr = Array.isArray(pfp)
+      ? [
+          ...new Set(
+            pfp.map((r) => String(r?.id_factura ?? "").trim()).filter(Boolean)
+          ),
+        ]
+      : [];
+
+    console.log("🧾 facturasArr después de pfp:", facturasArr);
+
     let facturas = [];
 
     if (facturasArr.length > 0) {
       const placeholders = facturasArr.map(() => "?").join(",");
 
-      // main: id_factura_proveedor
       const facturasSqlMain = `
         SELECT *
         FROM facturas_pago_proveedor
         WHERE id_factura_proveedor IN (${placeholders});
       `;
 
+      console.log("🔎 Query facturasSqlMain:", facturasSqlMain);
+      console.log("📌 Params facturasSqlMain:", facturasArr);
+
       const factRowsMain = await executeQuery(facturasSqlMain, facturasArr);
+
+      console.log("✅ Resultado factRowsMain:", factRowsMain);
+
       facturas = Array.isArray(factRowsMain)
         ? factRowsMain
         : (factRowsMain?.[0] ?? []);
-
-      // fallback: id_factura
-      if (!facturas || facturas.length === 0) {
-        const facturasSqlFallback = `
-          SELECT *
-          FROM facturas_pago_proveedor
-          WHERE id_factura IN (${placeholders});
-        `;
-        const factRowsFallback = await executeQuery(
-          facturasSqlFallback,
-          facturasArr,
-        );
-        const fb = Array.isArray(factRowsFallback)
-          ? factRowsFallback
-          : (factRowsFallback?.[0] ?? []);
-        if (Array.isArray(fb) && fb.length > 0) facturas = fb;
-      }
+    } else {
+      console.log(
+        "⚠️ No se consultó facturas_pago_proveedor porque pfp no trajo id_factura"
+      );
     }
 
+    console.log("🧾 facturas final:", facturas);
+    console.log("📊 facturas final length:", facturas.length);
+
     // -----------------------------
-    // 6) PAGOS
+    // 5) Resumen
     // -----------------------------
-    let pagos = [];
-
-    if (pagosArr.length > 0) {
-      const placeholders = pagosArr.map(() => "?").join(",");
-
-      // main: id_pago_proveedores
-      const pagosSqlMain = `
-        SELECT *
-        FROM pago_proveedores
-        WHERE id_pago_proveedores IN (${placeholders});
-      `;
-
-      const pagosRowsMain = await executeQuery(pagosSqlMain, pagosArr);
-      pagos = Array.isArray(pagosRowsMain)
-        ? pagosRowsMain
-        : (pagosRowsMain?.[0] ?? []);
-
-      // fallback: id_pago_proveedor
-      if (!pagos || pagos.length === 0) {
-        const pagosSqlFallback = `
-          SELECT *
-          FROM pago_proveedores
-          WHERE id_pago_proveedor IN (${placeholders});
-        `;
-        const pagosRowsFallback = await executeQuery(
-          pagosSqlFallback,
-          pagosArr,
-        );
-        const fb = Array.isArray(pagosRowsFallback)
-          ? pagosRowsFallback
-          : (pagosRowsFallback?.[0] ?? []);
-        if (Array.isArray(fb) && fb.length > 0) pagos = fb;
-      }
-    }
-
-    // =========================================================
-    // 7) VALIDACIÓN / RESUMEN
-    // =========================================================
-    const toNum = (v) => {
-      const n = Number(String(v ?? "").trim());
-      return Number.isFinite(n) ? n : 0;
-    };
-    const nearZero = (n) => Math.abs(Number(n || 0)) < 0.000001;
-
     let total_pagado = 0;
     let total_facturado = 0;
 
@@ -4903,7 +4908,6 @@ const Detalles = async (req, res) => {
 
       let estatus = "";
 
-      // ✅ FIX: 0 vs 0 NO es CUADRADO
       if (nearZero(pagado) && nearZero(facturado)) {
         estatus = "SIN_MOVIMIENTO";
       } else if (abs < 0.01) {
@@ -4924,9 +4928,8 @@ const Detalles = async (req, res) => {
       por_factura,
     };
 
-    // -----------------------------
-    // 8) Response
-    // -----------------------------
+    console.log("📑 resumen_validacion:", resumen_validacion);
+
     return res.status(200).json({
       ok: true,
       message: "Detalles obtenidos correctamente",
@@ -4945,7 +4948,7 @@ const Detalles = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error en Detalles:", error);
+    console.error("❌ Error en Detalles:", error);
     return res.status(500).json({
       ok: false,
       error: "Error en el servidor",
