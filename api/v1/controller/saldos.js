@@ -408,8 +408,8 @@ const facturas_pagos_y_saldos = async (req, res) => {
 const saldosUsados = async (req, res) => {
   try {
     const saldos = await executeQuery(
-      `select 
-vw.agente, vw.type as tipo_servicio, vw.codigo_confirmacion, vw.total as total_reserva, vw.created_at as fecha_creacion_reserva,
+      `select
+      vw.id_agente, vw.agente, vw.type as tipo_servicio, vw.codigo_confirmacion, vw.total as total_reserva, vw.created_at as fecha_creacion_reserva,f.rfc,
 f.uuid_factura, f.total as total_factura, f.created_at as fecha_creacion_factura, fps.monto as monto_pago_asignado_a_factura,
 sf.id_saldos, sf.monto, sf.created_at as fecha_creacion_pago
 from saldos_a_favor sf
@@ -420,7 +420,7 @@ inner join items_facturas fi on fi.id_factura = fps.id_factura
 left join facturas f on f.id_factura = fi.id_factura
 left join vw_new_reservas vw on vw.id_relacion = fi.id_relacion
 where vw.metodo_pago = "credito"
-group by sf.id_saldos, fps.id_factura, fi.id_relacion;`,
+group by sf.id_saldos, fps.id_factura;`,
       [],
     );
     return res.status(200).json({
