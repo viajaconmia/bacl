@@ -3201,8 +3201,11 @@ const obtener = async (req, res) => {
 
   // Viajero
   if (req.query.traveler) {
-    where.push(`vw.viajero LIKE CONCAT('%', ?, '%')`);
-    params.push(req.query.traveler);
+    const viajero_separado = req.query.traveler.split(" ").filter(Boolean);
+    where.push(
+      `vw.viajero LIKE CONCAT('%',${viajero_separado.map((i) => "?").join(",'%',")},'%')`,
+    );
+    params.push(...viajero_separado);
   }
 
   // Estado
