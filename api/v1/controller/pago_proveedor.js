@@ -2706,15 +2706,27 @@ const getSolicitudes = async (req, res) => {
     }
 
     // ---------------- index pagos by solicitud ----------------
-    const pagosBySolicitud = (pagosRaw || []).reduce((acc, row) => {
-      const key = String(row.id_solicitud_proveedor);
+const detalleBySolicitud = (pagosRaw || []).reduce((acc, row) => {
+  const key = String(row.id_solicitud_proveedor);
 
-      const dispersiones = toArray(row.dispersiones_json);
-      const pagos = toArray(row.pagos_json);
+  const dispersiones = toArray(row.dispersiones_json);
+  const pagos = toArray(row.pagos_json);
+  const facturas = toArray(row.facturas_json);
 
-      (acc[key] ||= []).push(...dispersiones, ...pagos);
-      return acc;
-    }, {});
+  if (!acc[key]) {
+    acc[key] = {
+      dispersiones: [],
+      pagos: [],
+      facturas: [],
+    };
+  }
+
+  acc[key].dispersiones.push(...dispersiones);
+  acc[key].pagos.push(...pagos);
+  acc[key].facturas.push(...facturas);
+
+  return acc;
+}, {});
 
     // ---------------- normalize rows ----------------
     const data = (spRows || []).map((r) => {
@@ -2741,10 +2753,22 @@ const getSolicitudes = async (req, res) => {
         ...rest
       } = r;
 
-      const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
-      const forma = norm(forma_pago_solicitada);
+      const detalleSolicitud = detalleBySolicitud[String(id_solicitud_proveedor)] ?? {
+  dispersiones: [],
+  pagos: [],
+  facturas: [],
+};
 
-      const pagoStats = getPagoStats(pagos);
+const dispersiones = detalleSolicitud.dispersiones;
+const pagosProveedor = detalleSolicitud.pagos;
+const facturas = detalleSolicitud.facturas;
+
+// si quieres seguir usando el mismo cálculo actual:
+const pagos = [...dispersiones, ...pagosProveedor];
+
+const forma = norm(forma_pago_solicitada);
+
+const pagoStats = getPagoStats(pagos);
       const saldoNum = num(saldo);
       const factNums = getFacturaNums({ ...r, ...rest });
 
@@ -2755,43 +2779,56 @@ const getSolicitudes = async (req, res) => {
         pagoStats.pagado >= num(monto_solicitado);
 
       return {
-        ...rest,
+  ...rest,
 
-        estatus_pagos,
+  estatus_pagos,
 
-        solicitud_proveedor: {
-          id_solicitud_proveedor,
-          fecha_solicitud,
-          monto_solicitado,
-          saldo,
-          forma_pago_solicitada,
-          id_tarjeta_solicitada,
-          usuario_solicitante,
-          usuario_generador,
-          comentarios,
-          estado_solicitud,
-          estado_facturacion,
-          is_ajuste,
-          comentario_ajuste,
-        },
+  solicitud_proveedor: {
+    id_solicitud_proveedor,
+    fecha_solicitud,
+    monto_solicitado,
+    saldo,
+    forma_pago_solicitada,
+    id_tarjeta_solicitada,
+    usuario_solicitante,
+    usuario_generador,
+    comentarios,
+    estado_solicitud,
+    estado_facturacion,
+    is_ajuste,
+    comentario_ajuste,
+  },
 
-        tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
-        proveedor: { rfc, razon_social },
+  tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
+  proveedor: { rfc, razon_social },
 
-        pagos,
+  // para no romper lo que ya usa el front
+  pagos,
 
-        __computed: {
-          forma,
-          estado_solicitud_norm: norm(estado_solicitud),
-          estaPagada,
-          pagos_count: pagoStats.count,
-          pagos_total_pagado: pagoStats.pagado,
-          pagos_total_solicitado_sum: pagoStats.solicitado,
-          facturado: factNums.facturado,
-          por_facturar: factNums.porFacturar,
-          solicitado: factNums.solicitado,
-        },
-      };
+  // nuevos campos separados y claros
+  dispersiones,
+  pagos_proveedor: pagosProveedor,
+  facturas,
+
+  // si quieres mandarlo casi tal cual viene del SP
+  sp_obtener_pagos_proveedor: {
+    dispersiones_json: dispersiones,
+    pagos_json: pagosProveedor,
+    facturas_json: facturas,
+  },
+
+  __computed: {
+    forma,
+    estado_solicitud_norm: norm(estado_solicitud),
+    estaPagada,
+    pagos_count: pagoStats.count,
+    pagos_total_pagado: pagoStats.pagado,
+    pagos_total_solicitado_sum: pagoStats.solicitado,
+    facturado: factNums.facturado,
+    por_facturar: factNums.porFacturar,
+    solicitado: factNums.solicitado,
+  },
+};
     });
 
     // ---------------- reglas de clasificación ----------------
@@ -3464,6 +3501,8 @@ const cargarFactura = async (req, res) => {
     url_xml,
     fecha_vencimiento,
     proveedoresData,
+    montos_originales_factura,
+    facturas,
   } = req.body;
 
   const id_factura = "fac-" + uuidv4();
@@ -3494,6 +3533,8 @@ const cargarFactura = async (req, res) => {
       });
     }
 
+    const facturaData = facturas?.facturaData ?? null;
+
     const totalN = toNumber(total);
     const subtotalN = toNumber(subtotal);
     const impuestosN = toNumber(impuestos);
@@ -3509,6 +3550,55 @@ const cargarFactura = async (req, res) => {
 
     const es_credito = Number(
       proveedorFirst?.is_credito ?? (fecha_vencimiento ? 1 : 0),
+    );
+
+    // ✅ nuevos campos para facturas_pago_proveedor
+    const razon_social = String(
+      facturaData?.receptor?.nombre ??
+      req.body?.razon_social ??
+      ""
+    ).trim();
+
+    const uso_cfdi = String(
+      facturaData?.receptor?.usoCFDI ??
+      req.body?.uso_cfdi ??
+      ""
+    ).trim() || null;
+
+    const moneda = String(
+      montos_originales_factura?.moneda ??
+      facturaData?.comprobante?.moneda ??
+      "MXN"
+    ).trim().toUpperCase();
+
+    const forma_pago = String(
+      facturaData?.comprobante?.formaPago ??
+      req.body?.forma_pago ??
+      ""
+    ).trim() || null;
+
+    const metodo_pago = String(
+      facturaData?.comprobante?.metodoPago ??
+      req.body?.metodo_pago ??
+      ""
+    ).trim() || null;
+
+    const total_moneda_O = toNumber(
+      montos_originales_factura?.total ??
+      facturaData?.comprobante?.total ??
+      total
+    );
+
+    const sub_total_moneda_O = toNumber(
+      montos_originales_factura?.subtotal ??
+      facturaData?.comprobante?.subtotal ??
+      subtotal
+    );
+
+    const impuestos_moneda_O = toNumber(
+      montos_originales_factura?.impuestos ??
+      facturaData?.impuestos?.traslado?.importe ??
+      impuestos
     );
 
     // ✅ Normalizar JSON para SP (ARRAY siempre)
@@ -3535,14 +3625,12 @@ const cargarFactura = async (req, res) => {
         p?.monto_asociar ?? p?.monto_facturado ?? 0,
       );
 
-      // ✅ Permitimos 0, solo rechazamos negativos
       if (monto_facturado < 0) {
         throw new Error(
           `proveedoresData[${idx}] monto_asociar inválido (no puede ser negativo)`,
         );
       }
 
-      // ✅ Si viene monto_solicitado, no debe excederlo
       if (monto_solicitado > 0 && monto_facturado > monto_solicitado) {
         throw new Error(
           `proveedoresData[${idx}] monto_asociar (${monto_facturado}) excede monto_solicitado (${monto_solicitado})`,
@@ -3558,24 +3646,30 @@ const cargarFactura = async (req, res) => {
         p?.id_pago_proveedores ??
         null;
 
+      const tipo_cambio = toNumber(
+        p?.montos_originales?.tipo_cambio ??
+        montos_originales_factura?.tipo_cambio ??
+        1
+      );
+
+
       return {
         id_pago,
         solicitud_proveedor: {
           id_solicitud_proveedor,
           monto_solicitado,
         },
-        monto_facturado,       // ✅ puede ser 0
+        monto_facturado,
         pendiente_facturar,
+        tipo_cambio,
       };
     });
 
-    // ✅ SUMA TOTAL ASOCIADA
     const monto_facturado_total = detalle.reduce(
       (acc, x) => acc + toNumber(x.monto_facturado),
       0,
     );
 
-    // ✅ Validación global: lo asociado no puede exceder el total de la factura
     if (monto_facturado_total > totalN) {
       return res.status(400).json({
         error: "Monto asociado inválido",
@@ -3614,6 +3708,16 @@ const cargarFactura = async (req, res) => {
         rfc,
         id_empresa,
         fecha_vencimiento,
+
+        // ✅ nuevos campos
+        razon_social,
+        uso_cfdi,
+        moneda,
+        forma_pago,
+        metodo_pago,
+        total_moneda_O,
+        sub_total_moneda_O,
+        impuestos_moneda_O,
 
         proveedoresDataSP,
       ],
@@ -3689,232 +3793,6 @@ const cargarFactura = async (req, res) => {
   }
 };
 
-// const saldo_a_favor = async (req, res) => {
-//   try {
-//     const { id_proveedor } = req.query; // puede venir undefined
-
-//     const data = await executeSP(
-//       "sp_obtener_saldo_a_favor_proveedor",
-//       [id_proveedor ?? null] // MUY IMPORTANTE: pasar null si no viene
-//     );
-
-//     return res.status(200).json({ data }); // data = array rows del SP
-//   } catch (error) {
-//     console.error(error);
-//     return res.status(error.statusCode || 500).json({
-//       error: "Error en el servidor",
-//       details: error?.message ?? error,
-//     });
-//   }
-// };
-
-// const EditCampos = async (req, res) => {
-//   try {
-//     const { id_solicitud_proveedor, ...rest } = req.body;
-
-//     // 1) Validar ID
-//     if (!id_solicitud_proveedor) {
-//       return res.status(400).json({ error: "Falta id_solicitud_proveedor en el body" });
-//     }
-
-//     // 2) Tomar campos a editar (permitir varios)
-//     const keys = Object.keys(rest).filter((k) => rest[k] !== undefined);
-
-//     if (keys.length === 0) {
-//       return res.status(400).json({
-//         error: "No viene ningún campo para actualizar (además del id_solicitud_proveedor)",
-//       });
-//     }
-
-//     // 3) Mapeo opcional (comentarios_x -> columnas reales)
-//     const FIELD_MAP = {
-//       comentarios_cxp: "comentario_CXP",
-//       comentarios_CXP: "comentario_CXP",
-//       comentarios_ops: "comentarios",
-//     };
-
-//     // 4) Lista blanca de campos permitidos (SEGURIDAD)
-//     const ALLOWED_FIELDS = new Set([
-//       "fecha_solicitud",
-//       "monto_solicitado",
-//       "saldo",
-//       "forma_pago_solicitada",
-//       "id_tarjeta_solicitada",
-//       "usuario_solicitante",
-//       "usuario_generador",
-//       "comentarios",
-//       "estado_solicitud",
-//       "estado_facturacion",
-//       "estatus_pagos",
-//       "id_proveedor",
-//       "monto_facturado",
-//       "monto_por_facturar",
-//       "comentario_CXP",
-//       "consolidado",
-//       "is_ajuste",
-//       // ✅ nuevo para tu botón
-//       "comentario_ajuste",
-//     ]);
-
-//     // 5) Casteo numérico (ajusta si quieres más campos aquí)
-//     const NUMERIC_FIELDS = new Set([
-//       "id_proveedor",
-//       "consolidado",
-//       "is_ajuste",
-//       "monto_solicitado",
-//       "saldo",
-//       "monto_facturado",
-//       "monto_por_facturar",
-//     ]);
-
-//     // Normaliza updates: key cliente -> dbField + valor final
-//     const updatesMap = new Map(); // dbField -> finalValue
-
-//     for (const fieldFromClient of keys) {
-//       const dbField = FIELD_MAP[fieldFromClient] || fieldFromClient;
-
-//       if (!ALLOWED_FIELDS.has(dbField)) {
-//         return res.status(400).json({
-//           error: `Campo no permitido para actualizar: ${fieldFromClient}`,
-//           permitido: Array.from(ALLOWED_FIELDS),
-//         });
-//       }
-
-//       const value = rest[fieldFromClient];
-
-//       const finalValue = NUMERIC_FIELDS.has(dbField)
-//         ? value === null || value === ""
-//           ? null
-//           : Number(value)
-//         : value;
-
-//       if (NUMERIC_FIELDS.has(dbField) && finalValue !== null && Number.isNaN(finalValue)) {
-//         return res.status(400).json({
-//           error: `El campo ${fieldFromClient} debe ser numérico`,
-//         });
-//       }
-
-//       // Si llegan dos campos que mapean al mismo dbField, el último gana
-//       updatesMap.set(dbField, finalValue);
-//     }
-
-//     // ====== 6) Manejo especial: monto_solicitado dispara lógica de ajuste ======
-//     let ajusteInfo = null;
-
-//     if (updatesMap.has("monto_solicitado")) {
-//       const nuevoMonto = Number(updatesMap.get("monto_solicitado"));
-//       if (!Number.isFinite(nuevoMonto)) {
-//         return res.status(400).json({ error: "monto_solicitado debe ser numérico" });
-//       }
-
-//       const qOld = `
-//         SELECT monto_solicitado
-//         FROM solicitudes_pago_proveedor
-//         WHERE id_solicitud_proveedor = ?
-//         LIMIT 1
-//       `;
-//       const rOld = await executeQuery(qOld, [id_solicitud_proveedor]);
-
-//       if (!rOld?.length) {
-//         return res.status(404).json({
-//           error: "No se encontró la solicitud",
-//           id_solicitud_proveedor,
-//         });
-//       }
-
-//       const montoOld = Number(rOld[0].monto_solicitado ?? 0);
-//       const EPS = 0.01;
-
-//       let ajusteResp = { ok: true, action: "NO_CHANGE" };
-
-//       if (nuevoMonto > montoOld + EPS) {
-//         ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
-//           executeQuery,
-//           id_solicitud_proveedor,
-//           nuevoMonto,
-//           EPS,
-//         });
-//       } else if (nuevoMonto < montoOld - EPS) {
-//         ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
-//           executeQuery,
-//           executeSP2, // si no existe aquí, bórralo
-//           id_solicitud_proveedor,
-//           nuevoMonto,
-//           EPS,
-//         });
-//       }
-
-//       ajusteInfo = {
-//         montoOld,
-//         montoNew: nuevoMonto,
-//         ajuste: ajusteResp,
-//       };
-
-//       // Evita doble update si tu lógica ya lo actualiza internamente
-//       updatesMap.delete("monto_solicitado");
-//     }
-
-//     // ====== 7) UPDATE normal para el resto de campos (si quedan) ======
-//     if (updatesMap.size > 0) {
-//       const setParts = [];
-//       const params = [];
-
-//       for (const [dbField, finalValue] of updatesMap.entries()) {
-//         setParts.push(`\`${dbField}\` = ?`);
-//         params.push(finalValue);
-//       }
-
-//       const updateSql = `
-//         UPDATE solicitudes_pago_proveedor
-//         SET ${setParts.join(", ")}
-//         WHERE id_solicitud_proveedor = ?
-//         LIMIT 1;
-//       `;
-
-//       const result = await executeQuery(updateSql, [...params, id_solicitud_proveedor]);
-//       const affectedRows = result?.affectedRows ?? result?.[0]?.affectedRows ?? 0;
-
-//       if (affectedRows === 0) {
-//         return res.status(404).json({
-//           error: "No se encontró la solicitud o no se actualizó nada",
-//           id_solicitud_proveedor,
-//         });
-//       }
-//     } else {
-//       // Si no quedan campos y tampoco hubo ajuste, no haces nada
-//       if (!ajusteInfo) {
-//         return res.status(400).json({ error: "No hubo cambios para aplicar" });
-//       }
-//     }
-
-//     // ====== 8) Regresar registro actualizado ======
-//     const selectSql = `
-//       SELECT *
-//       FROM solicitudes_pago_proveedor
-//       WHERE id_solicitud_proveedor = ?
-//       LIMIT 1;
-//     `;
-//     const rows = await executeQuery(selectSql, [id_solicitud_proveedor]);
-//     const updated = Array.isArray(rows) ? rows[0] : rows?.[0];
-
-//     return res.status(200).json({
-//       ok: true,
-//       message: updatesMap.size > 0 ? "Campos actualizados correctamente" : "Ajuste aplicado",
-//       id_solicitud_proveedor,
-//       ajusteInfo: ajusteInfo || null,
-//       updated_fields: keys,
-//       data: updated || null,
-//     });
-//   } catch (error) {
-//     console.error("Error en EditCampos:", error);
-//     return res.status(500).json({
-//       error: "Error en el servidor",
-//       details: error?.message ?? error,
-//     });
-//   }
-// };
-
-// --- helpers ---
 function money2(n) {
   const x = Number(n);
   if (!Number.isFinite(x)) return 0;
@@ -4698,6 +4576,413 @@ if (
   }
 };
 
+const monto_factura = async (req, res) => {
+  try {
+    const {
+      id_solicitud,
+      id_solicitud_proveedor,
+      id_factura_proveedor,
+      uuid_factura,
+      subtotal_facturado,
+      impuestos_facturado,
+      id_pago_proveedor = null,
+      monto_pago = null,
+    } = req.body;
+
+    const EPS = 0.01;
+
+    const getRows = (result) =>
+      Array.isArray(result) ? result : result?.[0] ?? [];
+
+    const safeString = (v) => String(v ?? "").trim();
+
+    const toNumber = (v) => {
+      if (v === null || v === undefined || v === "") return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const round2 = (n) => Number(Number(n || 0).toFixed(2));
+    const toMoneyString = (n) => round2(n).toFixed(2);
+
+    const idSolicitud = Number(id_solicitud_proveedor ?? id_solicitud);
+    const idFacturaPayload = safeString(id_factura_proveedor);
+    const uuid = safeString(uuid_factura);
+
+    const subtotalFacturado = toNumber(subtotal_facturado);
+    const impuestosFacturado = toNumber(impuestos_facturado);
+    const montoFacturado = round2(subtotalFacturado + impuestosFacturado);
+
+    const idPagoProveedor =
+      id_pago_proveedor === null ||
+      id_pago_proveedor === undefined ||
+      id_pago_proveedor === ""
+        ? null
+        : Number(id_pago_proveedor);
+
+    const montoPagoFinal =
+      monto_pago === null || monto_pago === undefined || monto_pago === ""
+        ? montoFacturado
+        : toNumber(monto_pago);
+
+    if (!Number.isInteger(idSolicitud) || idSolicitud <= 0) {
+      return res.status(400).json({
+        ok: false,
+        message:
+          "id_solicitud o id_solicitud_proveedor es requerido y debe ser válido",
+      });
+    }
+
+    if (!idFacturaPayload && !uuid) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debes enviar id_factura_proveedor o uuid_factura",
+      });
+    }
+
+    if (!Number.isFinite(subtotalFacturado) || subtotalFacturado < 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "subtotal_facturado debe ser numérico y no negativo",
+      });
+    }
+
+    if (!Number.isFinite(impuestosFacturado) || impuestosFacturado < 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "impuestos_facturado debe ser numérico y no negativo",
+      });
+    }
+
+    if (!(montoFacturado > 0)) {
+      return res.status(400).json({
+        ok: false,
+        message: "El monto asociado debe ser mayor a 0",
+      });
+    }
+
+    if (!Number.isFinite(montoPagoFinal) || montoPagoFinal < 0) {
+      return res.status(400).json({
+        ok: false,
+        message: "monto_pago debe ser numérico y no negativo",
+      });
+    }
+
+    // 1) Buscar factura
+    const whereFactura = [];
+    const paramsFactura = [];
+
+    if (idFacturaPayload) {
+      whereFactura.push(`TRIM(fpp.id_factura_proveedor) = TRIM(?)`);
+      paramsFactura.push(idFacturaPayload);
+    }
+
+    if (uuid) {
+      whereFactura.push(`TRIM(fpp.uuid_cfdi) = TRIM(?)`);
+      paramsFactura.push(uuid);
+    }
+
+    const qFactura = `
+      SELECT
+        fpp.id_factura_proveedor AS id_factura,
+        fpp.uuid_cfdi AS uuid_factura,
+        CAST(COALESCE(NULLIF(TRIM(fpp.total), ''), '0') AS DECIMAL(12,2)) AS total_factura
+      FROM facturas_pago_proveedor fpp
+      WHERE ${whereFactura.join(" OR ")}
+      LIMIT 1;
+    `;
+
+    const facturaRows = getRows(await executeQuery(qFactura, paramsFactura));
+
+    if (!facturaRows.length) {
+      return res.status(404).json({
+        ok: false,
+        message: "No se encontró una factura con los datos enviados",
+      });
+    }
+
+    const factura = facturaRows[0];
+    const idFactura = safeString(factura.id_factura);
+    const uuidFacturaReal = safeString(factura.uuid_factura);
+    const totalFactura = round2(factura.total_factura ?? 0);
+
+    if (!idFactura) {
+      return res.status(400).json({
+        ok: false,
+        message: "La factura encontrada no tiene id_factura_proveedor válido",
+      });
+    }
+
+    if (!(totalFactura > 0)) {
+      return res.status(400).json({
+        ok: false,
+        message: "La factura tiene total inválido o igual a 0",
+      });
+    }
+
+    // 2) Buscar solicitud
+    const qSolicitud = `
+      SELECT
+        id_solicitud_proveedor,
+        CAST(monto_solicitado AS DECIMAL(12,2)) AS monto_solicitado
+      FROM solicitudes_pago_proveedor
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1;
+    `;
+
+    const solicitudRows = getRows(await executeQuery(qSolicitud, [idSolicitud]));
+
+    if (!solicitudRows.length) {
+      return res.status(404).json({
+        ok: false,
+        message: "No se encontró la solicitud",
+      });
+    }
+
+    const solicitud = solicitudRows[0];
+    const montoSolicitado = round2(solicitud.monto_solicitado ?? 0);
+
+    // 3) Buscar relación existente de esta solicitud + factura
+    let relacionExistente = null;
+    {
+      const qRelacion = `
+        SELECT
+          id,
+          id_pago_proveedor,
+          CAST(COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2)) AS monto_facturado_actual,
+          CAST(COALESCE(NULLIF(TRIM(subtotal_facturado), ''), '0') AS DECIMAL(12,2)) AS subtotal_facturado_actual,
+          CAST(COALESCE(NULLIF(TRIM(impuestos_facturado), ''), '0') AS DECIMAL(12,2)) AS impuestos_facturado_actual
+        FROM pagos_facturas_proveedores
+        WHERE id_solicitud = ?
+          AND id_factura = ?
+        ORDER BY id DESC
+        LIMIT 1;
+      `;
+
+      const rows = getRows(await executeQuery(qRelacion, [idSolicitud, idFactura]));
+      relacionExistente = rows?.[0] ?? null;
+    }
+
+    const montoExistenteRelacion = round2(relacionExistente?.monto_facturado_actual ?? 0);
+
+    // 4) SUM global por factura
+    const qSumFactura = `
+      SELECT
+        COALESCE(
+          SUM(
+            CAST(COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2))
+          ),
+          0
+        ) AS total_asociado_factura
+      FROM pagos_facturas_proveedores
+      WHERE id_factura = ?;
+    `;
+
+    const sumFacturaRows = getRows(await executeQuery(qSumFactura, [idFactura]));
+    const totalAsociadoFactura = round2(sumFacturaRows?.[0]?.total_asociado_factura ?? 0);
+
+    // 5) SUM global por solicitud
+    const qSumSolicitud = `
+      SELECT
+        COALESCE(
+          SUM(
+            CAST(COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2))
+          ),
+          0
+        ) AS total_asociado_solicitud
+      FROM pagos_facturas_proveedores
+      WHERE id_solicitud = ?;
+    `;
+
+    const sumSolicitudRows = getRows(await executeQuery(qSumSolicitud, [idSolicitud]));
+    const totalAsociadoSolicitud = round2(
+      sumSolicitudRows?.[0]?.total_asociado_solicitud ?? 0
+    );
+
+    // 6) Quitar relación actual para permitir edición
+    const totalFacturaSinActual = Math.max(
+      0,
+      round2(totalAsociadoFactura - montoExistenteRelacion)
+    );
+
+    const totalSolicitudSinActual = Math.max(
+      0,
+      round2(totalAsociadoSolicitud - montoExistenteRelacion)
+    );
+
+    const disponibleFactura = Math.max(
+      0,
+      round2(totalFactura - totalFacturaSinActual)
+    );
+
+    const disponibleSolicitud = Math.max(
+      0,
+      round2(montoSolicitado - totalSolicitudSinActual)
+    );
+
+    const maximoAsociable = Math.max(
+      0,
+      round2(Math.min(disponibleFactura, disponibleSolicitud))
+    );
+
+    if (montoFacturado - maximoAsociable > EPS) {
+      return res.status(400).json({
+        ok: false,
+        message: "El monto asociado excede el máximo permitido",
+        data: {
+          subtotal_facturado: toMoneyString(subtotalFacturado),
+          impuestos_facturado: toMoneyString(impuestosFacturado),
+          monto_facturado: toMoneyString(montoFacturado),
+          total_factura: toMoneyString(totalFactura),
+          monto_solicitado: toMoneyString(montoSolicitado),
+          disponible_factura: toMoneyString(disponibleFactura),
+          disponible_solicitud: toMoneyString(disponibleSolicitud),
+          maximo_asociable: toMoneyString(maximoAsociable),
+        },
+      });
+    }
+
+    // 7) Insert / Update pagos_facturas_proveedores
+    let idRelacion = null;
+
+    if (relacionExistente?.id) {
+      await executeQuery(
+        `
+        UPDATE pagos_facturas_proveedores
+        SET
+          id_pago_proveedor = ?,
+          subtotal_facturado = ?,
+          impuestos_facturado = ?,
+          monto_facturado = ?,
+          monto_pago = ?
+        WHERE id = ?
+        LIMIT 1;
+        `,
+        [
+          idPagoProveedor,
+          toMoneyString(subtotalFacturado),
+          toMoneyString(impuestosFacturado),
+          toMoneyString(montoFacturado),
+          toMoneyString(montoPagoFinal),
+          Number(relacionExistente.id),
+        ]
+      );
+
+      idRelacion = Number(relacionExistente.id);
+    } else {
+      const qInsert = `
+        INSERT INTO pagos_facturas_proveedores (
+          id_pago_proveedor,
+          id_solicitud,
+          id_factura,
+          subtotal_facturado,
+          impuestos_facturado,
+          monto_facturado,
+          monto_pago
+        ) VALUES (?, ?, ?, ?, ?, ?, ?);
+      `;
+
+      const insertResult = await executeQuery(qInsert, [
+        idPagoProveedor,
+        idSolicitud,
+        idFactura,
+        toMoneyString(subtotalFacturado),
+        toMoneyString(impuestosFacturado),
+        toMoneyString(montoFacturado),
+        toMoneyString(montoPagoFinal),
+      ]);
+
+      idRelacion = insertResult?.insertId ?? null;
+    }
+
+    // 8) Recalcular solicitud
+    const qRecalcSolicitud = `
+      SELECT
+        COALESCE(
+          SUM(
+            CAST(COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2))
+          ),
+          0
+        ) AS total_facturado_real
+      FROM pagos_facturas_proveedores
+      WHERE id_solicitud = ?;
+    `;
+
+    const recalcRows = getRows(await executeQuery(qRecalcSolicitud, [idSolicitud]));
+    const nuevoMontoFacturado = round2(recalcRows?.[0]?.total_facturado_real ?? 0);
+    const nuevoMontoPorFacturar = Math.max(
+      0,
+      round2(montoSolicitado - nuevoMontoFacturado)
+    );
+
+    let nuevoEstadoFacturacion = "pendiente";
+    if (nuevoMontoPorFacturar <= EPS && nuevoMontoFacturado > EPS) {
+      nuevoEstadoFacturacion = "completado";
+    } else if (nuevoMontoFacturado > EPS) {
+      nuevoEstadoFacturacion = "parcial";
+    }
+
+    await executeQuery(
+      `
+      UPDATE solicitudes_pago_proveedor
+      SET
+        monto_facturado = ?,
+        monto_por_facturar = ?,
+        estado_facturacion = ?
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1;
+      `,
+      [
+        toMoneyString(nuevoMontoFacturado),
+        toMoneyString(nuevoMontoPorFacturar),
+        nuevoEstadoFacturacion,
+        idSolicitud,
+      ]
+    );
+
+    const updatedSolicitudRows = getRows(
+      await executeQuery(
+        `
+        SELECT *
+        FROM solicitudes_pago_proveedor
+        WHERE id_solicitud_proveedor = ?
+        LIMIT 1;
+        `,
+        [idSolicitud]
+      )
+    );
+
+    return res.status(200).json({
+      ok: true,
+      message: "Monto asociado correctamente",
+      data: {
+        id_relacion: idRelacion,
+        id_solicitud_proveedor: idSolicitud,
+        id_factura_proveedor: idFactura,
+        uuid_factura: uuidFacturaReal,
+        subtotal_facturado: toMoneyString(subtotalFacturado),
+        impuestos_facturado: toMoneyString(impuestosFacturado),
+        monto_facturado: toMoneyString(montoFacturado),
+        disponible_factura: toMoneyString(
+          Math.max(0, round2(disponibleFactura - montoFacturado))
+        ),
+        disponible_solicitud: toMoneyString(
+          Math.max(0, round2(disponibleSolicitud - montoFacturado))
+        ),
+        solicitud_actualizada: updatedSolicitudRows?.[0] ?? null,
+      },
+    });
+  } catch (error) {
+    console.error("Error en monto_factura:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error en el servidor",
+      details: error?.sqlMessage || error?.message || error,
+    });
+  }
+};
+
+
 // controllers/pago_proveedor.js (o donde lo tengas)
 const Detalles = async (req, res) => {
   try {
@@ -4763,8 +5048,7 @@ const Detalles = async (req, res) => {
     const solicitudSql = `
       SELECT *
       FROM solicitudes_pago_proveedor
-      WHERE id_solicitud_proveedor = ?
-      LIMIT 1;
+      WHERE id_solicitud_proveedor = ?;
     `;
 
     const solicitudRows = getRows(
@@ -4781,7 +5065,7 @@ const Detalles = async (req, res) => {
     }
 
     // =========================================================
-    // 4) CONSULTA: pagos_facturas_proveedores
+    // 4) CONSULTA RAW: pagos_facturas_proveedores
     // =========================================================
     let pfp = [];
     {
@@ -4815,7 +5099,6 @@ const Detalles = async (req, res) => {
 
     // =========================================================
     // 5) PAGOS
-    //    ✅ SIEMPRE por id_solicitud_proveedor
     // =========================================================
     let pagos = [];
     {
@@ -4830,7 +5113,6 @@ const Detalles = async (req, res) => {
         await executeQuery(pagosSql, [Number(id_solicitud_proveedor)])
       );
 
-      // Si el front mandó ids específicos, filtramos en memoria
       if (pagosArr.length > 0) {
         const pagosSet = new Set(pagosArr.map((x) => safeString(x)));
         pagos = pagos.filter((p) =>
@@ -4841,7 +5123,6 @@ const Detalles = async (req, res) => {
 
     // =========================================================
     // 6) FACTURAS
-    //    ✅ Buscar por id_factura_proveedor
     // =========================================================
     const facturaIdsDesdePfp = Array.isArray(pfp)
       ? pfp.map((r) => safeString(r?.id_factura)).filter(Boolean)
@@ -4927,9 +5208,129 @@ const Detalles = async (req, res) => {
     }
 
     // =========================================================
-    // 8) RESUMEN VALIDACIÓN
-    //    ✅ El pagado real sale de pago_proveedores
-    //    ✅ Se elimina validación por factura
+    // 8) ANÁLISIS DESDE LA VISTA
+    //    vw_pagos_facturas_proveedores_detalle
+    // =========================================================
+    const monto_solicitado = toNum(solicitud?.monto_solicitado);
+
+    const facturaIdsResponse = facturas
+      .map((f) => safeString(f?.id_factura_proveedor))
+      .filter(Boolean);
+
+    let totalAsociadoSolicitud = 0;
+    let detalleAgrupadoFacturas = [];
+    let detalleFacturasMap = new Map();
+
+    // 8.1 Total asociado de toda la solicitud
+    {
+      const totalSolicitudSql = `
+        SELECT
+          COALESCE(
+            SUM(
+              CAST(COALESCE(NULLIF(v.monto_facturado, ''), '0') AS DECIMAL(12,2))
+            ),
+            0
+          ) AS total_asociado_solicitud
+        FROM vw_pagos_facturas_proveedores_detalle v
+        WHERE v.id_solicitud = ?;
+      `;
+
+      const totalSolicitudRows = getRows(
+        await executeQuery(totalSolicitudSql, [Number(id_solicitud_proveedor)])
+      );
+
+      totalAsociadoSolicitud = toNum(
+        totalSolicitudRows?.[0]?.total_asociado_solicitud
+      );
+    }
+
+    // 8.2 Total asociado por factura para las facturas de la respuesta
+    if (facturaIdsResponse.length > 0) {
+      const phFacturas = facturaIdsResponse.map(() => "?").join(",");
+
+      const detalleVistaSql = `
+        SELECT
+          v.id_solicitud,
+          v.id_factura AS id_factura_proveedor,
+          MAX(
+            CAST(COALESCE(NULLIF(v.total, ''), '0') AS DECIMAL(12,2))
+          ) AS total_factura,
+          MAX(
+            CAST(COALESCE(NULLIF(v.monto_solicitado, ''), '0') AS DECIMAL(12,2))
+          ) AS monto_solicitado,
+          COALESCE(
+            SUM(
+              CAST(COALESCE(NULLIF(v.monto_facturado, ''), '0') AS DECIMAL(12,2))
+            ),
+            0
+          ) AS total_asociado_factura
+        FROM vw_pagos_facturas_proveedores_detalle v
+        WHERE v.id_solicitud = ?
+          AND v.id_factura IN (${phFacturas})
+        GROUP BY v.id_solicitud, v.id_factura
+        ORDER BY v.id_factura;
+      `;
+
+      detalleAgrupadoFacturas = getRows(
+        await executeQuery(detalleVistaSql, [
+          Number(id_solicitud_proveedor),
+          ...facturaIdsResponse,
+        ])
+      );
+
+      detalleFacturasMap = new Map(
+        detalleAgrupadoFacturas.map((r) => [
+          safeString(r?.id_factura_proveedor),
+          {
+            total_factura: toNum(r?.total_factura),
+            total_asociado_factura: toNum(r?.total_asociado_factura),
+            monto_solicitado: toNum(r?.monto_solicitado),
+          },
+        ])
+      );
+    }
+
+    const restante_solicitud = Math.max(
+      0,
+      Number((monto_solicitado - totalAsociadoSolicitud).toFixed(2))
+    );
+
+    // =========================================================
+    // 9) ENRIQUECER FACTURAS CON TOPES
+    //    maximo_a_asociar = menor entre:
+    //    - restante de la factura
+    //    - restante de la solicitud
+    // =========================================================
+    facturas = facturas.map((f) => {
+      const idFactura = safeString(f?.id_factura_proveedor);
+      const detalle = detalleFacturasMap.get(idFactura) || null;
+
+      const total_factura = toNum(
+        f?.total ?? detalle?.total_factura ?? f?.monto_facturado
+      );
+
+      const total_asociado_factura = toNum(detalle?.total_asociado_factura);
+
+      const restante_factura = Math.max(
+        0,
+        Number((total_factura - total_asociado_factura).toFixed(2))
+      );
+
+      const maximo_a_asociar = Number(
+        Math.min(restante_factura, restante_solicitud).toFixed(2)
+      );
+
+      return {
+        ...f,
+        total_factura: Number(total_factura.toFixed(2)),
+        total_asociado_factura: Number(total_asociado_factura.toFixed(2)),
+        restante_factura,
+        maximo_a_asociar,
+      };
+    });
+
+    // =========================================================
+    // 10) RESUMEN VALIDACIÓN
     // =========================================================
     const total_pagado = Array.isArray(pagos)
       ? pagos.reduce(
@@ -4940,21 +5341,30 @@ const Detalles = async (req, res) => {
 
     const total_facturado = Array.isArray(facturas)
       ? facturas.reduce(
-          (acc, f) => acc + toNum(f?.monto_facturado ?? f?.total),
+          (acc, f) => acc + toNum(f?.total_factura),
           0
         )
       : 0;
 
     const resumen_validacion = {
+      monto_solicitado: Number(monto_solicitado.toFixed(2)),
+      total_asociado_solicitud: Number(totalAsociadoSolicitud.toFixed(2)),
+      restante_solicitud: Number(restante_solicitud.toFixed(2)),
       total_pagado: Number(total_pagado.toFixed(2)),
       total_facturado: Number(total_facturado.toFixed(2)),
       diferencia_total: Number((total_pagado - total_facturado).toFixed(2)),
-      por_factura: [],
+      por_factura: facturas.map((f) => ({
+        id_factura_proveedor: safeString(f?.id_factura_proveedor),
+        total_factura: toNum(f?.total_factura),
+        total_asociado_factura: toNum(f?.total_asociado_factura),
+        restante_factura: toNum(f?.restante_factura),
+        maximo_a_asociar: toNum(f?.maximo_a_asociar),
+      })),
     };
 
-    // -----------------------------
-    // 9) Response
-    // -----------------------------
+    // =========================================================
+    // 11) Response
+    // =========================================================
     return res.status(200).json({
       ok: true,
       message: "Detalles obtenidos correctamente",
@@ -4969,11 +5379,192 @@ const Detalles = async (req, res) => {
         facturas,
         pagos,
         pagos_facturas_proveedores: pfp,
+        detalle_facturas_agrupado: detalleAgrupadoFacturas,
         resumen_validacion,
       },
     });
   } catch (error) {
     console.error("Error en Detalles:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error en el servidor",
+      details: error?.message ?? error,
+    });
+  }
+};
+
+const consultar_facturado = async (req, res) => {
+  try {
+    // ------------------------------------------------
+    // 1) Helpers
+    // ------------------------------------------------
+    const safeString = (v) => String(v ?? "").trim();
+
+    const normalizeArray = (v) => {
+      if (!v) return [];
+
+      if (Array.isArray(v)) {
+        return v;
+      }
+
+      if (typeof v === "string") {
+        const s = v.trim();
+        if (!s) return [];
+
+        // intentar JSON
+        try {
+          const parsed = JSON.parse(s);
+          if (Array.isArray(parsed)) return parsed;
+          return [parsed];
+        } catch (_) {
+          // si viene separado por comas
+          if (s.includes(",")) {
+            return s
+              .split(",")
+              .map((x) => x.trim())
+              .filter(Boolean);
+          }
+          return [s];
+        }
+      }
+
+      return [v];
+    };
+
+    const getRows = (result) =>
+      Array.isArray(result) ? result : (result?.[0] ?? []);
+
+    const uniq = (arr) => [...new Set(arr.filter(Boolean))];
+
+    const toNum = (v) => {
+      const n = Number(String(v ?? "").trim());
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    // ------------------------------------------------
+    // 2) Recibir ids
+    //    soporta:
+    //    - req.query.id_solicitud
+    //    - req.body.id_solicitud
+    //    - req.body.ids_solicitud
+    // ------------------------------------------------
+    const rawIds =
+      req.query?.id_solicitud ??
+      req.body?.id_solicitud ??
+      req.body?.ids_solicitud;
+
+    let idsSolicitud = normalizeArray(rawIds)
+      .map((x) => safeString(x))
+      .filter(Boolean);
+
+    idsSolicitud = uniq(idsSolicitud);
+
+    // si tus ids son numéricos, limpiamos solo numéricos válidos
+    const idsNumericos = idsSolicitud
+      .map((x) => Number(x))
+      .filter((x) => Number.isFinite(x) && x > 0);
+
+    if (idsNumericos.length === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "Debes enviar al menos un id_solicitud válido",
+      });
+    }
+
+    // ------------------------------------------------
+    // 3) Query principal
+    //    Base: solicitudes_pago_proveedor
+    //    Suma de facturado: vista agrupada
+    // ------------------------------------------------
+    const placeholdersVista = idsNumericos.map(() => "?").join(",");
+    const placeholdersSolicitudes = idsNumericos.map(() => "?").join(",");
+
+    const sql = `
+      SELECT
+        spp.id_solicitud_proveedor AS id_solicitud,
+        COALESCE(spp.monto_solicitado, 0) AS monto_solicitado,
+        COALESCE(vpf.total_facturado, 0) AS total_facturado,
+        ROUND(
+          COALESCE(spp.monto_solicitado, 0) - COALESCE(vpf.total_facturado, 0),
+          2
+        ) AS diferencia,
+        ROUND(
+          GREATEST(
+            COALESCE(spp.monto_solicitado, 0) - COALESCE(vpf.total_facturado, 0),
+            0
+          ),
+          2
+        ) AS maximo_asignar
+      FROM solicitudes_pago_proveedor spp
+      LEFT JOIN (
+        SELECT
+          id_solicitud,
+          SUM(COALESCE(monto_facturado, 0)) AS total_facturado
+        FROM vw_pagos_facturas_proveedores_detalle
+        WHERE id_solicitud IN (${placeholdersVista})
+        GROUP BY id_solicitud
+      ) vpf
+        ON vpf.id_solicitud = spp.id_solicitud_proveedor
+      WHERE spp.id_solicitud_proveedor IN (${placeholdersSolicitudes})
+      ORDER BY spp.id_solicitud_proveedor ASC;
+    `;
+
+    const rows = getRows(
+      await executeQuery(sql, [...idsNumericos, ...idsNumericos])
+    );
+
+    // ------------------------------------------------
+    // 4) Normalizar respuesta
+    // ------------------------------------------------
+    const data = rows.map((row) => {
+      const monto_solicitado = Number(toNum(row?.monto_solicitado).toFixed(2));
+      const total_facturado = Number(toNum(row?.total_facturado).toFixed(2));
+      const diferencia = Number(
+        (monto_solicitado - total_facturado).toFixed(2)
+      );
+      const maximo_asignar = Number(Math.max(diferencia, 0).toFixed(2));
+
+      return {
+        id_solicitud: safeString(row?.id_solicitud),
+        monto_solicitado,
+        total_facturado,
+        diferencia,
+        maximo_asignar,
+      };
+    });
+
+    // por si quieres acceso rápido por id en front
+    const data_by_id = data.reduce((acc, item) => {
+      acc[item.id_solicitud] = item;
+      return acc;
+    }, {});
+
+    // resumen general opcional
+    const resumen = {
+      total_solicitudes: data.length,
+      monto_solicitado_total: Number(
+        data.reduce((acc, x) => acc + toNum(x.monto_solicitado), 0).toFixed(2)
+      ),
+      total_facturado_total: Number(
+        data.reduce((acc, x) => acc + toNum(x.total_facturado), 0).toFixed(2)
+      ),
+      maximo_asignar_total: Number(
+        data.reduce((acc, x) => acc + toNum(x.maximo_asignar), 0).toFixed(2)
+      ),
+    };
+
+    return res.status(200).json({
+      ok: true,
+      message: "Montos facturados consultados correctamente",
+      request: {
+        id_solicitud: idsNumericos,
+      },
+      data,
+      data_by_id,
+      resumen,
+    });
+  } catch (error) {
+    console.error("Error en consultar_facturado:", error);
     return res.status(500).json({
       ok: false,
       error: "Error en el servidor",
@@ -4997,5 +5588,7 @@ module.exports = {
   saldo_a_favor,
   getSolicitudes2,
   saldos,
-  cambio_estatus
+  monto_factura,
+  cambio_estatus,
+  consultar_facturado
 };
