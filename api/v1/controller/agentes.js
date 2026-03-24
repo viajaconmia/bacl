@@ -50,7 +50,7 @@ const readEmpresasDatosFiscales = async (req, res) => {
     const { id_agente } = req.query;
     const agentes = await model.getEmpresasDatosFiscales(id_agente);
 
-    res.status(200).json({ data: agentes });
+    res.status(200).json({ data: agentes, message: "" });
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Error en el servidor", details: error });
@@ -100,7 +100,7 @@ const updateRestricted = async (req, res) => {
     const { id, value } = req.body;
     await executeQuery(
       `UPDATE agentes SET restringido = ? WHERE id_agente = ?`,
-      [value, id]
+      [value, id],
     );
 
     res.status(200).json({ data: value, message: "actualizado con exito" });
@@ -117,7 +117,7 @@ const getRestricted = async (req, res) => {
     const { id } = req.query;
     const [{ restringido }] = await executeQuery(
       `select restringido from agentes where id_agente = ?`,
-      [id]
+      [id],
     );
 
     res.status(200).json({ message: "", data: Boolean(restringido) });
