@@ -3006,9 +3006,331 @@ const pagoStats = getPagoStats(pagos);
   }
 };
 
+// const getSolicitudes2 = async (req, res) => {
+//   try {
+//     // ---------------- helpers ----------------
+//     const norm = (v) =>
+//       String(v ?? "")
+//         .trim()
+//         .toLowerCase();
+
+//     const clean = (v) => {
+//       const s = String(v ?? "").trim();
+//       return s === "" ? null : s;
+//     };
+
+//     const num = (v) => {
+//       const n = Number(v);
+//       return Number.isFinite(n) ? n : 0;
+//     };
+
+//     const toDateStart = (v) => {
+//       const s = clean(v);
+//       return s ? `${s} 00:00:00` : null;
+//     };
+
+//     const toDateEnd = (v) => {
+//       const s = clean(v);
+//       return s ? `${s} 23:59:59` : null;
+//     };
+
+//     const safeJsonParse = (v) => {
+//       if (v == null) return null;
+//       if (Array.isArray(v) || typeof v === "object") return v;
+//       if (typeof v !== "string") return null;
+
+//       const s = v.trim();
+//       if (!s) return null;
+//       if (!(s.startsWith("{") || s.startsWith("["))) return null;
+
+//       try {
+//         return JSON.parse(s);
+//       } catch {
+//         return null;
+//       }
+//     };
+
+//     const toArray = (v) => {
+//       const parsed = safeJsonParse(v);
+//       if (Array.isArray(parsed)) return parsed;
+//       if (parsed && typeof parsed === "object") return [parsed];
+//       return [];
+//     };
+
+//     const flattenPagosArr = (v) => {
+//       const arr = Array.isArray(v) ? v : toArray(v);
+//       const lvl1 = arr.flatMap((x) => (Array.isArray(x) ? x : [x]));
+//       const lvl2 = lvl1.flatMap((x) => (Array.isArray(x) ? x : [x]));
+//       return lvl2.filter(Boolean);
+//     };
+
+//     const getPagoStats = (pagos) => {
+//       const p = flattenPagosArr(pagos);
+
+//       let solicitado = 0;
+//       let pagado = 0;
+//       let conFecha = 0;
+
+//       for (const x of p) {
+//         solicitado += num(x?.monto_solicitado ?? 0);
+//         pagado += num(x?.monto_pagado ?? 0);
+//         if (x?.fecha_pago) conFecha += 1;
+//       }
+
+//       const anyPagadoEstado =
+//         p.some(
+//           (x) =>
+//             norm(x?.pago_estado_pago) === "pagado" ||
+//             norm(x?.estado_pago) === "pagado"
+//         ) || false;
+
+//       return {
+//         count: p.length,
+//         solicitado,
+//         pagado,
+//         conFecha,
+//         anyPagadoEstado,
+//       };
+//     };
+
+//     const getFacturaNums = (row) => {
+//       const solicitado = num(row?.monto_solicitado);
+
+//       const facturado = num(
+//         row?.monto_facturado ??
+//           row?.total_facturado ??
+//           row?.total_facturado_en_pfp ??
+//           row?.facturado ??
+//           row?.monto_facturas ??
+//           0
+//       );
+
+//       const porFacturarRaw =
+//         row?.monto_por_facturar ??
+//         row?.por_facturar ??
+//         row?.saldo_por_facturar;
+
+//       const porFacturar =
+//         porFacturarRaw != null
+//           ? num(porFacturarRaw)
+//           : Math.max(0, +(solicitado - facturado).toFixed(2));
+
+//       return { solicitado, facturado, porFacturar };
+//     };
+
+//     // ---------------- inputs GET ----------------
+//     const debug = Number(req.query.debug ?? 0) === 1;
+
+// const filters = {
+//   folio: clean(req.query.folio),
+//   cliente: clean(req.query.cliente),
+//   viajero: clean(req.query.viajero),
+//   hotel: clean(req.query.hotel),
+//   estado_solicitud: clean(req.query.estado_solicitud),
+//   estado_facturacion: clean(req.query.estado_facturacion),
+//   forma_pago: clean(req.query.forma_pago),
+
+//   created_start: toDateStart(req.query.created_start),
+//   created_end: toDateEnd(req.query.created_end),
+
+//   check_in_start: clean(req.query.check_in_start),
+//   check_in_end: clean(req.query.check_in_end),
+//   check_out_start: clean(req.query.check_out_start),
+//   check_out_end: clean(req.query.check_out_end),
+// };
+
+//     // ---------------- fetch SP filtrado ----------------
+// const spRows = await executeSP(
+//   STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
+//   [
+//     filters.folio,
+//     filters.cliente,
+//     filters.viajero,
+//     filters.hotel,
+//     filters.estado_solicitud,
+//     filters.estado_facturacion,
+//     filters.forma_pago,
+//     filters.created_start,
+//     filters.created_end,
+//     filters.check_in_start,
+//     filters.check_in_end,
+//     filters.check_out_start,
+//     filters.check_out_end,
+//   ]
+// );
+
+//     const ids = (spRows || [])
+//       .map((r) => r.id_solicitud_proveedor)
+//       .filter((id) => id !== null && id !== undefined);
+
+//     let pagosRaw = [];
+//     if (ids.length > 0) {
+//       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
+//     }
+
+//     // ---------------- index pagos by solicitud ----------------
+//     const pagosBySolicitud = (pagosRaw || []).reduce((acc, row) => {
+//       const key = String(row.id_solicitud_proveedor);
+
+//       const dispersiones = toArray(row.dispersiones_json);
+//       const pagos = toArray(row.pagos_json);
+
+//       (acc[key] ||= []).push(...dispersiones, ...pagos);
+//       return acc;
+//     }, {});
+
+//     // ---------------- normalize rows ----------------
+//     const data = (spRows || []).map((r) => {
+//       const {
+//         id_solicitud_proveedor,
+//         fecha_solicitud,
+//         monto_solicitado,
+//         saldo,
+//         forma_pago_solicitada,
+//         id_tarjeta_solicitada,
+//         usuario_solicitante,
+//         usuario_generador,
+//         comentarios,
+//         estado_solicitud,
+//         estado_facturacion,
+//         ultimos_4,
+//         banco_emisor,
+//         tipo_tarjeta,
+//         estatus_pagos,
+//         is_ajuste,
+//         comentario_ajuste,
+
+//         // nuevos campos del SP
+//         pagos_facturas_proveedores_json,
+//         uuids_facturas_json,
+//         rfcs_facturas_json,
+//         razones_sociales_facturas_json,
+//         uuid_factura_principal,
+//         rfc_factura_principal,
+//         razon_social_factura_principal,
+
+//         ...rest
+//       } = r;
+
+//       const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
+//       const forma = norm(forma_pago_solicitada);
+
+//       const pagoStats = getPagoStats(pagos);
+//       const saldoNum = num(saldo);
+//       const factNums = getFacturaNums({ ...r, ...rest });
+
+//       const facturasProveedor = toArray(pagos_facturas_proveedores_json);
+//       const uuidsFacturas = toArray(uuids_facturas_json);
+//       const rfcsFacturas = toArray(rfcs_facturas_json);
+//       const razonesSocialesFacturas = toArray(razones_sociales_facturas_json);
+
+//       const estaPagada =
+//         norm(estatus_pagos) === "pagado" ||
+//         saldoNum === 0 ||
+//         pagoStats.anyPagadoEstado ||
+//         pagoStats.pagado >= num(monto_solicitado);
+
+//       return {
+//         ...rest,
+//         id_solicitud_proveedor,
+//         fecha_solicitud,
+//         monto_solicitado,
+//         saldo,
+//         forma_pago_solicitada,
+//         estatus_pagos,
+
+//         solicitud_proveedor: {
+//           id_solicitud_proveedor,
+//           fecha_solicitud,
+//           monto_solicitado,
+//           saldo,
+//           forma_pago_solicitada,
+//           id_tarjeta_solicitada,
+//           usuario_solicitante,
+//           usuario_generador,
+//           comentarios,
+//           estado_solicitud,
+//           estado_facturacion,
+//           is_ajuste,
+//           comentario_ajuste,
+//         },
+
+//         tarjeta: {
+//           ultimos_4,
+//           banco_emisor,
+//           tipo_tarjeta,
+//         },
+
+//         proveedor: {
+//           rfc: rfc_factura_principal,
+//           razon_social: razon_social_factura_principal,
+//         },
+
+//         facturas_proveedor: {
+//           uuid_factura_principal,
+//           rfc_factura_principal,
+//           razon_social_factura_principal,
+//           uuids_facturas: uuidsFacturas,
+//           rfcs_facturas: rfcsFacturas,
+//           razones_sociales_facturas: razonesSocialesFacturas,
+//           facturas: facturasProveedor,
+//         },
+
+//         pagos,
+
+//         __computed: {
+//           forma,
+//           estado_solicitud_norm: norm(estado_solicitud),
+//           estaPagada,
+//           pagos_count: pagoStats.count,
+//           pagos_total_pagado: pagoStats.pagado,
+//           pagos_total_solicitado_sum: pagoStats.solicitado,
+//           facturado: factNums.facturado,
+//           por_facturar: factNums.porFacturar,
+//           solicitado: factNums.solicitado,
+//         },
+//       };
+//     });
+
+//     res.set({
+//       "Cache-Control": "no-store",
+//       Pragma: "no-cache",
+//       Expires: "0",
+//     });
+
+//     if (debug) {
+//       return res.status(200).json({
+//         ok: true,
+//         message: "Registros obtenidos con exito",
+//         data,
+//         meta: {
+//           filters,
+//           counts: {
+//             spRows_len: spRows.length,
+//             mapped_len: data.length,
+//             pagosRaw_len: pagosRaw.length,
+//           },
+//         },
+//       });
+//     }
+
+//     return res.status(200).json({
+//       ok: true,
+//       message: "Registros obtenidos con exito",
+//       data,
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     return res.status(500).json({
+//       ok: false,
+//       error: "Internal Server Error",
+//       details: error?.message || error,
+//     });
+//   }
+// };
+
 const getSolicitudes2 = async (req, res) => {
   try {
-    // ---------------- helpers ----------------
     const norm = (v) =>
       String(v ?? "")
         .trim()
@@ -3118,46 +3440,75 @@ const getSolicitudes2 = async (req, res) => {
       return { solicitado, facturado, porFacturar };
     };
 
-    // ---------------- inputs GET ----------------
     const debug = Number(req.query.debug ?? 0) === 1;
 
-const filters = {
-  folio: clean(req.query.folio),
-  cliente: clean(req.query.cliente),
-  viajero: clean(req.query.viajero),
-  hotel: clean(req.query.hotel),
-  estado_solicitud: clean(req.query.estado_solicitud),
-  estado_facturacion: clean(req.query.estado_facturacion),
-  forma_pago: clean(req.query.forma_pago),
+    const allowedFechaReserva = new Set(["created_at", "check_in", "check_out"]);
+    const rawFiltrarFechaPorReserva = clean(req.query.filtrar_fecha_por_reserva);
+    const filtrarFechaPorReserva =
+      rawFiltrarFechaPorReserva &&
+      allowedFechaReserva.has(String(rawFiltrarFechaPorReserva).toLowerCase())
+        ? String(rawFiltrarFechaPorReserva).toLowerCase()
+        : null;
 
-  created_start: toDateStart(req.query.created_start),
-  created_end: toDateEnd(req.query.created_end),
+    const fechaReservaStart = toDateStart(req.query.fecha_reserva_start);
+    const fechaReservaEnd = toDateEnd(req.query.fecha_reserva_end);
 
-  check_in_start: clean(req.query.check_in_start),
-  check_in_end: clean(req.query.check_in_end),
-  check_out_start: clean(req.query.check_out_start),
-  check_out_end: clean(req.query.check_out_end),
-};
+    const filters = {
+      // filtros actuales
+      folio: clean(req.query.folio),
+      cliente: clean(req.query.cliente),
+      viajero: clean(req.query.viajero),
+      hotel: clean(req.query.hotel),
+      estado_solicitud: clean(req.query.estado_solicitud),
+      estado_facturacion: clean(req.query.estado_facturacion),
+      forma_pago: clean(req.query.forma_pago),
+      created_start: toDateStart(req.query.created_start),
+      created_end: toDateEnd(req.query.created_end),
+      check_in_start: clean(req.query.check_in_start),
+      check_in_end: clean(req.query.check_in_end),
+      check_out_start: clean(req.query.check_out_start),
+      check_out_end: clean(req.query.check_out_end),
 
-    // ---------------- fetch SP filtrado ----------------
-const spRows = await executeSP(
-  STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
-  [
-    filters.folio,
-    filters.cliente,
-    filters.viajero,
-    filters.hotel,
-    filters.estado_solicitud,
-    filters.estado_facturacion,
-    filters.forma_pago,
-    filters.created_start,
-    filters.created_end,
-    filters.check_in_start,
-    filters.check_in_end,
-    filters.check_out_start,
-    filters.check_out_end,
-  ]
-);
+      // filtros nuevos de reserva
+      id_cliente: clean(req.query.id_cliente),
+      estado_reserva: clean(req.query.estado_reserva), // r.estado
+      etapa_reservacion: clean(req.query.etapa_reservacion), // r.etapa_reservacion
+      reservante: clean(req.query.reservante),
+      metodo_pago_reserva: clean(req.query.metodo_pago_reserva),
+      fecha_reserva_start: fechaReservaStart,
+      fecha_reserva_end: fechaReservaEnd,
+      filtrar_fecha_por_reserva:
+        filtrarFechaPorReserva ||
+        (fechaReservaStart || fechaReservaEnd ? "created_at" : null),
+    };
+
+    const spRows = await executeSP(
+      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
+      [
+        filters.folio,
+        filters.cliente,
+        filters.viajero,
+        filters.hotel,
+        filters.estado_solicitud,
+        filters.estado_facturacion,
+        filters.forma_pago,
+        filters.created_start,
+        filters.created_end,
+        filters.check_in_start,
+        filters.check_in_end,
+        filters.check_out_start,
+        filters.check_out_end,
+
+        filters.id_cliente,
+        filters.estado_reserva,
+        filters.etapa_reservacion,
+        filters.reservante,
+        filters.metodo_pago_reserva,
+        filters.fecha_reserva_start,
+        filters.fecha_reserva_end,
+        filters.filtrar_fecha_por_reserva,
+      ]
+    );
 
     const ids = (spRows || [])
       .map((r) => r.id_solicitud_proveedor)
@@ -3168,7 +3519,6 @@ const spRows = await executeSP(
       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
     }
 
-    // ---------------- index pagos by solicitud ----------------
     const pagosBySolicitud = (pagosRaw || []).reduce((acc, row) => {
       const key = String(row.id_solicitud_proveedor);
 
@@ -3179,7 +3529,6 @@ const spRows = await executeSP(
       return acc;
     }, {});
 
-    // ---------------- normalize rows ----------------
     const data = (spRows || []).map((r) => {
       const {
         id_solicitud_proveedor,
@@ -3200,7 +3549,6 @@ const spRows = await executeSP(
         is_ajuste,
         comentario_ajuste,
 
-        // nuevos campos del SP
         pagos_facturas_proveedores_json,
         uuids_facturas_json,
         rfcs_facturas_json,
