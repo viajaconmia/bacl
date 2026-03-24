@@ -1,5 +1,6 @@
 const router = require("express").Router();
 const controller = require("../../controller/pago_proveedor");
+const { TipoCambio } = require("../../controller/tipo_cambio");
 
 router.get("/solicitud", controller.getSolicitudes);
 router.get("/solicitud_conciliacion", controller.getSolicitudes2);
@@ -9,6 +10,7 @@ router.post("/cambio_de_estatus", controller.cambio_estatus)
 router.post("/dispersion", controller.createDispersion)
 router.post("/pago", controller.createPago) 
 router.get("/datosFiscales",controller.getDatosFiscalesProveedor);
+router.get("/tipo_cambio", TipoCambio);
 router.get("/saldos",controller.saldos)
 router.get("/consultar_facturado",controller.consultar_facturado)
 router.post("/editProveedor",controller.editProveedores);

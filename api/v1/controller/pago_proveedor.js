@@ -3479,481 +3479,320 @@ const cambio_estatus = async (req, res) => {
 
 const getProveedores = async (req, res) => {};
 
-// const cargarFactura = async (req, res) => {
-//   req.context.logStep(
-//     "crearFacturaDesdeCarga",
-//     "Iniciando creación de factura desde carga (proveedores)",
-//   );
-
-//   const {
-//     fecha_emision,
-//     estado,
-//     usuario_creador,
-//     id_agente,
-//     total,
-//     subtotal,
-//     impuestos,
-//     rfc,
-//     id_empresa,
-//     uuid_factura,
-//     rfc_emisor,
-//     url_pdf,
-//     url_xml,
-//     fecha_vencimiento,
-//     proveedoresData,
-//   } = req.body;
-
-//   const id_factura = "fac-" + uuidv4();
-
-//   const toNumber = (v) => {
-//     const n = Number(v);
-//     return Number.isFinite(n) ? n : 0;
-//   };
-
-//   const toDateOnly = (value) => {
-//     if (!value) return null;
-//     const d = new Date(value);
-//     if (Number.isNaN(d.getTime())) return null;
-//     return d.toISOString().slice(0, 10);
-//   };
-
-//   try {
-//     const proveedoresArr = Array.isArray(proveedoresData)
-//       ? proveedoresData
-//       : proveedoresData
-//         ? [proveedoresData]
-//         : [];
-
-//     if (proveedoresArr.length === 0) {
-//       return res.status(400).json({
-//         error: "Falta proveedoresData",
-//         message: "No se puede crear la factura sin proveedoresData.",
-//       });
-//     }
-
-//     const totalN = toNumber(total);
-//     const subtotalN = toNumber(subtotal);
-//     const impuestosN = toNumber(impuestos);
-
-//     const proveedorFirst = proveedoresArr[0];
-
-//     const proveedor_razon_social =
-//       proveedorFirst?.proveedor?.razon_social ??
-//       proveedorFirst?.razon_social ??
-//       null;
-
-//     const fechaFacturaSQL = toDateOnly(fecha_emision);
-
-//     const es_credito = Number(
-//       proveedorFirst?.is_credito ?? (fecha_vencimiento ? 1 : 0),
-//     );
-
-//     // ✅ Normalizar JSON para SP (ARRAY siempre)
-//     const detalle = proveedoresArr.map((p, idx) => {
-//       const id_solicitud_proveedor =
-//         p?.solicitud_proveedor?.id_solicitud_proveedor ??
-//         p?.id_solicitud_proveedor ??
-//         p?.id_solicitud ??
-//         null;
-
-//       if (!id_solicitud_proveedor) {
-//         throw new Error(
-//           `proveedoresData[${idx}] no trae id_solicitud / id_solicitud_proveedor`,
-//         );
-//       }
-
-//       const monto_solicitado = toNumber(
-//         p?.solicitud_proveedor?.monto_solicitado ??
-//         p?.monto_solicitado ??
-//         0,
-//       );
-
-//       const monto_facturado = toNumber(
-//         p?.monto_asociar ?? p?.monto_facturado ?? 0,
-//       );
-
-//       // ✅ Permitimos 0, solo rechazamos negativos
-//       if (monto_facturado < 0) {
-//         throw new Error(
-//           `proveedoresData[${idx}] monto_asociar inválido (no puede ser negativo)`,
-//         );
-//       }
-
-//       // ✅ Si viene monto_solicitado, no debe excederlo
-//       if (monto_solicitado > 0 && monto_facturado > monto_solicitado) {
-//         throw new Error(
-//           `proveedoresData[${idx}] monto_asociar (${monto_facturado}) excede monto_solicitado (${monto_solicitado})`,
-//         );
-//       }
-
-//       const pendiente_facturar =
-//         monto_solicitado > 0 ? monto_solicitado - monto_facturado : null;
-
-//       const id_pago =
-//         p?.detalles_pagos?.[0]?.id_pago ??
-//         p?.id_pago ??
-//         p?.id_pago_proveedores ??
-//         null;
-
-//       return {
-//         id_pago,
-//         solicitud_proveedor: {
-//           id_solicitud_proveedor,
-//           monto_solicitado,
-//         },
-//         monto_facturado,       // ✅ puede ser 0
-//         pendiente_facturar,
-//       };
-//     });
-
-//     // ✅ SUMA TOTAL ASOCIADA
-//     const monto_facturado_total = detalle.reduce(
-//       (acc, x) => acc + toNumber(x.monto_facturado),
-//       0,
-//     );
-
-//     // ✅ Validación global: lo asociado no puede exceder el total de la factura
-//     if (monto_facturado_total > totalN) {
-//       return res.status(400).json({
-//         error: "Monto asociado inválido",
-//         message: `La suma de monto_asociar (${monto_facturado_total}) no puede ser mayor al total de la factura (${totalN}).`,
-//       });
-//     }
-
-//     const proveedoresDataSP = JSON.stringify(detalle);
-
-//     const saldo_x_aplicar_items = totalN - monto_facturado_total;
-//     const estado_factura = estado;
-
-//     const response = await executeSP(
-//       "sp_inserta_factura_desde_carga_proveedores",
-//       [
-//         id_factura,
-
-//         uuid_factura,
-//         rfc_emisor,
-//         proveedor_razon_social,
-//         monto_facturado_total,
-//         url_xml,
-//         url_pdf,
-//         fechaFacturaSQL,
-//         es_credito,
-//         estado_factura,
-
-//         fechaFacturaSQL,
-//         estado,
-//         usuario_creador,
-//         id_agente,
-//         totalN,
-//         subtotalN,
-//         impuestosN,
-//         saldo_x_aplicar_items,
-//         rfc,
-//         id_empresa,
-//         fecha_vencimiento,
-
-//         proveedoresDataSP,
-//       ],
-//     );
-
-//     const idsSolicitudes = [
-//       ...new Set(
-//         detalle
-//           .map((x) => x?.solicitud_proveedor?.id_solicitud_proveedor)
-//           .filter(Boolean),
-//       ),
-//     ];
-
-//     if (idsSolicitudes.length > 0) {
-//       const placeholders = idsSolicitudes.map(() => "?").join(",");
-
-//       const updateEstatus = `
-//         UPDATE solicitudes_pago_proveedor spp
-//         LEFT JOIN (
-//           SELECT
-//             pfp.id_solicitud,
-//             SUM(
-//               CAST(COALESCE(NULLIF(pfp.monto_facturado, ''), '0') AS DECIMAL(12,2))
-//             ) AS total_facturado
-//           FROM pagos_facturas_proveedores pfp
-//           WHERE pfp.id_solicitud IN (${placeholders})
-//           GROUP BY pfp.id_solicitud
-//         ) agg
-//           ON agg.id_solicitud = spp.id_solicitud_proveedor
-//         SET
-//           spp.monto_facturado = IFNULL(agg.total_facturado, 0),
-//           spp.monto_por_facturar = GREATEST(
-//             CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
-//             0
-//           ),
-//           spp.estado_facturacion = CASE
-//             WHEN GREATEST(
-//               CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
-//               0
-//             ) = 0 THEN 'facturado'
-//             WHEN GREATEST(
-//               CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
-//               0
-//             ) <> CAST(spp.monto_solicitado AS DECIMAL(12,2)) THEN 'parcial'
-//             ELSE 'pendiente'
-//           END,
-//           spp.estatus_pagos = CASE
-//             WHEN CAST(COALESCE(NULLIF(spp.saldo, ''), '0') AS DECIMAL(12,2)) = 0 THEN 'pagado'
-//             ELSE spp.estatus_pagos
-//           END
-//         WHERE spp.id_solicitud_proveedor IN (${placeholders});
-//       `;
-
-//       await executeQuery(updateEstatus, [...idsSolicitudes, ...idsSolicitudes]);
-//     }
-
-//     return res.status(201).json({
-//       message: "Factura proveedor creada correctamente desde carga",
-//       data: {
-//         id_factura_proveedor: id_factura,
-//         uuid_cfdi: uuid_factura,
-//         monto_facturado_total,
-//         detalle_asociacion: detalle,
-//         response,
-//       },
-//     });
-//   } catch (error) {
-//     console.log(error);
-//     return res.status(500).json({
-//       error: "Error al crear factura proveedor desde carga",
-//       details: error?.message || error,
-//     });
-//   }
-// };
-
-const cargarFactura = async (req, res) => {console.log(req.body)}
-
-// const saldo_a_favor = async (req, res) => {
-//   try {
-//     const { id_proveedor } = req.query; // puede venir undefined
-
-//     const data = await executeSP(
-//       "sp_obtener_saldo_a_favor_proveedor",
-//       [id_proveedor ?? null] // MUY IMPORTANTE: pasar null si no viene
-//     );
-
-//     return res.status(200).json({ data }); // data = array rows del SP
-//   } catch (error) {
-//     console.error(error);
-//     return res.status(error.statusCode || 500).json({
-//       error: "Error en el servidor",
-//       details: error?.message ?? error,
-//     });
-//   }
-// };
-
-// const EditCampos = async (req, res) => {
-//   try {
-//     const { id_solicitud_proveedor, ...rest } = req.body;
-
-//     // 1) Validar ID
-//     if (!id_solicitud_proveedor) {
-//       return res.status(400).json({ error: "Falta id_solicitud_proveedor en el body" });
-//     }
-
-//     // 2) Tomar campos a editar (permitir varios)
-//     const keys = Object.keys(rest).filter((k) => rest[k] !== undefined);
-
-//     if (keys.length === 0) {
-//       return res.status(400).json({
-//         error: "No viene ningún campo para actualizar (además del id_solicitud_proveedor)",
-//       });
-//     }
-
-//     // 3) Mapeo opcional (comentarios_x -> columnas reales)
-//     const FIELD_MAP = {
-//       comentarios_cxp: "comentario_CXP",
-//       comentarios_CXP: "comentario_CXP",
-//       comentarios_ops: "comentarios",
-//     };
-
-//     // 4) Lista blanca de campos permitidos (SEGURIDAD)
-//     const ALLOWED_FIELDS = new Set([
-//       "fecha_solicitud",
-//       "monto_solicitado",
-//       "saldo",
-//       "forma_pago_solicitada",
-//       "id_tarjeta_solicitada",
-//       "usuario_solicitante",
-//       "usuario_generador",
-//       "comentarios",
-//       "estado_solicitud",
-//       "estado_facturacion",
-//       "estatus_pagos",
-//       "id_proveedor",
-//       "monto_facturado",
-//       "monto_por_facturar",
-//       "comentario_CXP",
-//       "consolidado",
-//       "is_ajuste",
-//       // ✅ nuevo para tu botón
-//       "comentario_ajuste",
-//     ]);
-
-//     // 5) Casteo numérico (ajusta si quieres más campos aquí)
-//     const NUMERIC_FIELDS = new Set([
-//       "id_proveedor",
-//       "consolidado",
-//       "is_ajuste",
-//       "monto_solicitado",
-//       "saldo",
-//       "monto_facturado",
-//       "monto_por_facturar",
-//     ]);
-
-//     // Normaliza updates: key cliente -> dbField + valor final
-//     const updatesMap = new Map(); // dbField -> finalValue
-
-//     for (const fieldFromClient of keys) {
-//       const dbField = FIELD_MAP[fieldFromClient] || fieldFromClient;
-
-//       if (!ALLOWED_FIELDS.has(dbField)) {
-//         return res.status(400).json({
-//           error: `Campo no permitido para actualizar: ${fieldFromClient}`,
-//           permitido: Array.from(ALLOWED_FIELDS),
-//         });
-//       }
-
-//       const value = rest[fieldFromClient];
-
-//       const finalValue = NUMERIC_FIELDS.has(dbField)
-//         ? value === null || value === ""
-//           ? null
-//           : Number(value)
-//         : value;
-
-//       if (NUMERIC_FIELDS.has(dbField) && finalValue !== null && Number.isNaN(finalValue)) {
-//         return res.status(400).json({
-//           error: `El campo ${fieldFromClient} debe ser numérico`,
-//         });
-//       }
-
-//       // Si llegan dos campos que mapean al mismo dbField, el último gana
-//       updatesMap.set(dbField, finalValue);
-//     }
-
-//     // ====== 6) Manejo especial: monto_solicitado dispara lógica de ajuste ======
-//     let ajusteInfo = null;
-
-//     if (updatesMap.has("monto_solicitado")) {
-//       const nuevoMonto = Number(updatesMap.get("monto_solicitado"));
-//       if (!Number.isFinite(nuevoMonto)) {
-//         return res.status(400).json({ error: "monto_solicitado debe ser numérico" });
-//       }
-
-//       const qOld = `
-//         SELECT monto_solicitado
-//         FROM solicitudes_pago_proveedor
-//         WHERE id_solicitud_proveedor = ?
-//         LIMIT 1
-//       `;
-//       const rOld = await executeQuery(qOld, [id_solicitud_proveedor]);
-
-//       if (!rOld?.length) {
-//         return res.status(404).json({
-//           error: "No se encontró la solicitud",
-//           id_solicitud_proveedor,
-//         });
-//       }
-
-//       const montoOld = Number(rOld[0].monto_solicitado ?? 0);
-//       const EPS = 0.01;
-
-//       let ajusteResp = { ok: true, action: "NO_CHANGE" };
-
-//       if (nuevoMonto > montoOld + EPS) {
-//         ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
-//           executeQuery,
-//           id_solicitud_proveedor,
-//           nuevoMonto,
-//           EPS,
-//         });
-//       } else if (nuevoMonto < montoOld - EPS) {
-//         ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
-//           executeQuery,
-//           executeSP2, // si no existe aquí, bórralo
-//           id_solicitud_proveedor,
-//           nuevoMonto,
-//           EPS,
-//         });
-//       }
-
-//       ajusteInfo = {
-//         montoOld,
-//         montoNew: nuevoMonto,
-//         ajuste: ajusteResp,
-//       };
-
-//       // Evita doble update si tu lógica ya lo actualiza internamente
-//       updatesMap.delete("monto_solicitado");
-//     }
-
-//     // ====== 7) UPDATE normal para el resto de campos (si quedan) ======
-//     if (updatesMap.size > 0) {
-//       const setParts = [];
-//       const params = [];
-
-//       for (const [dbField, finalValue] of updatesMap.entries()) {
-//         setParts.push(`\`${dbField}\` = ?`);
-//         params.push(finalValue);
-//       }
-
-//       const updateSql = `
-//         UPDATE solicitudes_pago_proveedor
-//         SET ${setParts.join(", ")}
-//         WHERE id_solicitud_proveedor = ?
-//         LIMIT 1;
-//       `;
-
-//       const result = await executeQuery(updateSql, [...params, id_solicitud_proveedor]);
-//       const affectedRows = result?.affectedRows ?? result?.[0]?.affectedRows ?? 0;
-
-//       if (affectedRows === 0) {
-//         return res.status(404).json({
-//           error: "No se encontró la solicitud o no se actualizó nada",
-//           id_solicitud_proveedor,
-//         });
-//       }
-//     } else {
-//       // Si no quedan campos y tampoco hubo ajuste, no haces nada
-//       if (!ajusteInfo) {
-//         return res.status(400).json({ error: "No hubo cambios para aplicar" });
-//       }
-//     }
-
-//     // ====== 8) Regresar registro actualizado ======
-//     const selectSql = `
-//       SELECT *
-//       FROM solicitudes_pago_proveedor
-//       WHERE id_solicitud_proveedor = ?
-//       LIMIT 1;
-//     `;
-//     const rows = await executeQuery(selectSql, [id_solicitud_proveedor]);
-//     const updated = Array.isArray(rows) ? rows[0] : rows?.[0];
-
-//     return res.status(200).json({
-//       ok: true,
-//       message: updatesMap.size > 0 ? "Campos actualizados correctamente" : "Ajuste aplicado",
-//       id_solicitud_proveedor,
-//       ajusteInfo: ajusteInfo || null,
-//       updated_fields: keys,
-//       data: updated || null,
-//     });
-//   } catch (error) {
-//     console.error("Error en EditCampos:", error);
-//     return res.status(500).json({
-//       error: "Error en el servidor",
-//       details: error?.message ?? error,
-//     });
-//   }
-// };
-
-// --- helpers ---
+const cargarFactura = async (req, res) => {
+  req.context.logStep(
+    "crearFacturaDesdeCarga",
+    "Iniciando creación de factura desde carga (proveedores)",
+  );
+
+  const {
+    fecha_emision,
+    estado,
+    usuario_creador,
+    id_agente,
+    total,
+    subtotal,
+    impuestos,
+    rfc,
+    id_empresa,
+    uuid_factura,
+    rfc_emisor,
+    url_pdf,
+    url_xml,
+    fecha_vencimiento,
+    proveedoresData,
+    montos_originales_factura,
+    facturas,
+  } = req.body;
+
+  const id_factura = "fac-" + uuidv4();
+
+  const toNumber = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const toDateOnly = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString().slice(0, 10);
+  };
+
+  try {
+    const proveedoresArr = Array.isArray(proveedoresData)
+      ? proveedoresData
+      : proveedoresData
+        ? [proveedoresData]
+        : [];
+
+    if (proveedoresArr.length === 0) {
+      return res.status(400).json({
+        error: "Falta proveedoresData",
+        message: "No se puede crear la factura sin proveedoresData.",
+      });
+    }
+
+    const facturaData = facturas?.facturaData ?? null;
+
+    const totalN = toNumber(total);
+    const subtotalN = toNumber(subtotal);
+    const impuestosN = toNumber(impuestos);
+
+    const proveedorFirst = proveedoresArr[0];
+
+    const proveedor_razon_social =
+      proveedorFirst?.proveedor?.razon_social ??
+      proveedorFirst?.razon_social ??
+      null;
+
+    const fechaFacturaSQL = toDateOnly(fecha_emision);
+
+    const es_credito = Number(
+      proveedorFirst?.is_credito ?? (fecha_vencimiento ? 1 : 0),
+    );
+
+    // ✅ nuevos campos para facturas_pago_proveedor
+    const razon_social = String(
+      facturaData?.receptor?.nombre ??
+      req.body?.razon_social ??
+      ""
+    ).trim();
+
+    const uso_cfdi = String(
+      facturaData?.receptor?.usoCFDI ??
+      req.body?.uso_cfdi ??
+      ""
+    ).trim() || null;
+
+    const moneda = String(
+      montos_originales_factura?.moneda ??
+      facturaData?.comprobante?.moneda ??
+      "MXN"
+    ).trim().toUpperCase();
+
+    const forma_pago = String(
+      facturaData?.comprobante?.formaPago ??
+      req.body?.forma_pago ??
+      ""
+    ).trim() || null;
+
+    const metodo_pago = String(
+      facturaData?.comprobante?.metodoPago ??
+      req.body?.metodo_pago ??
+      ""
+    ).trim() || null;
+
+    const total_moneda_O = toNumber(
+      montos_originales_factura?.total ??
+      facturaData?.comprobante?.total ??
+      total
+    );
+
+    const sub_total_moneda_O = toNumber(
+      montos_originales_factura?.subtotal ??
+      facturaData?.comprobante?.subtotal ??
+      subtotal
+    );
+
+    const impuestos_moneda_O = toNumber(
+      montos_originales_factura?.impuestos ??
+      facturaData?.impuestos?.traslado?.importe ??
+      impuestos
+    );
+
+    // ✅ Normalizar JSON para SP (ARRAY siempre)
+    const detalle = proveedoresArr.map((p, idx) => {
+      const id_solicitud_proveedor =
+        p?.solicitud_proveedor?.id_solicitud_proveedor ??
+        p?.id_solicitud_proveedor ??
+        p?.id_solicitud ??
+        null;
+
+      if (!id_solicitud_proveedor) {
+        throw new Error(
+          `proveedoresData[${idx}] no trae id_solicitud / id_solicitud_proveedor`,
+        );
+      }
+
+      const monto_solicitado = toNumber(
+        p?.solicitud_proveedor?.monto_solicitado ??
+        p?.monto_solicitado ??
+        0,
+      );
+
+      const monto_facturado = toNumber(
+        p?.monto_asociar ?? p?.monto_facturado ?? 0,
+      );
+
+      if (monto_facturado < 0) {
+        throw new Error(
+          `proveedoresData[${idx}] monto_asociar inválido (no puede ser negativo)`,
+        );
+      }
+
+      if (monto_solicitado > 0 && monto_facturado > monto_solicitado) {
+        throw new Error(
+          `proveedoresData[${idx}] monto_asociar (${monto_facturado}) excede monto_solicitado (${monto_solicitado})`,
+        );
+      }
+
+      const pendiente_facturar =
+        monto_solicitado > 0 ? monto_solicitado - monto_facturado : null;
+
+      const id_pago =
+        p?.detalles_pagos?.[0]?.id_pago ??
+        p?.id_pago ??
+        p?.id_pago_proveedores ??
+        null;
+
+      const tipo_cambio = toNumber(
+        p?.montos_originales?.tipo_cambio ??
+        montos_originales_factura?.tipo_cambio ??
+        1
+      );
+
+
+      return {
+        id_pago,
+        solicitud_proveedor: {
+          id_solicitud_proveedor,
+          monto_solicitado,
+        },
+        monto_facturado,
+        pendiente_facturar,
+        tipo_cambio,
+      };
+    });
+
+    const monto_facturado_total = detalle.reduce(
+      (acc, x) => acc + toNumber(x.monto_facturado),
+      0,
+    );
+
+    if (monto_facturado_total > totalN) {
+      return res.status(400).json({
+        error: "Monto asociado inválido",
+        message: `La suma de monto_asociar (${monto_facturado_total}) no puede ser mayor al total de la factura (${totalN}).`,
+      });
+    }
+
+    const proveedoresDataSP = JSON.stringify(detalle);
+
+    const saldo_x_aplicar_items = totalN - monto_facturado_total;
+    const estado_factura = estado;
+
+    const response = await executeSP(
+      "sp_inserta_factura_desde_carga_proveedores",
+      [
+        id_factura,
+
+        uuid_factura,
+        rfc_emisor,
+        proveedor_razon_social,
+        monto_facturado_total,
+        url_xml,
+        url_pdf,
+        fechaFacturaSQL,
+        es_credito,
+        estado_factura,
+
+        fechaFacturaSQL,
+        estado,
+        usuario_creador,
+        id_agente,
+        totalN,
+        subtotalN,
+        impuestosN,
+        saldo_x_aplicar_items,
+        rfc,
+        id_empresa,
+        fecha_vencimiento,
+
+        // ✅ nuevos campos
+        razon_social,
+        uso_cfdi,
+        moneda,
+        forma_pago,
+        metodo_pago,
+        total_moneda_O,
+        sub_total_moneda_O,
+        impuestos_moneda_O,
+
+        proveedoresDataSP,
+      ],
+    );
+
+    const idsSolicitudes = [
+      ...new Set(
+        detalle
+          .map((x) => x?.solicitud_proveedor?.id_solicitud_proveedor)
+          .filter(Boolean),
+      ),
+    ];
+
+    if (idsSolicitudes.length > 0) {
+      const placeholders = idsSolicitudes.map(() => "?").join(",");
+
+      const updateEstatus = `
+        UPDATE solicitudes_pago_proveedor spp
+        LEFT JOIN (
+          SELECT
+            pfp.id_solicitud,
+            SUM(
+              CAST(COALESCE(NULLIF(pfp.monto_facturado, ''), '0') AS DECIMAL(12,2))
+            ) AS total_facturado
+          FROM pagos_facturas_proveedores pfp
+          WHERE pfp.id_solicitud IN (${placeholders})
+          GROUP BY pfp.id_solicitud
+        ) agg
+          ON agg.id_solicitud = spp.id_solicitud_proveedor
+        SET
+          spp.monto_facturado = IFNULL(agg.total_facturado, 0),
+          spp.monto_por_facturar = GREATEST(
+            CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
+            0
+          ),
+          spp.estado_facturacion = CASE
+            WHEN GREATEST(
+              CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
+              0
+            ) = 0 THEN 'facturado'
+            WHEN GREATEST(
+              CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
+              0
+            ) <> CAST(spp.monto_solicitado AS DECIMAL(12,2)) THEN 'parcial'
+            ELSE 'pendiente'
+          END,
+          spp.estatus_pagos = CASE
+            WHEN CAST(COALESCE(NULLIF(spp.saldo, ''), '0') AS DECIMAL(12,2)) = 0 THEN 'pagado'
+            ELSE spp.estatus_pagos
+          END
+        WHERE spp.id_solicitud_proveedor IN (${placeholders});
+      `;
+
+      await executeQuery(updateEstatus, [...idsSolicitudes, ...idsSolicitudes]);
+    }
+
+    return res.status(201).json({
+      message: "Factura proveedor creada correctamente desde carga",
+      data: {
+        id_factura_proveedor: id_factura,
+        uuid_cfdi: uuid_factura,
+        monto_facturado_total,
+        detalle_asociacion: detalle,
+        response,
+      },
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(500).json({
+      error: "Error al crear factura proveedor desde carga",
+      details: error?.message || error,
+    });
+  }
+};
+
 function money2(n) {
   const x = Number(n);
   if (!Number.isFinite(x)) return 0;
