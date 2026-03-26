@@ -15,8 +15,9 @@ router.get("/saldos",controller.saldos)
 router.get("/consultar_facturado",controller.consultar_facturado)
 router.post("/editProveedor",controller.editProveedores);
 router.get("/proveedores",controller.getProveedores);
-router.post("/subir_factura",controller.cargarFactura);
 router.patch("/edit", controller.EditCampos)
+router.post("/subir_factura",controller.cargarFactura);
+router.post("/asignar_factura_previa",controller.asignar_factura_previa);
 router.post("/asignar_monto_fact", controller.monto_factura)
 router.post("/detalles",controller.Detalles);
 router.get("/buscar_factura",controller.Uuid);
