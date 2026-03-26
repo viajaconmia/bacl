@@ -19,4 +19,5 @@ router.post("/subir_factura",controller.cargarFactura);
 router.patch("/edit", controller.EditCampos)
 router.post("/asignar_monto_fact", controller.monto_factura)
 router.post("/detalles",controller.Detalles);
+router.get("/buscar_factura",controller.Uuid);
 module.exports = router;
