@@ -5987,6 +5987,396 @@ const Uuid = async (req, res) => {
     });
   }
 };
+
+const asignar_factura_previa = async (req, res) => {
+  let conn = null;
+
+  try {
+    const { uuid_cfdi, proveedoresData } = req.body;
+
+    const EPS = 0.01;
+
+    const safeString = (v) => String(v ?? "").trim();
+
+    const toNumber = (v) => {
+      if (v === null || v === undefined || v === "") return 0;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const round2 = (n) => Number(Number(n || 0).toFixed(2));
+    const toMoneyString = (n) => round2(n).toFixed(2);
+
+    const uuid = safeString(uuid_cfdi);
+
+    if (!uuid) {
+      return res.status(400).json({
+        ok: false,
+        message: "uuid_cfdi es requerido",
+      });
+    }
+
+    const proveedores = Array.isArray(proveedoresData)
+      ? proveedoresData
+      : proveedoresData
+      ? [proveedoresData]
+      : [];
+
+    if (!proveedores.length) {
+      return res.status(400).json({
+        ok: false,
+        message: "proveedoresData es requerido y debe contener al menos una solicitud",
+      });
+    }
+
+    // OJO: cambia esto a tu pool/conexión real
+    conn = await pool.promise().getConnection();
+    await conn.beginTransaction();
+
+    // 1) Buscar factura
+    const [facturaRows] = await conn.query(
+      `
+      SELECT
+        id_factura_proveedor,
+        uuid_cfdi,
+        id_agente,
+        total,
+        subtotal,
+        impuestos,
+        saldo_x_aplicar_items,
+        estado,
+        estado_factura
+      FROM facturas_pago_proveedor
+      WHERE TRIM(uuid_cfdi) = TRIM(?)
+      LIMIT 1
+      `,
+      [uuid]
+    );
+
+    if (!facturaRows.length) {
+      await conn.rollback();
+      return res.status(404).json({
+        ok: false,
+        message: "No se encontró la factura",
+      });
+    }
+
+    const factura = facturaRows[0];
+
+    const idFactura = safeString(factura.id_factura_proveedor);
+    const idProveedorFactura = safeString(factura.id_agente);
+    const totalFactura = round2(factura.total);
+    const subtotalFactura = round2(factura.subtotal);
+    const impuestosFactura = round2(factura.impuestos);
+    const saldoFactura = round2(factura.saldo_x_aplicar_items);
+
+    if (!idFactura) {
+      await conn.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "La factura no tiene id_factura_proveedor válido",
+      });
+    }
+
+    if (saldoFactura <= EPS) {
+      await conn.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "La factura ya no tiene saldo_x_aplicar_items disponible",
+      });
+    }
+
+    // 2) Validar proveedor contra factura
+    for (const item of proveedores) {
+      const idProveedorPayload = safeString(item?.id_proveedor);
+
+      if (idProveedorPayload && idProveedorFactura && idProveedorPayload !== idProveedorFactura) {
+        await conn.rollback();
+        return res.status(400).json({
+          ok: false,
+          message: `El proveedor de la solicitud no coincide con la factura. Factura=${idProveedorFactura}, Payload=${idProveedorPayload}`,
+        });
+      }
+    }
+
+    // 3) Total solicitado en esta operación
+    const totalOperacion = round2(
+      proveedores.reduce((acc, item) => acc + round2(toNumber(item?.monto_asociar)), 0)
+    );
+
+    if (totalOperacion <= EPS) {
+      await conn.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "El total a asignar debe ser mayor a 0",
+      });
+    }
+
+    if (totalOperacion - saldoFactura > EPS) {
+      await conn.rollback();
+      return res.status(400).json({
+        ok: false,
+        message: "El total a asignar excede el saldo disponible de la factura",
+        data: {
+          saldo_x_aplicar_items: toMoneyString(saldoFactura),
+          total_operacion: toMoneyString(totalOperacion),
+        },
+      });
+    }
+
+    const resultados = [];
+
+    // ratios para prorratear subtotal/impuestos
+    const ratioSubtotal = totalFactura > 0 ? subtotalFactura / totalFactura : 0;
+    const ratioImpuestos = totalFactura > 0 ? impuestosFactura / totalFactura : 0;
+
+    // 4) Procesar cada solicitud
+    for (const item of proveedores) {
+      const idSolicitud = Number(item?.id_solicitud);
+      const montoAsociar = round2(toNumber(item?.monto_asociar));
+      const montoSolicitadoPayload = round2(toNumber(item?.monto_solicitado));
+
+      if (!Number.isInteger(idSolicitud) || idSolicitud <= 0) {
+        await conn.rollback();
+        return res.status(400).json({
+          ok: false,
+          message: "id_solicitud inválido en proveedoresData",
+          data: item,
+        });
+      }
+
+      if (!(montoAsociar > 0)) {
+        await conn.rollback();
+        return res.status(400).json({
+          ok: false,
+          message: `El monto_asociar de la solicitud ${idSolicitud} debe ser mayor a 0`,
+        });
+      }
+
+      // 4.1 buscar solicitud
+      const [solicitudRows] = await conn.query(
+        `
+        SELECT
+          id_solicitud_proveedor,
+          id_proveedor,
+          CAST(COALESCE(NULLIF(TRIM(monto_solicitado), ''), '0') AS DECIMAL(12,2)) AS monto_solicitado,
+          CAST(COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2)) AS monto_facturado_actual,
+          CAST(COALESCE(NULLIF(TRIM(monto_por_facturar), ''), '0') AS DECIMAL(12,2)) AS monto_por_facturar_actual
+        FROM solicitudes_pago_proveedor
+        WHERE id_solicitud_proveedor = ?
+        LIMIT 1
+        `,
+        [idSolicitud]
+      );
+
+      if (!solicitudRows.length) {
+        await conn.rollback();
+        return res.status(404).json({
+          ok: false,
+          message: `No se encontró la solicitud ${idSolicitud}`,
+        });
+      }
+
+      const solicitud = solicitudRows[0];
+
+      const idProveedorSolicitud = safeString(solicitud.id_proveedor);
+      const montoSolicitadoDB = round2(solicitud.monto_solicitado);
+      const montoFacturadoActual = round2(solicitud.monto_facturado_actual);
+      const montoPorFacturarActual = round2(solicitud.monto_por_facturar_actual);
+
+      if (
+        idProveedorFactura &&
+        idProveedorSolicitud &&
+        idProveedorFactura !== idProveedorSolicitud
+      ) {
+        await conn.rollback();
+        return res.status(400).json({
+          ok: false,
+          message: `La solicitud ${idSolicitud} no pertenece al proveedor de la factura`,
+          data: {
+            proveedor_factura: idProveedorFactura,
+            proveedor_solicitud: idProveedorSolicitud,
+          },
+        });
+      }
+
+      const montoSolicitadoReal =
+        montoSolicitadoDB > 0 ? montoSolicitadoDB : montoSolicitadoPayload;
+
+      const maximoAsignableSolicitud = Math.max(
+        0,
+        round2(
+          montoPorFacturarActual > 0
+            ? montoPorFacturarActual
+            : montoSolicitadoReal - montoFacturadoActual
+        )
+      );
+
+      if (montoAsociar - maximoAsignableSolicitud > EPS) {
+        await conn.rollback();
+        return res.status(400).json({
+          ok: false,
+          message: `El monto_asociar excede el máximo permitido para la solicitud ${idSolicitud}`,
+          data: {
+            id_solicitud: idSolicitud,
+            monto_asociar: toMoneyString(montoAsociar),
+            maximo_asignable: toMoneyString(maximoAsignableSolicitud),
+          },
+        });
+      }
+
+      // 4.2 calcular subtotal/impuestos prorrateados
+      let subtotalFacturado = round2(montoAsociar * ratioSubtotal);
+      let impuestosFacturado = round2(montoAsociar * ratioImpuestos);
+
+      // ajuste fino por redondeo
+      const sumaProrrateada = round2(subtotalFacturado + impuestosFacturado);
+      const diferencia = round2(montoAsociar - sumaProrrateada);
+
+      if (Math.abs(diferencia) > 0) {
+        subtotalFacturado = round2(subtotalFacturado + diferencia);
+      }
+
+      // 4.3 insertar relación
+      const [insertResult] = await conn.query(
+        `
+        INSERT INTO pagos_facturas_proveedores (
+          id_pago_proveedor,
+          id_solicitud,
+          id_factura,
+          monto_facturado,
+          subtotal_facturado,
+          impuestos_facturado,
+          monto_pago
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          null,
+          idSolicitud,
+          idFactura,
+          toMoneyString(montoAsociar),
+          toMoneyString(subtotalFacturado),
+          toMoneyString(impuestosFacturado),
+          toMoneyString(montoAsociar),
+        ]
+      );
+
+      // 4.4 recalcular solicitud
+      const [sumSolicitudRows] = await conn.query(
+        `
+        SELECT
+          COALESCE(
+            SUM(
+              CAST(COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2))
+            ),
+            0
+          ) AS total_facturado_real
+        FROM pagos_facturas_proveedores
+        WHERE id_solicitud = ?
+        `,
+        [idSolicitud]
+      );
+
+      const nuevoMontoFacturado = round2(sumSolicitudRows[0]?.total_facturado_real ?? 0);
+      const nuevoMontoPorFacturar = Math.max(
+        0,
+        round2(montoSolicitadoReal - nuevoMontoFacturado)
+      );
+
+      let nuevoEstadoFacturacion = "pendiente";
+      if (nuevoMontoPorFacturar <= EPS && nuevoMontoFacturado > EPS) {
+        nuevoEstadoFacturacion = "completado";
+      } else if (nuevoMontoFacturado > EPS) {
+        nuevoEstadoFacturacion = "parcial";
+      }
+
+      await conn.query(
+        `
+        UPDATE solicitudes_pago_proveedor
+        SET
+          monto_facturado = ?,
+          monto_por_facturar = ?,
+          estado_facturacion = ?
+        WHERE id_solicitud_proveedor = ?
+        LIMIT 1
+        `,
+        [
+          toMoneyString(nuevoMontoFacturado),
+          toMoneyString(nuevoMontoPorFacturar),
+          nuevoEstadoFacturacion,
+          idSolicitud,
+        ]
+      );
+
+      resultados.push({
+        id_relacion: insertResult.insertId,
+        id_solicitud: idSolicitud,
+        id_factura: idFactura,
+        monto_facturado: toMoneyString(montoAsociar),
+        subtotal_facturado: toMoneyString(subtotalFacturado),
+        impuestos_facturado: toMoneyString(impuestosFacturado),
+        monto_por_facturar: toMoneyString(nuevoMontoPorFacturar),
+        estado_facturacion: nuevoEstadoFacturacion,
+      });
+    }
+
+    // 5) recalcular saldo disponible de factura
+    const [sumFacturaRows] = await conn.query(
+      `
+      SELECT
+        COALESCE(
+          SUM(
+            CAST(COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2))
+          ),
+          0
+        ) AS total_asociado_factura
+      FROM pagos_facturas_proveedores
+      WHERE id_factura = ?
+      `,
+      [idFactura]
+    );
+
+    const totalAsociadoFactura = round2(sumFacturaRows[0]?.total_asociado_factura ?? 0);
+    const nuevoSaldoFactura = Math.max(0, round2(totalFactura - totalAsociadoFactura));
+
+    await conn.query(
+      `
+      UPDATE facturas_pago_proveedor
+      SET saldo_x_aplicar_items = ?
+      WHERE id_factura_proveedor = ?
+      LIMIT 1
+      `,
+      [toMoneyString(nuevoSaldoFactura), idFactura]
+    );
+
+    await conn.commit();
+
+    return res.status(200).json({
+      ok: true,
+      message: "Factura previa asignada correctamente",
+      data: {
+        uuid_cfdi: uuid,
+        id_factura_proveedor: idFactura,
+        total_factura: toMoneyString(totalFactura),
+        saldo_x_aplicar_items_anterior: toMoneyString(saldoFactura),
+        saldo_x_aplicar_items_actual: toMoneyString(nuevoSaldoFactura),
+        asignaciones: resultados,
+      },
+    });
+  } catch (error) {
+    if (conn) await conn.rollback();
+
+    console.error("Error en asignar_factura_previa:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error en el servidor",
+      details: error?.sqlMessage || error?.message || error,
+    });
+  } finally {
+    if (conn) conn.release();
+  }
+};
+
 module.exports = {
   createSolicitud,
   Detalles,
@@ -6005,5 +6395,6 @@ module.exports = {
   monto_factura,
   cambio_estatus,
   consultar_facturado,
+  asignar_factura_previa,
   Uuid,
 };
