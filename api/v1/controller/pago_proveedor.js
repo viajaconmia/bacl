@@ -5921,6 +5921,72 @@ const consultar_facturado = async (req, res) => {
   }
 };
 
+const Uuid = async (req, res) => {
+  try {
+    const { uuid } = req.query || {};
+
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    const safeString = (v) => String(v ?? "").trim();
+
+    const getRows = (result) =>
+      Array.isArray(result) ? result : (result?.[0] ?? []);
+
+    const uuidBuscado = safeString(uuid).toUpperCase();
+
+    // -----------------------------
+    // Validación mínima
+    // -----------------------------
+    if (!uuidBuscado) {
+      return res.status(400).json({
+        ok: false,
+        error: "Falta uuid en query params",
+      });
+    }
+
+    // -----------------------------
+    // Consulta
+    // OJO: en tu tabla el campo parece ser uuid_cfdi
+    // si realmente tu columna se llama `uuid`, cambia uuid_cfdi por uuid
+    // -----------------------------
+    const sql = `
+      SELECT *
+      FROM facturas_pago_proveedor
+      WHERE uuid_cfdi = ?
+      LIMIT 1;
+    `;
+
+    const rows = getRows(await executeQuery(sql, [uuidBuscado]));
+    const factura = rows?.[0] || null;
+
+    if (!factura) {
+      return res.status(404).json({
+        ok: false,
+        error: "No se encontró ninguna factura con ese uuid",
+        request: {
+          uuid: uuidBuscado,
+        },
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: "Factura obtenida correctamente",
+      request: {
+        uuid: uuidBuscado,
+      },
+      data: factura,
+    });
+  } catch (error) {
+    console.error("Error en buscarFacturaPorUuid:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error en el servidor",
+      details: error?.message ?? error,
+    });
+  }
+};
 module.exports = {
   createSolicitud,
   Detalles,
@@ -5938,5 +6004,6 @@ module.exports = {
   saldos,
   monto_factura,
   cambio_estatus,
-  consultar_facturado
+  consultar_facturado,
+  Uuid,
 };
