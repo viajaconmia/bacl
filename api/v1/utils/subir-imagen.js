@@ -23,4 +23,17 @@ const generatePresignedUploadUrl = async (key, contentType) => {
   return { url, key, publicUrl };
 };
 
-module.exports = { generatePresignedUploadUrl };
+async function subirBufferAS3(buffer, key) {
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: process.env.S3_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: "image/png",
+    }),
+  );
+
+  return `https://${process.env.S3_BUCKET}.s3.amazonaws.com/${key}`;
+}
+
+module.exports = { generatePresignedUploadUrl, subirBufferAS3 };

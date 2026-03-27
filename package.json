@@ -45,6 +45,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "puppeteer": "^24.37.1"
+    "puppeteer": "^24.40.0"
   }
 }
