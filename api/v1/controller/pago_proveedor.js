@@ -3442,45 +3442,40 @@ const getSolicitudes2 = async (req, res) => {
 
     const debug = Number(req.query.debug ?? 0) === 1;
 
-    const allowedFechaReserva = new Set(["created_at", "check_in", "check_out"]);
-    const rawFiltrarFechaPorReserva = clean(req.query.filtrar_fecha_por_reserva);
-    const filtrarFechaPorReserva =
-      rawFiltrarFechaPorReserva &&
-      allowedFechaReserva.has(String(rawFiltrarFechaPorReserva).toLowerCase())
-        ? String(rawFiltrarFechaPorReserva).toLowerCase()
-        : null;
+   const allowedFechaReserva = new Set(["created_at", "check_in", "check_out"]);
+const rawFiltrarFechaPorReserva = clean(req.query.filtrar_fecha_por_reserva);
+const filtrarFechaPorReserva =
+  rawFiltrarFechaPorReserva &&
+  allowedFechaReserva.has(String(rawFiltrarFechaPorReserva).toLowerCase())
+    ? String(rawFiltrarFechaPorReserva).toLowerCase()
+    : null;
 
-    const fechaReservaStart = toDateStart(req.query.fecha_reserva_start);
-    const fechaReservaEnd = toDateEnd(req.query.fecha_reserva_end);
+const filters = {
+  folio: clean(req.query.folio),
+  cliente: clean(req.query.cliente),
+  viajero: clean(req.query.viajero),
+  hotel: clean(req.query.hotel),
+  estado_solicitud: clean(req.query.estado_solicitud),
+  estado_facturacion: clean(req.query.estado_facturacion),
+  forma_pago: clean(req.query.forma_pago),
 
-    const filters = {
-      // filtros actuales
-      folio: clean(req.query.folio),
-      cliente: clean(req.query.cliente),
-      viajero: clean(req.query.viajero),
-      hotel: clean(req.query.hotel),
-      estado_solicitud: clean(req.query.estado_solicitud),
-      estado_facturacion: clean(req.query.estado_facturacion),
-      forma_pago: clean(req.query.forma_pago),
-      created_start: toDateStart(req.query.created_start),
-      created_end: toDateEnd(req.query.created_end),
-      check_in_start: clean(req.query.check_in_start),
-      check_in_end: clean(req.query.check_in_end),
-      check_out_start: clean(req.query.check_out_start),
-      check_out_end: clean(req.query.check_out_end),
+  created_start: toDateStart(req.query.created_start),
+  created_end: toDateEnd(req.query.created_end),
+  check_in_start: clean(req.query.check_in_start),
+  check_in_end: clean(req.query.check_in_end),
+  check_out_start: clean(req.query.check_out_start),
+  check_out_end: clean(req.query.check_out_end),
 
-      // filtros nuevos de reserva
-      id_cliente: clean(req.query.id_cliente),
-      estado_reserva: clean(req.query.estado_reserva), // r.estado
-      etapa_reservacion: clean(req.query.etapa_reservacion), // r.etapa_reservacion
-      reservante: clean(req.query.reservante),
-      metodo_pago_reserva: clean(req.query.metodo_pago_reserva),
-      fecha_reserva_start: fechaReservaStart,
-      fecha_reserva_end: fechaReservaEnd,
-      filtrar_fecha_por_reserva:
-        filtrarFechaPorReserva ||
-        (fechaReservaStart || fechaReservaEnd ? "created_at" : null),
-    };
+  id_cliente: clean(req.query.id_cliente),
+  estado_reserva: clean(req.query.estado_reserva),
+  etapa_reservacion: clean(req.query.etapa_reservacion),
+  reservante: clean(req.query.reservante),
+  metodo_pago_reserva: clean(req.query.metodo_pago_reserva),
+
+  fecha_reserva_start: toDateStart(req.query.fecha_reserva_start),
+  fecha_reserva_end: toDateEnd(req.query.fecha_reserva_end),
+  filtrar_fecha_por_reserva: filtrarFechaPorReserva,
+};
 
     const spRows = await executeSP(
       STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
@@ -3725,6 +3720,7 @@ const saldo_a_favor = async (req, res) => {
     });
   }
 };
+
 const saldos = async (req, res) => {
   try {
     const { id_proveedor } = req.query; // puede venir undefined
