@@ -12,6 +12,8 @@ const Hospedaje = require("../model/hospedajes.model");
 const Item = require("../model/item.model");
 const { Calculo, calcularNoches } = require("../../lib/utils/calculates");
 const { Formato } = require("../../lib/utils/formats");
+const controller = require("../../api/v1/controller/pago_proveedor");
+
 
 /* =========================
  * UTILIDADES / HELPERS
@@ -1930,6 +1932,7 @@ function getMontoPagoProveedor(row) {
  * IMPORTANTE:
  * - Debe llamarse con la misma `connection` de la transacción del editar_reserva_definitivo
  */
+
 async function procesarSolicitudProveedorAlEditarReserva({
   connection,
   metadata,
@@ -1951,7 +1954,6 @@ async function procesarSolicitudProveedorAlEditarReserva({
       ? String(metadata.id_hospedaje).trim()
       : null;
 
-  // 1) Traer TODAS las solicitudes ligadas al booking
   const [rowsBooking] = await connection.execute(
     `
       SELECT DISTINCT id_solicitud
@@ -1987,7 +1989,6 @@ async function procesarSolicitudProveedorAlEditarReserva({
   const resultados = [];
 
   for (const id_solicitud_proveedor of idsSolicitud) {
-    // 2) Leer solicitud y bloquear fila
     const [rowsSolicitud] = await connection.execute(
       `
         SELECT
@@ -2015,7 +2016,6 @@ async function procesarSolicitudProveedorAlEditarReserva({
     const solicitud = rowsSolicitud[0];
     const estadoAnterior = String(solicitud.estado_solicitud || "").trim();
 
-    // Si ya estaba cancelada, no duplicamos nada
     if (estadoAnterior === "CANCELADA") {
       resultados.push({
         ok: true,
@@ -2027,7 +2027,6 @@ async function procesarSolicitudProveedorAlEditarReserva({
       continue;
     }
 
-    // 3) Buscar pagos de esa solicitud
     const [rowsPagos] = await connection.execute(
       `
         SELECT
@@ -2150,7 +2149,17 @@ async function procesarSolicitudProveedorAlEditarReserva({
       }
     }
 
-    // 4) Cancelar SIEMPRE la solicitud
+    // 4) Regresar saldo a la(s) factura(s) ligadas a la solicitud
+    const devolucionFacturas =
+      await controller.devolverMontoFacturadoAFacturasPorCancelacion({
+        id_solicitud_proveedor,
+        executeQuery: async (sql, params = []) => {
+          const [rows] = await connection.execute(sql, params);
+          return rows;
+        },
+      });
+
+    // 5) Cancelar SIEMPRE la solicitud
     if (estadoAnterior === "DISPERSION") {
       await connection.execute(
         `
@@ -2187,6 +2196,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
       monto_pagado_total,
       id_saldo,
       transaction_id,
+      devolucion_facturas: devolucionFacturas,
     });
   }
 
