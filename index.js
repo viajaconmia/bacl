@@ -159,8 +159,8 @@ app.use(
 
 app.get("/probando", async (req, res) => {
   try {
-    const { id } = req.query;
-    const [hotel] = await executeQuery(
+    const { hotel, ciudad, iteracion } = req.query;
+    const res = await executeQuery(
       `SELECT
       id_hotel as id,
   nombre AS hotel,
@@ -168,10 +168,11 @@ app.get("/probando", async (req, res) => {
   ROUND( precio_sencilla /1.16,2) AS subtotal,
   IF(desayuno_sencilla = 1, 1, 0) AS desayuno,
   direccion
-FROM vw_hoteles_tarifas_completa where id_hotel = ?;`,
-      [id],
+FROM vw_hoteles_tarifas_completa where zona = ?;`,
+      [(ciudad || "").toUpperCase()],
     );
-    const buffer = await generarImagenHotel(hotel);
+    if (!res[iteracion]) return res.status(404);
+    const buffer = await generarImagenHotel(res[iteracion]);
     return res.status(200).send(buffer);
   } catch (error) {
     console.error("Error creando ticket de prueba:", error);
