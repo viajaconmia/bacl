@@ -558,7 +558,14 @@ const updateProveedorCuenta = async (req, res) => {
 const getProveedorType = async (req, res) => {
   try {
     const { type, id } = req.query;
-    if (!type || !id) throw new Error("Falta el type o el id");
+    if (!id) throw new Error("Falta el type o el id");
+    if (!type)
+      return res
+        .status(200)
+        .json({
+          message: "",
+          data: { vuelos: null, renta_carro: null, vuelo: null },
+        });
 
     const querys = {
       renta_carro: `SELECT is_con_chofer, is_sin_chofer, is_chofer_bilingue, notas_sin_chofer, notas_con_chofer, notas_chofer_bilingue, incidencia, notas_generales FROM proveedor_auto WHERE id_proveedor = ?`,
