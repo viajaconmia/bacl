@@ -4374,11 +4374,125 @@ const calcularMontoPagadoDesdeDispersiones = (rows = []) => {
   );
 };
 
+const devolverMontoFacturadoAFacturasPorCancelacion = async ({
+  executeQuery,
+  id_solicitud_proveedor,
+}) => {
+  const getRows = (result) =>
+    Array.isArray(result) ? result : result?.[0] ?? [];
+
+  const safeString = (v) => String(v ?? "").trim();
+
+  const round2 = (n) => Number(Number(n || 0).toFixed(2));
+  const toMoneyString = (n) => round2(n).toFixed(2);
+
+  const qRelaciones = `
+    SELECT
+      TRIM(id_factura) AS id_factura,
+      ROUND(
+        SUM(
+          CAST(COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2))
+        ),
+        2
+      ) AS monto_facturado_total
+    FROM pagos_facturas_proveedores
+    WHERE id_solicitud = ?
+      AND COALESCE(NULLIF(TRIM(id_factura), ''), '') <> ''
+    GROUP BY TRIM(id_factura)
+    HAVING monto_facturado_total > 0;
+  `;
+
+  const relaciones = getRows(
+    await executeQuery(qRelaciones, [id_solicitud_proveedor])
+  );
+
+  if (!relaciones.length) {
+    return {
+      ok: true,
+      action: "NO_FACTURAS_RELACIONADAS",
+      facturas_actualizadas: [],
+    };
+  }
+
+  const facturasActualizadas = [];
+
+  for (const rel of relaciones) {
+    const idFactura = safeString(rel.id_factura);
+    const montoDevolver = round2(rel.monto_facturado_total ?? 0);
+
+    if (!idFactura || !(montoDevolver > 0)) continue;
+
+    const qFacturaActual = `
+      SELECT
+        id_factura_proveedor,
+        CAST(
+          COALESCE(NULLIF(TRIM(saldo_x_aplicar_items), ''), '0') AS DECIMAL(12,2)
+        ) AS saldo_actual
+      FROM facturas_pago_proveedor
+      WHERE TRIM(id_factura_proveedor) = TRIM(?)
+      LIMIT 1;
+    `;
+
+    const facturaRows = getRows(await executeQuery(qFacturaActual, [idFactura]));
+
+    if (!facturaRows.length) {
+      throw new Error(
+        `No se encontró la factura en facturas_pago_proveedor: ${idFactura}`
+      );
+    }
+
+    const saldoActual = round2(facturaRows[0].saldo_actual ?? 0);
+    const saldoNuevo = round2(saldoActual + montoDevolver);
+
+    await executeQuery(
+      `
+      UPDATE facturas_pago_proveedor
+      SET saldo_x_aplicar_items = ?
+      WHERE TRIM(id_factura_proveedor) = TRIM(?)
+      LIMIT 1;
+      `,
+      [toMoneyString(saldoNuevo), idFactura]
+    );
+
+    facturasActualizadas.push({
+      id_factura_proveedor: idFactura,
+      saldo_anterior: toMoneyString(saldoActual),
+      monto_devuelto: toMoneyString(montoDevolver),
+      saldo_nuevo: toMoneyString(saldoNuevo),
+    });
+  }
+
+  // importante: dejar en 0 las relaciones para no devolver dos veces
+  await executeQuery(
+    `
+    UPDATE pagos_facturas_proveedores
+    SET
+      monto_facturado = '0.00',
+      subtotal_facturado = '0.00',
+      impuestos_facturado = '0.00',
+      monto_pago = '0.00'
+    WHERE id_solicitud = ?;
+    `,
+    [id_solicitud_proveedor]
+  );
+
+  return {
+    ok: true,
+    action: "FACTURAS_SALDO_DEVUELTO",
+    facturas_actualizadas: facturasActualizadas,
+  };
+};
+
 const EditCampos = async (req, res) => {
   try {
     const { id_solicitud_proveedor, ...rest } = req.body;
 
     const normalizeEstado = (v) => String(v ?? "").trim().toUpperCase();
+
+    const esEstadoCancelacion = (v) => {
+      const estado = normalizeEstado(v);
+      return estado === "CANCELADA" || estado === "CANCELADO";
+    };
 
     const ESTADOS_PAGADO = new Set([
       "PAGADO LINK",
@@ -4386,14 +4500,12 @@ const EditCampos = async (req, res) => {
       "PAGADO TRANSFERENCIA",
     ]);
 
-    // 1) Validar ID
     if (!id_solicitud_proveedor) {
       return res.status(400).json({
         error: "Falta id_solicitud_proveedor en el body",
       });
     }
 
-    // 2) Tomar campos a editar (permitir varios)
     const keys = Object.keys(rest).filter((k) => rest[k] !== undefined);
 
     if (keys.length === 0) {
@@ -4403,14 +4515,12 @@ const EditCampos = async (req, res) => {
       });
     }
 
-    // 3) Mapeo opcional
     const FIELD_MAP = {
       comentarios_cxp: "comentario_CXP",
       comentarios_CXP: "comentario_CXP",
       comentarios_ops: "comentarios",
     };
 
-    // 4) Lista blanca
     const ALLOWED_FIELDS = new Set([
       "fecha_solicitud",
       "monto_solicitado",
@@ -4433,7 +4543,6 @@ const EditCampos = async (req, res) => {
       "pagado",
     ]);
 
-    // 5) Campos numéricos
     const NUMERIC_FIELDS = new Set([
       "id_proveedor",
       "consolidado",
@@ -4442,11 +4551,10 @@ const EditCampos = async (req, res) => {
       "saldo",
       "monto_facturado",
       "monto_por_facturar",
-      "pagado"
+      "pagado",
     ]);
 
-    // Normaliza updates
-    const updatesMap = new Map(); // dbField -> finalValue
+    const updatesMap = new Map();
 
     for (const fieldFromClient of keys) {
       const dbField = FIELD_MAP[fieldFromClient] || fieldFromClient;
@@ -4480,176 +4588,165 @@ const EditCampos = async (req, res) => {
     }
 
     const pagadoFlagBody = updatesMap.has("pagado")
-  ? Number(updatesMap.get("pagado"))
-  : null;
+      ? Number(updatesMap.get("pagado"))
+      : null;
 
-// ✅ pagado NO es columna, solo bandera de control
-updatesMap.delete("pagado");
+    updatesMap.delete("pagado");
 
     let ajusteInfo = null;
     let estadoEspecialInfo = null;
+    let devolucionFacturasInfo = null;
+    let debeDevolverFacturasPorCancelacion = false;
 
-let handledEstadoPagadoCombo = false;
+    let handledEstadoPagadoCombo = false;
 
-if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
-  const nuevoEstadoSolicitado = normalizeEstado(
-    updatesMap.get("estado_solicitud")
-  );
+    if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
+      const nuevoEstadoSolicitado = normalizeEstado(
+        updatesMap.get("estado_solicitud")
+      );
+      const esCancelacionSolicitada = esEstadoCancelacion(nuevoEstadoSolicitado);
 
-  const pagadoFlag = Number(pagadoFlagBody);
+      const pagadoFlag = Number(pagadoFlagBody);
 
-  if (![0, 1].includes(pagadoFlag)) {
-    return res.status(400).json({
-      error: "El campo pagado debe ser 0 o 1",
-    });
-  }
+      if (![0, 1].includes(pagadoFlag)) {
+        return res.status(400).json({
+          error: "El campo pagado debe ser 0 o 1",
+        });
+      }
 
-  const qSolicitudActual = `
-    SELECT
-      id_solicitud_proveedor,
-      id_proveedor,
-      estado_solicitud,
-      monto_solicitado,
-      saldo,
-      forma_pago_solicitada,
-      comentarios,
-      comentario_ajuste
-    FROM solicitudes_pago_proveedor
-    WHERE id_solicitud_proveedor = ?
-    LIMIT 1
-  `;
-  const rSolicitudActual = await executeQuery(qSolicitudActual, [
-    id_solicitud_proveedor,
-  ]);
-
-  if (!rSolicitudActual?.length) {
-    return res.status(404).json({
-      error: "No se encontró la solicitud",
-      id_solicitud_proveedor,
-    });
-  }
-
-  const solicitudActual = rSolicitudActual[0];
-
-  // CASO A: pagado = 0
-  // Solo cambia estado_solicitud al recibido y guarda pagado=0
-  if (pagadoFlag === 0) {
-    updatesMap.set("estado_solicitud", nuevoEstadoSolicitado);
-
-    estadoEspecialInfo = {
-      ok: true,
-      action: "NOTIFICADO_PAGADO_0_ONLY_STATUS_CHANGE",
-      estado_actual: normalizeEstado(solicitudActual.estado_solicitud),
-      estado_solicitado: nuevoEstadoSolicitado,
-      pagado: 0,
-    };
-
-    handledEstadoPagadoCombo = true;
-  }
-
-  // CASO B: pagado = 1
-  // Busca dispersiones, calcula monto pagado y genera saldo a favor
-  if (pagadoFlag === 1) {
-    const qDispersiones = `
-      SELECT
-        id_dispersion_pagos_proveedor,
+      const qSolicitudActual = `
+        SELECT
+          id_solicitud_proveedor,
+          id_proveedor,
+          estado_solicitud,
+          monto_solicitado,
+          saldo,
+          forma_pago_solicitada,
+          comentarios,
+          comentario_ajuste
+        FROM solicitudes_pago_proveedor
+        WHERE id_solicitud_proveedor = ?
+        LIMIT 1
+      `;
+      const rSolicitudActual = await executeQuery(qSolicitudActual, [
         id_solicitud_proveedor,
-        monto_solicitado,
-        saldo,
-        monto_pagado,
-        codigo_dispersion,
-        fecha_pago,
-        created_at
-      FROM dispersion_pagos_proveedor
-      WHERE id_solicitud_proveedor = ?
-      ORDER BY id_dispersion_pagos_proveedor ASC
-    `;
-    const dispersionRows = await executeQuery(qDispersiones, [
-      id_solicitud_proveedor,
-    ]);
+      ]);
 
-    if (!dispersionRows?.length) {
-      return res.status(400).json({
-        error:
-          "No existen registros en dispersion_pagos_proveedor para esta solicitud",
-        id_solicitud_proveedor,
-      });
+      if (!rSolicitudActual?.length) {
+        return res.status(404).json({
+          error: "No se encontró la solicitud",
+          id_solicitud_proveedor,
+        });
+      }
+
+      const solicitudActual = rSolicitudActual[0];
+
+      if (pagadoFlag === 0) {
+        updatesMap.set("estado_solicitud", nuevoEstadoSolicitado);
+
+        if (esCancelacionSolicitada) {
+          debeDevolverFacturasPorCancelacion = true;
+        }
+
+        estadoEspecialInfo = {
+          ok: true,
+          action: "NOTIFICADO_PAGADO_0_ONLY_STATUS_CHANGE",
+          estado_actual: normalizeEstado(solicitudActual.estado_solicitud),
+          estado_solicitado: nuevoEstadoSolicitado,
+          pagado: 0,
+        };
+
+        handledEstadoPagadoCombo = true;
+      }
+
+      if (pagadoFlag === 1) {
+        const qDispersiones = `
+          SELECT
+            id_dispersion_pagos_proveedor,
+            id_solicitud_proveedor,
+            monto_solicitado,
+            saldo,
+            monto_pagado,
+            codigo_dispersion,
+            fecha_pago,
+            created_at
+          FROM dispersion_pagos_proveedor
+          WHERE id_solicitud_proveedor = ?
+          ORDER BY id_dispersion_pagos_proveedor ASC
+        `;
+        const dispersionRows = await executeQuery(qDispersiones, [
+          id_solicitud_proveedor,
+        ]);
+
+        if (!dispersionRows?.length) {
+          return res.status(400).json({
+            error:
+              "No existen registros en dispersion_pagos_proveedor para esta solicitud",
+            id_solicitud_proveedor,
+          });
+        }
+
+        const montoPagadoNeto =
+          calcularMontoPagadoDesdeDispersiones(dispersionRows);
+
+        if (!(montoPagadoNeto > 0)) {
+          return res.status(400).json({
+            error:
+              "No se pudo determinar un monto pagado válido desde dispersion_pagos_proveedor",
+            id_solicitud_proveedor,
+          });
+        }
+
+        const usuario = req?.user?.email || req?.user?.name || "system";
+
+        const saldoResp = await crearSaldoFavorPorMontoPagado({
+          executeQuery,
+          id_solicitud_proveedor,
+          solicitudRow: {
+            id_proveedor: solicitudActual.id_proveedor,
+            forma_pago_solicitada: solicitudActual.forma_pago_solicitada,
+            comentarios: solicitudActual.comentarios,
+          },
+          usuario,
+          montoPagadoOverride: montoPagadoNeto,
+          origen: "dispersion_pagos_proveedor",
+          dispersionRows,
+        });
+
+        updatesMap.set("estado_solicitud", nuevoEstadoSolicitado);
+        updatesMap.set("is_ajuste", 1);
+        updatesMap.set(
+          "comentario_ajuste",
+          `Cancelada desde notificados | saldo a favor generado por dispersion_pagos_proveedor | monto neto: ${String(
+            montoPagadoNeto
+          )}`
+        );
+
+        if (esCancelacionSolicitada) {
+          debeDevolverFacturasPorCancelacion = true;
+        }
+
+        estadoEspecialInfo = {
+          ok: true,
+          action: "NOTIFICADO_PAGADO_1_CANCELADA_WITH_SALDO_FAVOR",
+          estado_actual: normalizeEstado(solicitudActual.estado_solicitud),
+          estado_solicitado: nuevoEstadoSolicitado,
+          pagado: 1,
+          monto_pagado_neto: montoPagadoNeto,
+          dispersiones_encontradas: dispersionRows.length,
+          saldo: saldoResp,
+        };
+
+        handledEstadoPagadoCombo = true;
+      }
     }
 
-    const montoPagadoNeto =
-      calcularMontoPagadoDesdeDispersiones(dispersionRows);
-
-    if (!(montoPagadoNeto > 0)) {
-      return res.status(400).json({
-        error:
-          "No se pudo determinar un monto pagado válido desde dispersion_pagos_proveedor",
-        id_solicitud_proveedor,
-      });
-    }
-
-    const usuario = req?.user?.email || req?.user?.name || "system";
-
-    // IMPORTANTE:
-    // Aquí reutilizas tu helper actual, pero debe soportar montoPagadoOverride
-    const saldoResp = await crearSaldoFavorPorMontoPagado({
-      executeQuery,
-      id_solicitud_proveedor,
-      solicitudRow: {
-        id_proveedor: solicitudActual.id_proveedor,
-        forma_pago_solicitada: solicitudActual.forma_pago_solicitada,
-        comentarios: solicitudActual.comentarios,
-      },
-      usuario,
-      montoPagadoOverride: montoPagadoNeto,
-      origen: "dispersion_pagos_proveedor",
-      dispersionRows,
-    });
-
-    // if (!saldoResp?.ok) {
-    //   return res.status(400).json({
-    //     error:
-    //       "No se pudo generar saldo a favor con base en dispersion_pagos_proveedor",
-    //     details: saldoResp,
-    //   });
-    // }
-
-    updatesMap.set("estado_solicitud", nuevoEstadoSolicitado);
-    updatesMap.set("is_ajuste", 1);
-    updatesMap.set(
-      "comentario_ajuste",
-      `Cancelada desde notificados | saldo a favor generado por dispersion_pagos_proveedor | monto neto: ${String(
-        montoPagadoNeto
-      )}`
-    );
-
-    estadoEspecialInfo = {
-      ok: true,
-      action: "NOTIFICADO_PAGADO_1_CANCELADA_WITH_SALDO_FAVOR",
-      estado_actual: normalizeEstado(solicitudActual.estado_solicitud),
-      estado_solicitado: nuevoEstadoSolicitado,
-      pagado: 1,
-      monto_pagado_neto: montoPagadoNeto,
-      dispersiones_encontradas: dispersionRows.length,
-      saldo: saldoResp,
-    };
-
-    handledEstadoPagadoCombo = true;
-  }
-}
-
-    // =========================================================
-    // 6) MANEJO ESPECIAL SI QUIEREN CAMBIAR estado_solicitud
-    // =========================================================
     if (!handledEstadoPagadoCombo && updatesMap.has("estado_solicitud")) {
       const nuevoEstadoSolicitado = normalizeEstado(
         updatesMap.get("estado_solicitud")
       );
 
-      // Solo aplico esta lógica especial cuando quieren CANCELAR
-      if (
-        nuevoEstadoSolicitado === "CANCELADA" ||
-        nuevoEstadoSolicitado === "CANCELADO"
-      ) {
+      if (esEstadoCancelacion(nuevoEstadoSolicitado)) {
         const qEstadoActual = `
           SELECT
             id_solicitud_proveedor,
@@ -4657,7 +4754,8 @@ if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
             estado_solicitud,
             monto_solicitado,
             saldo,
-            forma_pago_solicitada
+            forma_pago_solicitada,
+            comentarios
           FROM solicitudes_pago_proveedor
           WHERE id_solicitud_proveedor = ?
           LIMIT 1
@@ -4677,8 +4775,6 @@ if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
         const estadoActual = normalizeEstado(rowActual.estado_solicitud);
         const montoActual = Number(rowActual.monto_solicitado ?? 0);
 
-        // CASO 1: está en DISPERSION
-        // No canceles todavía. Solo marca ajuste y comentario.
         if (estadoActual === "DISPERSION") {
           const qMarkDispersion = `
             UPDATE solicitudes_pago_proveedor
@@ -4690,7 +4786,6 @@ if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
           `;
           await executeQuery(qMarkDispersion, [id_solicitud_proveedor]);
 
-          // evitar que el update normal cambie el estatus
           updatesMap.delete("estado_solicitud");
 
           estadoEspecialInfo = {
@@ -4699,78 +4794,74 @@ if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
             estado_actual: estadoActual,
             estado_solicitado: nuevoEstadoSolicitado,
           };
+        } else if (ESTADOS_PAGADO.has(estadoActual)) {
+          const usuario = req?.user?.email || req?.user?.name || "system";
+
+          const saldoResp = await crearSaldoFavorPorMontoPagado({
+            executeQuery,
+            id_solicitud_proveedor,
+            solicitudRow: {
+              id_proveedor: rowActual.id_proveedor,
+              forma_pago_solicitada: rowActual.forma_pago_solicitada,
+              comentarios: rowActual.comentarios,
+            },
+            usuario,
+          });
+
+          if (!saldoResp?.ok) {
+            return res.status(400).json({
+              error: "No se pudo generar saldo a favor por monto pagado para cancelar solicitud pagada",
+              details: saldoResp,
+            });
+          }
+
+          const qCancelPaid = `
+            UPDATE solicitudes_pago_proveedor
+            SET
+              estado_solicitud = 'CANCELADA',
+              is_ajuste = 1,
+              comentario_ajuste = CONCAT(
+                COALESCE(comentario_ajuste, ''),
+                CASE
+                  WHEN comentario_ajuste IS NULL OR comentario_ajuste = '' THEN ''
+                  ELSE ' | '
+                END,
+                'Cancelada después de generar saldo a favor por monto pagado neto: ',
+                ?
+              )
+            WHERE id_solicitud_proveedor = ?
+            LIMIT 1
+          `;
+          await executeQuery(qCancelPaid, [
+            String(saldoResp.monto_pagado_neto),
+            id_solicitud_proveedor,
+          ]);
+
+          updatesMap.delete("estado_solicitud");
+          updatesMap.delete("monto_solicitado");
+
+          debeDevolverFacturasPorCancelacion = true;
+
+          ajusteInfo = {
+            montoOld: montoActual,
+            montoNew: 0,
+            ajuste: saldoResp,
+          };
+
+          estadoEspecialInfo = {
+            ok: true,
+            action: "PAID_TO_CANCELADA_WITH_SALDO_BY_PAGOS_NETO",
+            estado_actual: estadoActual,
+            estado_solicitado: "CANCELADA",
+            saldo: saldoResp,
+          };
+        } else {
+          // cualquier otro estado: el update normal hará la cancelación
+          debeDevolverFacturasPorCancelacion = true;
         }
-
-        // CASO 2: está pagado
-        // Crear saldo a favor por TODO el monto usando tu lógica de disminución
-        else if (ESTADOS_PAGADO.has(estadoActual)) {
-  // Crear saldo a favor por lo pagado (neto) y luego cancelar
-  const usuario = req?.user?.email || req?.user?.name || "system";
-
-  const saldoResp = await crearSaldoFavorPorMontoPagado({
-    executeQuery,
-    id_solicitud_proveedor,
-    solicitudRow: {
-      id_proveedor: rowActual.id_proveedor,
-      forma_pago_solicitada: rowActual.forma_pago_solicitada,
-      comentarios: rowActual.comentarios, // si no lo seleccionas, quítalo
-    },
-    usuario,
-  });
-
-  if (!saldoResp?.ok) {
-    return res.status(400).json({
-      error: "No se pudo generar saldo a favor por monto pagado para cancelar solicitud pagada",
-      details: saldoResp,
-    });
-  }
-
-  const qCancelPaid = `
-    UPDATE solicitudes_pago_proveedor
-    SET
-      estado_solicitud = 'CANCELADA',
-      is_ajuste = 1,
-      comentario_ajuste = CONCAT(
-        COALESCE(comentario_ajuste, ''),
-        CASE
-          WHEN comentario_ajuste IS NULL OR comentario_ajuste = '' THEN ''
-          ELSE ' | '
-        END,
-        'Cancelada después de generar saldo a favor por monto pagado neto: ',
-        ?
-      )
-    WHERE id_solicitud_proveedor = ?
-    LIMIT 1
-  `;
-  await executeQuery(qCancelPaid, [String(saldoResp.monto_pagado_neto), id_solicitud_proveedor]);
-
-  // Evitar conflicto con update normal
-  updatesMap.delete("estado_solicitud");
-  updatesMap.delete("monto_solicitado");
-
-  ajusteInfo = {
-    montoOld: montoActual,
-    montoNew: 0,
-    ajuste: saldoResp, // aquí va el detalle del saldo creado
-  };
-
-  estadoEspecialInfo = {
-    ok: true,
-    action: "PAID_TO_CANCELADA_WITH_SALDO_BY_PAGOS_NETO",
-    estado_actual: estadoActual,
-    estado_solicitado: "CANCELADA",
-    saldo: saldoResp,
-  };
-}
-
-        // CASO 3: cualquier otro estado
-        // dejamos que el update normal haga la cancelación
       }
     }
 
-    // =========================================================
-    // 7) MANEJO ESPECIAL: monto_solicitado dispara lógica de ajuste
-    // =========================================================
     if (updatesMap.has("monto_solicitado")) {
       const nuevoMonto = Number(updatesMap.get("monto_solicitado"));
       if (!Number.isFinite(nuevoMonto)) {
@@ -4822,13 +4913,9 @@ if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
         ajuste: ajusteResp,
       };
 
-      // evita doble update
       updatesMap.delete("monto_solicitado");
     }
 
-    // =========================================================
-    // 8) UPDATE normal para el resto de campos
-    // =========================================================
     if (updatesMap.size > 0) {
       const setParts = [];
       const params = [];
@@ -4863,9 +4950,14 @@ if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
       }
     }
 
-    // =========================================================
-    // 9) Regresar registro actualizado
-    // =========================================================
+    if (debeDevolverFacturasPorCancelacion) {
+      devolucionFacturasInfo =
+        await devolverMontoFacturadoAFacturasPorCancelacion({
+          executeQuery,
+          id_solicitud_proveedor,
+        });
+    }
+
     const selectSql = `
       SELECT *
       FROM solicitudes_pago_proveedor
@@ -4875,36 +4967,43 @@ if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
     const rows = await executeQuery(selectSql, [id_solicitud_proveedor]);
     const updated = Array.isArray(rows) ? rows[0] : rows?.[0];
 
+    let message = "Campos actualizados correctamente";
 
-let message = "Campos actualizados correctamente";
+    if (
+      estadoEspecialInfo?.action ===
+      "NOTIFICADO_PAGADO_0_ONLY_STATUS_CHANGE"
+    ) {
+      message =
+        "La solicitud fue actualizada con pagado=0 y solo se cambió el estado_solicitud";
+    } else if (
+      estadoEspecialInfo?.action ===
+      "NOTIFICADO_PAGADO_1_CANCELADA_WITH_SALDO_FAVOR"
+    ) {
+      message =
+        "La solicitud fue cancelada con pagado=1 y se generó saldo a favor desde dispersion_pagos_proveedor";
+    } else if (
+      estadoEspecialInfo?.action ===
+      "DISPERSION_MARKED_AJUSTE_NO_STATUS_CHANGE"
+    ) {
+      message =
+        "La solicitud está en DISPERSION: se marcó como ajuste y no se cambió el estatus";
+    } else if (
+      estadoEspecialInfo?.action ===
+      "PAID_TO_CANCELADA_WITH_SALDO_BY_PAGOS_NETO"
+    ) {
+      message =
+        "La solicitud pagada fue cancelada y se generó saldo a favor por monto pagado neto";
+    } else if (ajusteInfo && !updatesMap.size) {
+      message = "Ajuste aplicado";
+    }
 
-if (
-  estadoEspecialInfo?.action ===
-  "NOTIFICADO_PAGADO_0_ONLY_STATUS_CHANGE"
-) {
-  message =
-    "La solicitud fue actualizada con pagado=0 y solo se cambió el estado_solicitud";
-} else if (
-  estadoEspecialInfo?.action ===
-  "NOTIFICADO_PAGADO_1_CANCELADA_WITH_SALDO_FAVOR"
-) {
-  message =
-    "La solicitud fue cancelada con pagado=1 y se generó saldo a favor desde dispersion_pagos_proveedor";
-} else if (
-  estadoEspecialInfo?.action ===
-  "DISPERSION_MARKED_AJUSTE_NO_STATUS_CHANGE"
-) {
-  message =
-    "La solicitud está en DISPERSION: se marcó como ajuste y no se cambió el estatus";
-} else if (
-  estadoEspecialInfo?.action ===
-  "PAID_TO_CANCELADA_WITH_SALDO_BY_PAGOS_NETO"
-) {
-  message =
-    "La solicitud pagada fue cancelada y se generó saldo a favor por monto pagado neto";
-} else if (ajusteInfo && !updatesMap.size) {
-  message = "Ajuste aplicado";
-}
+    if (devolucionFacturasInfo?.action === "FACTURAS_SALDO_DEVUELTO") {
+      message += " | Se devolvió saldo a las facturas relacionadas";
+    } else if (
+      devolucionFacturasInfo?.action === "NO_FACTURAS_RELACIONADAS"
+    ) {
+      message += " | No había facturas relacionadas para devolver saldo";
+    }
 
     return res.status(200).json({
       ok: true,
@@ -4912,6 +5011,7 @@ if (
       id_solicitud_proveedor,
       estadoEspecialInfo: estadoEspecialInfo || null,
       ajusteInfo: ajusteInfo || null,
+      devolucionFacturasInfo: devolucionFacturasInfo || null,
       updated_fields: keys,
       data: updated || null,
     });
@@ -6462,6 +6562,7 @@ const asignar_factura_previa = async (req, res) => {
 };
 
 module.exports = {
+  devolverMontoFacturadoAFacturasPorCancelacion,
   createSolicitud,
   Detalles,
   getSolicitudes,
