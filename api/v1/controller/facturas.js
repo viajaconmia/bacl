@@ -1124,8 +1124,6 @@ for (const facturaPayload of facturaDataRaw) {
     });
   }
 
-  // aquí mantenemos la misma lógica hacia abajo:
-  // "saldo" ahora será el monto_asignado que realmente quieres aplicar
   const f = {
     id_factura: String(r[0].id_factura),
     saldo: montoAsignado,
@@ -1135,6 +1133,16 @@ for (const facturaPayload of facturaDataRaw) {
   facturas.push(f);
   log("facturas.push", f);
 }
+
+const totalFacturasCents = facturas.reduce(
+  (acc, f) => acc + toCents(f.saldo),
+  0,
+);
+
+log("Facturas cargadas", {
+  facturas,
+  total_facturas: fromCents(totalFacturasCents),
+});
 
     // -----------------------------
     // 2) Vista de saldos disponibles (saldo y monto_por_facturar por raw_id)
@@ -1729,17 +1737,27 @@ for (const facturaPayload of facturaDataRaw) {
 
     log("[BRIDGE] Inserciones completadas", { insertedBridge });
 
-    // ============================================================
-    // 9) UPDATE facturas -> saldo = 0
+   // ============================================================
+    // 9) UPDATE facturas -> saldo = saldo_disponible - monto_asignado
     // ============================================================
     let updatedFacturas = 0;
 
     for (const f of facturas || []) {
       const id_factura = String(f.id_factura);
 
-      diferencia = diferencia / 100;
-      const paramsUF = [diferencia, id_factura];
-      log("[FACTURA] UPDATE saldo=0 (params)", { id_factura, diferencia });
+      const nuevoSaldo = Math.max(
+        0,
+        Number(f.saldo_disponible) - Number(f.saldo),
+      );
+
+      const paramsUF = [nuevoSaldo, id_factura];
+
+      log("[FACTURA] UPDATE saldo (params)", {
+        id_factura,
+        saldo_disponible: Number(f.saldo_disponible),
+        monto_asignado: Number(f.saldo),
+        nuevoSaldo,
+      });
 
       const rUF = await executeQuery(queryUpdateFactura, paramsUF);
       logQuery("UPDATE facturas", queryUpdateFactura, paramsUF, rUF);
