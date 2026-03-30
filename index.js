@@ -4,8 +4,8 @@ const express = require("express");
 const app = express();
 const cookieParser = require("cookie-parser");
 const PORT = process.env.PORT || 3001;
-const jwt = require("jsonwebtoken")
-const {SECRET_KEY} = require("./lib/constant/index")
+const jwt = require("jsonwebtoken");
+const { SECRET_KEY } = require("./lib/constant/index");
 /**de aqui para abajo */
 require("dotenv").config();
 // const jwt = require("jsonwebtoken");
@@ -63,6 +63,11 @@ const {
 } = require("./services/zoho/contacts");
 const { DEPARTMENTS } = require("./lib/constant");
 const { subirTicketSolicitudZoho } = require("./services/zoho");
+const {
+  generarYSubirImagenHotel,
+  generarImagenHotel,
+} = require("./api/v1/utils/generarImagenCotizacion");
+const { executeQuery } = require("./config/db");
 
 // Control de CORS
 const corsOptions = {
@@ -149,17 +154,32 @@ app.use(
     res.setHeader("Cache-Control", "no-cache");
     next();
   },
-  v1Router
+  v1Router,
 );
 
 app.get("/probando", async (req, res) => {
   try {
-    const { id } = req.query;
-    const response = await subirTicketSolicitudZoho({
-      id,
-      servicio,
-    });
-    return res.status(200).json(response);
+    const { hotel, ciudad, iteracion } = req.query;
+    console.log("entrando");
+    const response = await executeQuery(
+      `SELECT
+      id_hotel as id,
+      nombre AS hotel,
+      precio_sencilla AS total,
+      ROUND( precio_sencilla /1.16,2) AS subtotal,
+      IF(desayuno_sencilla = 1, 1, 0) AS desayuno,
+      direccion
+FROM vw_hoteles_tarifas_completa where zona = ?;`,
+      [(ciudad || "").toUpperCase()],
+    );
+    console.log(response);
+    if (!response[iteracion])
+      return res
+        .status(404)
+        .json({ message: "no encontramos esta iteracion", error: null });
+    const buffer = await generarImagenHotel(response[iteracion]);
+    console.log("imagen creada");
+    return res.status(200).send(buffer);
   } catch (error) {
     console.error("Error creando ticket de prueba:", error);
     return res.json({ message: "Error creando ticket de prueba", error });
@@ -171,7 +191,7 @@ app.get("/", (req, res) =>
   res.json({
     mensaje:
       "Bienvenido a la API. Por favor, autentícate para acceder a más datos.",
-  })
+  }),
 );
 
 app.post("/message", handleChat);
