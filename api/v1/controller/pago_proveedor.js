@@ -551,6 +551,7 @@ const createSolicitud = async (req, res) => {
       usuario_creador,
       paymentSchedule = [],
       moneda,
+      documento
     } = solicitud;
 
     // ✅ Determina forma_pago_solicitada para el SP
@@ -748,6 +749,8 @@ const createSolicitud = async (req, res) => {
         ? String(selectedCard)
         : null;
 
+    const documentoId = String(documento ?? "").trim() || null;
+
     const parametrosSP = [
       Number(monto_a_pagar), // p_monto_solicitado
       formaPagoDB, // p_forma_pago_solicitada (credit/transfer/card/link)
@@ -761,6 +764,7 @@ const createSolicitud = async (req, res) => {
       fechaSolicitud, // p_fecha
       estado_solicitud_db, // p_estado_solicitud
       estatus_pagos_db, // p_estatus_pagos
+      documentoId
     ];
 
     const spResp = await executeSP(
@@ -4216,7 +4220,6 @@ async function crearSaldoFavorPorMontoPagado({
         numero_comprobante,
         codigo_dispersion,
         descripcion,
-        is_devolucion,
         fecha_pago,
         fecha_emision
       FROM pago_proveedores
