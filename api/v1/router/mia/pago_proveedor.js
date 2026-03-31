@@ -21,4 +21,5 @@ router.post("/asignar_factura_previa",controller.asignar_factura_previa);
 router.post("/asignar_monto_fact", controller.monto_factura)
 router.post("/detalles",controller.Detalles);
 router.get("/buscar_factura",controller.Uuid);
+router.delete("/edit_factura",controller.eliminarFactura);
 module.exports = router;
