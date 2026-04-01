@@ -15,7 +15,7 @@ const pool = mysql.createPool({
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
   waitForConnections: true,
-  connectionLimit: 3,
+  connectionLimit: 1,
   // timezone: "-06:00",
   // multipleStatements: true,
   typeCast: function (field, next) {
