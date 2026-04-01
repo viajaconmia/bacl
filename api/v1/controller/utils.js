@@ -6,7 +6,8 @@ const { generatePresignedUploadUrl } = require("../utils/subir-imagen");
 exports.cargarArchivos = async (req, res) => {
   try {
     const { ruta } = req.params;                        
-    const { filename, filetype } = req.query;                 
+    const { filename, filetype } = req.query;      
+               
 
     if (!ruta || !filename || !filetype) {
       return res.status(400).json({

@@ -4889,14 +4889,14 @@ const EditCampos = async (req, res) => {
 
       let ajusteResp = { ok: true, action: "NO_CHANGE" };
 
-      if (nuevoMonto > montoOld + EPS) {
+      if (nuevoMonto > montoOld ) {
         ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
           executeQuery,
           id_solicitud_proveedor,
           nuevoMonto,
           EPS,
         });
-      } else if (nuevoMonto < montoOld - EPS) {
+      } else if (nuevoMonto < montoOld) {
         ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
           executeQuery,
           executeSP2,
