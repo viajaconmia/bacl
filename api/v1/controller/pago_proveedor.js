@@ -551,6 +551,7 @@ const createSolicitud = async (req, res) => {
       usuario_creador,
       paymentSchedule = [],
       moneda,
+      documento
     } = solicitud;
 
     // ✅ Determina forma_pago_solicitada para el SP
@@ -748,6 +749,8 @@ const createSolicitud = async (req, res) => {
         ? String(selectedCard)
         : null;
 
+    const documentoId = String(documento ?? "").trim() || null;
+
     const parametrosSP = [
       Number(monto_a_pagar), // p_monto_solicitado
       formaPagoDB, // p_forma_pago_solicitada (credit/transfer/card/link)
@@ -761,6 +764,7 @@ const createSolicitud = async (req, res) => {
       fechaSolicitud, // p_fecha
       estado_solicitud_db, // p_estado_solicitud
       estatus_pagos_db, // p_estatus_pagos
+      documentoId
     ];
 
     const spResp = await executeSP(
@@ -4216,7 +4220,6 @@ async function crearSaldoFavorPorMontoPagado({
         numero_comprobante,
         codigo_dispersion,
         descripcion,
-        is_devolucion,
         fecha_pago,
         fecha_emision
       FROM pago_proveedores
@@ -6084,6 +6087,314 @@ const Uuid = async (req, res) => {
   }
 };
 
+const eliminarFactura = async (req, res) => {
+  try {
+    const payloadRaw = req.body;
+
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    const safeString = (v) => String(v ?? "").trim();
+
+    const getRows = (result) =>
+      Array.isArray(result) ? result : (result?.[0] ?? []);
+
+    const toNumber = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Number(n.toFixed(2)) : 0;
+    };
+
+    const items = Array.isArray(payloadRaw) ? payloadRaw : [payloadRaw];
+
+    // -----------------------------
+    // Validación mínima
+    // -----------------------------
+    if (!items.length) {
+      return res.status(400).json({
+        ok: false,
+        error: "No se recibió información para eliminar la factura",
+      });
+    }
+
+    for (const item of items) {
+      const idSolicitud = safeString(item?.id_solicitud_proveedor);
+      const idFactura = safeString(item?.id_factura_proveedor);
+      const uuidFactura = safeString(item?.uuid_factura).toUpperCase();
+
+      if (!idSolicitud || !idFactura) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "Cada elemento debe contener id_solicitud_proveedor e id_factura_proveedor",
+          request: item,
+        });
+      }
+
+      if (!uuidFactura) {
+        return res.status(400).json({
+          ok: false,
+          error: "Cada elemento debe contener uuid_factura",
+          request: item,
+        });
+      }
+    }
+
+    const resultados = [];
+
+    for (const item of items) {
+      const idSolicitud = safeString(item?.id_solicitud_proveedor);
+      const idFactura = safeString(item?.id_factura_proveedor);
+      const uuidFactura = safeString(item?.uuid_factura).toUpperCase();
+
+      // -----------------------------
+      // 1) Validar que exista la factura
+      // -----------------------------
+      const sqlFactura = `
+        SELECT
+          id_factura_proveedor,
+          uuid_cfdi,
+          saldo_x_aplicar_items
+        FROM facturas_pago_proveedor
+        WHERE TRIM(id_factura_proveedor) = ?
+          AND UPPER(TRIM(uuid_cfdi)) = ?
+        LIMIT 1;
+      `;
+
+      const facturaRows = getRows(
+        await executeQuery(sqlFactura, [idFactura, uuidFactura])
+      );
+      const factura = facturaRows?.[0] || null;
+
+      if (!factura) {
+        return res.status(404).json({
+          ok: false,
+          error: `No se encontró la factura ${idFactura} con uuid ${uuidFactura}`,
+          request: {
+            id_solicitud_proveedor: idSolicitud,
+            id_factura_proveedor: idFactura,
+            uuid_factura: uuidFactura,
+          },
+        });
+      }
+
+      // -----------------------------
+      // 2) Buscar relación y guardar monto_facturado
+      // -----------------------------
+      const sqlRelacion = `
+        SELECT
+          TRIM(id_solicitud) AS id_solicitud,
+          TRIM(id_factura) AS id_factura,
+          ROUND(
+            SUM(
+              CAST(
+                COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2)
+              )
+            ),
+            2
+          ) AS monto_facturado_total,
+          COUNT(*) AS total_relaciones
+        FROM pagos_facturas_proveedores
+        WHERE TRIM(id_solicitud) = ?
+          AND TRIM(id_factura) = ?
+        GROUP BY TRIM(id_solicitud), TRIM(id_factura)
+        LIMIT 1;
+      `;
+
+      const relacionRows = getRows(
+        await executeQuery(sqlRelacion, [idSolicitud, idFactura])
+      );
+      const relacion = relacionRows?.[0] || null;
+
+      if (!relacion) {
+        return res.status(404).json({
+          ok: false,
+          error: `No existe relación en pagos_facturas_proveedores para id_solicitud=${idSolicitud} e id_factura=${idFactura}`,
+          request: {
+            id_solicitud_proveedor: idSolicitud,
+            id_factura_proveedor: idFactura,
+            uuid_factura: uuidFactura,
+          },
+        });
+      }
+
+      const montoFacturado = toNumber(relacion.monto_facturado_total);
+
+      if (montoFacturado <= 0) {
+        return res.status(400).json({
+          ok: false,
+          error: `El monto_facturado encontrado para la relación solicitud=${idSolicitud} factura=${idFactura} es inválido`,
+          request: {
+            id_solicitud_proveedor: idSolicitud,
+            id_factura_proveedor: idFactura,
+            uuid_factura: uuidFactura,
+          },
+          data: relacion,
+        });
+      }
+
+      // -----------------------------
+      // 3) Borrar relación en pagos_facturas_proveedores
+      // -----------------------------
+      const sqlDeleteRelacion = `
+        DELETE FROM pagos_facturas_proveedores
+        WHERE TRIM(id_solicitud) = ?
+          AND TRIM(id_factura) = ?;
+      `;
+
+      const deleteResult = await executeQuery(sqlDeleteRelacion, [
+        idSolicitud,
+        idFactura,
+      ]);
+
+      if (!deleteResult?.affectedRows) {
+        return res.status(400).json({
+          ok: false,
+          error: "No se pudo eliminar la relación en pagos_facturas_proveedores",
+          request: {
+            id_solicitud_proveedor: idSolicitud,
+            id_factura_proveedor: idFactura,
+            uuid_factura: uuidFactura,
+          },
+        });
+      }
+
+      // -----------------------------
+      // 4) Regresar saldo a la factura
+      // saldo_x_aplicar_items += monto_facturado
+      // -----------------------------
+      const sqlUpdateFactura = `
+        UPDATE facturas_pago_proveedor
+        SET saldo_x_aplicar_items = ROUND(
+          CAST(
+            COALESCE(NULLIF(TRIM(saldo_x_aplicar_items), ''), '0') AS DECIMAL(12,2)
+          ) + ?,
+          2
+        )
+        WHERE TRIM(id_factura_proveedor) = ?
+          AND UPPER(TRIM(uuid_cfdi)) = ?;
+      `;
+
+      const updateFacturaResult = await executeQuery(sqlUpdateFactura, [
+        montoFacturado,
+        idFactura,
+        uuidFactura,
+      ]);
+
+      if (!updateFacturaResult?.affectedRows) {
+        return res.status(400).json({
+          ok: false,
+          error: "No se pudo actualizar saldo_x_aplicar_items en facturas_pago_proveedor",
+          request: {
+            id_solicitud_proveedor: idSolicitud,
+            id_factura_proveedor: idFactura,
+            uuid_factura: uuidFactura,
+          },
+        });
+      }
+
+      // -----------------------------
+      // 5) Ajustar la solicitud
+      // monto_facturado -= monto_facturado
+      // monto_por_facturar += monto_facturado
+      // -----------------------------
+      const sqlUpdateSolicitud = `
+        UPDATE solicitudes_pago_proveedor
+        SET
+          monto_facturado = ROUND(
+            GREATEST(
+              CAST(
+                COALESCE(NULLIF(TRIM(monto_facturado), ''), '0') AS DECIMAL(12,2)
+              ) - ?,
+              0
+            ),
+            2
+          ),
+          monto_por_facturar = ROUND(
+            CAST(
+              COALESCE(NULLIF(TRIM(monto_por_facturar), ''), '0') AS DECIMAL(12,2)
+            ) + ?,
+            2
+          )
+        WHERE TRIM(id_solicitud_proveedor) = ?;
+      `;
+
+      const updateSolicitudResult = await executeQuery(sqlUpdateSolicitud, [
+        montoFacturado,
+        montoFacturado,
+        idSolicitud,
+      ]);
+
+      if (!updateSolicitudResult?.affectedRows) {
+        return res.status(400).json({
+          ok: false,
+          error: "No se pudo actualizar la solicitud en solicitudes_pago_proveedor",
+          request: {
+            id_solicitud_proveedor: idSolicitud,
+            id_factura_proveedor: idFactura,
+            uuid_factura: uuidFactura,
+          },
+        });
+      }
+
+      // -----------------------------
+      // 6) Consultar datos finales
+      // -----------------------------
+      const sqlResumenSolicitud = `
+        SELECT
+          id_solicitud_proveedor,
+          monto_facturado,
+          monto_por_facturar
+        FROM solicitudes_pago_proveedor
+        WHERE TRIM(id_solicitud_proveedor) = ?
+        LIMIT 1;
+      `;
+
+      const sqlResumenFactura = `
+        SELECT
+          id_factura_proveedor,
+          uuid_cfdi,
+          saldo_x_aplicar_items
+        FROM facturas_pago_proveedor
+        WHERE TRIM(id_factura_proveedor) = ?
+          AND UPPER(TRIM(uuid_cfdi)) = ?
+        LIMIT 1;
+      `;
+
+      const solicitudRows = getRows(
+        await executeQuery(sqlResumenSolicitud, [idSolicitud])
+      );
+      const facturaFinalRows = getRows(
+        await executeQuery(sqlResumenFactura, [idFactura, uuidFactura])
+      );
+
+      resultados.push({
+        request: {
+          id_solicitud_proveedor: idSolicitud,
+          id_factura_proveedor: idFactura,
+          uuid_factura: uuidFactura,
+        },
+        monto_facturado_eliminado: montoFacturado,
+        solicitud_actualizada: solicitudRows?.[0] || null,
+        factura_actualizada: facturaFinalRows?.[0] || null,
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: "Factura y relaciones eliminadas correctamente",
+      total_procesados: resultados.length,
+      results: resultados,
+    });
+  } catch (error) {
+    console.error("Error en eliminarFactura:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error al eliminar la factura",
+      details: error?.message ?? error,
+    });
+  }
+};
+
 const asignar_factura_previa = async (req, res) => {
   try {
     const { uuid_cfdi, proveedoresData } = req.body;
@@ -6557,6 +6868,7 @@ const asignar_factura_previa = async (req, res) => {
   }
 };
 
+
 module.exports = {
   devolverMontoFacturadoAFacturasPorCancelacion,
   createSolicitud,
@@ -6578,4 +6890,5 @@ module.exports = {
   consultar_facturado,
   asignar_factura_previa,
   Uuid,
+  eliminarFactura
 };

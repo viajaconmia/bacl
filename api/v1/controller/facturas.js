@@ -994,99 +994,155 @@ const asignarFacturaPagos = async (req, res) => {
     log("Pasos a iniciar (req.body)", req.body);
 
     const {
-      id_factura: facturasRaw,
-      ejemplo_saldos: saldosRaw,
-      id_agente = null,
-      metodo_de_pago = "aplicacion_saldo",
-      currency = "MXN",
-      concepto = "aplicacion a facturas",
-    } = req.body || {};
+  facturaData: facturaDataRaw,
+  id_factura: facturasRaw,
+  ejemplo_saldos: saldosRaw,
+  id_agente = null,
+  metodo_de_pago = "aplicacion_saldo",
+  currency = "MXN",
+  concepto = "aplicacion a facturas",
+} = req.body || {};
 
-    // ---------
-    // Validaciones payload
-    // ---------
-    if (
-      !facturasRaw ||
-      (Array.isArray(facturasRaw) && facturasRaw.length === 0)
-    ) {
-      log("ERROR id_factura faltante/vacío", { facturasRaw });
-      return res.status(400).json({
-        error: "Debes enviar 'id_factura' con 1+ elementos (array o string).",
-      });
-    }
-    const facturasOrden = Array.isArray(facturasRaw)
-      ? facturasRaw
-      : [facturasRaw];
-    log("facturasOrden normalizado", facturasOrden);
+// ---------
+// Validaciones payload
+// ---------
+if (!Array.isArray(facturaDataRaw) || facturaDataRaw.length === 0) {
+  log("ERROR facturaData faltante/vacío", { facturaDataRaw });
+  return res.status(400).json({
+    error: "Debes enviar 'facturaData' con al menos una factura.",
+  });
+}
 
-    let itemsEntrada = saldosRaw;
-    if (!itemsEntrada) {
-      log("ERROR ejemplo_saldos faltante", { itemsEntrada });
-      return res
-        .status(400)
-        .json({ error: "Falta 'ejemplo_saldos' en el payload." });
-    }
+if (!saldosRaw || (Array.isArray(saldosRaw) && saldosRaw.length === 0)) {
+  log("ERROR ejemplo_saldos faltante/vacío", { saldosRaw });
+  return res.status(400).json({
+    error: "No elegiste saldos",
+  });
+}
 
-    if (typeof itemsEntrada === "string") {
-      log("ejemplo_saldos venía string -> JSON.parse", itemsEntrada);
-      try {
-        itemsEntrada = JSON.parse(itemsEntrada);
-      } catch (e) {
-        log("ERROR JSON.parse(ejemplo_saldos)", { message: e.message });
-        return res.status(400).json({
-          error: "El campo 'ejemplo_saldos' no es un JSON válido",
-          details: e.message,
-        });
-      }
-    }
-    if (!Array.isArray(itemsEntrada)) itemsEntrada = [itemsEntrada];
+const facturasOrden = facturaDataRaw.map((f) => String(f.id_factura)).filter(Boolean);
 
-    log("itemsEntrada normalizado", {
-      length: itemsEntrada.length,
-      preview: briefLocal(itemsEntrada, 10),
+if (facturasOrden.length === 0) {
+  log("ERROR id_factura no válido dentro de facturaData", { facturaDataRaw });
+  return res.status(400).json({
+    error: "Las facturas enviadas no son válidas.",
+  });
+}
+
+log("facturasOrden normalizado", facturasOrden);
+
+let itemsEntrada = saldosRaw;
+
+if (typeof itemsEntrada === "string") {
+  log("ejemplo_saldos venía string -> JSON.parse", itemsEntrada);
+  try {
+    itemsEntrada = JSON.parse(itemsEntrada);
+  } catch (e) {
+    log("ERROR JSON.parse(ejemplo_saldos)", { message: e.message });
+    return res.status(400).json({
+      error: "El campo 'ejemplo_saldos' no es un JSON válido",
+      details: e.message,
     });
+  }
+}
 
-    // -----------------------------
-    // 1) Cargar facturas (totales por factura)
-    // -----------------------------
-    const facturas = [];
-    for (const idf of facturasOrden) {
-      const q = "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;";
-      const r = await executeQuery(q, [idf]);
-      logQuery("SELECT factura saldo", q, [idf], r);
+if (!Array.isArray(itemsEntrada)) itemsEntrada = [itemsEntrada];
 
-      if (!r?.length) {
-        log("ERROR: Factura no encontrada", { id_factura: idf });
-        return res.status(400).json({ error: `Factura no encontrada: ${idf}` });
-      }
-      const fSaldo = Number(r[0].saldo) || 0;
+if (itemsEntrada.length === 0) {
+  log("ERROR ejemplo_saldos vacío después de normalizar", { itemsEntrada });
+  return res.status(400).json({
+    error: "No elegiste saldos",
+  });
+}
 
-      if (fSaldo <= 0) {
-        log("ERROR: Factura sin saldo por pagar (ya pagada o aplicada)", {
-          id_factura: idf,
-          saldo: fSaldo,
-        });
-        return res.status(400).json({
-          error:
-            "No se puede aplicar pago: la factura ya fue pagada total o parcialmente (saldo <= 0).",
-          details: { id_factura: idf, saldo: fSaldo },
-        });
-      }
+log("itemsEntrada normalizado", {
+  length: itemsEntrada.length,
+  preview: briefLocal(itemsEntrada, 10),
+});
 
-      const f = { id_factura: String(r[0].id_factura), saldo: fSaldo };
-      facturas.push(f);
+// -----------------------------
+// 1) Cargar facturas (usar monto_asignado)
+// -----------------------------
+const facturas = [];
 
-      log("facturas.push", f);
-    }
+for (const facturaPayload of facturaDataRaw) {
+  const idf = String(facturaPayload.id_factura || "");
+  const montoAsignado = Number(facturaPayload.monto_asignado ?? 0);
 
-    const totalFacturasCents = facturas.reduce(
-      (acc, f) => acc + toCents(f.saldo),
-      0,
-    );
-    log("Facturas cargadas", {
-      facturas,
-      total_facturas: fromCents(totalFacturasCents),
+  if (!idf) {
+    log("ERROR: factura sin id_factura", { facturaPayload });
+    return res.status(400).json({
+      error: "Hay una factura sin id_factura en facturaData.",
     });
+  }
+
+  if (!Number.isFinite(montoAsignado) || montoAsignado <= 0) {
+    log("ERROR: monto_asignado inválido", { id_factura: idf, montoAsignado });
+    return res.status(400).json({
+      error: `El monto_asignado de la factura ${idf} debe ser mayor a 0.`,
+    });
+  }
+
+  const q = "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;";
+  const r = await executeQuery(q, [idf]);
+  logQuery("SELECT factura saldo", q, [idf], r);
+
+  if (!r?.length) {
+    log("ERROR: Factura no encontrada", { id_factura: idf });
+    return res.status(400).json({
+      error: `Factura no encontrada: ${idf}`,
+    });
+  }
+
+  const saldoDisponible = Number(r[0].saldo) || 0;
+
+  if (saldoDisponible <= 0) {
+    log("ERROR: Factura sin saldo disponible", {
+      id_factura: idf,
+      saldo: saldoDisponible,
+    });
+    return res.status(400).json({
+      error:
+        "No se puede aplicar pago: la factura ya fue pagada total o parcialmente (saldo <= 0).",
+      details: { id_factura: idf, saldo: saldoDisponible },
+    });
+  }
+
+  if (montoAsignado > saldoDisponible) {
+    log("ERROR: monto_asignado mayor al saldo disponible", {
+      id_factura: idf,
+      monto_asignado: montoAsignado,
+      saldo_disponible: saldoDisponible,
+    });
+    return res.status(400).json({
+      error: "El monto a asignar no está disponible.",
+      details: {
+        id_factura: idf,
+        monto_asignado: montoAsignado,
+        saldo_disponible: saldoDisponible,
+      },
+    });
+  }
+
+  const f = {
+    id_factura: String(r[0].id_factura),
+    saldo: montoAsignado,
+    saldo_disponible: saldoDisponible,
+  };
+
+  facturas.push(f);
+  log("facturas.push", f);
+}
+
+const totalFacturasCents = facturas.reduce(
+  (acc, f) => acc + toCents(f.saldo),
+  0,
+);
+
+log("Facturas cargadas", {
+  facturas,
+  total_facturas: fromCents(totalFacturasCents),
+});
 
     // -----------------------------
     // 2) Vista de saldos disponibles (saldo y monto_por_facturar por raw_id)
@@ -1681,17 +1737,27 @@ const asignarFacturaPagos = async (req, res) => {
 
     log("[BRIDGE] Inserciones completadas", { insertedBridge });
 
-    // ============================================================
-    // 9) UPDATE facturas -> saldo = 0
+   // ============================================================
+    // 9) UPDATE facturas -> saldo = saldo_disponible - monto_asignado
     // ============================================================
     let updatedFacturas = 0;
 
     for (const f of facturas || []) {
       const id_factura = String(f.id_factura);
 
-      diferencia = diferencia / 100;
-      const paramsUF = [diferencia, id_factura];
-      log("[FACTURA] UPDATE saldo=0 (params)", { id_factura, diferencia });
+      const nuevoSaldo = Math.max(
+        0,
+        Number(f.saldo_disponible) - Number(f.saldo),
+      );
+
+      const paramsUF = [nuevoSaldo, id_factura];
+
+      log("[FACTURA] UPDATE saldo (params)", {
+        id_factura,
+        saldo_disponible: Number(f.saldo_disponible),
+        monto_asignado: Number(f.saldo),
+        nuevoSaldo,
+      });
 
       const rUF = await executeQuery(queryUpdateFactura, paramsUF);
       logQuery("UPDATE facturas", queryUpdateFactura, paramsUF, rUF);
