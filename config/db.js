@@ -26,12 +26,6 @@ const pool = mysql.createPool({
   },
 });
 
-async function getSafeConnection() {
-  const conn = await pool.getConnection();
-  await conn.query("SET SQL_SAFE_UPDATES = 0");
-  return conn;
-}
-
 pool.on("connection", (conn) => {
   conn.query("SET time_zone = 'America/Mexico_City'");
   conn.query("SET SQL_SAFE_UPDATES = 0");
@@ -56,21 +50,17 @@ async function executeQuery(query, params = []) {
   }
 }
 
-async function executeSP(procedure, params = [], connection = null) {
-  const conn = connection || (await pool.getConnection());
-  const isNewConnection = !connection;
-
+async function executeSP(procedure, params = []) {
+  const connection = await pool.getConnection();
   try {
-    if (isNewConnection) {
-      await conn.query("SET SQL_SAFE_UPDATES = 0");
-    }
-
+    await connection.query("SET SQL_SAFE_UPDATES = 0");
     const placeholders = params.map(() => "?").join(", ");
     const query = `CALL ${procedure}(${placeholders});`;
-
-    const [rows] = await conn.query(query, params);
+    const result = await connection.query(query, params);
+    const [rows] = result;
     return Array.isArray(rows[0]) ? rows[0] : rows;
   } catch (error) {
+    console.log("error executeSP", error);
     throw new CustomError(
       error.sqlMessage,
       500,
@@ -78,7 +68,7 @@ async function executeSP(procedure, params = [], connection = null) {
       error,
     );
   } finally {
-    if (isNewConnection) conn.release();
+    connection.release();
   }
 }
 
