@@ -28,6 +28,7 @@ const pool = mysql.createPool({
 
 pool.on("connection", (conn) => {
   conn.query("SET time_zone = 'America/Mexico_City'");
+  conn.query("SET SQL_SAFE_UPDATES = 0");
 });
 
 async function executeQuery(query, params = []) {

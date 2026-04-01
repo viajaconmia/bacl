@@ -159,7 +159,7 @@ app.use(
 
 app.get("/probando", async (req, res) => {
   try {
-    const { hotel, ciudad, iteracion } = req.query;
+    const { hotel, ciudad, iteracion = 0 } = req.query;
     console.log("entrando");
     const response = await executeQuery(
       `SELECT

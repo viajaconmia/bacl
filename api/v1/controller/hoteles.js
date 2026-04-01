@@ -4,6 +4,146 @@ const model = require("../model/hoteles");
 const { generatePresignedUploadUrl } = require("../utils/subir-imagen");
 const { ShortError } = require("../../../middleware/errorHandler");
 
+const obtenerHotelesPrioridad = async (req, res) => {
+  let { page, length } = req.query;
+
+  page = page ? Number(page) : null;
+  length = length ? Number(length) : null;
+
+  const hasPagination = page && length;
+
+  if (hasPagination && page < 1) {
+    return res.status(400).json({ message: "Parámetros inválidos" });
+  }
+
+  const offset = hasPagination ? (page - 1) * length : null;
+
+  const where = [];
+  const params = [];
+
+  /* =========================
+     FILTROS
+  ==========================*/
+
+  // 🔥 Filtro combinado (tiene prioridad)
+  if (req.query.id_agente && req.query.zona) {
+    where.push(`vw.id_agente = ? AND vw.zona = ?`);
+    params.push(req.query.id_agente, req.query.zona);
+  } else {
+    // Cliente ID
+    if (req.query.id_agente) {
+      where.push(`vw.id_agente = ?`);
+      params.push(req.query.id_agente);
+    }
+
+    // Zona
+    if (req.query.zona) {
+      where.push(`vw.zona LIKE CONCAT('%', ?, '%')`);
+      params.push(req.query.zona);
+    }
+  }
+
+  // Cliente (nombre)
+  if (req.query.cliente) {
+    where.push(`vw.cliente_nombre LIKE CONCAT('%', ?, '%')`);
+    params.push(req.query.cliente);
+  }
+
+  // Nombre comercial
+  if (req.query.nombre_comercial) {
+    where.push(`vw.nombre_comercial LIKE CONCAT('%', ?, '%')`);
+    params.push(req.query.nombre_comercial);
+  }
+
+  // RFC
+  if (req.query.rfc) {
+    where.push(`vw.rfc = ?`);
+    params.push(req.query.rfc);
+  }
+
+  // Hotel
+  if (req.query.hotel) {
+    where.push(`vw.hotel_nombre LIKE CONCAT('%', ?, '%')`);
+    params.push(req.query.hotel);
+  }
+
+  // Estado
+  if (req.query.estado) {
+    where.push(`vw.estado = ?`);
+    params.push(req.query.estado);
+  }
+
+  // Prioridad
+  if (req.query.priority) {
+    where.push(`vw.priority = ?`);
+    params.push(req.query.priority);
+  }
+
+  // Permitido
+  if (req.query.is_allowed !== undefined) {
+    where.push(`vw.is_allowed = ?`);
+    params.push(req.query.is_allowed);
+  }
+
+  // Solo activos
+  if (req.query.activo !== undefined) {
+    where.push(`vw.activo = ?`);
+    params.push(req.query.activo);
+  }
+
+  // Precio mínimo
+  if (req.query.precio_min) {
+    where.push(`vw.precio_sencilla >= ?`);
+    params.push(req.query.precio_min);
+  }
+
+  // Precio máximo
+  if (req.query.precio_max) {
+    where.push(`vw.precio_sencilla <= ?`);
+    params.push(req.query.precio_max);
+  }
+
+  /* =========================
+     SQL
+  ==========================*/
+
+  const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+  const sqlTotal = `
+    SELECT COUNT(*) AS total
+    FROM vw_client_hotel_priority_full vw
+    ${whereSQL}
+  `;
+
+  const sqlData = `
+    SELECT *
+    FROM vw_client_hotel_priority_full vw
+    ${whereSQL}
+    ORDER BY vw.id_agente ASC, vw.zona ASC, vw.priority ASC
+    ${hasPagination ? `LIMIT ${length} OFFSET ${offset}` : ""}
+  `;
+
+  try {
+    const data = await executeQuery(sqlData, params);
+    const [{ total }] = await executeQuery(sqlTotal, params);
+
+    res.status(200).json({
+      message: "ok",
+      data,
+      metadata: { page, length, total },
+    });
+  } catch (error) {
+    console.error("❌ Error obtenerHotelesPrioridad:", error);
+    res
+      .status(error.statusCode || 500)
+      .json({
+        error,
+        message: error.message || "Error al obtener hoteles con prioridad",
+        data: null,
+      });
+  }
+};
+
 const AgregarHotel = async (req, res) => {
   req.context.logStep("Llegó al endpoint de agregar hotel");
 
@@ -130,14 +270,14 @@ const AgregarHotel = async (req, res) => {
             comentarios: tarifa.doble?.comentarios || null,
             precio_noche_extra: safeNumber(tarifa.doble?.precio_noche_extra),
             precio_persona_extra: safeNumber(
-              tarifa.doble?.precio_persona_extra
+              tarifa.doble?.precio_persona_extra,
             ),
           },
         };
 
         req.context.logStep(
           "Tarifa preferencial procesada:",
-          JSON.stringify(tarifaPreferencial, null, 2)
+          JSON.stringify(tarifaPreferencial, null, 2),
         );
         return tarifaPreferencial;
       });
@@ -147,7 +287,7 @@ const AgregarHotel = async (req, res) => {
     const tarifas_preferenciales_json = JSON.stringify(tarifasPreferenciales);
     req.context.logStep(
       "Tarifas preferenciales finales:",
-      tarifas_preferenciales_json
+      tarifas_preferenciales_json,
     );
 
     // Formatear fecha de vigencia del convenio si existe
@@ -250,7 +390,7 @@ const AgregarHotel = async (req, res) => {
         safeNumber(score_operaciones2),
         safeNumber(score_sistemas2),
       ],
-      false
+      false,
     );
     req.context.logStep("Resultado del stored procedure:", result);
     res.status(200).json({
@@ -390,7 +530,7 @@ const actualizaHotel = async (req, res) => {
         score_operaciones2,
         score_sistemas2,
       ],
-      false
+      false,
     );
 
     res.status(200).json({
@@ -414,7 +554,7 @@ const getTarifasByIdHotel = async (req, res) => {
     const tarifas = await executeSP(
       "sp_get_tarifas_by_id_hotel",
       [id_hotel],
-      false
+      false,
     );
     if (!tarifas) {
       res
@@ -458,7 +598,7 @@ const consultaPrecioSencilla = async (req, res) => {
     const result = await executeSP(
       "get_precio_habitacion_sencilla",
       [id_hotel],
-      false
+      false,
     );
     //console.log(result)
     const precio_sencilla = result?.[0]?.precio_sencilla;
@@ -491,7 +631,7 @@ const consultaPrecioDoble = async (req, res) => {
     const result = await executeSP(
       "get_precio_habitacion_doble",
       [[id_hotel]],
-      false
+      false,
     );
 
     // Si el resultado viene como: [ { precio_doble: '4200.00' } ]
@@ -532,7 +672,7 @@ const filtra_hoteles = async (req, res) => {
       const hoteles_inactivos = await executeSP(
         "sp_hoteles_inactivos",
         [],
-        false
+        false,
       );
       res.status(200).json({
         message: "Hoteles inactivos recuperados",
@@ -610,7 +750,7 @@ const get_hotel_tarifas_by_nombre = async (req, res) => {
     const result = await executeSP(
       "sp_get_hotel_tarifas_por_nombre",
       [nombre_up],
-      false
+      false,
     );
 
     if (!result || result.length === 0) {
@@ -764,7 +904,7 @@ const actualizarTarifa = async (req, res) => {
         precio_persona_extra,
         tipo_desayuno,
       ],
-      false
+      false,
     );
 
     res.status(200).json({
@@ -792,7 +932,7 @@ const eliminarLogicaTarifa = async (req, res) => {
     const result = await executeSP(
       "sp_eliminacion_logica_tarifa",
       [id_tarifa_preferencial_sencilla, id_tarifa_preferencial_doble],
-      false
+      false,
     );
 
     res.status(200).json({
@@ -840,7 +980,7 @@ const filtroAvanzado = async (req, res) => {
 
   // Utilidad para convertir a mayúsculas si es string
   const toUpperOrNull = (val) =>
-    typeof val === "string" ? val.toUpperCase() : val ?? null;
+    typeof val === "string" ? val.toUpperCase() : (val ?? null);
 
   try {
     req.context.logStep("Ejecutando stored procedure filtro_completo");
@@ -870,7 +1010,7 @@ const filtroAvanzado = async (req, res) => {
         toUpperOrNull(tiene_transportacion),
         toUpperOrNull(pais),
       ],
-      true
+      true,
     );
     req.context.logStep("Resultado del stored procedure:", result);
     if (!result) {
@@ -930,4 +1070,5 @@ module.exports = {
   readHotelesWithTarifaClient,
   cargaImagen,
   readHotelesTarifasById,
+  obtenerHotelesPrioridad,
 };
