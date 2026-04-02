@@ -28,6 +28,7 @@ const pool = mysql.createPool({
 
 pool.on("connection", (conn) => {
   conn.query("SET time_zone = 'America/Mexico_City'");
+  conn.query("SET SQL_SAFE_UPDATES = 0");
 });
 
 async function executeQuery(query, params = []) {
@@ -52,6 +53,7 @@ async function executeQuery(query, params = []) {
 async function executeSP(procedure, params = []) {
   const connection = await pool.getConnection();
   try {
+    await connection.query("SET SQL_SAFE_UPDATES = 0");
     const placeholders = params.map(() => "?").join(", ");
     const query = `CALL ${procedure}(${placeholders});`;
     const result = await connection.query(query, params);
