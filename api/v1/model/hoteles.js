@@ -14,6 +14,8 @@ const getHotelesWithCuartos = async () => {
     h.iva,
     h.ish,
     h.otros_impuestos,
+    h.latitud,
+    h.longitud,
     h.otros_impuestos_porcentaje,
     tc.id_tipo_cuarto,
     tc.nombre AS nombre_tipo_cuarto,
@@ -55,6 +57,7 @@ const getHotelesWithCuartos = async () => {
           nombre_hotel: item.nombre_hotel,
           Estado: item.Estado,
           Ciudad_Zona: item.Ciudad_Zona,
+          geo: { latitud: item.latitud, longitud: item.longitud },
           impuestos: [
             { name: "iva", porcentaje: item.iva },
             { name: "ish", porcentaje: item.ish },
