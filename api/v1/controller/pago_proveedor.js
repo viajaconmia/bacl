@@ -2856,13 +2856,16 @@ const pagoStats = getPagoStats(pagos);
     };
 
     const esCartaGarantia = (d) => {
-      const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
-      return (
-        estado === "cupon enviado" &&
-        esAjuste(d) &&
-        comentarioEsPagoSolicitado(d)
-      );
-    };
+  const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
+
+  if (estado === "solicitada") return true;
+
+  return (
+    estado === "cupon enviado" &&
+    esAjuste(d) &&
+    comentarioEsPagoSolicitado(d)
+  );
+};
 
     const esNotificado = (d) => {
       const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
@@ -4889,14 +4892,14 @@ const EditCampos = async (req, res) => {
 
       let ajusteResp = { ok: true, action: "NO_CHANGE" };
 
-      if (nuevoMonto > montoOld + EPS) {
+      if (nuevoMonto > montoOld ) {
         ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
           executeQuery,
           id_solicitud_proveedor,
           nuevoMonto,
           EPS,
         });
-      } else if (nuevoMonto < montoOld - EPS) {
+      } else if (nuevoMonto < montoOld) {
         ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
           executeQuery,
           executeSP2,
