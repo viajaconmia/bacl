@@ -1303,7 +1303,7 @@ const createPago = async (req, res) => {
         );
       }
 
-      const saldoSol = Number(rowsSol[0].saldo || 0);
+      const saldoSol = Number(rowsSol[0].saldo || 0); 
       if (saldoSol <= 0) {
         throw new Error(
           `Saldo en solicitudes_pago_proveedor es 0. No se permite registrar el pago. (id_solicitud=${idSolicitud})`,
@@ -1759,6 +1759,246 @@ const createPago = async (req, res) => {
         error: "Conflict",
         details: "Ya existe un registro con estos datos",
         field: error.message.match(/for key '(.+)'/)?.[1],
+      });
+    }
+
+    if (error.code === "ER_DATA_TOO_LONG") {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: "Algunos datos exceden la longitud permitida",
+      });
+    }
+
+    return res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
+  }
+};
+
+const createComprobantePago = async (req, res) => {
+  try {
+    const {
+      frontendData = {},
+      csvData = [],
+      isMasivo = false,
+    } = req.body || {};
+
+    const toNull = (v) => {
+      if (v === undefined || v === null) return null;
+      if (typeof v === "string") {
+        const s = v.trim();
+        if (!s || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") {
+          return null;
+        }
+        return s;
+      }
+      return v;
+    };
+
+    const toDecOrNull = (v) => {
+      if (v === undefined || v === null) return null;
+      const n = Number(String(v).replace(/,/g, "").trim());
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const parseFechaSafe = (value) => {
+      if (!value) return new Date();
+
+      const s = String(value).trim();
+
+      // yyyy-mm-dd
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return new Date(`${s}T00:00:00`);
+      }
+
+      // dd/mm/yyyy
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const dd = Number(m[1]);
+        const mm = Number(m[2]);
+        const yyyy = Number(m[3]);
+        return new Date(yyyy, mm - 1, dd);
+      }
+
+      const d = new Date(s);
+      return Number.isNaN(d.getTime()) ? new Date() : d;
+    };
+
+    const insertarPago = async ({
+      id_solicitud_proveedor,
+      monto_pagado,
+      fecha_pago,
+      url_pdf,
+      concepto,
+    }) => {
+      const query = `
+        INSERT INTO pago_proveedores (
+          id_solicitud_proveedor,
+          monto_pagado,
+          fecha_pago,
+          url_pdf,
+          monto,
+          total,
+          concepto
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const values = [
+        id_solicitud_proveedor,
+        monto_pagado,
+        fecha_pago,
+        url_pdf,
+        monto_pagado,
+        monto_pagado,
+        concepto,
+      ];
+
+      return await executeQuery(query, values);
+    };
+
+    // ==========================
+    // MODO INDIVIDUAL
+    // ==========================
+    if (!isMasivo) {
+      const pagoData = {
+        id_solicitud_proveedor: toNull(frontendData.id_solicitud_proveedor),
+        monto_pagado: toDecOrNull(frontendData.monto_pagado),
+        fecha_pago: parseFechaSafe(frontendData.fecha_pago),
+        url_pdf: toNull(frontendData.url_pdf),
+        concepto: toNull(frontendData.concepto),
+      };
+
+      if (!pagoData.id_solicitud_proveedor) {
+        return res.status(400).json({
+          error: "Bad Request",
+          details: "El campo id_solicitud_proveedor es obligatorio",
+        });
+      }
+
+      if (pagoData.monto_pagado === null || pagoData.monto_pagado <= 0) {
+        return res.status(400).json({
+          error: "Bad Request",
+          details: "El campo monto_pagado es obligatorio y debe ser mayor a 0",
+        });
+      }
+
+      if (!pagoData.url_pdf) {
+        return res.status(400).json({
+          error: "Bad Request",
+          details: "El campo url_pdf es obligatorio",
+        });
+      }
+
+      const result = await insertarPago(pagoData);
+
+      return res.status(201).json({
+        success: true,
+        message: "Comprobante de pago creado exitosamente",
+        data: {
+          id_pago_proveedores: result.insertId,
+          ...pagoData,
+          monto: pagoData.monto_pagado,
+          total: pagoData.monto_pagado,
+        },
+      });
+    }
+
+    // ==========================
+    // MODO MASIVO
+    // ==========================
+    if (!Array.isArray(csvData) || csvData.length === 0) {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: "csvData debe ser un arreglo con al menos una fila",
+      });
+    }
+
+    const urlPdfGlobal = toNull(frontendData.url_pdf);
+
+    if (!urlPdfGlobal) {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: "El comprobante PDF global es obligatorio para el modo masivo",
+      });
+    }
+
+    const resultados = [];
+    const errores = [];
+
+    for (let i = 0; i < csvData.length; i++) {
+      try {
+        const row = csvData[i] || {};
+
+        const pagoData = {
+          id_solicitud_proveedor:
+            toNull(row.id_solicitud_proveedor) ||
+            toNull(row["id_solicitud_proveedor"]),
+
+          monto_pagado:
+            toDecOrNull(row.monto_pagado) ||
+            toDecOrNull(row["monto_pagado"]),
+
+          fecha_pago: parseFechaSafe(
+            row.fecha_pago || row["fecha_pago"]
+          ),
+
+          concepto:
+            toNull(row.concepto) ||
+            toNull(row["concepto"]) ||
+            toNull(frontendData.concepto),
+
+          // si luego quieres permitir url por fila, aquí puedes usar:
+          // toNull(row.url_pdf) || urlPdfGlobal
+          url_pdf: urlPdfGlobal,
+        };
+
+        if (!pagoData.id_solicitud_proveedor) {
+          throw new Error(`id_solicitud_proveedor faltante en fila ${i + 1}`);
+        }
+
+        if (pagoData.monto_pagado === null || pagoData.monto_pagado <= 0) {
+          throw new Error(`monto_pagado inválido en fila ${i + 1}`);
+        }
+
+        const result = await insertarPago(pagoData);
+
+        resultados.push({
+          fila: i + 1,
+          success: true,
+          id_pago_proveedores: result.insertId,
+          ...pagoData,
+          monto: pagoData.monto_pagado,
+          total: pagoData.monto_pagado,
+        });
+      } catch (error) {
+        errores.push({
+          fila: i + 1,
+          error: error.message,
+          code: error.code,
+        });
+      }
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: `Procesamiento completado: ${resultados.length} registros creados, ${errores.length} errores`,
+      summary: {
+        total_filas: csvData.length,
+        exitosas: resultados.length,
+        errores: errores.length,
+      },
+      resultados,
+      errores: errores.length ? errores : undefined,
+    });
+  } catch (error) {
+    console.error("❌ Error al crear comprobante de pago:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        error: "Conflict",
+        details: "Ya existe un registro con esos datos",
       });
     }
 
@@ -6398,6 +6638,7 @@ const eliminarFactura = async (req, res) => {
   }
 };
 
+
 const asignar_factura_previa = async (req, res) => {
   try {
     const { uuid_cfdi, proveedoresData } = req.body;
@@ -6870,6 +7111,82 @@ const asignar_factura_previa = async (req, res) => {
     });
   }
 };
+const buscaruuid = async (req, res) => {
+  try {
+    const { uuid_factura } = req.body;
+
+    const getRows = (result) =>
+      Array.isArray(result) ? result : result?.[0] ?? [];
+
+    const safeString = (v) => String(v ?? "").trim();
+
+    const uuid = safeString(uuid_factura);
+
+    if (!uuid) {
+      return res.status(400).json({
+        ok: false,
+        message: "uuid_factura es requerido",
+      });
+    }
+
+    const qBuscar = `
+      SELECT
+        v.id_relacion_pago_factura,
+        v.id_pago_proveedor,
+        v.id_solicitud,
+        v.monto_solicitado,
+        v.id_factura,
+        v.monto_facturado,
+        v.uuid_factura,
+        v.url_pdf,
+        v.url_xml,
+        v.rfc_emisor,
+        v.id_agente,
+        v.total,
+        v.subtotal,
+        v.impuestos,
+        v.uso_cfdi,
+        v.moneda,
+        v.forma_pago,
+        v.metodo_pago,
+        v.total_moneda_O,
+        v.sub_total_moneda_O,
+        v.impuestos_moneda_O,
+        v.razon_social_fiscal,
+        v.id_booking,
+        v.codigo_confirmacion
+      FROM vw_pagos_facturas_proveedores_detalle v
+      INNER JOIN solicitudes_pago_proveedor spp
+        ON spp.id_solicitud_proveedor = v.id_solicitud
+      WHERE TRIM(v.uuid_factura) = TRIM(?)
+        AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
+      ORDER BY v.id_relacion_pago_factura DESC;
+    `;
+
+    const rows = getRows(await executeQuery(qBuscar, [uuid]));
+
+    if (!rows.length) {
+      return res.status(404).json({
+        ok: false,
+        message:
+          "No se encontraron registros para ese uuid_factura o la solicitud está cancelada",
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: "Registros encontrados correctamente",
+      data: rows,
+    });
+  } catch (error) {
+    console.error("Error en buscaruuid:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error en el servidor",
+      details: error?.sqlMessage || error?.message || error,
+    });
+  }
+};
 
 
 module.exports = {
@@ -6893,5 +7210,7 @@ module.exports = {
   consultar_facturado,
   asignar_factura_previa,
   Uuid,
-  eliminarFactura
+  eliminarFactura,
+  createComprobantePago,
+  buscaruuid
 };
