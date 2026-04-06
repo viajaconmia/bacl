@@ -2856,13 +2856,16 @@ const pagoStats = getPagoStats(pagos);
     };
 
     const esCartaGarantia = (d) => {
-      const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
-      return (
-        estado === "cupon enviado" &&
-        esAjuste(d) &&
-        comentarioEsPagoSolicitado(d)
-      );
-    };
+  const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
+
+  if (estado === "solicitada") return true;
+
+  return (
+    estado === "cupon enviado" &&
+    esAjuste(d) &&
+    comentarioEsPagoSolicitado(d)
+  );
+};
 
     const esNotificado = (d) => {
       const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
