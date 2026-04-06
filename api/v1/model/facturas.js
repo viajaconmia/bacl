@@ -380,18 +380,6 @@ await conn.execute(insertFacturaQuery, [
   info_user?.fecha_vencimiento ?? null, // fecha_vencimiento
 ]);
 
-
-        // 4. Actualizar solo los items seleccionados
-        // const updateItemsSql = `
-        // UPDATE items
-        // SET id_factura = ?,
-        // is_facturado = 1
-        // WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
-        // `;
-        // const resultados_items = await conn.execute(updateItemsSql, [
-        //   id_factura,
-        //   ...itemsArray,
-        // ]);
         // 4 NUEVO: Insertar en items factura
         // 4 NUEVO: validar monto disponible por item antes de insertar en items_facturas
 const round2 = (value) => Number((Number(value) || 0).toFixed(2));
@@ -606,120 +594,6 @@ function sanitizeCfdi(cfdiRaw = {}) {
 
   return cfdi;
 }
-
-// const crearFacturaEmi = async (req, { cfdi }) => {
-//   const {info_user} = cfdi
-//   req.context.logStep(
-//     "LLgando al model de crear factura combinada con los datos:",
-//     JSON.stringify({ cfdi, info_user }),
-//   );
-//   console.log("datos",cfdi,info_user)
-//   try {
-//     const { id_user, datos_empresa } = info_user;
-
-//     // 0. Calcular totales
-//     // const { total, subtotal, impuestos } = cfdi.Items.reduce(
-//     //   (acc, item) => {
-//     //     acc.total += parseFloat(item.Total);
-//     //     acc.subtotal += parseFloat(item.Subtotal);
-//     //     item.Taxes.forEach((tax) => (acc.impuestos += parseFloat(tax.Total)));
-//     //     return acc;
-//     //   },
-//     //   { total: 0, subtotal: 0, impuestos: 0 }
-//     // );
-
-//     // Ejecutamos todo dentro de una transacción
-//     const result = await runTransaction(async (conn) => {
-//       try {
-//         // 1. Crear factura en Facturama
-//         const response_factura = await crearCfdi(req, cfdi);
-
-//         // 2. Generar ID local de factura
-//         const id_factura = `fac-${uuidv4()}`;
-
-//         // 3. Insertar factura principal
-//         const insertFacturaQuery = `
-//         INSERT INTO facturas (
-//           id_factura,
-//           fecha_emision,
-//           estado,
-//           usuario_creador,
-//           total,
-//           subtotal,
-//           impuestos,
-//           id_facturama,
-//           rfc,
-//           id_empresa,
-//           uuid_factura
-//           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?);
-//           `;
-//         console.log(datos_empresa);
-//         const results = await conn.execute(insertFacturaQuery, [
-//           id_factura,
-//           new Date(),
-//           "Confirmada",
-//           id_user,
-//           total,
-//           subtotal,
-//           impuestos,
-//           response_factura.data.Id,
-//           datos_empresa.rfc,
-//           datos_empresa.id_empresa,
-//           response_factura.data.Complement.TaxStamp.Uuid,
-//         ]);
-
-//         // 4. Actualizar solo los items seleccionados
-//         // const updateItemsSql = `
-//         // UPDATE items
-//         // SET id_factura = ?
-//         // WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
-//         // `;
-//         // const resultados_items = await conn.execute(updateItemsSql, [
-//         //   id_factura,
-//         //   ...itemsArray,
-//         // ]);
-
-//         // 5. Insertar registros en facturas_pagos
-//         const resultados_pagos = await conn.execute(
-//           `
-//         INSERT INTO facturas_pagos (
-//           id_factura,
-//           monto_pago,
-//           id_pago
-//           )
-//           SELECT
-//           ? AS id_factura,
-//           ? AS monto_pago,
-//           p.id_pago
-//           FROM
-//           solicitudes s
-//           JOIN servicios se ON s.id_servicio = se.id_servicio
-//           JOIN pagos p ON se.id_servicio = p.id_servicio
-//           WHERE
-//           s.id_solicitud IN (${solicitudesArray.map(() => "?").join(",")})
-//           AND p.id_pago IS NOT NULL
-//           `,
-//           [id_factura, total, ...solicitudesArray]
-//         );
-//         console.log("resultado pagos", resultados_pagos);
-
-//         return {
-//           id_factura,
-//           ...response_factura,
-//         };
-//       } catch (error) {
-//         throw error;
-//       }
-//     });
-
-//     return {
-//       success: true,
-//       data: result,
-//     };
-//   } catch (error) {
-//     throw error;
-//   }
-// };
 
 const crearFacturaEmi = async (req, payload) => {
   let { cfdi, info_user, datos_empresa, solicitudesArray = [] } = payload || {};
