@@ -23,5 +23,5 @@ router.post("/asignar_monto_fact", controller.monto_factura)
 router.post("/detalles",controller.Detalles);
 router.get("/buscar_factura",controller.Uuid);
 router.delete("/edit_factura",controller.eliminarFactura);
-router.delete("/buscaruuid",controller.buscaruuid);
+router.post("/buscaruuid",controller.buscaruuid);
 module.exports = router;

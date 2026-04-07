@@ -1785,6 +1785,8 @@ const createComprobantePago = async (req, res) => {
       isMasivo = false,
     } = req.body || {};
 
+    const SOLICITUDES_TABLE = "solicitudes_pago_proveedor";
+
     const toNull = (v) => {
       if (v === undefined || v === null) return null;
       if (typeof v === "string") {
@@ -1799,7 +1801,9 @@ const createComprobantePago = async (req, res) => {
 
     const toDecOrNull = (v) => {
       if (v === undefined || v === null) return null;
-      const n = Number(String(v).replace(/,/g, "").trim());
+      const s = String(v).replace(/,/g, "").trim();
+      if (!s) return null;
+      const n = Number(s);
       return Number.isFinite(n) ? n : null;
     };
 
@@ -1808,12 +1812,10 @@ const createComprobantePago = async (req, res) => {
 
       const s = String(value).trim();
 
-      // yyyy-mm-dd
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
         return new Date(`${s}T00:00:00`);
       }
 
-      // dd/mm/yyyy
       const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       if (m) {
         const dd = Number(m[1]);
@@ -1825,6 +1827,8 @@ const createComprobantePago = async (req, res) => {
       const d = new Date(s);
       return Number.isNaN(d.getTime()) ? new Date() : d;
     };
+
+    const round2 = (n) => Number((Number(n || 0)).toFixed(2));
 
     const insertarPago = async ({
       id_solicitud_proveedor,
@@ -1858,50 +1862,213 @@ const createComprobantePago = async (req, res) => {
       return await executeQuery(query, values);
     };
 
+    const getSolicitudById = async (id_solicitud_proveedor) => {
+      const query = `
+        SELECT
+          spp.id_solicitud_proveedor,
+          spp.monto_solicitado,
+          COALESCE(pp.total_pagado, 0) AS total_pagado
+        FROM ${SOLICITUDES_TABLE} spp
+        LEFT JOIN (
+          SELECT
+            id_solicitud_proveedor,
+            SUM(COALESCE(monto_pagado, 0)) AS total_pagado
+          FROM pago_proveedores
+          GROUP BY id_solicitud_proveedor
+        ) pp
+          ON pp.id_solicitud_proveedor = spp.id_solicitud_proveedor
+        WHERE spp.id_solicitud_proveedor = ?
+        LIMIT 1
+      `;
+
+      const rows = await executeQuery(query, [id_solicitud_proveedor]);
+      return Array.isArray(rows) ? rows : [];
+    };
+
+    const getSolicitudesByCodigoConfirmacion = async (codigo_confirmacion) => {
+      const query = `
+        SELECT DISTINCT
+          bs.id_solicitud_proveedor,
+          spp.monto_solicitado,
+          COALESCE(pp.total_pagado, 0) AS total_pagado,
+          vnr.id_booking,
+          vnr.codigo_confirmacion
+        FROM vw_new_reservas vnr
+        INNER JOIN booking_solicitud bs
+          ON bs.id_booking = vnr.id_booking
+        INNER JOIN ${SOLICITUDES_TABLE} spp
+          ON spp.id_solicitud_proveedor = bs.id_solicitud_proveedor
+        LEFT JOIN (
+          SELECT
+            id_solicitud_proveedor,
+            SUM(COALESCE(monto_pagado, 0)) AS total_pagado
+          FROM pago_proveedores
+          GROUP BY id_solicitud_proveedor
+        ) pp
+          ON pp.id_solicitud_proveedor = bs.id_solicitud_proveedor
+        WHERE TRIM(vnr.codigo_confirmacion) = TRIM(?)
+      `;
+
+      const rows = await executeQuery(query, [codigo_confirmacion]);
+      return Array.isArray(rows) ? rows : [];
+    };
+
+    const resolvePagoRows = async ({
+      rawRow,
+      defaultUrlPdf,
+      defaultConcepto = null,
+    }) => {
+      const id_solicitud_proveedor =
+        toNull(rawRow.id_solicitud_proveedor) ||
+        toNull(rawRow.id_solicitud) ||
+        toNull(rawRow["id_solicitud_proveedor"]) ||
+        toNull(rawRow["id_solicitud"]);
+
+      const codigo_confirmacion =
+        toNull(rawRow.codigo_confirmacion) ||
+        toNull(rawRow["codigo_confirmacion"]);
+
+      const monto_pagado_input =
+        toDecOrNull(rawRow.monto_pagado) ??
+        toDecOrNull(rawRow["monto_pagado"]);
+
+      const fecha_pago = parseFechaSafe(
+        rawRow.fecha_pago || rawRow["fecha_pago"]
+      );
+
+      const concepto =
+        toNull(rawRow.concepto) ||
+        toNull(rawRow["concepto"]) ||
+        toNull(defaultConcepto);
+
+      const url_pdf =
+        toNull(rawRow.url_pdf) ||
+        toNull(rawRow["url_pdf"]) ||
+        toNull(defaultUrlPdf);
+
+      if (!id_solicitud_proveedor && !codigo_confirmacion) {
+        throw new Error(
+          "Debes enviar id_solicitud_proveedor / id_solicitud o codigo_confirmacion"
+        );
+      }
+
+      if (!url_pdf) {
+        throw new Error("El campo url_pdf es obligatorio");
+      }
+
+      let solicitudes = [];
+
+      if (id_solicitud_proveedor) {
+        solicitudes = await getSolicitudById(id_solicitud_proveedor);
+
+        if (!solicitudes.length) {
+          throw new Error(
+            `No se encontró la solicitud ${id_solicitud_proveedor}`
+          );
+        }
+      } else {
+        solicitudes = await getSolicitudesByCodigoConfirmacion(codigo_confirmacion);
+
+        if (!solicitudes.length) {
+          throw new Error(
+            `No se encontraron solicitudes para el codigo_confirmacion ${codigo_confirmacion}`
+          );
+        }
+
+        if (monto_pagado_input !== null && solicitudes.length > 1) {
+          throw new Error(
+            `El codigo_confirmacion ${codigo_confirmacion} tiene múltiples solicitudes; no envíes monto_pagado manual para ese caso`
+          );
+        }
+      }
+
+      const resolvedRows = solicitudes.map((sol) => {
+        const monto_solicitado = round2(sol.monto_solicitado || 0);
+        const total_pagado = round2(sol.total_pagado || 0);
+        const monto_pendiente = round2(monto_solicitado - total_pagado);
+
+        if (monto_pendiente <= 0) {
+          throw new Error(
+            `La solicitud ${sol.id_solicitud_proveedor} ya no tiene saldo disponible`
+          );
+        }
+
+        let monto_final = monto_pagado_input;
+
+        if (monto_final === null) {
+          monto_final = monto_pendiente;
+        }
+
+        monto_final = round2(monto_final);
+
+        if (monto_final <= 0) {
+          throw new Error(
+            `El monto_pagado para la solicitud ${sol.id_solicitud_proveedor} debe ser mayor a 0`
+          );
+        }
+
+        if (monto_final > monto_pendiente) {
+          throw new Error(
+            `El monto_pagado (${monto_final}) excede el pendiente (${monto_pendiente}) de la solicitud ${sol.id_solicitud_proveedor}`
+          );
+        }
+
+        return {
+          id_solicitud_proveedor: sol.id_solicitud_proveedor,
+          monto_pagado: monto_final,
+          fecha_pago,
+          url_pdf,
+          concepto,
+          monto_solicitado,
+          total_pagado,
+          monto_pendiente,
+          codigo_confirmacion: codigo_confirmacion || sol.codigo_confirmacion || null,
+          id_booking: sol.id_booking || null,
+        };
+      });
+
+      return resolvedRows;
+    };
+
     // ==========================
     // MODO INDIVIDUAL
     // ==========================
     if (!isMasivo) {
-      const pagoData = {
-        id_solicitud_proveedor: toNull(frontendData.id_solicitud_proveedor),
-        monto_pagado: toDecOrNull(frontendData.monto_pagado),
-        fecha_pago: parseFechaSafe(frontendData.fecha_pago),
-        url_pdf: toNull(frontendData.url_pdf),
-        concepto: toNull(frontendData.concepto),
-      };
+      const resolvedRows = await resolvePagoRows({
+        rawRow: frontendData,
+        defaultUrlPdf: frontendData.url_pdf,
+        defaultConcepto: frontendData.concepto,
+      });
 
-      if (!pagoData.id_solicitud_proveedor) {
-        return res.status(400).json({
-          error: "Bad Request",
-          details: "El campo id_solicitud_proveedor es obligatorio",
+      const inserts = [];
+
+      for (const pagoData of resolvedRows) {
+        const result = await insertarPago(pagoData);
+
+        inserts.push({
+          id_pago_proveedores: result.insertId,
+          id_solicitud_proveedor: pagoData.id_solicitud_proveedor,
+          codigo_confirmacion: pagoData.codigo_confirmacion,
+          id_booking: pagoData.id_booking,
+          monto_pagado: pagoData.monto_pagado,
+          fecha_pago: pagoData.fecha_pago,
+          url_pdf: pagoData.url_pdf,
+          concepto: pagoData.concepto,
+          monto: pagoData.monto_pagado,
+          total: pagoData.monto_pagado,
+          monto_solicitado: pagoData.monto_solicitado,
+          total_pagado_previo: pagoData.total_pagado,
+          monto_pendiente_previo: pagoData.monto_pendiente,
         });
       }
-
-      if (pagoData.monto_pagado === null || pagoData.monto_pagado <= 0) {
-        return res.status(400).json({
-          error: "Bad Request",
-          details: "El campo monto_pagado es obligatorio y debe ser mayor a 0",
-        });
-      }
-
-      if (!pagoData.url_pdf) {
-        return res.status(400).json({
-          error: "Bad Request",
-          details: "El campo url_pdf es obligatorio",
-        });
-      }
-
-      const result = await insertarPago(pagoData);
 
       return res.status(201).json({
         success: true,
-        message: "Comprobante de pago creado exitosamente",
-        data: {
-          id_pago_proveedores: result.insertId,
-          ...pagoData,
-          monto: pagoData.monto_pagado,
-          total: pagoData.monto_pagado,
-        },
+        message:
+          inserts.length === 1
+            ? "Comprobante de pago creado exitosamente"
+            : `Comprobantes de pago creados exitosamente: ${inserts.length}`,
+        data: inserts.length === 1 ? inserts[0] : inserts,
       });
     }
 
@@ -1920,7 +2087,7 @@ const createComprobantePago = async (req, res) => {
     if (!urlPdfGlobal) {
       return res.status(400).json({
         error: "Bad Request",
-        details: "El comprobante PDF global es obligatorio para el modo masivo",
+        details: "El comprobante global es obligatorio para el modo masivo",
       });
     }
 
@@ -1931,47 +2098,43 @@ const createComprobantePago = async (req, res) => {
       try {
         const row = csvData[i] || {};
 
-        const pagoData = {
-          id_solicitud_proveedor:
-            toNull(row.id_solicitud_proveedor) ||
-            toNull(row["id_solicitud_proveedor"]),
-
-          monto_pagado:
-            toDecOrNull(row.monto_pagado) ||
-            toDecOrNull(row["monto_pagado"]),
-
-          fecha_pago: parseFechaSafe(
-            row.fecha_pago || row["fecha_pago"]
-          ),
-
-          concepto:
-            toNull(row.concepto) ||
-            toNull(row["concepto"]) ||
-            toNull(frontendData.concepto),
-
-          // si luego quieres permitir url por fila, aquí puedes usar:
-          // toNull(row.url_pdf) || urlPdfGlobal
-          url_pdf: urlPdfGlobal,
-        };
-
-        if (!pagoData.id_solicitud_proveedor) {
-          throw new Error(`id_solicitud_proveedor faltante en fila ${i + 1}`);
-        }
-
-        if (pagoData.monto_pagado === null || pagoData.monto_pagado <= 0) {
-          throw new Error(`monto_pagado inválido en fila ${i + 1}`);
-        }
-
-        const result = await insertarPago(pagoData);
-
-        resultados.push({
-          fila: i + 1,
-          success: true,
-          id_pago_proveedores: result.insertId,
-          ...pagoData,
-          monto: pagoData.monto_pagado,
-          total: pagoData.monto_pagado,
+        const resolvedRows = await resolvePagoRows({
+          rawRow: row,
+          defaultUrlPdf: urlPdfGlobal,
+          defaultConcepto: frontendData.concepto,
         });
+
+        for (const pagoData of resolvedRows) {
+          try {
+            const result = await insertarPago(pagoData);
+
+            resultados.push({
+              fila: i + 1,
+              success: true,
+              id_pago_proveedores: result.insertId,
+              id_solicitud_proveedor: pagoData.id_solicitud_proveedor,
+              codigo_confirmacion: pagoData.codigo_confirmacion,
+              id_booking: pagoData.id_booking,
+              monto_pagado: pagoData.monto_pagado,
+              fecha_pago: pagoData.fecha_pago,
+              url_pdf: pagoData.url_pdf,
+              concepto: pagoData.concepto,
+              monto: pagoData.monto_pagado,
+              total: pagoData.monto_pagado,
+              monto_solicitado: pagoData.monto_solicitado,
+              total_pagado_previo: pagoData.total_pagado,
+              monto_pendiente_previo: pagoData.monto_pendiente,
+            });
+          } catch (error) {
+            errores.push({
+              fila: i + 1,
+              id_solicitud_proveedor: pagoData.id_solicitud_proveedor,
+              codigo_confirmacion: pagoData.codigo_confirmacion,
+              error: error.message,
+              code: error.code,
+            });
+          }
+        }
       } catch (error) {
         errores.push({
           fila: i + 1,
