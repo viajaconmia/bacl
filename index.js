@@ -56,18 +56,21 @@ const morgan = require("morgan");
 
 const logger = require("./api/v1/utils/logger");
 const requestContext = require("./middleware/requestContext");
-const {
-  createContact,
-  getContacts,
-  getByEmail,
-} = require("./services/zoho/contacts");
-const { DEPARTMENTS } = require("./lib/constant");
-const { subirTicketSolicitudZoho } = require("./services/zoho");
-const {
-  generarYSubirImagenHotel,
-  generarImagenHotel,
-} = require("./api/v1/utils/generarImagenCotizacion");
+// const {
+//   createContact,
+//   getContacts,
+//   getByEmail,
+// } = require("./services/zoho/contacts");
+// const { DEPARTMENTS } = require("./lib/constant");
+// const { subirTicketSolicitudZoho } = require("./services/zoho");
+// const {
+//   generarYSubirImagenHotel,
+//   generarImagenHotel,
+// } = require("./api/v1/utils/generarImagenCotizacion");
 const { executeQuery } = require("./config/db");
+const { generarPDFHotel } = require("./api/v1/utils/generarImagenCotizacion");
+const { check } = require("zod");
+const { getLatLngFromCP } = require("./lib/utils/geo");
 
 // Control de CORS
 const corsOptions = {
@@ -159,30 +162,152 @@ app.use(
 
 app.get("/probando", async (req, res) => {
   try {
-    const { hotel, ciudad, iteracion = 0 } = req.query;
-    console.log("entrando");
-    const response = await executeQuery(
-      `SELECT
-      id_hotel as id,
-      nombre AS hotel,
-      precio_sencilla AS total,
-      ROUND( precio_sencilla /1.16,2) AS subtotal,
-      IF(desayuno_sencilla = 1, 1, 0) AS desayuno,
-      direccion
-FROM vw_hoteles_tarifas_completa where zona = ?;`,
-      [(ciudad || "").toUpperCase()],
-    );
-    console.log(response);
-    if (!response[iteracion])
-      return res
-        .status(404)
-        .json({ message: "no encontramos esta iteracion", error: null });
-    const buffer = await generarImagenHotel(response[iteracion]);
-    console.log("imagen creada");
-    return res.status(200).send(buffer);
+    const {
+      ciudad,
+      hotel,
+      cp,
+      lat,
+      lng,
+      iteracion = 0,
+      checkin,
+      checkout,
+    } = req.query;
+
+    const where = [];
+    const params = [];
+
+    let orderBy = "vw.precio_sencilla ASC";
+
+    // =========================
+    // 🏨 BUSQUEDA POR NOMBRE
+    // =========================
+    if (hotel) {
+      where.push(`
+        (
+          vw.nombre LIKE CONCAT('%', ?, '%')
+          OR chp.zona = (
+            SELECT zona
+            FROM client_hotel_priority chp2
+            INNER JOIN hoteles h2 ON h2.id_hotel = chp2.id_hotel
+            WHERE h2.nombre LIKE CONCAT('%', ?, '%')
+            LIMIT 1
+          )
+        )
+      `);
+      params.push(hotel, hotel);
+
+      orderBy = `
+        CASE 
+          WHEN vw.nombre LIKE CONCAT('%', ?, '%') THEN 0
+          ELSE 1 
+        END,
+        vw.precio_sencilla ASC
+      `;
+      params.push(hotel);
+    }
+
+    // =========================
+    // 📍 CP → LAT/LNG
+    // =========================
+    let latFinal = lat;
+    let lngFinal = lng;
+
+    if (cp && (!lat || !lng)) {
+      const coords = await getLatLngFromCP(cp);
+      if (coords) {
+        latFinal = coords.lat;
+        lngFinal = coords.lng;
+      }
+    }
+
+    // =========================
+    // 📏 ORDEN POR DISTANCIA
+    // =========================
+    if (latFinal && lngFinal) {
+      orderBy = `
+        ST_Distance_Sphere(
+          h.ubicacion,
+          ST_SRID(POINT(${Number(lngFinal)}, ${Number(latFinal)}), 4326)
+        ) ASC
+      `;
+    }
+
+    // =========================
+    // 🗺 FILTRO POR ZONA (chp)
+    // =========================
+    if (ciudad) {
+      where.push(`chp.zona LIKE CONCAT('%', ?, '%')`);
+      params.push(ciudad.toUpperCase());
+
+      if (!latFinal && !lngFinal && !hotel) {
+        orderBy = `chp.priority ASC`;
+      }
+    }
+
+    const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+    // =========================
+    // 🔥 QUERY FINAL
+    // =========================
+    const query = `
+      SELECT
+        vw.id_hotel as id,
+        vw.nombre AS hotel,
+        vw.precio_sencilla AS total,
+        ROUND(vw.precio_sencilla /1.16,2) AS subtotal,
+        IF(vw.desayuno_sencilla = 1, 1, 0) AS desayuno,
+        vw.direccion,
+        chp.zona,
+        chp.priority,
+        ${
+          latFinal && lngFinal
+            ? `ST_Distance_Sphere(
+                h.ubicacion,
+                ST_SRID(POINT(?, ?), 4326)
+              ) AS distancia`
+            : `NULL AS distancia`
+        }
+      FROM vw_hoteles_tarifas_completa vw
+      INNER JOIN client_hotel_priority chp 
+        ON chp.id_hotel = vw.id_hotel
+      INNER JOIN hoteles h 
+        ON h.id_hotel = vw.id_hotel
+      ${whereSQL}
+      ORDER BY ${orderBy}
+      LIMIT 20
+    `;
+
+    const finalParams = [
+      ...params,
+      ...(latFinal && lngFinal ? [Number(lngFinal), Number(latFinal)] : []),
+    ];
+
+    const response = await executeQuery(query, finalParams);
+    console.log("Respuesta de la consulta:", response);
+
+    if (!response[iteracion]) {
+      return res.status(404).json({
+        message: "no encontramos esta iteracion",
+        error: null,
+      });
+    }
+
+    const buffer = await generarPDFHotel({
+      ...response[iteracion],
+      checkin,
+      checkout,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "attachment; filename=hotel.pdf");
+
+    return res.send(buffer);
   } catch (error) {
-    console.error("Error creando ticket de prueba:", error);
-    return res.json({ message: "Error creando ticket de prueba", error });
+    console.error("Error creando PDF:", error);
+    return res.status(500).json({
+      message: "Error creando PDF",
+      error,
+    });
   }
 });
 

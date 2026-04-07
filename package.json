@@ -19,6 +19,7 @@
     "@aws-sdk/client-s3": "^3.830.0",
     "@aws-sdk/s3-request-presigner": "^3.830.0",
     "@google/genai": "^1.29.0",
+    "@react-pdf/renderer": "^4.4.0",
     "@sendgrid/mail": "^8.1.4",
     "@sparticuz/chromium-min": "^143.0.4",
     "@supabase/supabase-js": "^2.49.9",
@@ -38,13 +39,10 @@
     "nodemon": "^3.1.10",
     "otp-generator": "^4.0.1",
     "playwright": "^1.58.1",
-    "puppeteer-core": "^24.37.1",
+    "react": "^19.2.4",
     "stripe": "^17.6.0",
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "puppeteer": "^24.40.0"
   }
 }
