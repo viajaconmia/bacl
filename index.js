@@ -236,15 +236,15 @@ app.get("/probando", async (req, res) => {
     // 🗺 FILTRO POR ZONA (chp)
     // =========================
     if (ciudad) {
-      where.push(`chp.zona LIKE CONCAT('%', ?, '%')`);
-      params.push(ciudad.toUpperCase());
+      where.push(`chp.zona LIKE ?`);
+      params.push(ciudad.toUpperCase().split(" ").join("%"));
 
       if (!latFinal && !lngFinal && !hotel) {
         orderBy = `chp.priority ASC`;
       }
     }
 
-    const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const whereSQL = where.length ? `WHERE ${where.join(" OR ")}` : "";
 
     // =========================
     // 🔥 QUERY FINAL
