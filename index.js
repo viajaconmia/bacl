@@ -172,6 +172,7 @@ app.get("/probando", async (req, res) => {
       checkin,
       checkout,
     } = req.query;
+    console.log(req.query);
 
     const where = [];
     const params = [];
@@ -237,7 +238,7 @@ app.get("/probando", async (req, res) => {
     // =========================
     if (ciudad) {
       where.push(`chp.zona LIKE ?`);
-      params.push(ciudad.toUpperCase().split(" ").join("%"));
+      params.push(`%${ciudad.toUpperCase().split(" ").join("%")}%`);
 
       if (!latFinal && !lngFinal && !hotel) {
         orderBy = `chp.priority ASC`;
@@ -278,12 +279,12 @@ app.get("/probando", async (req, res) => {
     `;
 
     const finalParams = [
-      ...params,
       ...(latFinal && lngFinal ? [Number(lngFinal), Number(latFinal)] : []),
+      ...params,
     ];
 
     const response = await executeQuery(query, finalParams);
-    console.log("Respuesta de la consulta:", response);
+    console.log(query, finalParams);
 
     if (!response[iteracion]) {
       return res.status(404).json({
