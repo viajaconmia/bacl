@@ -300,7 +300,10 @@ app.get("/probando", async (req, res) => {
     });
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", "attachment; filename=hotel.pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=hotel${iteracion}.pdf`,
+    );
 
     return res.send(buffer);
   } catch (error) {
