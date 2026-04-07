@@ -1303,7 +1303,7 @@ const createPago = async (req, res) => {
         );
       }
 
-      const saldoSol = Number(rowsSol[0].saldo || 0);
+      const saldoSol = Number(rowsSol[0].saldo || 0); 
       if (saldoSol <= 0) {
         throw new Error(
           `Saldo en solicitudes_pago_proveedor es 0. No se permite registrar el pago. (id_solicitud=${idSolicitud})`,
@@ -1759,6 +1759,409 @@ const createPago = async (req, res) => {
         error: "Conflict",
         details: "Ya existe un registro con estos datos",
         field: error.message.match(/for key '(.+)'/)?.[1],
+      });
+    }
+
+    if (error.code === "ER_DATA_TOO_LONG") {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: "Algunos datos exceden la longitud permitida",
+      });
+    }
+
+    return res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
+  }
+};
+
+const createComprobantePago = async (req, res) => {
+  try {
+    const {
+      frontendData = {},
+      csvData = [],
+      isMasivo = false,
+    } = req.body || {};
+
+    const SOLICITUDES_TABLE = "solicitudes_pago_proveedor";
+
+    const toNull = (v) => {
+      if (v === undefined || v === null) return null;
+      if (typeof v === "string") {
+        const s = v.trim();
+        if (!s || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") {
+          return null;
+        }
+        return s;
+      }
+      return v;
+    };
+
+    const toDecOrNull = (v) => {
+      if (v === undefined || v === null) return null;
+      const s = String(v).replace(/,/g, "").trim();
+      if (!s) return null;
+      const n = Number(s);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const parseFechaSafe = (value) => {
+      if (!value) return new Date();
+
+      const s = String(value).trim();
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        return new Date(`${s}T00:00:00`);
+      }
+
+      const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) {
+        const dd = Number(m[1]);
+        const mm = Number(m[2]);
+        const yyyy = Number(m[3]);
+        return new Date(yyyy, mm - 1, dd);
+      }
+
+      const d = new Date(s);
+      return Number.isNaN(d.getTime()) ? new Date() : d;
+    };
+
+    const round2 = (n) => Number((Number(n || 0)).toFixed(2));
+
+    const insertarPago = async ({
+      id_solicitud_proveedor,
+      monto_pagado,
+      fecha_pago,
+      url_pdf,
+      concepto,
+    }) => {
+      const query = `
+        INSERT INTO pago_proveedores (
+          id_solicitud_proveedor,
+          monto_pagado,
+          fecha_pago,
+          url_pdf,
+          monto,
+          total,
+          concepto
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const values = [
+        id_solicitud_proveedor,
+        monto_pagado,
+        fecha_pago,
+        url_pdf,
+        monto_pagado,
+        monto_pagado,
+        concepto,
+      ];
+
+      return await executeQuery(query, values);
+    };
+
+    const getSolicitudById = async (id_solicitud_proveedor) => {
+      const query = `
+        SELECT
+          spp.id_solicitud_proveedor,
+          spp.monto_solicitado,
+          COALESCE(pp.total_pagado, 0) AS total_pagado
+        FROM ${SOLICITUDES_TABLE} spp
+        LEFT JOIN (
+          SELECT
+            id_solicitud_proveedor,
+            SUM(COALESCE(monto_pagado, 0)) AS total_pagado
+          FROM pago_proveedores
+          GROUP BY id_solicitud_proveedor
+        ) pp
+          ON pp.id_solicitud_proveedor = spp.id_solicitud_proveedor
+        WHERE spp.id_solicitud_proveedor = ?
+        LIMIT 1
+      `;
+
+      const rows = await executeQuery(query, [id_solicitud_proveedor]);
+      return Array.isArray(rows) ? rows : [];
+    };
+
+    const getSolicitudesByCodigoConfirmacion = async (codigo_confirmacion) => {
+      const query = `
+        SELECT DISTINCT
+          bs.id_solicitud_proveedor,
+          spp.monto_solicitado,
+          COALESCE(pp.total_pagado, 0) AS total_pagado,
+          vnr.id_booking,
+          vnr.codigo_confirmacion
+        FROM vw_new_reservas vnr
+        INNER JOIN booking_solicitud bs
+          ON bs.id_booking = vnr.id_booking
+        INNER JOIN ${SOLICITUDES_TABLE} spp
+          ON spp.id_solicitud_proveedor = bs.id_solicitud_proveedor
+        LEFT JOIN (
+          SELECT
+            id_solicitud_proveedor,
+            SUM(COALESCE(monto_pagado, 0)) AS total_pagado
+          FROM pago_proveedores
+          GROUP BY id_solicitud_proveedor
+        ) pp
+          ON pp.id_solicitud_proveedor = bs.id_solicitud_proveedor
+        WHERE TRIM(vnr.codigo_confirmacion) = TRIM(?)
+      `;
+
+      const rows = await executeQuery(query, [codigo_confirmacion]);
+      return Array.isArray(rows) ? rows : [];
+    };
+
+    const resolvePagoRows = async ({
+      rawRow,
+      defaultUrlPdf,
+      defaultConcepto = null,
+    }) => {
+      const id_solicitud_proveedor =
+        toNull(rawRow.id_solicitud_proveedor) ||
+        toNull(rawRow.id_solicitud) ||
+        toNull(rawRow["id_solicitud_proveedor"]) ||
+        toNull(rawRow["id_solicitud"]);
+
+      const codigo_confirmacion =
+        toNull(rawRow.codigo_confirmacion) ||
+        toNull(rawRow["codigo_confirmacion"]);
+
+      const monto_pagado_input =
+        toDecOrNull(rawRow.monto_pagado) ??
+        toDecOrNull(rawRow["monto_pagado"]);
+
+      const fecha_pago = parseFechaSafe(
+        rawRow.fecha_pago || rawRow["fecha_pago"]
+      );
+
+      const concepto =
+        toNull(rawRow.concepto) ||
+        toNull(rawRow["concepto"]) ||
+        toNull(defaultConcepto);
+
+      const url_pdf =
+        toNull(rawRow.url_pdf) ||
+        toNull(rawRow["url_pdf"]) ||
+        toNull(defaultUrlPdf);
+
+      if (!id_solicitud_proveedor && !codigo_confirmacion) {
+        throw new Error(
+          "Debes enviar id_solicitud_proveedor / id_solicitud o codigo_confirmacion"
+        );
+      }
+
+      if (!url_pdf) {
+        throw new Error("El campo url_pdf es obligatorio");
+      }
+
+      let solicitudes = [];
+
+      if (id_solicitud_proveedor) {
+        solicitudes = await getSolicitudById(id_solicitud_proveedor);
+
+        if (!solicitudes.length) {
+          throw new Error(
+            `No se encontró la solicitud ${id_solicitud_proveedor}`
+          );
+        }
+      } else {
+        solicitudes = await getSolicitudesByCodigoConfirmacion(codigo_confirmacion);
+
+        if (!solicitudes.length) {
+          throw new Error(
+            `No se encontraron solicitudes para el codigo_confirmacion ${codigo_confirmacion}`
+          );
+        }
+
+        if (monto_pagado_input !== null && solicitudes.length > 1) {
+          throw new Error(
+            `El codigo_confirmacion ${codigo_confirmacion} tiene múltiples solicitudes; no envíes monto_pagado manual para ese caso`
+          );
+        }
+      }
+
+      const resolvedRows = solicitudes.map((sol) => {
+        const monto_solicitado = round2(sol.monto_solicitado || 0);
+        const total_pagado = round2(sol.total_pagado || 0);
+        const monto_pendiente = round2(monto_solicitado - total_pagado);
+
+        if (monto_pendiente <= 0) {
+          throw new Error(
+            `La solicitud ${sol.id_solicitud_proveedor} ya no tiene saldo disponible`
+          );
+        }
+
+        let monto_final = monto_pagado_input;
+
+        if (monto_final === null) {
+          monto_final = monto_pendiente;
+        }
+
+        monto_final = round2(monto_final);
+
+        if (monto_final <= 0) {
+          throw new Error(
+            `El monto_pagado para la solicitud ${sol.id_solicitud_proveedor} debe ser mayor a 0`
+          );
+        }
+
+        if (monto_final > monto_pendiente) {
+          throw new Error(
+            `El monto_pagado (${monto_final}) excede el pendiente (${monto_pendiente}) de la solicitud ${sol.id_solicitud_proveedor}`
+          );
+        }
+
+        return {
+          id_solicitud_proveedor: sol.id_solicitud_proveedor,
+          monto_pagado: monto_final,
+          fecha_pago,
+          url_pdf,
+          concepto,
+          monto_solicitado,
+          total_pagado,
+          monto_pendiente,
+          codigo_confirmacion: codigo_confirmacion || sol.codigo_confirmacion || null,
+          id_booking: sol.id_booking || null,
+        };
+      });
+
+      return resolvedRows;
+    };
+
+    // ==========================
+    // MODO INDIVIDUAL
+    // ==========================
+    if (!isMasivo) {
+      const resolvedRows = await resolvePagoRows({
+        rawRow: frontendData,
+        defaultUrlPdf: frontendData.url_pdf,
+        defaultConcepto: frontendData.concepto,
+      });
+
+      const inserts = [];
+
+      for (const pagoData of resolvedRows) {
+        const result = await insertarPago(pagoData);
+
+        inserts.push({
+          id_pago_proveedores: result.insertId,
+          id_solicitud_proveedor: pagoData.id_solicitud_proveedor,
+          codigo_confirmacion: pagoData.codigo_confirmacion,
+          id_booking: pagoData.id_booking,
+          monto_pagado: pagoData.monto_pagado,
+          fecha_pago: pagoData.fecha_pago,
+          url_pdf: pagoData.url_pdf,
+          concepto: pagoData.concepto,
+          monto: pagoData.monto_pagado,
+          total: pagoData.monto_pagado,
+          monto_solicitado: pagoData.monto_solicitado,
+          total_pagado_previo: pagoData.total_pagado,
+          monto_pendiente_previo: pagoData.monto_pendiente,
+        });
+      }
+
+      return res.status(201).json({
+        success: true,
+        message:
+          inserts.length === 1
+            ? "Comprobante de pago creado exitosamente"
+            : `Comprobantes de pago creados exitosamente: ${inserts.length}`,
+        data: inserts.length === 1 ? inserts[0] : inserts,
+      });
+    }
+
+    // ==========================
+    // MODO MASIVO
+    // ==========================
+    if (!Array.isArray(csvData) || csvData.length === 0) {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: "csvData debe ser un arreglo con al menos una fila",
+      });
+    }
+
+    const urlPdfGlobal = toNull(frontendData.url_pdf);
+
+    if (!urlPdfGlobal) {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: "El comprobante global es obligatorio para el modo masivo",
+      });
+    }
+
+    const resultados = [];
+    const errores = [];
+
+    for (let i = 0; i < csvData.length; i++) {
+      try {
+        const row = csvData[i] || {};
+
+        const resolvedRows = await resolvePagoRows({
+          rawRow: row,
+          defaultUrlPdf: urlPdfGlobal,
+          defaultConcepto: frontendData.concepto,
+        });
+
+        for (const pagoData of resolvedRows) {
+          try {
+            const result = await insertarPago(pagoData);
+
+            resultados.push({
+              fila: i + 1,
+              success: true,
+              id_pago_proveedores: result.insertId,
+              id_solicitud_proveedor: pagoData.id_solicitud_proveedor,
+              codigo_confirmacion: pagoData.codigo_confirmacion,
+              id_booking: pagoData.id_booking,
+              monto_pagado: pagoData.monto_pagado,
+              fecha_pago: pagoData.fecha_pago,
+              url_pdf: pagoData.url_pdf,
+              concepto: pagoData.concepto,
+              monto: pagoData.monto_pagado,
+              total: pagoData.monto_pagado,
+              monto_solicitado: pagoData.monto_solicitado,
+              total_pagado_previo: pagoData.total_pagado,
+              monto_pendiente_previo: pagoData.monto_pendiente,
+            });
+          } catch (error) {
+            errores.push({
+              fila: i + 1,
+              id_solicitud_proveedor: pagoData.id_solicitud_proveedor,
+              codigo_confirmacion: pagoData.codigo_confirmacion,
+              error: error.message,
+              code: error.code,
+            });
+          }
+        }
+      } catch (error) {
+        errores.push({
+          fila: i + 1,
+          error: error.message,
+          code: error.code,
+        });
+      }
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: `Procesamiento completado: ${resultados.length} registros creados, ${errores.length} errores`,
+      summary: {
+        total_filas: csvData.length,
+        exitosas: resultados.length,
+        errores: errores.length,
+      },
+      resultados,
+      errores: errores.length ? errores : undefined,
+    });
+  } catch (error) {
+    console.error("❌ Error al crear comprobante de pago:", error);
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        error: "Conflict",
+        details: "Ya existe un registro con esos datos",
       });
     }
 
@@ -2856,13 +3259,16 @@ const pagoStats = getPagoStats(pagos);
     };
 
     const esCartaGarantia = (d) => {
-      const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
-      return (
-        estado === "cupon enviado" &&
-        esAjuste(d) &&
-        comentarioEsPagoSolicitado(d)
-      );
-    };
+  const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
+
+  if (estado === "solicitada") return true;
+
+  return (
+    estado === "cupon enviado" &&
+    esAjuste(d) &&
+    comentarioEsPagoSolicitado(d)
+  );
+};
 
     const esNotificado = (d) => {
       const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
@@ -3010,329 +3416,6 @@ const pagoStats = getPagoStats(pagos);
   }
 };
 
-// const getSolicitudes2 = async (req, res) => {
-//   try {
-//     // ---------------- helpers ----------------
-//     const norm = (v) =>
-//       String(v ?? "")
-//         .trim()
-//         .toLowerCase();
-
-//     const clean = (v) => {
-//       const s = String(v ?? "").trim();
-//       return s === "" ? null : s;
-//     };
-
-//     const num = (v) => {
-//       const n = Number(v);
-//       return Number.isFinite(n) ? n : 0;
-//     };
-
-//     const toDateStart = (v) => {
-//       const s = clean(v);
-//       return s ? `${s} 00:00:00` : null;
-//     };
-
-//     const toDateEnd = (v) => {
-//       const s = clean(v);
-//       return s ? `${s} 23:59:59` : null;
-//     };
-
-//     const safeJsonParse = (v) => {
-//       if (v == null) return null;
-//       if (Array.isArray(v) || typeof v === "object") return v;
-//       if (typeof v !== "string") return null;
-
-//       const s = v.trim();
-//       if (!s) return null;
-//       if (!(s.startsWith("{") || s.startsWith("["))) return null;
-
-//       try {
-//         return JSON.parse(s);
-//       } catch {
-//         return null;
-//       }
-//     };
-
-//     const toArray = (v) => {
-//       const parsed = safeJsonParse(v);
-//       if (Array.isArray(parsed)) return parsed;
-//       if (parsed && typeof parsed === "object") return [parsed];
-//       return [];
-//     };
-
-//     const flattenPagosArr = (v) => {
-//       const arr = Array.isArray(v) ? v : toArray(v);
-//       const lvl1 = arr.flatMap((x) => (Array.isArray(x) ? x : [x]));
-//       const lvl2 = lvl1.flatMap((x) => (Array.isArray(x) ? x : [x]));
-//       return lvl2.filter(Boolean);
-//     };
-
-//     const getPagoStats = (pagos) => {
-//       const p = flattenPagosArr(pagos);
-
-//       let solicitado = 0;
-//       let pagado = 0;
-//       let conFecha = 0;
-
-//       for (const x of p) {
-//         solicitado += num(x?.monto_solicitado ?? 0);
-//         pagado += num(x?.monto_pagado ?? 0);
-//         if (x?.fecha_pago) conFecha += 1;
-//       }
-
-//       const anyPagadoEstado =
-//         p.some(
-//           (x) =>
-//             norm(x?.pago_estado_pago) === "pagado" ||
-//             norm(x?.estado_pago) === "pagado"
-//         ) || false;
-
-//       return {
-//         count: p.length,
-//         solicitado,
-//         pagado,
-//         conFecha,
-//         anyPagadoEstado,
-//       };
-//     };
-
-//     const getFacturaNums = (row) => {
-//       const solicitado = num(row?.monto_solicitado);
-
-//       const facturado = num(
-//         row?.monto_facturado ??
-//           row?.total_facturado ??
-//           row?.total_facturado_en_pfp ??
-//           row?.facturado ??
-//           row?.monto_facturas ??
-//           0
-//       );
-
-//       const porFacturarRaw =
-//         row?.monto_por_facturar ??
-//         row?.por_facturar ??
-//         row?.saldo_por_facturar;
-
-//       const porFacturar =
-//         porFacturarRaw != null
-//           ? num(porFacturarRaw)
-//           : Math.max(0, +(solicitado - facturado).toFixed(2));
-
-//       return { solicitado, facturado, porFacturar };
-//     };
-
-//     // ---------------- inputs GET ----------------
-//     const debug = Number(req.query.debug ?? 0) === 1;
-
-// const filters = {
-//   folio: clean(req.query.folio),
-//   cliente: clean(req.query.cliente),
-//   viajero: clean(req.query.viajero),
-//   hotel: clean(req.query.hotel),
-//   estado_solicitud: clean(req.query.estado_solicitud),
-//   estado_facturacion: clean(req.query.estado_facturacion),
-//   forma_pago: clean(req.query.forma_pago),
-
-//   created_start: toDateStart(req.query.created_start),
-//   created_end: toDateEnd(req.query.created_end),
-
-//   check_in_start: clean(req.query.check_in_start),
-//   check_in_end: clean(req.query.check_in_end),
-//   check_out_start: clean(req.query.check_out_start),
-//   check_out_end: clean(req.query.check_out_end),
-// };
-
-//     // ---------------- fetch SP filtrado ----------------
-// const spRows = await executeSP(
-//   STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
-//   [
-//     filters.folio,
-//     filters.cliente,
-//     filters.viajero,
-//     filters.hotel,
-//     filters.estado_solicitud,
-//     filters.estado_facturacion,
-//     filters.forma_pago,
-//     filters.created_start,
-//     filters.created_end,
-//     filters.check_in_start,
-//     filters.check_in_end,
-//     filters.check_out_start,
-//     filters.check_out_end,
-//   ]
-// );
-
-//     const ids = (spRows || [])
-//       .map((r) => r.id_solicitud_proveedor)
-//       .filter((id) => id !== null && id !== undefined);
-
-//     let pagosRaw = [];
-//     if (ids.length > 0) {
-//       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
-//     }
-
-//     // ---------------- index pagos by solicitud ----------------
-//     const pagosBySolicitud = (pagosRaw || []).reduce((acc, row) => {
-//       const key = String(row.id_solicitud_proveedor);
-
-//       const dispersiones = toArray(row.dispersiones_json);
-//       const pagos = toArray(row.pagos_json);
-
-//       (acc[key] ||= []).push(...dispersiones, ...pagos);
-//       return acc;
-//     }, {});
-
-//     // ---------------- normalize rows ----------------
-//     const data = (spRows || []).map((r) => {
-//       const {
-//         id_solicitud_proveedor,
-//         fecha_solicitud,
-//         monto_solicitado,
-//         saldo,
-//         forma_pago_solicitada,
-//         id_tarjeta_solicitada,
-//         usuario_solicitante,
-//         usuario_generador,
-//         comentarios,
-//         estado_solicitud,
-//         estado_facturacion,
-//         ultimos_4,
-//         banco_emisor,
-//         tipo_tarjeta,
-//         estatus_pagos,
-//         is_ajuste,
-//         comentario_ajuste,
-
-//         // nuevos campos del SP
-//         pagos_facturas_proveedores_json,
-//         uuids_facturas_json,
-//         rfcs_facturas_json,
-//         razones_sociales_facturas_json,
-//         uuid_factura_principal,
-//         rfc_factura_principal,
-//         razon_social_factura_principal,
-
-//         ...rest
-//       } = r;
-
-//       const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
-//       const forma = norm(forma_pago_solicitada);
-
-//       const pagoStats = getPagoStats(pagos);
-//       const saldoNum = num(saldo);
-//       const factNums = getFacturaNums({ ...r, ...rest });
-
-//       const facturasProveedor = toArray(pagos_facturas_proveedores_json);
-//       const uuidsFacturas = toArray(uuids_facturas_json);
-//       const rfcsFacturas = toArray(rfcs_facturas_json);
-//       const razonesSocialesFacturas = toArray(razones_sociales_facturas_json);
-
-//       const estaPagada =
-//         norm(estatus_pagos) === "pagado" ||
-//         saldoNum === 0 ||
-//         pagoStats.anyPagadoEstado ||
-//         pagoStats.pagado >= num(monto_solicitado);
-
-//       return {
-//         ...rest,
-//         id_solicitud_proveedor,
-//         fecha_solicitud,
-//         monto_solicitado,
-//         saldo,
-//         forma_pago_solicitada,
-//         estatus_pagos,
-
-//         solicitud_proveedor: {
-//           id_solicitud_proveedor,
-//           fecha_solicitud,
-//           monto_solicitado,
-//           saldo,
-//           forma_pago_solicitada,
-//           id_tarjeta_solicitada,
-//           usuario_solicitante,
-//           usuario_generador,
-//           comentarios,
-//           estado_solicitud,
-//           estado_facturacion,
-//           is_ajuste,
-//           comentario_ajuste,
-//         },
-
-//         tarjeta: {
-//           ultimos_4,
-//           banco_emisor,
-//           tipo_tarjeta,
-//         },
-
-//         proveedor: {
-//           rfc: rfc_factura_principal,
-//           razon_social: razon_social_factura_principal,
-//         },
-
-//         facturas_proveedor: {
-//           uuid_factura_principal,
-//           rfc_factura_principal,
-//           razon_social_factura_principal,
-//           uuids_facturas: uuidsFacturas,
-//           rfcs_facturas: rfcsFacturas,
-//           razones_sociales_facturas: razonesSocialesFacturas,
-//           facturas: facturasProveedor,
-//         },
-
-//         pagos,
-
-//         __computed: {
-//           forma,
-//           estado_solicitud_norm: norm(estado_solicitud),
-//           estaPagada,
-//           pagos_count: pagoStats.count,
-//           pagos_total_pagado: pagoStats.pagado,
-//           pagos_total_solicitado_sum: pagoStats.solicitado,
-//           facturado: factNums.facturado,
-//           por_facturar: factNums.porFacturar,
-//           solicitado: factNums.solicitado,
-//         },
-//       };
-//     });
-
-//     res.set({
-//       "Cache-Control": "no-store",
-//       Pragma: "no-cache",
-//       Expires: "0",
-//     });
-
-//     if (debug) {
-//       return res.status(200).json({
-//         ok: true,
-//         message: "Registros obtenidos con exito",
-//         data,
-//         meta: {
-//           filters,
-//           counts: {
-//             spRows_len: spRows.length,
-//             mapped_len: data.length,
-//             pagosRaw_len: pagosRaw.length,
-//           },
-//         },
-//       });
-//     }
-
-//     return res.status(200).json({
-//       ok: true,
-//       message: "Registros obtenidos con exito",
-//       data,
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     return res.status(500).json({
-//       ok: false,
-//       error: "Internal Server Error",
-//       details: error?.message || error,
-//     });
-//   }
-// };
-
 const getSolicitudes2 = async (req, res) => {
   try {
     const norm = (v) =>
@@ -3341,9 +3424,18 @@ const getSolicitudes2 = async (req, res) => {
         .toLowerCase();
 
     const clean = (v) => {
-      const s = String(v ?? "").trim();
-      return s === "" ? null : s;
-    };
+  const raw = String(v ?? "");
+  if (!raw.trim()) return null;
+
+  try {
+    const decoded = decodeURIComponent(raw.replace(/\+/g, " "));
+    const s = decoded.trim();
+    return s === "" ? null : s;
+  } catch {
+    const s = raw.replace(/\+/g, " ").trim();
+    return s === "" ? null : s;
+  }
+};
 
     const num = (v) => {
       const n = Number(v);
@@ -3454,6 +3546,8 @@ const filtrarFechaPorReserva =
     ? String(rawFiltrarFechaPorReserva).toLowerCase()
     : null;
 
+    console.log(clean(req.query.comentarios),"🤬🤬🤬🤬")
+
 const filters = {
   folio: clean(req.query.folio),
   cliente: clean(req.query.cliente),
@@ -3479,35 +3573,41 @@ const filters = {
   fecha_reserva_start: toDateStart(req.query.fecha_reserva_start),
   fecha_reserva_end: toDateEnd(req.query.fecha_reserva_end),
   filtrar_fecha_por_reserva: filtrarFechaPorReserva,
+
+  comentarios: clean(req.query.comentarios),
+  comentario_CXP: clean(req.query.comentario_CXP),
 };
 
     const spRows = await executeSP(
-      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
-      [
-        filters.folio,
-        filters.cliente,
-        filters.viajero,
-        filters.hotel,
-        filters.estado_solicitud,
-        filters.estado_facturacion,
-        filters.forma_pago,
-        filters.created_start,
-        filters.created_end,
-        filters.check_in_start,
-        filters.check_in_end,
-        filters.check_out_start,
-        filters.check_out_end,
+  STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
+  [
+    filters.folio,
+    filters.cliente,
+    filters.viajero,
+    filters.hotel,
+    filters.estado_solicitud,
+    filters.estado_facturacion,
+    filters.forma_pago,
+    filters.created_start,
+    filters.created_end,
+    filters.check_in_start,
+    filters.check_in_end,
+    filters.check_out_start,
+    filters.check_out_end,
 
-        filters.id_cliente,
-        filters.estado_reserva,
-        filters.etapa_reservacion,
-        filters.reservante,
-        filters.metodo_pago_reserva,
-        filters.fecha_reserva_start,
-        filters.fecha_reserva_end,
-        filters.filtrar_fecha_por_reserva,
-      ]
-    );
+    filters.id_cliente,
+    filters.estado_reserva,
+    filters.etapa_reservacion,
+    filters.reservante,
+    filters.metodo_pago_reserva,
+    filters.fecha_reserva_start,
+    filters.fecha_reserva_end,
+    filters.filtrar_fecha_por_reserva,
+
+    filters.comentarios,
+    filters.comentario_CXP,
+  ]
+);
 
     const ids = (spRows || [])
       .map((r) => r.id_solicitud_proveedor)
@@ -4889,14 +4989,14 @@ const EditCampos = async (req, res) => {
 
       let ajusteResp = { ok: true, action: "NO_CHANGE" };
 
-      if (nuevoMonto > montoOld + EPS) {
+      if (nuevoMonto > montoOld ) {
         ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
           executeQuery,
           id_solicitud_proveedor,
           nuevoMonto,
           EPS,
         });
-      } else if (nuevoMonto < montoOld - EPS) {
+      } else if (nuevoMonto < montoOld) {
         ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
           executeQuery,
           executeSP2,
@@ -6395,6 +6495,7 @@ const eliminarFactura = async (req, res) => {
   }
 };
 
+
 const asignar_factura_previa = async (req, res) => {
   try {
     const { uuid_cfdi, proveedoresData } = req.body;
@@ -6867,6 +6968,82 @@ const asignar_factura_previa = async (req, res) => {
     });
   }
 };
+const buscaruuid = async (req, res) => {
+  try {
+    const { uuid_factura } = req.body;
+
+    const getRows = (result) =>
+      Array.isArray(result) ? result : result?.[0] ?? [];
+
+    const safeString = (v) => String(v ?? "").trim();
+
+    const uuid = safeString(uuid_factura);
+
+    if (!uuid) {
+      return res.status(400).json({
+        ok: false,
+        message: "uuid_factura es requerido",
+      });
+    }
+
+    const qBuscar = `
+      SELECT
+        v.id_relacion_pago_factura,
+        v.id_pago_proveedor,
+        v.id_solicitud,
+        v.monto_solicitado,
+        v.id_factura,
+        v.monto_facturado,
+        v.uuid_factura,
+        v.url_pdf,
+        v.url_xml,
+        v.rfc_emisor,
+        v.id_agente,
+        v.total,
+        v.subtotal,
+        v.impuestos,
+        v.uso_cfdi,
+        v.moneda,
+        v.forma_pago,
+        v.metodo_pago,
+        v.total_moneda_O,
+        v.sub_total_moneda_O,
+        v.impuestos_moneda_O,
+        v.razon_social_fiscal,
+        v.id_booking,
+        v.codigo_confirmacion
+      FROM vw_pagos_facturas_proveedores_detalle v
+      INNER JOIN solicitudes_pago_proveedor spp
+        ON spp.id_solicitud_proveedor = v.id_solicitud
+      WHERE TRIM(v.uuid_factura) = TRIM(?)
+        AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
+      ORDER BY v.id_relacion_pago_factura DESC;
+    `;
+
+    const rows = getRows(await executeQuery(qBuscar, [uuid]));
+
+    if (!rows.length) {
+      return res.status(404).json({
+        ok: false,
+        message:
+          "No se encontraron registros para ese uuid_factura o la solicitud está cancelada",
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: "Registros encontrados correctamente",
+      data: rows,
+    });
+  } catch (error) {
+    console.error("Error en buscaruuid:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error en el servidor",
+      details: error?.sqlMessage || error?.message || error,
+    });
+  }
+};
 
 
 module.exports = {
@@ -6890,5 +7067,7 @@ module.exports = {
   consultar_facturado,
   asignar_factura_previa,
   Uuid,
-  eliminarFactura
+  eliminarFactura,
+  createComprobantePago,
+  buscaruuid
 };

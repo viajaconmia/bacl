@@ -2252,41 +2252,6 @@ const editar_reserva_definitivo = async (req, res) => {
           error: "Faltan IDs clave (id_servicio, id_hospedaje, id_booking).",
         });
       }
-      const estado_solicitud = "CANCELADA";
-
-      /*
-        const diferencia_proveedor =
-          Number(proveedor?.current?.total || 0) -
-          Number(metadata?.costo_total || 0);
-
-        // Si hay decimales, mejor con tolerancia:
-        const EPS = 0.01;
-        //if (Math.abs(diferencia_proveedor) > EPS) {
-        console.log(diferencia_proveedor, "diff ✅✅✅✅");
-
-        if (diferencia_proveedor > 0) {
-          console.log(
-            diferencia_proveedor,
-            "se aumentó el costo proveedor 🚓🚓",
-          );
-          await ajustarSolicitudPorAumentoCostoProveedor({
-            executeQuery,
-            metadata,
-            proveedorTotal: proveedor.current.total,
-          });
-        } else {
-          console.log(
-            diferencia_proveedor,
-            "se disminuyó el costo proveedor 1️⃣1️⃣1️⃣1️⃣1️⃣",
-          );
-          await ajustarSolicitudPorDisminucionCostoProveedor({
-            executeQuery,
-            executeSP2, // tu SP caller (pool). Solo si forma_pago_solicitada es transfer se usa
-            metadata,
-            proveedorTotal: proveedor.current.total,
-            EPS: 0.01,
-          });
-        }*/
 
       const resultadoSolicitud =
         await procesarSolicitudProveedorAlEditarReserva({

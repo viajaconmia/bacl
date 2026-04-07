@@ -380,61 +380,101 @@ await conn.execute(insertFacturaQuery, [
   info_user?.fecha_vencimiento ?? null, // fecha_vencimiento
 ]);
 
-
-        // 4. Actualizar solo los items seleccionados
-        // const updateItemsSql = `
-        // UPDATE items
-        // SET id_factura = ?,
-        // is_facturado = 1
-        // WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
-        // `;
-        // const resultados_items = await conn.execute(updateItemsSql, [
-        //   id_factura,
-        //   ...itemsArray,
-        // ]);
         // 4 NUEVO: Insertar en items factura
-        const numberOfItems = itemsArray.length;
-        console.log("ITEMSSS", itemsArray);
-        const insertItemsFacturasQuery = `
-        insert into items_facturas (id_factura,id_relacion,id_item,monto) values(?,?,?,?);`;
-        for (let i = 0; i < numberOfItems; i++) {
-          console.log(
-            "😎😎😎😎😎😎😎😎😎😎😎😎😎🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬🤬",
-            itemsArray[i].id_relacion,
-            itemsArray[i].id_item,
-            total / numberOfItems,
-          );
-          await conn.execute(insertItemsFacturasQuery, [
-            id_factura,
-            itemsArray[i].id_relacion,
-            itemsArray[i].id_item,
-            total / numberOfItems,
-          ]);
-        }
+        // 4 NUEVO: validar monto disponible por item antes de insertar en items_facturas
+const round2 = (value) => Number((Number(value) || 0).toFixed(2));
 
-        // 5. Insertar registros en facturas_pagos
-        /* const resultados_pagos = await conn.execute( LO COMENTO POR SI ACASO
-          `
-        INSERT INTO facturas_pagos (
-          id_factura, 
-          monto_pago, 
-          id_pago
-          )
-          SELECT 
-          ? AS id_factura,
-          ? AS monto_pago,
-          p.id_pago
-          FROM 
-          solicitudes s
-          JOIN servicios se ON s.id_servicio = se.id_servicio
-          JOIN pagos p ON se.id_servicio = p.id_servicio
-          WHERE 
-          s.id_solicitud IN (${solicitudesArray.map(() => "?").join(",")})
-          AND p.id_pago IS NOT NULL
-          `,
-          [id_factura, total, ...solicitudesArray]
-        );
-        console.log("resultado pagos", resultados_pagos);*/
+const insertItemsFacturasQuery = `
+  INSERT INTO items_facturas (id_factura, id_relacion, id_item, monto)
+  VALUES (?, ?, ?, ?);
+`;
+
+// ids a consultar/bloquear
+const itemIds = itemsArray.map((it) => it.id_item);
+
+// Traer items y bloquearlos dentro de la transacción
+const [itemsDB] = await conn.execute(
+  `
+    SELECT
+      id_item,
+      id_relacion,
+      total,
+      COALESCE(monto_facturado, 0) AS monto_facturado
+    FROM items
+    WHERE id_item IN (${itemIds.map(() => "?").join(",")})
+    FOR UPDATE
+  `,
+  itemIds,
+);
+
+const itemsMap = new Map(itemsDB.map((row) => [row.id_item, row]));
+
+const detalleItemsAsociados = [];
+const warningsItems = [];
+
+for (const payloadItem of itemsArray) {
+  const itemDB = itemsMap.get(payloadItem.id_item);
+
+  if (!itemDB) {
+    throw new Error(`El item ${payloadItem.id_item} no existe en la tabla items`);
+  }
+
+  const montoSolicitado = round2(payloadItem.monto);
+  const montoDisponible = round2(
+    Number(itemDB.total) - Number(itemDB.monto_facturado)
+  );
+
+  const montoAsociar = round2(
+    Math.max(0, Math.min(montoSolicitado, montoDisponible))
+  );
+
+  const diferencia = round2(montoSolicitado - montoAsociar);
+
+  // Si no hay disponible, no insertes nada
+  if (montoAsociar > 0) {
+    await conn.execute(insertItemsFacturasQuery, [
+      id_factura,
+      payloadItem.id_relacion || itemDB.id_relacion,
+      payloadItem.id_item,
+      montoAsociar,
+    ]);
+
+    // IMPORTANTE:
+    // solo deja esto si items.monto_facturado es la fuente real que usas para validar después
+    await conn.execute(
+      `
+        UPDATE items
+        SET monto_facturado = COALESCE(monto_facturado, 0) + ?
+        WHERE id_item = ?
+      `,
+      [montoAsociar, payloadItem.id_item],
+    );
+  }
+
+  const asociadoConMenorCantidad = montoAsociar < montoSolicitado;
+
+  const detalle = {
+    id_item: payloadItem.id_item,
+    id_relacion: payloadItem.id_relacion || itemDB.id_relacion,
+    monto_solicitado: montoSolicitado,
+    monto_disponible: montoDisponible,
+    monto_asociado: montoAsociar,
+    diferencia,
+    mensaje:
+      montoAsociar === 0
+        ? "item sin monto disponible para asociar"
+        : asociadoConMenorCantidad
+        ? "item asociado con menor cantidad"
+        : "item asociado correctamente",
+  };
+
+  detalleItemsAsociados.push(detalle);
+
+  if (asociadoConMenorCantidad || montoAsociar === 0) {
+    warningsItems.push(detalle);
+  }
+}
+
         const insertPagosSql = `
   INSERT INTO facturas_pagos_y_saldos (
     id_factura,
@@ -458,9 +498,11 @@ await conn.execute(insertFacturaQuery, [
         console.log("resultado pagos", resultados_pagos);
 
         return {
-          id_factura,
-          ...response_factura,
-        };
+  id_factura,
+  ...response_factura,
+  items_asociados: detalleItemsAsociados,
+  warnings_items: warningsItems,
+};
       } catch (error) {
         console.log(error.response);
         console.log(error);
@@ -552,120 +594,6 @@ function sanitizeCfdi(cfdiRaw = {}) {
 
   return cfdi;
 }
-
-// const crearFacturaEmi = async (req, { cfdi }) => {
-//   const {info_user} = cfdi
-//   req.context.logStep(
-//     "LLgando al model de crear factura combinada con los datos:",
-//     JSON.stringify({ cfdi, info_user }),
-//   );
-//   console.log("datos",cfdi,info_user)
-//   try {
-//     const { id_user, datos_empresa } = info_user;
-
-//     // 0. Calcular totales
-//     // const { total, subtotal, impuestos } = cfdi.Items.reduce(
-//     //   (acc, item) => {
-//     //     acc.total += parseFloat(item.Total);
-//     //     acc.subtotal += parseFloat(item.Subtotal);
-//     //     item.Taxes.forEach((tax) => (acc.impuestos += parseFloat(tax.Total)));
-//     //     return acc;
-//     //   },
-//     //   { total: 0, subtotal: 0, impuestos: 0 }
-//     // );
-
-//     // Ejecutamos todo dentro de una transacción
-//     const result = await runTransaction(async (conn) => {
-//       try {
-//         // 1. Crear factura en Facturama
-//         const response_factura = await crearCfdi(req, cfdi);
-
-//         // 2. Generar ID local de factura
-//         const id_factura = `fac-${uuidv4()}`;
-
-//         // 3. Insertar factura principal
-//         const insertFacturaQuery = `
-//         INSERT INTO facturas (
-//           id_factura,
-//           fecha_emision,
-//           estado,
-//           usuario_creador,
-//           total,
-//           subtotal,
-//           impuestos,
-//           id_facturama,
-//           rfc,
-//           id_empresa,
-//           uuid_factura
-//           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?);
-//           `;
-//         console.log(datos_empresa);
-//         const results = await conn.execute(insertFacturaQuery, [
-//           id_factura,
-//           new Date(),
-//           "Confirmada",
-//           id_user,
-//           total,
-//           subtotal,
-//           impuestos,
-//           response_factura.data.Id,
-//           datos_empresa.rfc,
-//           datos_empresa.id_empresa,
-//           response_factura.data.Complement.TaxStamp.Uuid,
-//         ]);
-
-//         // 4. Actualizar solo los items seleccionados
-//         // const updateItemsSql = `
-//         // UPDATE items
-//         // SET id_factura = ?
-//         // WHERE id_item IN (${itemsArray.map(() => "?").join(",")})
-//         // `;
-//         // const resultados_items = await conn.execute(updateItemsSql, [
-//         //   id_factura,
-//         //   ...itemsArray,
-//         // ]);
-
-//         // 5. Insertar registros en facturas_pagos
-//         const resultados_pagos = await conn.execute(
-//           `
-//         INSERT INTO facturas_pagos (
-//           id_factura,
-//           monto_pago,
-//           id_pago
-//           )
-//           SELECT
-//           ? AS id_factura,
-//           ? AS monto_pago,
-//           p.id_pago
-//           FROM
-//           solicitudes s
-//           JOIN servicios se ON s.id_servicio = se.id_servicio
-//           JOIN pagos p ON se.id_servicio = p.id_servicio
-//           WHERE
-//           s.id_solicitud IN (${solicitudesArray.map(() => "?").join(",")})
-//           AND p.id_pago IS NOT NULL
-//           `,
-//           [id_factura, total, ...solicitudesArray]
-//         );
-//         console.log("resultado pagos", resultados_pagos);
-
-//         return {
-//           id_factura,
-//           ...response_factura,
-//         };
-//       } catch (error) {
-//         throw error;
-//       }
-//     });
-
-//     return {
-//       success: true,
-//       data: result,
-//     };
-//   } catch (error) {
-//     throw error;
-//   }
-// };
 
 const crearFacturaEmi = async (req, payload) => {
   let { cfdi, info_user, datos_empresa, solicitudesArray = [] } = payload || {};
