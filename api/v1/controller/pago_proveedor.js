@@ -7049,9 +7049,9 @@ const buscaruuid = async (req, res) => {
       INNER JOIN solicitudes_pago_proveedor spp
         ON spp.id_solicitud_proveedor = v.id_solicitud
       WHERE v.uuid_factura LIKE trim(?)
-		-- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
       ORDER BY v.id_relacion_pago_factura DESC;
-    `;
+      `;
+    // -- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
 
     const rows = getRows(await executeQuery(qBuscar, [uuid]));
 
