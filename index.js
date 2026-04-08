@@ -286,6 +286,12 @@ app.get("/probando", async (req, res) => {
     const response = await executeQuery(query, finalParams);
     console.log(query, finalParams);
     console.log(response);
+    console.log(
+      "Iteracion:",
+      iteracion,
+      "Hotel seleccionado:",
+      response[iteracion],
+    );
 
     if (!response[iteracion]) {
       return res.status(404).json({
