@@ -26,7 +26,7 @@ const normalizeTitularBody = (body = {}) => {
 // router.post("/", middleware.validateParams([]), controller.create);
 router.get("/", async (req, res) => {
   try {
-    let query = `select * from tarjetas;`;
+    let query = `select * from tarjetas where activa = 1;`;
     let response = await executeQuery(query);
     res.status(200).json(
       response.map((tarjeta) => ({
