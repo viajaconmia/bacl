@@ -15,7 +15,8 @@ const isPositiveInt = (v) => {
 const normalizeTitularBody = (body = {}) => {
   // Acepta tanto "Titular" como "titular" por conveniencia
   const titular = body.Titular ?? body.titular;
-  const identificacion = body.identificacion ?? body.url_identificacion ?? body.identificacion_url;
+  const identificacion =
+    body.identificacion ?? body.url_identificacion ?? body.identificacion_url;
 
   return { titular, identificacion };
 };
@@ -26,13 +27,13 @@ const normalizeTitularBody = (body = {}) => {
 // router.post("/", middleware.validateParams([]), controller.create);
 router.get("/", async (req, res) => {
   try {
-    let query = `select * from tarjetas where activa = 1;`;
+    let query = `select * from tarjetas;`;
     let response = await executeQuery(query);
     res.status(200).json(
       response.map((tarjeta) => ({
         ...tarjeta,
         activa: Boolean(tarjeta.activa),
-      }))
+      })),
     );
   } catch (error) {
     console.error(error);
@@ -51,7 +52,7 @@ router.get("/titulares", async (req, res) => {
       response.map((tarjeta) => ({
         ...tarjeta,
         activa: Boolean(tarjeta.activa),
-      }))
+      })),
     );
   } catch (error) {
     console.error(error);
@@ -79,7 +80,11 @@ router.post("/titulares", async (req, res) => {
   try {
     const { titular, identificacion } = normalizeTitularBody(req.body || {});
 
-    if (!titular || typeof titular !== "string" || titular.trim().length === 0) {
+    if (
+      !titular ||
+      typeof titular !== "string" ||
+      titular.trim().length === 0
+    ) {
       return res.status(400).json({
         error: "Datos inválidos.",
         message: "El campo 'Titular' es requerido (string).",
@@ -93,7 +98,11 @@ router.post("/titulares", async (req, res) => {
       });
     }
 
-    if (identificacion !== undefined && identificacion !== null && typeof identificacion !== "string") {
+    if (
+      identificacion !== undefined &&
+      identificacion !== null &&
+      typeof identificacion !== "string"
+    ) {
       return res.status(400).json({
         error: "Datos inválidos.",
         message: "El campo 'identificacion' debe ser string (URL) si se envía.",
@@ -104,7 +113,10 @@ router.post("/titulares", async (req, res) => {
       INSERT INTO titular(Titular, identificacion)
       VALUES (?, ?);
     `;
-    const result = await executeQuery(insertQuery, [titular.trim(), identificacion ?? null]);
+    const result = await executeQuery(insertQuery, [
+      titular.trim(),
+      identificacion ?? null,
+    ]);
 
     // MySQL típico: result.insertId
     const newId = result?.insertId;
@@ -112,14 +124,24 @@ router.post("/titulares", async (req, res) => {
     if (!newId) {
       return res.status(201).json({
         message: "Titular creado correctamente.",
-        data: { Titular: titular.trim(), identificacion: identificacion ?? null },
+        data: {
+          Titular: titular.trim(),
+          identificacion: identificacion ?? null,
+        },
       });
     }
 
-    const rows = await executeQuery(`SELECT * FROM titular WHERE idTitular = ?;`, [newId]);
+    const rows = await executeQuery(
+      `SELECT * FROM titular WHERE idTitular = ?;`,
+      [newId],
+    );
     return res.status(201).json({
       message: "Titular creado correctamente.",
-      data: rows?.[0] ?? { idTitular: newId, Titular: titular.trim(), identificacion: identificacion ?? null },
+      data: rows?.[0] ?? {
+        idTitular: newId,
+        Titular: titular.trim(),
+        identificacion: identificacion ?? null,
+      },
     });
   } catch (error) {
     console.error("Error al insertar titular:", error);
@@ -198,7 +220,10 @@ router.put("/titulares/:idTitular", async (req, res) => {
       });
     }
 
-    const rows = await executeQuery(`SELECT * FROM titular WHERE idTitular = ?;`, [Number(idTitular)]);
+    const rows = await executeQuery(
+      `SELECT * FROM titular WHERE idTitular = ?;`,
+      [Number(idTitular)],
+    );
     return res.status(200).json({
       message: "Titular actualizado correctamente.",
       data: rows?.[0] ?? null,
@@ -237,7 +262,9 @@ router.delete("/titulares/:idTitular", async (req, res) => {
       });
     }
 
-    return res.status(200).json({ message: "Titular eliminado correctamente." });
+    return res
+      .status(200)
+      .json({ message: "Titular eliminado correctamente." });
   } catch (error) {
     console.error("Error al eliminar titular:", error);
     return res.status(500).json({
@@ -275,7 +302,7 @@ router.get("/:id", async (req, res) => {
       results.map((tarjeta) => ({
         ...tarjeta,
         activa: Boolean(tarjeta.activa),
-      }))[0]
+      }))[0],
     );
   } catch (error) {
     console.error("Error al consultar la tarjeta por UUID:", error);
@@ -361,7 +388,9 @@ router.post("/", async (req, res) => {
     const insertQuery = `INSERT INTO tarjetas (${cols.join(", ")}) VALUES (${placeholders.join(", ")});`;
     await executeQuery(insertQuery, values);
 
-    const rows = await executeQuery(`SELECT * FROM tarjetas WHERE id = ?;`, [id]);
+    const rows = await executeQuery(`SELECT * FROM tarjetas WHERE id = ?;`, [
+      id,
+    ]);
     const tarjeta = rows?.[0];
 
     return res.status(201).json({
@@ -435,7 +464,9 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    const rows = await executeQuery(`SELECT * FROM tarjetas WHERE id = ?;`, [id]);
+    const rows = await executeQuery(`SELECT * FROM tarjetas WHERE id = ?;`, [
+      id,
+    ]);
     const tarjeta = rows?.[0];
 
     return res.status(200).json({
@@ -476,7 +507,9 @@ router.delete("/:id", async (req, res) => {
       });
     }
 
-    return res.status(200).json({ message: "Tarjeta eliminada correctamente." });
+    return res
+      .status(200)
+      .json({ message: "Tarjeta eliminada correctamente." });
   } catch (error) {
     console.error("Error al eliminar tarjeta:", error);
     return res.status(500).json({
