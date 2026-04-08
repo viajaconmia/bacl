@@ -187,7 +187,7 @@ app.get("/probando", async (req, res) => {
         (
           vw.nombre LIKE CONCAT('%', ?, '%')
           OR chp.zona = (
-            SELECT zona
+            SELECT chp2.zona
             FROM client_hotel_priority chp2
             INNER JOIN hoteles h2 ON h2.id_hotel = chp2.id_hotel
             WHERE h2.nombre LIKE CONCAT('%', ?, '%')
