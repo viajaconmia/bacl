@@ -172,10 +172,11 @@ app.get("/probando", async (req, res) => {
       checkin,
       checkout,
     } = req.query;
-    console.log(req.query);
 
     const where = [];
-    const params = [];
+    const whereParams = [];
+    const orderParams = [];
+    const distanceParams = [];
 
     let orderBy = "vw.precio_sencilla ASC";
 
@@ -195,8 +196,10 @@ app.get("/probando", async (req, res) => {
           )
         )
       `);
-      params.push(hotel, hotel);
 
+      whereParams.push(hotel, hotel);
+
+      // Solo usamos este ORDER si NO hay distancia
       orderBy = `
         CASE 
           WHEN vw.nombre LIKE CONCAT('%', ?, '%') THEN 0
@@ -204,7 +207,7 @@ app.get("/probando", async (req, res) => {
         END,
         vw.precio_sencilla ASC
       `;
-      params.push(hotel);
+      orderParams.push(hotel);
     }
 
     // =========================
@@ -224,7 +227,19 @@ app.get("/probando", async (req, res) => {
     // =========================
     // 📏 ORDEN POR DISTANCIA
     // =========================
+    let distanciaSelect = "NULL AS distancia";
+
     if (latFinal && lngFinal) {
+      distanciaSelect = `
+        ST_Distance_Sphere(
+          h.ubicacion,
+          ST_SRID(POINT(?, ?), 4326)
+        ) AS distancia
+      `;
+
+      distanceParams.push(Number(lngFinal), Number(latFinal));
+
+      // Sobrescribe ORDER BY
       orderBy = `
         ST_Distance_Sphere(
           h.ubicacion,
@@ -234,18 +249,19 @@ app.get("/probando", async (req, res) => {
     }
 
     // =========================
-    // 🗺 FILTRO POR ZONA (chp)
+    // 🗺 FILTRO POR ZONA
     // =========================
     if (ciudad) {
       where.push(`chp.zona LIKE ?`);
-      params.push(`%${ciudad.toUpperCase().split(" ").join("%")}%`);
+      whereParams.push(`%${ciudad.toUpperCase().split(" ").join("%")}%`);
 
       if (!latFinal && !lngFinal && !hotel) {
         orderBy = `chp.priority ASC`;
       }
     }
 
-    const whereSQL = where.length ? `WHERE ${where.join(" OR ")}` : "";
+    // ⚠️ IMPORTANTE: agrupamos correctamente
+    const whereSQL = where.length ? `WHERE (${where.join(" OR ")})` : "";
 
     // =========================
     // 🔥 QUERY FINAL
@@ -260,14 +276,7 @@ app.get("/probando", async (req, res) => {
         vw.direccion,
         chp.zona,
         chp.priority,
-        ${
-          latFinal && lngFinal
-            ? `ST_Distance_Sphere(
-                h.ubicacion,
-                ST_SRID(POINT(?, ?), 4326)
-              ) AS distancia`
-            : `NULL AS distancia`
-        }
+        ${distanciaSelect}
       FROM vw_hoteles_tarifas_completa vw
       INNER JOIN client_hotel_priority chp 
         ON chp.id_hotel = vw.id_hotel
@@ -278,20 +287,14 @@ app.get("/probando", async (req, res) => {
       LIMIT 20
     `;
 
+    // 🔥 ORDEN CORRECTO SIEMPRE
     const finalParams = [
-      ...(latFinal && lngFinal ? [Number(lngFinal), Number(latFinal)] : []),
-      ...params,
+      ...distanceParams,
+      ...whereParams,
+      ...(latFinal && lngFinal ? [] : orderParams),
     ];
 
     const response = await executeQuery(query, finalParams);
-    console.log(query, finalParams);
-    console.log(response);
-    console.log(
-      "Iteracion:",
-      iteracion,
-      "Hotel seleccionado:",
-      response[iteracion],
-    );
 
     if (!response[iteracion]) {
       return res.status(404).json({
@@ -321,7 +324,6 @@ app.get("/probando", async (req, res) => {
     });
   }
 });
-
 // Ruta pública raíz
 app.get("/", (req, res) =>
   res.json({
