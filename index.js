@@ -312,7 +312,7 @@ app.get("/probando", async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=cotizacion_opcion${iteracion + 1}.pdf`,
+      `attachment; filename=cotizacion_opcion${Number(iteracion) + 1}.pdf`,
     );
 
     return res.send(buffer);
