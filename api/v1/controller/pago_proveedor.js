@@ -551,7 +551,7 @@ const createSolicitud = async (req, res) => {
       usuario_creador,
       paymentSchedule = [],
       moneda,
-      documento
+      documento,
     } = solicitud;
 
     // ✅ Determina forma_pago_solicitada para el SP
@@ -764,7 +764,7 @@ const createSolicitud = async (req, res) => {
       fechaSolicitud, // p_fecha
       estado_solicitud_db, // p_estado_solicitud
       estatus_pagos_db, // p_estatus_pagos
-      documentoId
+      documentoId,
     ];
 
     const spResp = await executeSP(
@@ -978,7 +978,7 @@ const createDispersion = async (req, res) => {
       ...new Set(
         solicitudes
           .map((s) => Number(s?.id_solicitud_proveedor))
-          .filter((id) => Number.isInteger(id) && id > 0)
+          .filter((id) => Number.isInteger(id) && id > 0),
       ),
     ];
 
@@ -998,8 +998,10 @@ const createDispersion = async (req, res) => {
           idSolProv,
           {
             ...s,
-            id_solicitud: s?.id_solicitud != null ? String(s.id_solicitud) : null,
-            id_solicitud_proveedor: Number.isInteger(idSolProv) && idSolProv > 0 ? idSolProv : null,
+            id_solicitud:
+              s?.id_solicitud != null ? String(s.id_solicitud) : null,
+            id_solicitud_proveedor:
+              Number.isInteger(idSolProv) && idSolProv > 0 ? idSolProv : null,
             id_pago: s?.id_pago != null ? String(s.id_pago) : null,
 
             id_proveedor:
@@ -1038,7 +1040,7 @@ const createDispersion = async (req, res) => {
                 : null,
           },
         ];
-      })
+      }),
     );
 
     const inPlaceholders = ids.map(() => "?").join(", ");
@@ -1062,7 +1064,7 @@ const createDispersion = async (req, res) => {
           saldo: Number(r.saldo ?? 0),
           estado_solicitud: String(r.estado_solicitud ?? "").trim(),
         },
-      ])
+      ]),
     );
 
     const faltantes = ids.filter((id) => !saldoMap.has(id));
@@ -1107,16 +1109,18 @@ const createDispersion = async (req, res) => {
       const fechaPago = itemPayload?.fecha_pago ?? null;
 
       return [
-        idSol,          // id_solicitud_proveedor
-        saldoDb,        // monto_solicitado
-        saldoDb,        // saldo
-        0,              // monto_pagado
-        idDispersion,   // codigo_dispersion
-        fechaPago,      // fecha_pago
+        idSol, // id_solicitud_proveedor
+        saldoDb, // monto_solicitado
+        saldoDb, // saldo
+        0, // monto_pagado
+        idDispersion, // codigo_dispersion
+        fechaPago, // fecha_pago
       ];
     });
 
-    const insertPlaceholders = values.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+    const insertPlaceholders = values
+      .map(() => "(?, ?, ?, ?, ?, ?)")
+      .join(", ");
 
     const insertSql = `
       INSERT INTO dispersion_pagos_proveedor (
@@ -1147,7 +1151,7 @@ const createDispersion = async (req, res) => {
     const id_pagos =
       firstInsertId > 0 && insertedCount > 0
         ? Array.from({ length: insertedCount }, (_, i) =>
-            String(firstInsertId + i)
+            String(firstInsertId + i),
           )
         : [];
 
@@ -1303,7 +1307,7 @@ const createPago = async (req, res) => {
         );
       }
 
-      const saldoSol = Number(rowsSol[0].saldo || 0); 
+      const saldoSol = Number(rowsSol[0].saldo || 0);
       if (saldoSol <= 0) {
         throw new Error(
           `Saldo en solicitudes_pago_proveedor es 0. No se permite registrar el pago. (id_solicitud=${idSolicitud})`,
@@ -1791,7 +1795,11 @@ const createComprobantePago = async (req, res) => {
       if (v === undefined || v === null) return null;
       if (typeof v === "string") {
         const s = v.trim();
-        if (!s || s.toLowerCase() === "null" || s.toLowerCase() === "undefined") {
+        if (
+          !s ||
+          s.toLowerCase() === "null" ||
+          s.toLowerCase() === "undefined"
+        ) {
           return null;
         }
         return s;
@@ -1828,7 +1836,7 @@ const createComprobantePago = async (req, res) => {
       return Number.isNaN(d.getTime()) ? new Date() : d;
     };
 
-    const round2 = (n) => Number((Number(n || 0)).toFixed(2));
+    const round2 = (n) => Number(Number(n || 0).toFixed(2));
 
     const insertarPago = async ({
       id_solicitud_proveedor,
@@ -1929,11 +1937,10 @@ const createComprobantePago = async (req, res) => {
         toNull(rawRow["codigo_confirmacion"]);
 
       const monto_pagado_input =
-        toDecOrNull(rawRow.monto_pagado) ??
-        toDecOrNull(rawRow["monto_pagado"]);
+        toDecOrNull(rawRow.monto_pagado) ?? toDecOrNull(rawRow["monto_pagado"]);
 
       const fecha_pago = parseFechaSafe(
-        rawRow.fecha_pago || rawRow["fecha_pago"]
+        rawRow.fecha_pago || rawRow["fecha_pago"],
       );
 
       const concepto =
@@ -1948,7 +1955,7 @@ const createComprobantePago = async (req, res) => {
 
       if (!id_solicitud_proveedor && !codigo_confirmacion) {
         throw new Error(
-          "Debes enviar id_solicitud_proveedor / id_solicitud o codigo_confirmacion"
+          "Debes enviar id_solicitud_proveedor / id_solicitud o codigo_confirmacion",
         );
       }
 
@@ -1963,21 +1970,22 @@ const createComprobantePago = async (req, res) => {
 
         if (!solicitudes.length) {
           throw new Error(
-            `No se encontró la solicitud ${id_solicitud_proveedor}`
+            `No se encontró la solicitud ${id_solicitud_proveedor}`,
           );
         }
       } else {
-        solicitudes = await getSolicitudesByCodigoConfirmacion(codigo_confirmacion);
+        solicitudes =
+          await getSolicitudesByCodigoConfirmacion(codigo_confirmacion);
 
         if (!solicitudes.length) {
           throw new Error(
-            `No se encontraron solicitudes para el codigo_confirmacion ${codigo_confirmacion}`
+            `No se encontraron solicitudes para el codigo_confirmacion ${codigo_confirmacion}`,
           );
         }
 
         if (monto_pagado_input !== null && solicitudes.length > 1) {
           throw new Error(
-            `El codigo_confirmacion ${codigo_confirmacion} tiene múltiples solicitudes; no envíes monto_pagado manual para ese caso`
+            `El codigo_confirmacion ${codigo_confirmacion} tiene múltiples solicitudes; no envíes monto_pagado manual para ese caso`,
           );
         }
       }
@@ -1989,7 +1997,7 @@ const createComprobantePago = async (req, res) => {
 
         if (monto_pendiente <= 0) {
           throw new Error(
-            `La solicitud ${sol.id_solicitud_proveedor} ya no tiene saldo disponible`
+            `La solicitud ${sol.id_solicitud_proveedor} ya no tiene saldo disponible`,
           );
         }
 
@@ -2003,13 +2011,13 @@ const createComprobantePago = async (req, res) => {
 
         if (monto_final <= 0) {
           throw new Error(
-            `El monto_pagado para la solicitud ${sol.id_solicitud_proveedor} debe ser mayor a 0`
+            `El monto_pagado para la solicitud ${sol.id_solicitud_proveedor} debe ser mayor a 0`,
           );
         }
 
         if (monto_final > monto_pendiente) {
           throw new Error(
-            `El monto_pagado (${monto_final}) excede el pendiente (${monto_pendiente}) de la solicitud ${sol.id_solicitud_proveedor}`
+            `El monto_pagado (${monto_final}) excede el pendiente (${monto_pendiente}) de la solicitud ${sol.id_solicitud_proveedor}`,
           );
         }
 
@@ -2022,7 +2030,8 @@ const createComprobantePago = async (req, res) => {
           monto_solicitado,
           total_pagado,
           monto_pendiente,
-          codigo_confirmacion: codigo_confirmacion || sol.codigo_confirmacion || null,
+          codigo_confirmacion:
+            codigo_confirmacion || sol.codigo_confirmacion || null,
           id_booking: sol.id_booking || null,
         };
       });
@@ -3023,7 +3032,7 @@ const getSolicitudes = async (req, res) => {
         p.some(
           (x) =>
             norm(x?.pago_estado_pago) === "pagado" ||
-            norm(x?.estado_pago) === "pagado"
+            norm(x?.estado_pago) === "pagado",
         ) || false;
 
       return {
@@ -3044,13 +3053,11 @@ const getSolicitudes = async (req, res) => {
           row?.total_facturado_en_pfp ??
           row?.facturado ??
           row?.monto_facturas ??
-          0
+          0,
       );
 
       const porFacturarRaw =
-        row?.monto_por_facturar ??
-        row?.por_facturar ??
-        row?.saldo_por_facturar;
+        row?.monto_por_facturar ?? row?.por_facturar ?? row?.saldo_por_facturar;
 
       const porFacturar =
         porFacturarRaw != null
@@ -3076,10 +3083,10 @@ const getSolicitudes = async (req, res) => {
           if (bbu !== abu) return bbu - abu;
 
           const af = toTime(
-            a?.solicitud_proveedor?.fecha_solicitud ?? a?.fecha_solicitud
+            a?.solicitud_proveedor?.fecha_solicitud ?? a?.fecha_solicitud,
           );
           const bf = toTime(
-            b?.solicitud_proveedor?.fecha_solicitud ?? b?.fecha_solicitud
+            b?.solicitud_proveedor?.fecha_solicitud ?? b?.fecha_solicitud,
           );
           return bf - af;
         }
@@ -3100,7 +3107,7 @@ const getSolicitudes = async (req, res) => {
 
     // ---------------- fetch SPs ----------------
     const spRows = await executeSP(
-      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR
+      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR,
     );
 
     const ids = (spRows || [])
@@ -3113,27 +3120,27 @@ const getSolicitudes = async (req, res) => {
     }
 
     // ---------------- index pagos by solicitud ----------------
-const detalleBySolicitud = (pagosRaw || []).reduce((acc, row) => {
-  const key = String(row.id_solicitud_proveedor);
+    const detalleBySolicitud = (pagosRaw || []).reduce((acc, row) => {
+      const key = String(row.id_solicitud_proveedor);
 
-  const dispersiones = toArray(row.dispersiones_json);
-  const pagos = toArray(row.pagos_json);
-  const facturas = toArray(row.facturas_json);
+      const dispersiones = toArray(row.dispersiones_json);
+      const pagos = toArray(row.pagos_json);
+      const facturas = toArray(row.facturas_json);
 
-  if (!acc[key]) {
-    acc[key] = {
-      dispersiones: [],
-      pagos: [],
-      facturas: [],
-    };
-  }
+      if (!acc[key]) {
+        acc[key] = {
+          dispersiones: [],
+          pagos: [],
+          facturas: [],
+        };
+      }
 
-  acc[key].dispersiones.push(...dispersiones);
-  acc[key].pagos.push(...pagos);
-  acc[key].facturas.push(...facturas);
+      acc[key].dispersiones.push(...dispersiones);
+      acc[key].pagos.push(...pagos);
+      acc[key].facturas.push(...facturas);
 
-  return acc;
-}, {});
+      return acc;
+    }, {});
 
     // ---------------- normalize rows ----------------
     const data = (spRows || []).map((r) => {
@@ -3160,22 +3167,24 @@ const detalleBySolicitud = (pagosRaw || []).reduce((acc, row) => {
         ...rest
       } = r;
 
-      const detalleSolicitud = detalleBySolicitud[String(id_solicitud_proveedor)] ?? {
-  dispersiones: [],
-  pagos: [],
-  facturas: [],
-};
+      const detalleSolicitud = detalleBySolicitud[
+        String(id_solicitud_proveedor)
+      ] ?? {
+        dispersiones: [],
+        pagos: [],
+        facturas: [],
+      };
 
-const dispersiones = detalleSolicitud.dispersiones;
-const pagosProveedor = detalleSolicitud.pagos;
-const facturas = detalleSolicitud.facturas;
+      const dispersiones = detalleSolicitud.dispersiones;
+      const pagosProveedor = detalleSolicitud.pagos;
+      const facturas = detalleSolicitud.facturas;
 
-// si quieres seguir usando el mismo cálculo actual:
-const pagos = [...dispersiones, ...pagosProveedor];
+      // si quieres seguir usando el mismo cálculo actual:
+      const pagos = [...dispersiones, ...pagosProveedor];
 
-const forma = norm(forma_pago_solicitada);
+      const forma = norm(forma_pago_solicitada);
 
-const pagoStats = getPagoStats(pagos);
+      const pagoStats = getPagoStats(pagos);
       const saldoNum = num(saldo);
       const factNums = getFacturaNums({ ...r, ...rest });
 
@@ -3186,64 +3195,63 @@ const pagoStats = getPagoStats(pagos);
         pagoStats.pagado >= num(monto_solicitado);
 
       return {
-  ...rest,
+        ...rest,
 
-  estatus_pagos,
+        estatus_pagos,
 
-  solicitud_proveedor: {
-    id_solicitud_proveedor,
-    fecha_solicitud,
-    monto_solicitado,
-    saldo,
-    forma_pago_solicitada,
-    id_tarjeta_solicitada,
-    usuario_solicitante,
-    usuario_generador,
-    comentarios,
-    estado_solicitud,
-    estado_facturacion,
-    is_ajuste,
-    comentario_ajuste,
-  },
+        solicitud_proveedor: {
+          id_solicitud_proveedor,
+          fecha_solicitud,
+          monto_solicitado,
+          saldo,
+          forma_pago_solicitada,
+          id_tarjeta_solicitada,
+          usuario_solicitante,
+          usuario_generador,
+          comentarios,
+          estado_solicitud,
+          estado_facturacion,
+          is_ajuste,
+          comentario_ajuste,
+        },
 
-  tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
-  proveedor: { rfc, razon_social },
+        tarjeta: { ultimos_4, banco_emisor, tipo_tarjeta },
+        proveedor: { rfc, razon_social },
 
-  // para no romper lo que ya usa el front
-  pagos,
+        // para no romper lo que ya usa el front
+        pagos,
 
-  // nuevos campos separados y claros
-  dispersiones,
-  pagos_proveedor: pagosProveedor,
-  facturas,
+        // nuevos campos separados y claros
+        dispersiones,
+        pagos_proveedor: pagosProveedor,
+        facturas,
 
-  // si quieres mandarlo casi tal cual viene del SP
-  sp_obtener_pagos_proveedor: {
-    dispersiones_json: dispersiones,
-    pagos_json: pagosProveedor,
-    facturas_json: facturas,
-  },
+        // si quieres mandarlo casi tal cual viene del SP
+        sp_obtener_pagos_proveedor: {
+          dispersiones_json: dispersiones,
+          pagos_json: pagosProveedor,
+          facturas_json: facturas,
+        },
 
-  __computed: {
-    forma,
-    estado_solicitud_norm: norm(estado_solicitud),
-    estaPagada,
-    pagos_count: pagoStats.count,
-    pagos_total_pagado: pagoStats.pagado,
-    pagos_total_solicitado_sum: pagoStats.solicitado,
-    facturado: factNums.facturado,
-    por_facturar: factNums.porFacturar,
-    solicitado: factNums.solicitado,
-  },
-};
+        __computed: {
+          forma,
+          estado_solicitud_norm: norm(estado_solicitud),
+          estaPagada,
+          pagos_count: pagoStats.count,
+          pagos_total_pagado: pagoStats.pagado,
+          pagos_total_solicitado_sum: pagoStats.solicitado,
+          facturado: factNums.facturado,
+          por_facturar: factNums.porFacturar,
+          solicitado: factNums.solicitado,
+        },
+      };
     });
 
     // ---------------- reglas de clasificación ----------------
     const comentarioEsPagoSolicitado = (d) => {
       const comentario = norm(d?.solicitud_proveedor?.comentario_ajuste ?? "");
       return (
-        comentario === "pago solicitado" ||
-        comentario === "'pago solicitado'"
+        comentario === "pago solicitado" || comentario === "'pago solicitado'"
       );
     };
 
@@ -3259,16 +3267,16 @@ const pagoStats = getPagoStats(pagos);
     };
 
     const esCartaGarantia = (d) => {
-  const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
+      const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
 
-  if (estado === "solicitada") return true;
+      if (estado === "solicitada") return true;
 
-  return (
-    estado === "cupon enviado" &&
-    esAjuste(d) &&
-    comentarioEsPagoSolicitado(d)
-  );
-};
+      return (
+        estado === "cupon enviado" &&
+        esAjuste(d) &&
+        comentarioEsPagoSolicitado(d)
+      );
+    };
 
     const esNotificado = (d) => {
       const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
@@ -3278,12 +3286,13 @@ const pagoStats = getPagoStats(pagos);
     // ---------------- buckets ----------------
     const pago_tdc = sortByHospedajeReciente(
       data.filter(
-        (d) => norm(d?.solicitud_proveedor?.estado_solicitud) === "carta_enviada"
-      )
+        (d) =>
+          norm(d?.solicitud_proveedor?.estado_solicitud) === "carta_enviada",
+      ),
     );
 
     const notificados = sortByHospedajeReciente(
-      data.filter((d) => esNotificado(d))
+      data.filter((d) => esNotificado(d)),
     );
 
     const spei_solicitado = sortByHospedajeReciente(
@@ -3294,37 +3303,34 @@ const pagoStats = getPagoStats(pagos);
           estado === "transferencia_solicitada" ||
           (estado === "dispersion" && !esAjuste(d))
         );
-      })
+      }),
     );
 
     const pago_link = sortByHospedajeReciente(
       data.filter(
-        (d) => norm(d?.solicitud_proveedor?.estado_solicitud) === "pagado link"
-      )
+        (d) => norm(d?.solicitud_proveedor?.estado_solicitud) === "pagado link",
+      ),
     );
 
     const canceladas = sortByHospedajeReciente(
       data.filter(
-        (d) => norm(d?.solicitud_proveedor?.estado_solicitud) === "cancelada"
-      )
+        (d) => norm(d?.solicitud_proveedor?.estado_solicitud) === "cancelada",
+      ),
     );
 
     const carta_enviada = sortByHospedajeReciente(
-      data.filter((d) => esCartaEnviada(d))
+      data.filter((d) => esCartaEnviada(d)),
     );
 
     const carta_garantia = sortByHospedajeReciente(
-      data.filter((d) => esCartaGarantia(d))
+      data.filter((d) => esCartaGarantia(d)),
     );
 
     const pagada = sortByHospedajeReciente(
       data.filter((d) => {
         const estado = norm(d?.solicitud_proveedor?.estado_solicitud);
-        return (
-          estado === "pagado tarjeta" ||
-          estado === "pagado transferencia"
-        );
-      })
+        return estado === "pagado tarjeta" || estado === "pagado transferencia";
+      }),
     );
 
     const responseData = {
@@ -3424,18 +3430,18 @@ const getSolicitudes2 = async (req, res) => {
         .toLowerCase();
 
     const clean = (v) => {
-  const raw = String(v ?? "");
-  if (!raw.trim()) return null;
+      const raw = String(v ?? "");
+      if (!raw.trim()) return null;
 
-  try {
-    const decoded = decodeURIComponent(raw.replace(/\+/g, " "));
-    const s = decoded.trim();
-    return s === "" ? null : s;
-  } catch {
-    const s = raw.replace(/\+/g, " ").trim();
-    return s === "" ? null : s;
-  }
-};
+      try {
+        const decoded = decodeURIComponent(raw.replace(/\+/g, " "));
+        const s = decoded.trim();
+        return s === "" ? null : s;
+      } catch {
+        const s = raw.replace(/\+/g, " ").trim();
+        return s === "" ? null : s;
+      }
+    };
 
     const num = (v) => {
       const n = Number(v);
@@ -3499,7 +3505,7 @@ const getSolicitudes2 = async (req, res) => {
         p.some(
           (x) =>
             norm(x?.pago_estado_pago) === "pagado" ||
-            norm(x?.estado_pago) === "pagado"
+            norm(x?.estado_pago) === "pagado",
         ) || false;
 
       return {
@@ -3520,13 +3526,11 @@ const getSolicitudes2 = async (req, res) => {
           row?.total_facturado_en_pfp ??
           row?.facturado ??
           row?.monto_facturas ??
-          0
+          0,
       );
 
       const porFacturarRaw =
-        row?.monto_por_facturar ??
-        row?.por_facturar ??
-        row?.saldo_por_facturar;
+        row?.monto_por_facturar ?? row?.por_facturar ?? row?.saldo_por_facturar;
 
       const porFacturar =
         porFacturarRaw != null
@@ -3538,76 +3542,82 @@ const getSolicitudes2 = async (req, res) => {
 
     const debug = Number(req.query.debug ?? 0) === 1;
 
-   const allowedFechaReserva = new Set(["created_at", "check_in", "check_out"]);
-const rawFiltrarFechaPorReserva = clean(req.query.filtrar_fecha_por_reserva);
-const filtrarFechaPorReserva =
-  rawFiltrarFechaPorReserva &&
-  allowedFechaReserva.has(String(rawFiltrarFechaPorReserva).toLowerCase())
-    ? String(rawFiltrarFechaPorReserva).toLowerCase()
-    : null;
+    const allowedFechaReserva = new Set([
+      "created_at",
+      "check_in",
+      "check_out",
+    ]);
+    const rawFiltrarFechaPorReserva = clean(
+      req.query.filtrar_fecha_por_reserva,
+    );
+    const filtrarFechaPorReserva =
+      rawFiltrarFechaPorReserva &&
+      allowedFechaReserva.has(String(rawFiltrarFechaPorReserva).toLowerCase())
+        ? String(rawFiltrarFechaPorReserva).toLowerCase()
+        : null;
 
-    console.log(clean(req.query.comentarios),"🤬🤬🤬🤬")
+    console.log(clean(req.query.comentarios), "🤬🤬🤬🤬");
 
-const filters = {
-  folio: clean(req.query.folio),
-  cliente: clean(req.query.cliente),
-  viajero: clean(req.query.viajero),
-  hotel: clean(req.query.hotel),
-  estado_solicitud: clean(req.query.estado_solicitud),
-  estado_facturacion: clean(req.query.estado_facturacion),
-  forma_pago: clean(req.query.forma_pago),
+    const filters = {
+      folio: clean(req.query.folio),
+      cliente: clean(req.query.cliente),
+      viajero: clean(req.query.viajero),
+      hotel: clean(req.query.hotel),
+      estado_solicitud: clean(req.query.estado_solicitud),
+      estado_facturacion: clean(req.query.estado_facturacion),
+      forma_pago: clean(req.query.forma_pago),
 
-  created_start: toDateStart(req.query.created_start),
-  created_end: toDateEnd(req.query.created_end),
-  check_in_start: clean(req.query.check_in_start),
-  check_in_end: clean(req.query.check_in_end),
-  check_out_start: clean(req.query.check_out_start),
-  check_out_end: clean(req.query.check_out_end),
+      created_start: toDateStart(req.query.created_start),
+      created_end: toDateEnd(req.query.created_end),
+      check_in_start: clean(req.query.check_in_start),
+      check_in_end: clean(req.query.check_in_end),
+      check_out_start: clean(req.query.check_out_start),
+      check_out_end: clean(req.query.check_out_end),
 
-  id_cliente: clean(req.query.id_cliente),
-  estado_reserva: clean(req.query.estado_reserva),
-  etapa_reservacion: clean(req.query.etapa_reservacion),
-  reservante: clean(req.query.reservante),
-  metodo_pago_reserva: clean(req.query.metodo_pago_reserva),
+      id_cliente: clean(req.query.id_cliente),
+      estado_reserva: clean(req.query.estado_reserva),
+      etapa_reservacion: clean(req.query.etapa_reservacion),
+      reservante: clean(req.query.reservante),
+      metodo_pago_reserva: clean(req.query.metodo_pago_reserva),
 
-  fecha_reserva_start: toDateStart(req.query.fecha_reserva_start),
-  fecha_reserva_end: toDateEnd(req.query.fecha_reserva_end),
-  filtrar_fecha_por_reserva: filtrarFechaPorReserva,
+      fecha_reserva_start: toDateStart(req.query.fecha_reserva_start),
+      fecha_reserva_end: toDateEnd(req.query.fecha_reserva_end),
+      filtrar_fecha_por_reserva: filtrarFechaPorReserva,
 
-  comentarios: clean(req.query.comentarios),
-  comentario_CXP: clean(req.query.comentario_CXP),
-};
+      comentarios: clean(req.query.comentarios),
+      comentario_CXP: clean(req.query.comentario_CXP),
+    };
 
     const spRows = await executeSP(
-  STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
-  [
-    filters.folio,
-    filters.cliente,
-    filters.viajero,
-    filters.hotel,
-    filters.estado_solicitud,
-    filters.estado_facturacion,
-    filters.forma_pago,
-    filters.created_start,
-    filters.created_end,
-    filters.check_in_start,
-    filters.check_in_end,
-    filters.check_out_start,
-    filters.check_out_end,
+      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
+      [
+        filters.folio,
+        filters.cliente,
+        filters.viajero,
+        filters.hotel,
+        filters.estado_solicitud,
+        filters.estado_facturacion,
+        filters.forma_pago,
+        filters.created_start,
+        filters.created_end,
+        filters.check_in_start,
+        filters.check_in_end,
+        filters.check_out_start,
+        filters.check_out_end,
 
-    filters.id_cliente,
-    filters.estado_reserva,
-    filters.etapa_reservacion,
-    filters.reservante,
-    filters.metodo_pago_reserva,
-    filters.fecha_reserva_start,
-    filters.fecha_reserva_end,
-    filters.filtrar_fecha_por_reserva,
+        filters.id_cliente,
+        filters.estado_reserva,
+        filters.etapa_reservacion,
+        filters.reservante,
+        filters.metodo_pago_reserva,
+        filters.fecha_reserva_start,
+        filters.fecha_reserva_end,
+        filters.filtrar_fecha_por_reserva,
 
-    filters.comentarios,
-    filters.comentario_CXP,
-  ]
-);
+        filters.comentarios,
+        filters.comentario_CXP,
+      ],
+    );
 
     const ids = (spRows || [])
       .map((r) => r.id_solicitud_proveedor)
@@ -3846,7 +3856,6 @@ const saldos = async (req, res) => {
 
 const editProveedores = async (req, res) => {};
 
-
 const cambio_estatus = async (req, res) => {
   try {
     const { id_saldo, estado } = req.body;
@@ -4002,51 +4011,48 @@ const cargarFactura = async (req, res) => {
 
     // ✅ nuevos campos para facturas_pago_proveedor
     const razon_social = String(
-      facturaData?.receptor?.nombre ??
-      req.body?.razon_social ??
-      ""
+      facturaData?.receptor?.nombre ?? req.body?.razon_social ?? "",
     ).trim();
 
-    const uso_cfdi = String(
-      facturaData?.receptor?.usoCFDI ??
-      req.body?.uso_cfdi ??
-      ""
-    ).trim() || null;
+    const uso_cfdi =
+      String(
+        facturaData?.receptor?.usoCFDI ?? req.body?.uso_cfdi ?? "",
+      ).trim() || null;
 
     const moneda = String(
       montos_originales_factura?.moneda ??
-      facturaData?.comprobante?.moneda ??
-      "MXN"
-    ).trim().toUpperCase();
+        facturaData?.comprobante?.moneda ??
+        "MXN",
+    )
+      .trim()
+      .toUpperCase();
 
-    const forma_pago = String(
-      facturaData?.comprobante?.formaPago ??
-      req.body?.forma_pago ??
-      ""
-    ).trim() || null;
+    const forma_pago =
+      String(
+        facturaData?.comprobante?.formaPago ?? req.body?.forma_pago ?? "",
+      ).trim() || null;
 
-    const metodo_pago = String(
-      facturaData?.comprobante?.metodoPago ??
-      req.body?.metodo_pago ??
-      ""
-    ).trim() || null;
+    const metodo_pago =
+      String(
+        facturaData?.comprobante?.metodoPago ?? req.body?.metodo_pago ?? "",
+      ).trim() || null;
 
     const total_moneda_O = toNumber(
       montos_originales_factura?.total ??
-      facturaData?.comprobante?.total ??
-      total
+        facturaData?.comprobante?.total ??
+        total,
     );
 
     const sub_total_moneda_O = toNumber(
       montos_originales_factura?.subtotal ??
-      facturaData?.comprobante?.subtotal ??
-      subtotal
+        facturaData?.comprobante?.subtotal ??
+        subtotal,
     );
 
     const impuestos_moneda_O = toNumber(
       montos_originales_factura?.impuestos ??
-      facturaData?.impuestos?.traslado?.importe ??
-      impuestos
+        facturaData?.impuestos?.traslado?.importe ??
+        impuestos,
     );
 
     // ✅ Normalizar JSON para SP (ARRAY siempre)
@@ -4064,9 +4070,7 @@ const cargarFactura = async (req, res) => {
       }
 
       const monto_solicitado = toNumber(
-        p?.solicitud_proveedor?.monto_solicitado ??
-        p?.monto_solicitado ??
-        0,
+        p?.solicitud_proveedor?.monto_solicitado ?? p?.monto_solicitado ?? 0,
       );
 
       const monto_facturado = toNumber(
@@ -4096,10 +4100,9 @@ const cargarFactura = async (req, res) => {
 
       const tipo_cambio = toNumber(
         p?.montos_originales?.tipo_cambio ??
-        montos_originales_factura?.tipo_cambio ??
-        1
+          montos_originales_factura?.tipo_cambio ??
+          1,
       );
-
 
       return {
         id_pago,
@@ -4260,7 +4263,9 @@ function toMoneyNumber(v) {
 
 function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
   // ajusta si tu tabla "saldos.forma_pago" usa otros valores
-  const fp = String(formaPagoSolicitada || "").trim().toLowerCase();
+  const fp = String(formaPagoSolicitada || "")
+    .trim()
+    .toLowerCase();
   if (fp === "transfer" || fp === "transferencia") return "transfer";
   if (fp === "card" || fp === "tarjeta") return "card";
   if (fp === "link") return "link";
@@ -4357,7 +4362,8 @@ async function crearSaldoFavorPorMontoPagado({
     }
 
     pagoBase =
-      rowsPagos.find((x) => Number(x?.is_devolucion || 0) !== 1) || rowsPagos[0];
+      rowsPagos.find((x) => Number(x?.is_devolucion || 0) !== 1) ||
+      rowsPagos[0];
   }
 
   // 2) idempotencia simple
@@ -4384,7 +4390,7 @@ async function crearSaldoFavorPorMontoPagado({
   const id_saldo = makeIdSaldo();
   const transaction_id = makeTransactionId();
   const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(
-    solicitudRow?.forma_pago_solicitada
+    solicitudRow?.forma_pago_solicitada,
   );
 
   const referencia = `EDITCAMPOS_CANCEL_PAGADA|SOL:${id_solicitud_proveedor}`;
@@ -4401,7 +4407,9 @@ async function crearSaldoFavorPorMontoPagado({
       ? `Dispersion base: ${pagoBase.id_dispersion_pagos_proveedor}.`
       : null,
     pagoBase?.metodo_de_pago ? `Método: ${pagoBase.metodo_de_pago}.` : null,
-    pagoBase?.referencia_pago ? `Referencia: ${pagoBase.referencia_pago}.` : null,
+    pagoBase?.referencia_pago
+      ? `Referencia: ${pagoBase.referencia_pago}.`
+      : null,
     pagoBase?.numero_comprobante
       ? `Comprobante: ${pagoBase.numero_comprobante}.`
       : null,
@@ -4469,7 +4477,7 @@ const calcularMontoPagadoDesdeDispersiones = (rows = []) => {
   return money2(
     rows.reduce((acc, row) => {
       return acc + Number(row?.monto_solicitado ?? 0);
-    }, 0)
+    }, 0),
   );
 };
 
@@ -4478,7 +4486,7 @@ const devolverMontoFacturadoAFacturasPorCancelacion = async ({
   id_solicitud_proveedor,
 }) => {
   const getRows = (result) =>
-    Array.isArray(result) ? result : result?.[0] ?? [];
+    Array.isArray(result) ? result : (result?.[0] ?? []);
 
   const safeString = (v) => String(v ?? "").trim();
 
@@ -4502,7 +4510,7 @@ const devolverMontoFacturadoAFacturasPorCancelacion = async ({
   `;
 
   const relaciones = getRows(
-    await executeQuery(qRelaciones, [id_solicitud_proveedor])
+    await executeQuery(qRelaciones, [id_solicitud_proveedor]),
   );
 
   if (!relaciones.length) {
@@ -4532,11 +4540,13 @@ const devolverMontoFacturadoAFacturasPorCancelacion = async ({
       LIMIT 1;
     `;
 
-    const facturaRows = getRows(await executeQuery(qFacturaActual, [idFactura]));
+    const facturaRows = getRows(
+      await executeQuery(qFacturaActual, [idFactura]),
+    );
 
     if (!facturaRows.length) {
       throw new Error(
-        `No se encontró la factura en facturas_pago_proveedor: ${idFactura}`
+        `No se encontró la factura en facturas_pago_proveedor: ${idFactura}`,
       );
     }
 
@@ -4550,7 +4560,7 @@ const devolverMontoFacturadoAFacturasPorCancelacion = async ({
       WHERE TRIM(id_factura_proveedor) = TRIM(?)
       LIMIT 1;
       `,
-      [toMoneyString(saldoNuevo), idFactura]
+      [toMoneyString(saldoNuevo), idFactura],
     );
 
     facturasActualizadas.push({
@@ -4572,7 +4582,7 @@ const devolverMontoFacturadoAFacturasPorCancelacion = async ({
       monto_pago = '0.00'
     WHERE id_solicitud = ?;
     `,
-    [id_solicitud_proveedor]
+    [id_solicitud_proveedor],
   );
 
   return {
@@ -4586,7 +4596,10 @@ const EditCampos = async (req, res) => {
   try {
     const { id_solicitud_proveedor, ...rest } = req.body;
 
-    const normalizeEstado = (v) => String(v ?? "").trim().toUpperCase();
+    const normalizeEstado = (v) =>
+      String(v ?? "")
+        .trim()
+        .toUpperCase();
 
     const esEstadoCancelacion = (v) => {
       const estado = normalizeEstado(v);
@@ -4701,9 +4714,11 @@ const EditCampos = async (req, res) => {
 
     if (updatesMap.has("estado_solicitud") && pagadoFlagBody !== null) {
       const nuevoEstadoSolicitado = normalizeEstado(
-        updatesMap.get("estado_solicitud")
+        updatesMap.get("estado_solicitud"),
       );
-      const esCancelacionSolicitada = esEstadoCancelacion(nuevoEstadoSolicitado);
+      const esCancelacionSolicitada = esEstadoCancelacion(
+        nuevoEstadoSolicitado,
+      );
 
       const pagadoFlag = Number(pagadoFlagBody);
 
@@ -4817,8 +4832,8 @@ const EditCampos = async (req, res) => {
         updatesMap.set(
           "comentario_ajuste",
           `Cancelada desde notificados | saldo a favor generado por dispersion_pagos_proveedor | monto neto: ${String(
-            montoPagadoNeto
-          )}`
+            montoPagadoNeto,
+          )}`,
         );
 
         if (esCancelacionSolicitada) {
@@ -4842,7 +4857,7 @@ const EditCampos = async (req, res) => {
 
     if (!handledEstadoPagadoCombo && updatesMap.has("estado_solicitud")) {
       const nuevoEstadoSolicitado = normalizeEstado(
-        updatesMap.get("estado_solicitud")
+        updatesMap.get("estado_solicitud"),
       );
 
       if (esEstadoCancelacion(nuevoEstadoSolicitado)) {
@@ -4909,7 +4924,8 @@ const EditCampos = async (req, res) => {
 
           if (!saldoResp?.ok) {
             return res.status(400).json({
-              error: "No se pudo generar saldo a favor por monto pagado para cancelar solicitud pagada",
+              error:
+                "No se pudo generar saldo a favor por monto pagado para cancelar solicitud pagada",
               details: saldoResp,
             });
           }
@@ -4989,7 +5005,7 @@ const EditCampos = async (req, res) => {
 
       let ajusteResp = { ok: true, action: "NO_CHANGE" };
 
-      if (nuevoMonto > montoOld ) {
+      if (nuevoMonto > montoOld) {
         ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
           executeQuery,
           id_solicitud_proveedor,
@@ -5035,7 +5051,8 @@ const EditCampos = async (req, res) => {
         ...params,
         id_solicitud_proveedor,
       ]);
-      const affectedRows = result?.affectedRows ?? result?.[0]?.affectedRows ?? 0;
+      const affectedRows =
+        result?.affectedRows ?? result?.[0]?.affectedRows ?? 0;
 
       if (affectedRows === 0) {
         return res.status(404).json({
@@ -5069,8 +5086,7 @@ const EditCampos = async (req, res) => {
     let message = "Campos actualizados correctamente";
 
     if (
-      estadoEspecialInfo?.action ===
-      "NOTIFICADO_PAGADO_0_ONLY_STATUS_CHANGE"
+      estadoEspecialInfo?.action === "NOTIFICADO_PAGADO_0_ONLY_STATUS_CHANGE"
     ) {
       message =
         "La solicitud fue actualizada con pagado=0 y solo se cambió el estado_solicitud";
@@ -5081,8 +5097,7 @@ const EditCampos = async (req, res) => {
       message =
         "La solicitud fue cancelada con pagado=1 y se generó saldo a favor desde dispersion_pagos_proveedor";
     } else if (
-      estadoEspecialInfo?.action ===
-      "DISPERSION_MARKED_AJUSTE_NO_STATUS_CHANGE"
+      estadoEspecialInfo?.action === "DISPERSION_MARKED_AJUSTE_NO_STATUS_CHANGE"
     ) {
       message =
         "La solicitud está en DISPERSION: se marcó como ajuste y no se cambió el estatus";
@@ -5098,9 +5113,7 @@ const EditCampos = async (req, res) => {
 
     if (devolucionFacturasInfo?.action === "FACTURAS_SALDO_DEVUELTO") {
       message += " | Se devolvió saldo a las facturas relacionadas";
-    } else if (
-      devolucionFacturasInfo?.action === "NO_FACTURAS_RELACIONADAS"
-    ) {
+    } else if (devolucionFacturasInfo?.action === "NO_FACTURAS_RELACIONADAS") {
       message += " | No había facturas relacionadas para devolver saldo";
     }
 
@@ -5139,7 +5152,7 @@ const monto_factura = async (req, res) => {
     const EPS = 0.01;
 
     const getRows = (result) =>
-      Array.isArray(result) ? result : result?.[0] ?? [];
+      Array.isArray(result) ? result : (result?.[0] ?? []);
 
     const safeString = (v) => String(v ?? "").trim();
 
@@ -5277,7 +5290,9 @@ const monto_factura = async (req, res) => {
       LIMIT 1;
     `;
 
-    const solicitudRows = getRows(await executeQuery(qSolicitud, [idSolicitud]));
+    const solicitudRows = getRows(
+      await executeQuery(qSolicitud, [idSolicitud]),
+    );
 
     if (!solicitudRows.length) {
       return res.status(404).json({
@@ -5306,11 +5321,15 @@ const monto_factura = async (req, res) => {
         LIMIT 1;
       `;
 
-      const rows = getRows(await executeQuery(qRelacion, [idSolicitud, idFactura]));
+      const rows = getRows(
+        await executeQuery(qRelacion, [idSolicitud, idFactura]),
+      );
       relacionExistente = rows?.[0] ?? null;
     }
 
-    const montoExistenteRelacion = round2(relacionExistente?.monto_facturado_actual ?? 0);
+    const montoExistenteRelacion = round2(
+      relacionExistente?.monto_facturado_actual ?? 0,
+    );
 
     // 4) SUM global por factura
     const qSumFactura = `
@@ -5325,8 +5344,12 @@ const monto_factura = async (req, res) => {
       WHERE id_factura = ?;
     `;
 
-    const sumFacturaRows = getRows(await executeQuery(qSumFactura, [idFactura]));
-    const totalAsociadoFactura = round2(sumFacturaRows?.[0]?.total_asociado_factura ?? 0);
+    const sumFacturaRows = getRows(
+      await executeQuery(qSumFactura, [idFactura]),
+    );
+    const totalAsociadoFactura = round2(
+      sumFacturaRows?.[0]?.total_asociado_factura ?? 0,
+    );
 
     // 5) SUM global por solicitud
     const qSumSolicitud = `
@@ -5341,35 +5364,37 @@ const monto_factura = async (req, res) => {
       WHERE id_solicitud = ?;
     `;
 
-    const sumSolicitudRows = getRows(await executeQuery(qSumSolicitud, [idSolicitud]));
+    const sumSolicitudRows = getRows(
+      await executeQuery(qSumSolicitud, [idSolicitud]),
+    );
     const totalAsociadoSolicitud = round2(
-      sumSolicitudRows?.[0]?.total_asociado_solicitud ?? 0
+      sumSolicitudRows?.[0]?.total_asociado_solicitud ?? 0,
     );
 
     // 6) Quitar relación actual para permitir edición
     const totalFacturaSinActual = Math.max(
       0,
-      round2(totalAsociadoFactura - montoExistenteRelacion)
+      round2(totalAsociadoFactura - montoExistenteRelacion),
     );
 
     const totalSolicitudSinActual = Math.max(
       0,
-      round2(totalAsociadoSolicitud - montoExistenteRelacion)
+      round2(totalAsociadoSolicitud - montoExistenteRelacion),
     );
 
     const disponibleFactura = Math.max(
       0,
-      round2(totalFactura - totalFacturaSinActual)
+      round2(totalFactura - totalFacturaSinActual),
     );
 
     const disponibleSolicitud = Math.max(
       0,
-      round2(montoSolicitado - totalSolicitudSinActual)
+      round2(montoSolicitado - totalSolicitudSinActual),
     );
 
     const maximoAsociable = Math.max(
       0,
-      round2(Math.min(disponibleFactura, disponibleSolicitud))
+      round2(Math.min(disponibleFactura, disponibleSolicitud)),
     );
 
     if (montoFacturado - maximoAsociable > EPS) {
@@ -5412,7 +5437,7 @@ const monto_factura = async (req, res) => {
           toMoneyString(montoFacturado),
           toMoneyString(montoPagoFinal),
           Number(relacionExistente.id),
-        ]
+        ],
       );
 
       idRelacion = Number(relacionExistente.id);
@@ -5455,11 +5480,15 @@ const monto_factura = async (req, res) => {
       WHERE id_solicitud = ?;
     `;
 
-    const recalcRows = getRows(await executeQuery(qRecalcSolicitud, [idSolicitud]));
-    const nuevoMontoFacturado = round2(recalcRows?.[0]?.total_facturado_real ?? 0);
+    const recalcRows = getRows(
+      await executeQuery(qRecalcSolicitud, [idSolicitud]),
+    );
+    const nuevoMontoFacturado = round2(
+      recalcRows?.[0]?.total_facturado_real ?? 0,
+    );
     const nuevoMontoPorFacturar = Math.max(
       0,
-      round2(montoSolicitado - nuevoMontoFacturado)
+      round2(montoSolicitado - nuevoMontoFacturado),
     );
 
     let nuevoEstadoFacturacion = "pendiente";
@@ -5484,7 +5513,7 @@ const monto_factura = async (req, res) => {
         toMoneyString(nuevoMontoPorFacturar),
         nuevoEstadoFacturacion,
         idSolicitud,
-      ]
+      ],
     );
 
     const updatedSolicitudRows = getRows(
@@ -5495,8 +5524,8 @@ const monto_factura = async (req, res) => {
         WHERE id_solicitud_proveedor = ?
         LIMIT 1;
         `,
-        [idSolicitud]
-      )
+        [idSolicitud],
+      ),
     );
 
     return res.status(200).json({
@@ -5511,10 +5540,10 @@ const monto_factura = async (req, res) => {
         impuestos_facturado: toMoneyString(impuestosFacturado),
         monto_facturado: toMoneyString(montoFacturado),
         disponible_factura: toMoneyString(
-          Math.max(0, round2(disponibleFactura - montoFacturado))
+          Math.max(0, round2(disponibleFactura - montoFacturado)),
         ),
         disponible_solicitud: toMoneyString(
-          Math.max(0, round2(disponibleSolicitud - montoFacturado))
+          Math.max(0, round2(disponibleSolicitud - montoFacturado)),
         ),
         solicitud_actualizada: updatedSolicitudRows?.[0] ?? null,
       },
@@ -5529,16 +5558,11 @@ const monto_factura = async (req, res) => {
   }
 };
 
-
 // controllers/pago_proveedor.js (o donde lo tengas)
 const Detalles = async (req, res) => {
   try {
-    const {
-      id_solicitud_proveedor,
-      id_proveedor,
-      id_facturas,
-      id_pagos,
-    } = req.body || {};
+    const { id_solicitud_proveedor, id_proveedor, id_facturas, id_pagos } =
+      req.body || {};
 
     // -----------------------------
     // 1) Validación mínima
@@ -5599,7 +5623,7 @@ const Detalles = async (req, res) => {
     `;
 
     const solicitudRows = getRows(
-      await executeQuery(solicitudSql, [Number(id_solicitud_proveedor)])
+      await executeQuery(solicitudSql, [Number(id_solicitud_proveedor)]),
     );
 
     const solicitud = solicitudRows?.[0] || null;
@@ -5657,13 +5681,13 @@ const Detalles = async (req, res) => {
       `;
 
       pagos = getRows(
-        await executeQuery(pagosSql, [Number(id_solicitud_proveedor)])
+        await executeQuery(pagosSql, [Number(id_solicitud_proveedor)]),
       );
 
       if (pagosArr.length > 0) {
         const pagosSet = new Set(pagosArr.map((x) => safeString(x)));
         pagos = pagos.filter((p) =>
-          pagosSet.has(safeString(p?.id_pago_proveedores))
+          pagosSet.has(safeString(p?.id_pago_proveedores)),
         );
       }
     }
@@ -5702,7 +5726,7 @@ const Detalles = async (req, res) => {
         await executeQuery(facturasSql, [
           ...facturaIdsFinales,
           Number(id_solicitud_proveedor),
-        ])
+        ]),
       );
     } else {
       const facturasSql = `
@@ -5713,7 +5737,7 @@ const Detalles = async (req, res) => {
       `;
 
       facturas = getRows(
-        await executeQuery(facturasSql, [Number(id_solicitud_proveedor)])
+        await executeQuery(facturasSql, [Number(id_solicitud_proveedor)]),
       );
     }
 
@@ -5783,11 +5807,11 @@ const Detalles = async (req, res) => {
       `;
 
       const totalSolicitudRows = getRows(
-        await executeQuery(totalSolicitudSql, [Number(id_solicitud_proveedor)])
+        await executeQuery(totalSolicitudSql, [Number(id_solicitud_proveedor)]),
       );
 
       totalAsociadoSolicitud = toNum(
-        totalSolicitudRows?.[0]?.total_asociado_solicitud
+        totalSolicitudRows?.[0]?.total_asociado_solicitud,
       );
     }
 
@@ -5822,7 +5846,7 @@ const Detalles = async (req, res) => {
         await executeQuery(detalleVistaSql, [
           Number(id_solicitud_proveedor),
           ...facturaIdsResponse,
-        ])
+        ]),
       );
 
       detalleFacturasMap = new Map(
@@ -5833,13 +5857,13 @@ const Detalles = async (req, res) => {
             total_asociado_factura: toNum(r?.total_asociado_factura),
             monto_solicitado: toNum(r?.monto_solicitado),
           },
-        ])
+        ]),
       );
     }
 
     const restante_solicitud = Math.max(
       0,
-      Number((monto_solicitado - totalAsociadoSolicitud).toFixed(2))
+      Number((monto_solicitado - totalAsociadoSolicitud).toFixed(2)),
     );
 
     // =========================================================
@@ -5853,18 +5877,18 @@ const Detalles = async (req, res) => {
       const detalle = detalleFacturasMap.get(idFactura) || null;
 
       const total_factura = toNum(
-        f?.total ?? detalle?.total_factura ?? f?.monto_facturado
+        f?.total ?? detalle?.total_factura ?? f?.monto_facturado,
       );
 
       const total_asociado_factura = toNum(detalle?.total_asociado_factura);
 
       const restante_factura = Math.max(
         0,
-        Number((total_factura - total_asociado_factura).toFixed(2))
+        Number((total_factura - total_asociado_factura).toFixed(2)),
       );
 
       const maximo_a_asociar = Number(
-        Math.min(restante_factura, restante_solicitud).toFixed(2)
+        Math.min(restante_factura, restante_solicitud).toFixed(2),
       );
 
       return {
@@ -5882,15 +5906,12 @@ const Detalles = async (req, res) => {
     const total_pagado = Array.isArray(pagos)
       ? pagos.reduce(
           (acc, p) => acc + toNum(p?.monto_pagado ?? p?.monto ?? p?.total),
-          0
+          0,
         )
       : 0;
 
     const total_facturado = Array.isArray(facturas)
-      ? facturas.reduce(
-          (acc, f) => acc + toNum(f?.total_factura),
-          0
-        )
+      ? facturas.reduce((acc, f) => acc + toNum(f?.total_factura), 0)
       : 0;
 
     const resumen_validacion = {
@@ -6057,7 +6078,7 @@ const consultar_facturado = async (req, res) => {
     `;
 
     const rows = getRows(
-      await executeQuery(sql, [...idsNumericos, ...idsNumericos])
+      await executeQuery(sql, [...idsNumericos, ...idsNumericos]),
     );
 
     // ------------------------------------------------
@@ -6067,7 +6088,7 @@ const consultar_facturado = async (req, res) => {
       const monto_solicitado = Number(toNum(row?.monto_solicitado).toFixed(2));
       const total_facturado = Number(toNum(row?.total_facturado).toFixed(2));
       const diferencia = Number(
-        (monto_solicitado - total_facturado).toFixed(2)
+        (monto_solicitado - total_facturado).toFixed(2),
       );
       const maximo_asignar = Number(Math.max(diferencia, 0).toFixed(2));
 
@@ -6090,13 +6111,13 @@ const consultar_facturado = async (req, res) => {
     const resumen = {
       total_solicitudes: data.length,
       monto_solicitado_total: Number(
-        data.reduce((acc, x) => acc + toNum(x.monto_solicitado), 0).toFixed(2)
+        data.reduce((acc, x) => acc + toNum(x.monto_solicitado), 0).toFixed(2),
       ),
       total_facturado_total: Number(
-        data.reduce((acc, x) => acc + toNum(x.total_facturado), 0).toFixed(2)
+        data.reduce((acc, x) => acc + toNum(x.total_facturado), 0).toFixed(2),
       ),
       maximo_asignar_total: Number(
-        data.reduce((acc, x) => acc + toNum(x.maximo_asignar), 0).toFixed(2)
+        data.reduce((acc, x) => acc + toNum(x.maximo_asignar), 0).toFixed(2),
       ),
     };
 
@@ -6261,7 +6282,7 @@ const eliminarFactura = async (req, res) => {
       `;
 
       const facturaRows = getRows(
-        await executeQuery(sqlFactura, [idFactura, uuidFactura])
+        await executeQuery(sqlFactura, [idFactura, uuidFactura]),
       );
       const factura = facturaRows?.[0] || null;
 
@@ -6301,7 +6322,7 @@ const eliminarFactura = async (req, res) => {
       `;
 
       const relacionRows = getRows(
-        await executeQuery(sqlRelacion, [idSolicitud, idFactura])
+        await executeQuery(sqlRelacion, [idSolicitud, idFactura]),
       );
       const relacion = relacionRows?.[0] || null;
 
@@ -6349,7 +6370,8 @@ const eliminarFactura = async (req, res) => {
       if (!deleteResult?.affectedRows) {
         return res.status(400).json({
           ok: false,
-          error: "No se pudo eliminar la relación en pagos_facturas_proveedores",
+          error:
+            "No se pudo eliminar la relación en pagos_facturas_proveedores",
           request: {
             id_solicitud_proveedor: idSolicitud,
             id_factura_proveedor: idFactura,
@@ -6383,7 +6405,8 @@ const eliminarFactura = async (req, res) => {
       if (!updateFacturaResult?.affectedRows) {
         return res.status(400).json({
           ok: false,
-          error: "No se pudo actualizar saldo_x_aplicar_items en facturas_pago_proveedor",
+          error:
+            "No se pudo actualizar saldo_x_aplicar_items en facturas_pago_proveedor",
           request: {
             id_solicitud_proveedor: idSolicitud,
             id_factura_proveedor: idFactura,
@@ -6427,7 +6450,8 @@ const eliminarFactura = async (req, res) => {
       if (!updateSolicitudResult?.affectedRows) {
         return res.status(400).json({
           ok: false,
-          error: "No se pudo actualizar la solicitud en solicitudes_pago_proveedor",
+          error:
+            "No se pudo actualizar la solicitud en solicitudes_pago_proveedor",
           request: {
             id_solicitud_proveedor: idSolicitud,
             id_factura_proveedor: idFactura,
@@ -6461,10 +6485,10 @@ const eliminarFactura = async (req, res) => {
       `;
 
       const solicitudRows = getRows(
-        await executeQuery(sqlResumenSolicitud, [idSolicitud])
+        await executeQuery(sqlResumenSolicitud, [idSolicitud]),
       );
       const facturaFinalRows = getRows(
-        await executeQuery(sqlResumenFactura, [idFactura, uuidFactura])
+        await executeQuery(sqlResumenFactura, [idFactura, uuidFactura]),
       );
 
       resultados.push({
@@ -6495,7 +6519,6 @@ const eliminarFactura = async (req, res) => {
   }
 };
 
-
 const asignar_factura_previa = async (req, res) => {
   try {
     const { uuid_cfdi, proveedoresData } = req.body;
@@ -6503,7 +6526,7 @@ const asignar_factura_previa = async (req, res) => {
     const EPS = 0.01;
 
     const getRows = (result) =>
-      Array.isArray(result) ? result : result?.[0] ?? [];
+      Array.isArray(result) ? result : (result?.[0] ?? []);
 
     const safeString = (v) => String(v ?? "").trim();
 
@@ -6528,8 +6551,8 @@ const asignar_factura_previa = async (req, res) => {
     const proveedores = Array.isArray(proveedoresData)
       ? proveedoresData
       : proveedoresData
-      ? [proveedoresData]
-      : [];
+        ? [proveedoresData]
+        : [];
 
     if (!proveedores.length) {
       return res.status(400).json({
@@ -6616,7 +6639,7 @@ const asignar_factura_previa = async (req, res) => {
     const totalOperacion = round2(
       proveedores.reduce((acc, item) => {
         return acc + round2(toNumber(item?.monto_asociar));
-      }, 0)
+      }, 0),
     );
 
     if (totalOperacion <= EPS) {
@@ -6640,7 +6663,8 @@ const asignar_factura_previa = async (req, res) => {
     const resultados = [];
 
     const ratioSubtotal = totalFactura > 0 ? subtotalFactura / totalFactura : 0;
-    const ratioImpuestos = totalFactura > 0 ? impuestosFactura / totalFactura : 0;
+    const ratioImpuestos =
+      totalFactura > 0 ? impuestosFactura / totalFactura : 0;
 
     // 4) Procesar cada solicitud
     for (const item of proveedores) {
@@ -6676,7 +6700,9 @@ const asignar_factura_previa = async (req, res) => {
         LIMIT 1;
       `;
 
-      const solicitudRows = getRows(await executeQuery(qSolicitud, [idSolicitud]));
+      const solicitudRows = getRows(
+        await executeQuery(qSolicitud, [idSolicitud]),
+      );
 
       if (!solicitudRows.length) {
         return res.status(404).json({
@@ -6688,9 +6714,11 @@ const asignar_factura_previa = async (req, res) => {
       const solicitud = solicitudRows[0];
       const idProveedorSolicitud = safeString(solicitud.id_proveedor);
       const montoSolicitadoDB = round2(solicitud.monto_solicitado ?? 0);
-      const montoFacturadoActual = round2(solicitud.monto_facturado_actual ?? 0);
+      const montoFacturadoActual = round2(
+        solicitud.monto_facturado_actual ?? 0,
+      );
       const montoPorFacturarActual = round2(
-        solicitud.monto_por_facturar_actual ?? 0
+        solicitud.monto_por_facturar_actual ?? 0,
       );
 
       if (
@@ -6726,12 +6754,12 @@ const asignar_factura_previa = async (req, res) => {
       `;
 
       const relacionRows = getRows(
-        await executeQuery(qRelacion, [idSolicitud, idFactura])
+        await executeQuery(qRelacion, [idSolicitud, idFactura]),
       );
 
       const relacionExistente = relacionRows?.[0] ?? null;
       const montoExistenteRelacion = round2(
-        relacionExistente?.monto_facturado_actual ?? 0
+        relacionExistente?.monto_facturado_actual ?? 0,
       );
 
       // 4.3 SUM global por solicitud
@@ -6748,31 +6776,34 @@ const asignar_factura_previa = async (req, res) => {
       `;
 
       const sumSolicitudRows = getRows(
-        await executeQuery(qSumSolicitud, [idSolicitud])
+        await executeQuery(qSumSolicitud, [idSolicitud]),
       );
 
       const totalAsociadoSolicitud = round2(
-        sumSolicitudRows?.[0]?.total_asociado_solicitud ?? 0
+        sumSolicitudRows?.[0]?.total_asociado_solicitud ?? 0,
       );
 
       // quitamos la relación actual si existe para permitir edición
       const totalSolicitudSinActual = Math.max(
         0,
-        round2(totalAsociadoSolicitud - montoExistenteRelacion)
+        round2(totalAsociadoSolicitud - montoExistenteRelacion),
       );
 
       const disponibleSolicitud = Math.max(
         0,
-        round2(montoSolicitadoReal - totalSolicitudSinActual)
+        round2(montoSolicitadoReal - totalSolicitudSinActual),
       );
 
       const maximoAsignableSolicitud = Math.max(
         0,
         round2(
           montoPorFacturarActual > 0
-            ? Math.min(montoPorFacturarActual + montoExistenteRelacion, disponibleSolicitud)
-            : disponibleSolicitud
-        )
+            ? Math.min(
+                montoPorFacturarActual + montoExistenteRelacion,
+                disponibleSolicitud,
+              )
+            : disponibleSolicitud,
+        ),
       );
 
       if (montoAsociar - maximoAsignableSolicitud > EPS) {
@@ -6820,7 +6851,7 @@ const asignar_factura_previa = async (req, res) => {
             toMoneyString(montoAsociar),
             toMoneyString(montoAsociar),
             Number(relacionExistente.id),
-          ]
+          ],
         );
 
         idRelacion = Number(relacionExistente.id);
@@ -6864,16 +6895,16 @@ const asignar_factura_previa = async (req, res) => {
       `;
 
       const recalcRows = getRows(
-        await executeQuery(qRecalcSolicitud, [idSolicitud])
+        await executeQuery(qRecalcSolicitud, [idSolicitud]),
       );
 
       const nuevoMontoFacturado = round2(
-        recalcRows?.[0]?.total_facturado_real ?? 0
+        recalcRows?.[0]?.total_facturado_real ?? 0,
       );
 
       const nuevoMontoPorFacturar = Math.max(
         0,
-        round2(montoSolicitadoReal - nuevoMontoFacturado)
+        round2(montoSolicitadoReal - nuevoMontoFacturado),
       );
 
       let nuevoEstadoFacturacion = "pendiente";
@@ -6898,7 +6929,7 @@ const asignar_factura_previa = async (req, res) => {
           toMoneyString(nuevoMontoPorFacturar),
           nuevoEstadoFacturacion,
           idSolicitud,
-        ]
+        ],
       );
 
       resultados.push({
@@ -6926,15 +6957,17 @@ const asignar_factura_previa = async (req, res) => {
       WHERE TRIM(id_factura) = TRIM(?);
     `;
 
-    const sumFacturaRows = getRows(await executeQuery(qSumFactura, [idFactura]));
+    const sumFacturaRows = getRows(
+      await executeQuery(qSumFactura, [idFactura]),
+    );
 
     const totalAsociadoFactura = round2(
-      sumFacturaRows?.[0]?.total_asociado_factura ?? 0
+      sumFacturaRows?.[0]?.total_asociado_factura ?? 0,
     );
 
     const nuevoSaldoFactura = Math.max(
       0,
-      round2(totalFactura - totalAsociadoFactura)
+      round2(totalFactura - totalAsociadoFactura),
     );
 
     await executeQuery(
@@ -6944,7 +6977,7 @@ const asignar_factura_previa = async (req, res) => {
       WHERE id_factura_proveedor = ?
       LIMIT 1;
       `,
-      [toMoneyString(nuevoSaldoFactura), idFactura]
+      [toMoneyString(nuevoSaldoFactura), idFactura],
     );
 
     return res.status(200).json({
@@ -6973,7 +7006,7 @@ const buscaruuid = async (req, res) => {
     const { uuid_factura } = req.body;
 
     const getRows = (result) =>
-      Array.isArray(result) ? result : result?.[0] ?? [];
+      Array.isArray(result) ? result : (result?.[0] ?? []);
 
     const safeString = (v) => String(v ?? "").trim();
 
@@ -7015,8 +7048,8 @@ const buscaruuid = async (req, res) => {
       FROM vw_pagos_facturas_proveedores_detalle v
       INNER JOIN solicitudes_pago_proveedor spp
         ON spp.id_solicitud_proveedor = v.id_solicitud
-      WHERE TRIM(v.uuid_factura) = TRIM(?)
-        AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
+      WHERE v.uuid_factura LIKE trim(?)
+		-- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
       ORDER BY v.id_relacion_pago_factura DESC;
     `;
 
@@ -7045,7 +7078,6 @@ const buscaruuid = async (req, res) => {
   }
 };
 
-
 module.exports = {
   devolverMontoFacturadoAFacturasPorCancelacion,
   createSolicitud,
@@ -7069,5 +7101,5 @@ module.exports = {
   Uuid,
   eliminarFactura,
   createComprobantePago,
-  buscaruuid
+  buscaruuid,
 };
