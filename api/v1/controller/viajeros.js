@@ -1,4 +1,4 @@
-const { executeSP } = require("../../../config/db");
+const { executeSP, executeQuery } = require("../../../config/db");
 const model = require("../model/viajeros");
 
 const create = async (req, res) => {
