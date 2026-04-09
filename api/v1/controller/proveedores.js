@@ -66,11 +66,11 @@ const getDetalles = async (req, res) => {
 
     const datos_fiscales = await executeQuery(
       `
-      SELECT df.*, r.id as id_relacion
+      SELECT df.*, r.id as id_relacion, r.active
       FROM proveedores_datos_fiscales_relacion r
       INNER JOIN proveedores_datos_fiscales df
         ON df.id = r.id_datos_fiscales
-      WHERE r.id_proveedor = ?;
+      WHERE r.id_proveedor = ? AND r.active = 1;
       `,
       [id_proveedor],
     );
@@ -93,6 +93,21 @@ const getCuentas = async (req, res) => {
       [id_proveedor],
     );
     res.status(200).json({ message: "", data: cuentas });
+  } catch (error) {
+    console.log(error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message, data: null, error });
+  }
+};
+const deleteDatosFiscales = async (req, res) => {
+  try {
+    const { id } = req.query;
+    await executeQuery(
+      `UPDATE proveedores_datos_fiscales_relacion SET active = 0 WHERE id = ?;`,
+      [id],
+    );
+    res.status(204).json({ message: "Eliminado con éxito", data: null });
   } catch (error) {
     console.log(error);
     res
@@ -726,6 +741,7 @@ module.exports = {
   getCuentas,
   updateProveedorCuenta,
   createProveedorCuenta,
+  deleteDatosFiscales,
   //Proveedor Type
   getProveedorType,
   //vuelo
