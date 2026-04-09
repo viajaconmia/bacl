@@ -4978,58 +4978,108 @@ const EditCampos = async (req, res) => {
     }
 
     if (updatesMap.has("monto_solicitado")) {
-      const nuevoMonto = Number(updatesMap.get("monto_solicitado"));
-      if (!Number.isFinite(nuevoMonto)) {
-        return res.status(400).json({
-          error: "monto_solicitado debe ser numérico",
-        });
-      }
+  const nuevoMonto = Number(updatesMap.get("monto_solicitado"));
+  if (!Number.isFinite(nuevoMonto)) {
+    return res.status(400).json({
+      error: "monto_solicitado debe ser numérico",
+    });
+  }
 
-      const qOld = `
-        SELECT monto_solicitado
-        FROM solicitudes_pago_proveedor
-        WHERE id_solicitud_proveedor = ?
+  const qOld = `
+    SELECT monto_solicitado
+    FROM solicitudes_pago_proveedor
+    WHERE id_solicitud_proveedor = ?
+    LIMIT 1
+  `;
+  const rOld = await executeQuery(qOld, [id_solicitud_proveedor]);
+
+  if (!rOld?.length) {
+    return res.status(404).json({
+      error: "No se encontró la solicitud",
+      id_solicitud_proveedor,
+    });
+  }
+
+  const montoOld = Number(rOld[0].monto_solicitado ?? 0);
+  const EPS = 0.01;
+
+  let ajusteResp = { ok: true, action: "NO_CHANGE" };
+
+  if (nuevoMonto > montoOld) {
+    ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
+      executeQuery,
+      id_solicitud_proveedor,
+      nuevoMonto,
+      EPS,
+    });
+    } else if (nuevoMonto < montoOld) {
+      ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
+        executeQuery,
+        executeSP2,
+        id_solicitud_proveedor,
+        nuevoMonto,
+        EPS,
+      });
+    }
+
+    // NUEVO: sincronizar bookings.costo_total
+    let bookingSyncInfo = null;
+
+    const qBookingRelacion = `
+      SELECT id_booking
+      FROM booking_solicitud
+      WHERE id_solicitud = ?
+      LIMIT 1
+    `;
+    const rBookingRelacion = await executeQuery(qBookingRelacion, [
+      id_solicitud_proveedor,
+    ]);
+
+    if (rBookingRelacion?.length) {
+      const id_booking = rBookingRelacion[0].id_booking;
+
+      const qUpdateBooking = `
+        UPDATE bookings
+        SET costo_total = ?
+        WHERE id_booking = ?
         LIMIT 1
       `;
-      const rOld = await executeQuery(qOld, [id_solicitud_proveedor]);
 
-      if (!rOld?.length) {
-        return res.status(404).json({
-          error: "No se encontró la solicitud",
-          id_solicitud_proveedor,
-        });
-      }
+      const rUpdateBooking = await executeQuery(qUpdateBooking, [
+        nuevoMonto,
+        id_booking,
+      ]);
 
-      const montoOld = Number(rOld[0].monto_solicitado ?? 0);
-      const EPS = 0.01;
+      const affectedBooking =
+        rUpdateBooking?.affectedRows ?? rUpdateBooking?.[0]?.affectedRows ?? 0;
 
-      let ajusteResp = { ok: true, action: "NO_CHANGE" };
-
-      if (nuevoMonto > montoOld) {
-        ajusteResp = await ajustarSolicitudPorAumentoMontoSolicitudDirecto({
-          executeQuery,
-          id_solicitud_proveedor,
-          nuevoMonto,
-          EPS,
-        });
-      } else if (nuevoMonto < montoOld) {
-        ajusteResp = await ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
-          executeQuery,
-          executeSP2,
-          id_solicitud_proveedor,
-          nuevoMonto,
-          EPS,
-        });
-      }
-
-      ajusteInfo = {
-        montoOld,
-        montoNew: nuevoMonto,
-        ajuste: ajusteResp,
+      bookingSyncInfo = {
+        ok: affectedBooking > 0,
+        action:
+          affectedBooking > 0
+            ? "BOOKING_COSTO_TOTAL_UPDATED"
+            : "BOOKING_FOUND_BUT_NOT_UPDATED",
+        id_booking,
+        costo_total: nuevoMonto,
       };
-
-      updatesMap.delete("monto_solicitado");
+    } else {
+      bookingSyncInfo = {
+        ok: false,
+        action: "BOOKING_RELATION_NOT_FOUND",
+        message:
+          "No se encontró relación en booking_solicitud para esta solicitud",
+      };
     }
+
+    ajusteInfo = {
+      montoOld,
+      montoNew: nuevoMonto,
+      ajuste: ajusteResp,
+      bookingSyncInfo,
+    };
+
+    updatesMap.delete("monto_solicitado");
+  }
 
     if (updatesMap.size > 0) {
       const setParts = [];
@@ -6172,8 +6222,8 @@ const Uuid = async (req, res) => {
     // -----------------------------
     const sql = `
       SELECT *
-      FROM facturas_pago_proveedor
-      WHERE uuid_cfdi = ?
+      FROM vw_saldos_facturas_proveedores
+      WHERE uuid_factura = ?
       LIMIT 1;
     `;
 
