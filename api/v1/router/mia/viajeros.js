@@ -11,17 +11,18 @@ router.post(
     "apellido_paterno",
   ]),
 
-  controller.create
+  controller.create,
 );
+router.post("/delete", controller.updateNombreViajero);
 router.get("/", controller.read);
 router.get("/get-all-viajeros", controller.readAllViajeros);
 router.get(
   "/get-viajeros-by-agente/:id_agente",
-  controller.get_viajeros_by_id_agente
+  controller.get_viajeros_by_id_agente,
 );
 router.get(
   "/get-primer-viajero-empresa/:id_agente",
-  controller.primeros_empresa_viajero
+  controller.primeros_empresa_viajero,
 );
 router.get("/id", controller.readById);
 router.put("/", controller.update);
@@ -29,7 +30,7 @@ router.delete("/", controller.deleteViajeroById);
 
 /* ESTE ES EL NUEVO QUE FUNCIONA EN ADMIN EN EL SERVICE DE VIAJEROS*/
 router.get("/by-agente", async (req, res) => {
-  console.log("🔽🔽🔽🔽🔽🔽🔽🔽🔽🤬🤬🤬🤬🤬🤬🤬",req.query)
+  console.log("🔽🔽🔽🔽🔽🔽🔽🔽🔽🤬🤬🤬🤬🤬🤬🤬", req.query);
   try {
     const { id } = req.query;
     const query = `
