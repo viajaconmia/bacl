@@ -1067,7 +1067,7 @@ const facturas = [];
 
 for (const facturaPayload of facturaDataRaw) {
   const idf = String(facturaPayload.id_factura || "");
-  const montoAsignado = Number(facturaPayload.monto_aplicado ?? 0);
+  const montoAsignado = Number(facturaPayload.monto_asignado ?? 0);
 
   if (!idf) {
     log("ERROR: factura sin id_factura", { facturaPayload });
@@ -1077,7 +1077,7 @@ for (const facturaPayload of facturaDataRaw) {
   }
 
   if (!Number.isFinite(montoAsignado) || montoAsignado <= 0) {
-    log("ERROR: monto_asignado inválido", { id_factura: idf, monto_aplicado });
+    log("ERROR: monto_asignado inválido", { id_factura: idf, monto_asignado });
     return res.status(400).json({
       error: `El monto_asignado de la factura ${idf} debe ser mayor a 0.`,
     });
