@@ -25,4 +25,7 @@ router.get("/proveedor", controller.getProveedorType);
 router.put("/vuelo", controller.updateProveedorVuelo);
 router.post("/vuelo", controller.createProveedorVuelo);
 
+//Datos fiscales
+// router.delete("/datos_fiscales", controller.deleteDatosFiscales);
+
 module.exports = router;

@@ -66,7 +66,7 @@ const getDetalles = async (req, res) => {
 
     const datos_fiscales = await executeQuery(
       `
-      SELECT df.*
+      SELECT df.*, r.id as id_relacion
       FROM proveedores_datos_fiscales_relacion r
       INNER JOIN proveedores_datos_fiscales df
         ON df.id = r.id_datos_fiscales
@@ -560,12 +560,10 @@ const getProveedorType = async (req, res) => {
     const { type, id } = req.query;
     if (!id) throw new Error("Falta el type o el id");
     if (!type)
-      return res
-        .status(200)
-        .json({
-          message: "",
-          data: { vuelos: null, renta_carro: null, vuelo: null },
-        });
+      return res.status(200).json({
+        message: "",
+        data: { vuelos: null, renta_carro: null, vuelo: null },
+      });
 
     const querys = {
       renta_carro: `SELECT is_con_chofer, is_sin_chofer, is_chofer_bilingue, notas_sin_chofer, notas_con_chofer, notas_chofer_bilingue, incidencia, notas_generales FROM proveedor_auto WHERE id_proveedor = ?`,
