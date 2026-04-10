@@ -22,6 +22,7 @@ router.get("/stripe-info", controller.getStripeInfo);
 router.get("/facturas_saldos", controller.facturas_pagos_y_saldos);
 router.get("/usados", controller.saldosUsados);
 router.get("/:id", controller.readSaldoByAgente);
+router.get("/saldo_usar/:id", controller.saldo_a_usar);
 // router.patch("/actualizar-saldo-a-favor", controller.update_saldo_by_id);
 
 module.exports = router;
