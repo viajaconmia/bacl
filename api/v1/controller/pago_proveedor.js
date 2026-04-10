@@ -4631,6 +4631,9 @@ const EditCampos = async (req, res) => {
       comentarios_cxp: "comentario_CXP",
       comentarios_CXP: "comentario_CXP",
       comentarios_ops: "comentarios",
+      comentarios_Ap: "comentario_AP",
+      comentarios_AP: "comentario_AP",
+      notas_internas: "notas_internas"
     };
 
     const ALLOWED_FIELDS = new Set([
@@ -4646,6 +4649,7 @@ const EditCampos = async (req, res) => {
       "estado_facturacion",
       "estatus_pagos",
       "id_proveedor",
+      "comentario_AP",
       "monto_facturado",
       "monto_por_facturar",
       "comentario_CXP",
@@ -4653,6 +4657,7 @@ const EditCampos = async (req, res) => {
       "is_ajuste",
       "comentario_ajuste",
       "pagado",
+      "notas_internas",
     ]);
 
     const NUMERIC_FIELDS = new Set([
@@ -5187,7 +5192,7 @@ const EditCampos = async (req, res) => {
 };
 
 const monto_factura = async (req, res) => {
-  try {
+  try { 
     const {
       id_solicitud,
       id_solicitud_proveedor,

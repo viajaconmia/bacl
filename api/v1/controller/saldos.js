@@ -226,6 +226,58 @@ LEFT JOIN vw_pagos_prepago_facturables AS v
   }
 };
 
+const saldo_a_usar = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const saldo = await executeQuery(
+      `SELECT
+  sf.id_agente,
+  a.nombre,
+  sf.id_saldos,
+  sf.fecha_creacion,
+  sf.saldo,
+  sf.monto,
+  sf.metodo_pago,
+  sf.fecha_pago,
+  sf.concepto,
+  sf.referencia,
+  sf.currency,
+  sf.tipo_tarjeta,
+  sf.ult_digits,
+  sf.comentario,
+  sf.link_stripe,
+  sf.is_facturable,
+  sf.is_wallet_credito,
+  sf.comprobante,
+  sf.activo,
+  sf.numero_autorizacion,
+  sf.banco_tarjeta,
+  COALESCE(v.monto_facturado, 0)     AS monto_facturado,
+  COALESCE(v.monto_por_facturar, 0)  AS monto_por_facturar
+FROM saldos_a_favor AS sf
+INNER JOIN agente_details AS a
+  ON a.id_agente = sf.id_agente
+LEFT JOIN vw_pagos_prepago_facturables AS v
+  ON v.raw_id = sf.id_saldos
+  where sf.id_agente = ? and sf.is_cancelado =0
+  ;`,
+      [id],
+    );
+    // console.log(saldo);
+    res
+      .status(200)
+      .json({ message: "Saldos obtenidos correctamente", data: saldo });
+  } catch (error) {
+    console.log(error);
+    res.status(error.status || 500).json({
+      error,
+      message:
+        error.message || "Error desconocido en servidor, read saldo by agente",
+      data: null,
+    });
+  }
+};
+
 const createNewSaldo = async (req, res) => {
   const { user } = req.session;
   const data = req.body;
@@ -448,4 +500,5 @@ module.exports = {
   getStripeInfo,
   facturas_pagos_y_saldos,
   saldosUsados,
+  saldo_a_usar,
 };
