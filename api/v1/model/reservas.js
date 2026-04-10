@@ -1400,7 +1400,7 @@ const getReservaAllFacturacion = async (filters = {}) => {
     ];
 
     const query = `
-      CALL sp_get_reserva_all_facturacion(
+      CALL sp_get_reserva_all_facturacion2(
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       );
     `;
