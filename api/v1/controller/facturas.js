@@ -1077,7 +1077,7 @@ for (const facturaPayload of facturaDataRaw) {
   }
 
   if (!Number.isFinite(montoAsignado) || montoAsignado <= 0) {
-    log("ERROR: monto_asignado inválido", { id_factura: idf, monto_asignado });
+    log("ERROR: monto_asignado inválido", { id_factura: idf, montoAsignado });
     return res.status(400).json({
       error: `El monto_asignado de la factura ${idf} debe ser mayor a 0.`,
     });
