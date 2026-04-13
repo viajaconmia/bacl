@@ -6640,7 +6640,50 @@ const asignar_factura_previa = async (req, res) => {
         message: "No se encontró la factura",
       });
     }
+const cacheRazonesSociales = new Map();
 
+const obtenerRazonesSocialesProveedor = async (idProveedor) => {
+  const id = safeString(idProveedor);
+  if (!id) return [];
+
+  if (cacheRazonesSociales.has(id)) {
+    return cacheRazonesSociales.get(id);
+  }
+
+  const qRazones = `
+    SELECT DISTINCT
+      UPPER(TRIM(pdfr.razon_social)) AS razon_social
+    FROM proveedores_datos_fiscales_relacion pdfr
+    WHERE TRIM(pdfr.id_proveedor) = TRIM(?)
+      AND TRIM(COALESCE(pdfr.razon_social, '')) <> '';
+  `;
+
+  const rows = getRows(await executeQuery(qRazones, [id]));
+  const razones = rows
+    .map((row) => safeString(row?.razon_social).toUpperCase())
+    .filter(Boolean);
+
+  cacheRazonesSociales.set(id, razones);
+  return razones;
+};
+
+const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
+  const idA = safeString(idProveedorA);
+  const idB = safeString(idProveedorB);
+
+  if (!idA || !idB) return false;
+  if (idA === idB) return true;
+
+  const [razonesA, razonesB] = await Promise.all([
+    obtenerRazonesSocialesProveedor(idA),
+    obtenerRazonesSocialesProveedor(idB),
+  ]);
+
+  if (!razonesA.length || !razonesB.length) return false;
+
+  const setB = new Set(razonesB);
+  return razonesA.some((razon) => setB.has(razon));
+};
     const factura = facturaRows[0];
     const idFactura = safeString(factura.id_factura);
     const uuidFacturaReal = safeString(factura.uuid_factura);
@@ -6672,23 +6715,36 @@ const asignar_factura_previa = async (req, res) => {
       });
     }
 
-    // 2) Validar proveedor contra factura
-    for (const item of proveedores) {
-      const idProveedorPayload = safeString(item?.id_proveedor);
+    // 2) Validar proveedor del payload contra factura por razón social
+for (const item of proveedores) {
+  const idProveedorPayload = safeString(item?.id_proveedor);
 
-      if (
-        idProveedorPayload &&
-        idProveedorFactura &&
-        idProveedorPayload !== idProveedorFactura
-      ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            `El proveedor del payload no coincide con la factura. ` +
-            `Factura=${idProveedorFactura}, Payload=${idProveedorPayload}`,
-        });
-      }
+  if (idProveedorPayload && idProveedorFactura) {
+    const coincideProveedor = await compartenRazonSocial(
+      idProveedorFactura,
+      idProveedorPayload
+    );
+
+    if (!coincideProveedor) {
+      const [razonesFactura, razonesPayload] = await Promise.all([
+        obtenerRazonesSocialesProveedor(idProveedorFactura),
+        obtenerRazonesSocialesProveedor(idProveedorPayload),
+      ]);
+
+      return res.status(400).json({
+        ok: false,
+        message:
+          "El proveedor del payload no coincide con la factura ni comparte una razón social fiscal.",
+        data: {
+          proveedor_factura: idProveedorFactura,
+          proveedor_payload: idProveedorPayload,
+          razones_sociales_factura: razonesFactura,
+          razones_sociales_payload: razonesPayload,
+        },
+      });
     }
+  }
+}
 
     // 3) Total solicitado en esta operación
     const totalOperacion = round2(
@@ -6776,20 +6832,30 @@ const asignar_factura_previa = async (req, res) => {
         solicitud.monto_por_facturar_actual ?? 0,
       );
 
-      if (
-        idProveedorFactura &&
-        idProveedorSolicitud &&
-        idProveedorFactura !== idProveedorSolicitud
-      ) {
-        return res.status(400).json({
-          ok: false,
-          message: `La solicitud ${idSolicitud} no pertenece al proveedor de la factura`,
-          data: {
-            proveedor_factura: idProveedorFactura,
-            proveedor_solicitud: idProveedorSolicitud,
-          },
-        });
-      }
+     if (idProveedorFactura && idProveedorSolicitud) {
+  const coincideProveedorSolicitud = await compartenRazonSocial(
+    idProveedorFactura,
+    idProveedorSolicitud
+  );
+
+  if (!coincideProveedorSolicitud) {
+    const [razonesFactura, razonesSolicitud] = await Promise.all([
+      obtenerRazonesSocialesProveedor(idProveedorFactura),
+      obtenerRazonesSocialesProveedor(idProveedorSolicitud),
+    ]);
+
+    return res.status(400).json({
+      ok: false,
+      message: `La solicitud ${idSolicitud} no pertenece al proveedor de la factura ni comparte una razón social fiscal.`,
+      data: {
+        proveedor_factura: idProveedorFactura,
+        proveedor_solicitud: idProveedorSolicitud,
+        razones_sociales_factura: razonesFactura,
+        razones_sociales_solicitud: razonesSolicitud,
+      },
+    });
+  }
+}
 
       const montoSolicitadoReal =
         montoSolicitadoDB > 0 ? montoSolicitadoDB : montoSolicitadoPayload;
@@ -7056,6 +7122,7 @@ const asignar_factura_previa = async (req, res) => {
     });
   }
 };
+
 const buscaruuid = async (req, res) => {
   try {
     const { uuid_factura } = req.body;
