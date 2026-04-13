@@ -348,20 +348,33 @@ router.put("/", async (req, res) => {
         const sectionData = dataToUpdate[sectionKey];
 
         for (const idValue in sectionData) {
-          // "emp-...", "via-...", "..."
-          const recordUpdates = sectionData[idValue];
-          const fieldsToUpdate = [];
-          const valuesToUpdate = [];
+  // "emp-...", "via-...", "..."
+  const recordUpdates = sectionData[idValue];
+  const normalizedUpdates = { ...recordUpdates };
+  const fieldsToUpdate = [];
+  const valuesToUpdate = [];
 
-          // Construir la parte SET de la consulta dinámicamente
-          for (const field in recordUpdates) {
+  // Si en agente viene tiene_credito_consolidado = 0, también forzar saldo = 0
+  if (
+    sectionKey === "agente" &&
+    Object.prototype.hasOwnProperty.call(
+      normalizedUpdates,
+      "tiene_credito_consolidado"
+    ) &&
+    String(normalizedUpdates.tiene_credito_consolidado) === "0"
+  ) {
+    normalizedUpdates.saldo = 0;
+  }
+
+  // Construir la parte SET de la consulta dinámicamente
+  for (const field in normalizedUpdates) {
             // Validar que el campo esté permitido para la tabla actual
             if (
               allowedColumns[tableName] &&
               allowedColumns[tableName].includes(field)
             ) {
               fieldsToUpdate.push(`${field} = ?`);
-              valuesToUpdate.push(recordUpdates[field]);
+              valuesToUpdate.push(normalizedUpdates[field]);
             } else {
               console.warn(
                 `Campo '${field}' no permitido o no definido para la tabla '${tableName}' y será ignorado para el ID '${idValue}'.`
