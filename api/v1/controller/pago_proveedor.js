@@ -7142,38 +7142,38 @@ const buscaruuid = async (req, res) => {
     }
 
     const qBuscar = `
-      SELECT
-        v.id_relacion_pago_factura,
-        v.id_pago_proveedor,
-        v.id_solicitud,
-        v.monto_solicitado,
-        v.id_factura,
-        v.monto_facturado,
-        v.uuid_factura,
-        v.url_pdf,
-        v.url_xml,
-        v.rfc_emisor,
-        v.id_agente,
-        v.total,
-        v.subtotal,
-        v.impuestos,
-        v.uso_cfdi,
-        v.moneda,
-        v.forma_pago,
-        v.metodo_pago,
-        v.total_moneda_O,
-        v.sub_total_moneda_O,
-        v.impuestos_moneda_O,
-        v.razon_social_fiscal,
-        v.id_booking,
-        v.codigo_confirmacion
-      FROM vw_pagos_facturas_proveedores_detalle v
-      INNER JOIN solicitudes_pago_proveedor spp
-        ON spp.id_solicitud_proveedor = v.id_solicitud
-      WHERE v.uuid_factura LIKE trim(?)
-      ORDER BY v.id_relacion_pago_factura DESC;
-      `;
-    // -- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
+  SELECT
+    v.id_relacion_pago_factura,
+    v.id_pago_proveedor,
+    v.id_solicitud,
+    v.monto_solicitado,
+    v.id_factura,
+    v.monto_facturado,
+    v.uuid_factura,
+    v.url_pdf,
+    v.url_xml,
+    v.rfc_emisor,
+    v.id_agente,
+    v.total,
+    v.subtotal,
+    v.impuestos,
+    v.uso_cfdi,
+    v.moneda,
+    v.forma_pago,
+    v.metodo_pago,
+    v.total_moneda_O,
+    v.sub_total_moneda_O,
+    v.impuestos_moneda_O,
+    v.razon_social_fiscal,
+    v.id_booking,
+    v.codigo_confirmacion
+  FROM vw_pagos_facturas_proveedores_detalle v
+  INNER JOIN solicitudes_pago_proveedor spp
+    ON spp.id_solicitud_proveedor = v.id_solicitud
+  WHERE v.uuid_factura LIKE TRIM(?)
+    AND NULLIF(TRIM(v.codigo_confirmacion), '') IS NOT NULL
+  ORDER BY v.id_relacion_pago_factura DESC;
+`;    // -- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
 
     const rows = getRows(await executeQuery(qBuscar, [uuid]));
 
