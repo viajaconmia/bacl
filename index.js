@@ -171,7 +171,54 @@ app.get("/probando", async (req, res) => {
       iteracion = 0,
       checkin,
       checkout,
+      id_hotel,
     } = req.query;
+
+    // =========================
+    // 🏨 BUSQUEDA DIRECTA POR ID
+    // =========================
+    if (id_hotel) {
+      const queryById = `
+        SELECT
+          vw.id_hotel as id,
+          vw.nombre AS hotel,
+          vw.precio_sencilla AS total,
+          ROUND(vw.precio_sencilla /1.16,2) AS subtotal,
+          IF(vw.desayuno_sencilla = 1, 1, 0) AS desayuno,
+          vw.direccion,
+          chp.zona,
+          chp.priority,
+          NULL AS distancia
+        FROM vw_hoteles_tarifas_completa vw
+        INNER JOIN client_hotel_priority chp
+          ON chp.id_hotel = vw.id_hotel
+        INNER JOIN hoteles h
+          ON h.id_hotel = vw.id_hotel
+        WHERE vw.id_hotel = ?
+        LIMIT 1
+      `;
+      const responseById = await executeQuery(queryById, [id_hotel]);
+
+      if (!responseById[0]) {
+        return res.status(404).json({
+          message: "no encontramos el hotel con ese id",
+          error: null,
+        });
+      }
+
+      const buffer = await generarPDFHotel({
+        ...responseById[0],
+        checkin,
+        checkout,
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=cotizacion_opcion1.pdf`,
+      );
+      return res.send(buffer);
+    }
 
     const where = [];
     const whereParams = [];

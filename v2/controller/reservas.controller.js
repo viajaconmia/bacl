@@ -14,7 +14,6 @@ const { Calculo, calcularNoches } = require("../../lib/utils/calculates");
 const { Formato } = require("../../lib/utils/formats");
 const controller = require("../../api/v1/controller/pago_proveedor");
 
-
 /* =========================
  * UTILIDADES / HELPERS
  * ========================= */
@@ -1974,17 +1973,19 @@ async function procesarSolicitudProveedorAlEditarReserva({
     };
   }
 
-  const idsSolicitud = [...new Set(
-    rowsBooking.map((row) => {
-      const id = Number(row?.id_solicitud);
-      if (!Number.isInteger(id) || id <= 0) {
-        throw new Error(
-          `booking_solicitud.id_solicitud inválido para id_booking=${id_booking}: ${row?.id_solicitud}`,
-        );
-      }
-      return id;
-    }),
-  )];
+  const idsSolicitud = [
+    ...new Set(
+      rowsBooking.map((row) => {
+        const id = Number(row?.id_solicitud);
+        if (!Number.isInteger(id) || id <= 0) {
+          throw new Error(
+            `booking_solicitud.id_solicitud inválido para id_booking=${id_booking}: ${row?.id_solicitud}`,
+          );
+        }
+        return id;
+      }),
+    ),
+  ];
 
   const resultados = [];
 
@@ -2101,7 +2102,9 @@ async function procesarSolicitudProveedorAlEditarReserva({
             ? `Código dispersión: ${pagoBase.codigo_dispersion}.`
             : null,
           pagoBase?.concepto ? `Concepto: ${pagoBase.concepto}.` : null,
-          pagoBase?.descripcion ? `Descripción: ${pagoBase.descripcion}.` : null,
+          pagoBase?.descripcion
+            ? `Descripción: ${pagoBase.descripcion}.`
+            : null,
           solicitud?.comentarios
             ? `Comentarios solicitud: ${solicitud.comentarios}`
             : null,
@@ -3293,7 +3296,9 @@ ${finanzas ? "GROUP BY vw.id_booking, f.id_factura" : ""}
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error });
+    res
+      .status(error.statusCode || error.status || 500)
+      .json({ error, message: error.message || "Error al obtener los datos" });
   }
 };
 
