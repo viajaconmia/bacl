@@ -186,12 +186,8 @@ app.get("/probando", async (req, res) => {
           ROUND(vw.precio_sencilla /1.16,2) AS subtotal,
           IF(vw.desayuno_sencilla = 1, 1, 0) AS desayuno,
           vw.direccion,
-          chp.zona,
-          chp.priority,
           NULL AS distancia
         FROM vw_hoteles_tarifas_completa vw
-        INNER JOIN client_hotel_priority chp
-          ON chp.id_hotel = vw.id_hotel
         INNER JOIN hoteles h
           ON h.id_hotel = vw.id_hotel
         WHERE vw.id_hotel = ?
