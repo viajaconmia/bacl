@@ -304,7 +304,9 @@ app.get("/probando", async (req, res) => {
     }
 
     // ⚠️ IMPORTANTE: agrupamos correctamente
-    const whereSQL = where.length ? `WHERE (${where.join(" OR ")})` : "";
+    const whereSQL = where.length
+      ? `WHERE chp.is_allowed = 1 AND (${where.join(" OR ")})`
+      : "";
 
     // =========================
     // 🔥 QUERY FINAL

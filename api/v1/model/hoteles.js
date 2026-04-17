@@ -104,8 +104,59 @@ const getHotelesWithTarifasClient = async () => {
   }
 };
 
+const insertarPrioridadHotel = async ({ id_agente, id_hotel, zona, priority }) => {
+  const hotelExiste = await executeQuery(
+    `SELECT id_hotel FROM hoteles WHERE id_hotel = ? LIMIT 1`,
+    [id_hotel]
+  );
+
+  if (!hotelExiste.length) {
+    const err = new Error("Hotel no encontrado");
+    err.code = "HOTEL_NOT_FOUND";
+    throw err;
+  }
+
+  await executeQuery(
+    `INSERT INTO client_hotel_priority (id_agente, id_hotel, zona, priority) VALUES (?, ?, ?, ?)`,
+    [id_agente, id_hotel, zona, priority]
+  );
+};
+
+const actualizarPrioridadHotel = async (id, campos) => {
+  const permitidos = ["zona", "priority", "is_allowed"];
+  const sets = [];
+  const params = [];
+
+  for (const campo of permitidos) {
+    if (campos[campo] !== undefined) {
+      sets.push(`${campo} = ?`);
+      params.push(campos[campo]);
+    }
+  }
+
+  if (!sets.length) {
+    const err = new Error("Sin campos para actualizar");
+    err.code = "NO_FIELDS";
+    throw err;
+  }
+
+  params.push(id);
+  const result = await executeQuery(
+    `UPDATE client_hotel_priority SET ${sets.join(", ")} WHERE id = ?`,
+    params
+  );
+
+  if (result.affectedRows === 0) {
+    const err = new Error("Registro no encontrado");
+    err.code = "NOT_FOUND";
+    throw err;
+  }
+};
+
 module.exports = {
   getHotelesWithCuartos,
   getHotelesWithTarifas,
   getHotelesWithTarifasClient,
+  insertarPrioridadHotel,
+  actualizarPrioridadHotel,
 };
