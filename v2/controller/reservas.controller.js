@@ -1075,7 +1075,6 @@ async function caso_base_tolerante({
   });
 }
 
-
 function money2(n) {
   // evita cosas tipo 199.99999997
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -1119,9 +1118,7 @@ function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
   return "TRANSFERENCIA";
 }
 
-
 const { randomUUID, randomBytes } = require("crypto");
-
 
 function money2(value) {
   const n = Number(value || 0);
@@ -1194,9 +1191,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
   }
 
   const id_hospedaje =
-    metadata?.id_relacion != null
-      ? String(metadata.id_hospedaje).trim()
-      : null;
+    metadata?.id_relacion != null ? String(metadata.id_hospedaje).trim() : null;
 
   const [rowsBooking] = await connection.execute(
     `
@@ -1393,7 +1388,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
             comentariosSaldo,
             id_solicitud_proveedor,
             new Date(),
-            id_booking
+            id_booking,
           ],
         );
       }
@@ -2574,6 +2569,7 @@ const cancelarBooking = async (req, res) => {
     });
     res.status(200).json({ message: "obtenido bien", data: response });
   } catch (error) {
+    console.log(error);
     res.status(error.status || error.statusCode || 500).json({
       message: error.message || "Error al obtenr los datos",
       error,
