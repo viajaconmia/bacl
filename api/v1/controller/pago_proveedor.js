@@ -258,6 +258,54 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
   };
 }
 
+const obteneSrReservaDesdeSolicitud = async (
+  executeQuery,
+  id_solicitud_proveedor,
+) => {
+  const qBookingReserva = `
+    SELECT id_booking
+    FROM booking_solicitud
+    WHERE id_solicitud = ?
+    LIMIT 1
+  `;
+  const rBookingReserva = await executeQuery(qBookingReserva, [
+    id_solicitud_proveedor,
+  ]);
+
+  return rBookingReserva?.length ? rBookingReserva[0].id_booking ?? null : null;
+};
+
+const obteneSrRelacionDesdeSolicitud = async (
+  executeQuery,
+  id_solicitud_proveedor,
+) => {
+  const qBookingReserva = `
+    SELECT id_booking
+    FROM booking_solicitud
+    WHERE id_solicitud = ?
+    LIMIT 1
+  `;
+
+  const q_relacion = `
+    SELECT id_relacion
+    FROM vw_new_reservas
+    WHERE id_booking = ?
+    LIMIT 1
+  `;
+
+  const rBookingReserva = await executeQuery(qBookingReserva, [
+    id_solicitud_proveedor,
+  ]);
+
+  if (!rBookingReserva?.length) return null;
+
+  const id_booking = rBookingReserva[0].id_booking;
+
+  const relacopm = await executeQuery(q_relacion, [id_booking]);
+
+  return relacopm?.length ? relacopm[0].id_relacion ?? null : null;
+};
+
 async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
   executeQuery, // idealmente txExecuteQuery
   executeSP2, // opcional
@@ -406,7 +454,8 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
       forma_pago_solicitada,
     );
 
-    const referencia = `AJUSTE_LOW|SOL:${id}`;
+    const referencia = `AJUSTE_LOW
+    }`;
     const motivo = "Ajuste por disminución de monto proveedor";
     const comentarios = [
       `Saldo quedó negativo: ${money2(saldo_new)}`,
@@ -418,12 +467,15 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
       .filter(Boolean)
       .join(" | ");
 
+      const reserva = await obteneSrReservaDesdeSolicitud(executeQuery, id);
+      const id_hospedaje = await obteneSrRelacionDesdeSolicitud(executeQuery, id);
+      
     const qInsSaldo = `
       INSERT INTO saldos
         (id_saldo, id_proveedor, monto, restante, forma_pago, fecha_procesamiento,
-         referencia, id_hospedaje, transaction_id, motivo, comentarios, estado)
+         referencia, id_hospedaje, transaction_id, motivo, comentarios, estado,reserva)
       VALUES
-        (?, ?, ?, ?, ?, NOW(), ?, NULL, ?, ?, ?, 'pending')
+        (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, 'pending')
     `;
 
     await executeQuery(qInsSaldo, [
@@ -433,9 +485,11 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
       credito,
       forma_pago_saldo,
       referencia,
+      id_hospedaje,
       transaction_id,
       motivo,
       comentarios,
+      reserva
     ]);
 
     return {
@@ -4393,7 +4447,8 @@ async function crearSaldoFavorPorMontoPagado({
     solicitudRow?.forma_pago_solicitada,
   );
 
-  const referencia = `EDITCAMPOS_CANCEL_PAGADA|SOL:${id_solicitud_proveedor}`;
+  const referencia = `EDITCAMPOS_CANCEL_PAGADA
+  _solicitud_proveedor}`;
   const motivo = "Saldo a favor por cancelación de solicitud pagada";
 
   const comentariosSaldo = [
@@ -4845,6 +4900,7 @@ const EditCampos = async (req, res) => {
           montoPagadoOverride: montoPagadoNeto,
           origen: "dispersion_pagos_proveedor",
           dispersionRows,
+          reserva,
         });
 
         updatesMap.set("estado_solicitud", nuevoEstadoSolicitado);
@@ -4940,6 +4996,7 @@ const EditCampos = async (req, res) => {
               comentarios: rowActual.comentarios,
             },
             usuario,
+            reserva,
           });
 
           if (!saldoResp?.ok) {
@@ -7252,3 +7309,7 @@ module.exports = {
   createComprobantePago,
   buscaruuid,
 };
+
+
+
+
