@@ -2642,8 +2642,8 @@ const CLAVE_ESTADOS = {
   guerrero: "GRO",
   hidalgo: "HGO",
   jalisco: "JAL",
-  mexico: "EDO MÉXD",
-  "estado de mexico": "EDO MÉXD",
+  mexico: "EDO MEXD",
+  "estado de mexico": "EDO MEXD",
   michoacan: "MICH",
   morelos: "MOR",
   nayarit: "NAY",
@@ -2738,7 +2738,7 @@ function getEstadoClaveFromLocation(locationStr) {
   // Mapea IATA -> CLAVE_ESTADO (pon aquí los que uses más)
   const AIRPORT_STATE_BY_IATA = {
     MEX: "CDMX",
-    NLU: "EDO MÉXD",
+    NLU: "EDO MEXD",
     MTY: "NL",
     QRO: "QRO",
     GDL: "JAL",
@@ -2803,26 +2803,28 @@ const agentes_report_fac = async (req, res) => {
   const { id_agente, fecha_desde, fecha_hasta } = req.query;
 
   try {
-    if (!id_agente) {
-      throw new ShortError("No se encontro el id de agente", 404);
-    }
+    const normalizeText = (v) => {
+      if (v === undefined || v === null) return "";
+      return String(v).trim();
+    };
 
-    // Normaliza fechas: si no vienen o vienen vacías -> null
     const normalizeDate = (v) => {
       if (v === undefined || v === null) return null;
       const s = String(v).trim();
-      return s.length ? s : null; // espera formato YYYY-MM-DD
+      return s.length ? s : null;
     };
 
+    // ✅ si no viene, se manda vacío
+    const p_id_agente = normalizeText(id_agente);
     const p_fecha_desde = normalizeDate(fecha_desde);
     const p_fecha_hasta = normalizeDate(fecha_hasta);
 
-    // ⚠️ Importante: ahora tu SP recibe 3 params (id_agente, fecha_desde, fecha_hasta)
     const facturas = await executeSP("sp_facturas_agente_reservas", [
-      id_agente,
+      p_id_agente,
       p_fecha_desde,
       p_fecha_hasta,
     ]);
+
     const facturasConClave = (Array.isArray(facturas) ? facturas : []).map(
       (row) => {
         const origen_estado = getEstadoClaveFromLocation(row.origen);
@@ -2833,27 +2835,20 @@ const agentes_report_fac = async (req, res) => {
           [origen_estado, destino_estado].filter(Boolean).join("-") ||
           estado_reserva_original;
 
-        // ❌ no mandar columnas redundantes
         const { origen, destino, ...rest } = row;
 
         return {
           ...rest,
-
-          // ✅ solo estas fechas sin hora
           chin: toYMD(row.chin),
           chout: toYMD(row.chout),
-
-          // ✅ confirmación base
           codigo_confirmacion_base: getCodigoConfirmacionBase(
-            row.codigo_confirmacion,
+            row.codigo_confirmacion
           ),
-
-          // ✅ estados
           origen_estado,
           destino_estado,
           estado_reserva: estado_reserva_ruta,
         };
-      },
+      }
     );
 
     res.status(200).json({

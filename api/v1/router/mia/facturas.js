@@ -39,11 +39,7 @@ router.post(
   controller.crearFacturaDesdeCargaPagos,
 );
 
-router.get(
-  "/agentes_report_fac",
-  // middleware.validateParams(["info_user", "cfdi"]),
-  controller.agentes_report_fac,
-);
+
 
 router.post("/CrearFacturaDesdeCarga", controller.crearFacturaDesdeCarga);
 router.post(
