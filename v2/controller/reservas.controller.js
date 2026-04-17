@@ -1369,7 +1369,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
               comentarios,
               estado,
               id_solicitud,
-              update_at
+              update_at,
               reserva
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?,?)
