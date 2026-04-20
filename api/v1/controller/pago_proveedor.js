@@ -6836,7 +6836,7 @@ for (const item of proveedores) {
       });
     }
 
-    if (totalOperacion - saldoFactura > EPS) {
+    if (totalOperacion - (saldoFactura?? 0) > EPS) {
       return res.status(400).json({
         ok: false,
         message: "El total a asignar excede el saldo disponible de la factura",
