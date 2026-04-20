@@ -11,6 +11,7 @@ const hospedaje = require("../mia/hospedaje");
 const impuestos = require("../mia/impuestos");
 const reservas = require("../mia/reservas");
 const datosFiscales = require("../mia/datosFiscales");
+const avisos_reservas = require("../mia/avisos_reservas");
 const pagos = require("../mia/pagos");
 const credito = require("../mia/credito");
 const stats = require("../mia/stats");
