@@ -25,3 +25,4 @@ router.get("/buscar_factura",controller.Uuid);
 router.delete("/edit_factura",controller.eliminarFactura);
 router.post("/buscaruuid",controller.buscaruuid);
 module.exports = router;
+
