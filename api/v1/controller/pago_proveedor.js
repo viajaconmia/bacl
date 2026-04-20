@@ -6776,7 +6776,6 @@ const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
     const totalFactura = round2(factura.total_factura ?? 0);
     const subtotalFactura = round2(factura.subtotal_factura ?? 0);
     const impuestosFactura = round2(factura.impuestos_factura ?? 0);
-    const saldoFactura = round2(factura.saldo_x_aplicar_items ?? 0);
 
     if (!idFactura) {
       return res.status(400).json({
@@ -6789,13 +6788,6 @@ const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
       return res.status(400).json({
         ok: false,
         message: "La factura tiene total inválido o igual a 0",
-      });
-    }
-
-    if (saldoFactura <= EPS) {
-      return res.status(400).json({
-        ok: false,
-        message: "La factura ya no tiene saldo_x_aplicar_items disponible",
       });
     }
 
@@ -6844,7 +6836,7 @@ for (const item of proveedores) {
       });
     }
 
-    if (totalOperacion - saldoFactura > EPS) {
+    if (totalOperacion - (saldoFactura?? 0) > EPS) {
       return res.status(400).json({
         ok: false,
         message: "El total a asignar excede el saldo disponible de la factura",
