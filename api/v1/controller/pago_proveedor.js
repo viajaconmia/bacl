@@ -6836,8 +6836,6 @@ for (const item of proveedores) {
       });
     }
 
-
-
     const resultados = [];
 
     const ratioSubtotal = totalFactura > 0 ? subtotalFactura / totalFactura : 0;
@@ -7175,8 +7173,6 @@ for (const item of proveedores) {
         uuid_cfdi: uuidFacturaReal,
         id_factura_proveedor: idFactura,
         total_factura: toMoneyString(totalFactura),
-        saldo_x_aplicar_items_anterior: toMoneyString(saldoFactura),
-        saldo_x_aplicar_items_actual: toMoneyString(nuevoSaldoFactura),
         asignaciones: resultados,
       },
     });
