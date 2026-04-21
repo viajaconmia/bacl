@@ -1135,6 +1135,35 @@ const agregarPrioridadHotel = async (req, res) => {
   }
 };
 
+const buscarHotelesParaCotizacion = async (req, res) => {
+  try {
+    const { ciudad, hotel, cp, lat, lng, checkin, checkout, id_hotel } = req.query;
+
+    const hoteles = await model.buscarHotelesConFiltros({ ciudad, hotel, cp, lat, lng, id_hotel });
+
+    if (!hoteles.length) {
+      return res.status(404).json({
+        message: id_hotel
+          ? "No se encontró el hotel con ese id"
+          : "No se encontraron hoteles con esos filtros",
+        data: null,
+        error: null,
+      });
+    }
+
+    return res.json({
+      message: "Hoteles encontrados",
+      data: hoteles.map((h) => ({ ...h, checkin, checkout })),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error al buscar hoteles",
+      data: null,
+      error,
+    });
+  }
+};
+
 module.exports = {
   readGroupByHotel,
   AgregarHotel,
@@ -1158,4 +1187,5 @@ module.exports = {
   obtenerHotelesPrioridad,
   agregarPrioridadHotel,
   actualizarPrioridadHotel,
+  buscarHotelesParaCotizacion,
 };

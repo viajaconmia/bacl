@@ -2491,11 +2491,12 @@ ${whereSQL}
 
   const sqlData = `
   SELECT 
-  ${finanzas ? `vw.*, f.uuid_factura, f.total as total_factura` : "vw.*"}
+  ${finanzas ? `vw.*, f.uuid_factura, f.total as total_factura, vp.uuid_factura as uuid_recibido, vp.monto_facturado as monto_facturado_factura_recibida` : "vw.*"}
   FROM vw_new_reservas vw
 ${
   finanzas
-    ? `LEFT JOIN items_facturas fi ON vw.id_relacion = fi.id_relacion LEFT JOIN facturas f ON fi.id_factura = f.id_factura`
+    ? `LEFT JOIN items_facturas fi ON vw.id_relacion = fi.id_relacion LEFT JOIN facturas f ON fi.id_factura = f.id_factura
+    left join vw_pagos_facturas_proveedores_detalle vp on vp.id_solicitud = vw.id_solicitud_proveedor`
     : ""
 }
 ${whereSQL}

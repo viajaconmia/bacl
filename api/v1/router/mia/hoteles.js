@@ -33,4 +33,5 @@ router.post("/Filtro-avanzado", controller.filtroAvanzado);
 router.get("/carga-imagen", controller.cargaImagen);
 router.post("/prioridad", controller.agregarPrioridadHotel);
 router.patch("/prioridad/:id", controller.actualizarPrioridadHotel);
+router.get("/cotizacion", controller.buscarHotelesParaCotizacion);
 module.exports = router;
