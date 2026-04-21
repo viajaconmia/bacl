@@ -30,6 +30,7 @@ const volaris = require("../mia/volaris");
 
 router.use("/auth", auth);
 router.use("/cart", cart);
+router.use("/avisos_reservas",avisos_reservas);
 router.use("/proveedores", proveedores);
 router.use("/aeropuerto", aeropuerto);
 router.use("/renta_carros", renta_carros);
