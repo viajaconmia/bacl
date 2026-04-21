@@ -6776,7 +6776,6 @@ const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
     const totalFactura = round2(factura.total_factura ?? 0);
     const subtotalFactura = round2(factura.subtotal_factura ?? 0);
     const impuestosFactura = round2(factura.impuestos_factura ?? 0);
-    const saldoFactura = round2(factura.saldo_x_aplicar_items ?? 0);
 
     if (!idFactura) {
       return res.status(400).json({
@@ -6789,13 +6788,6 @@ const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
       return res.status(400).json({
         ok: false,
         message: "La factura tiene total inválido o igual a 0",
-      });
-    }
-
-    if (saldoFactura <= EPS) {
-      return res.status(400).json({
-        ok: false,
-        message: "La factura ya no tiene saldo_x_aplicar_items disponible",
       });
     }
 
@@ -6841,17 +6833,6 @@ for (const item of proveedores) {
       return res.status(400).json({
         ok: false,
         message: "El total a asignar debe ser mayor a 0",
-      });
-    }
-
-    if (totalOperacion - saldoFactura > EPS) {
-      return res.status(400).json({
-        ok: false,
-        message: "El total a asignar excede el saldo disponible de la factura",
-        data: {
-          saldo_x_aplicar_items: toMoneyString(saldoFactura),
-          total_operacion: toMoneyString(totalOperacion),
-        },
       });
     }
 
@@ -7192,8 +7173,6 @@ for (const item of proveedores) {
         uuid_cfdi: uuidFacturaReal,
         id_factura_proveedor: idFactura,
         total_factura: toMoneyString(totalFactura),
-        saldo_x_aplicar_items_anterior: toMoneyString(saldoFactura),
-        saldo_x_aplicar_items_actual: toMoneyString(nuevoSaldoFactura),
         asignaciones: resultados,
       },
     });
