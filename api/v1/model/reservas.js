@@ -1358,7 +1358,6 @@ const getReservaAllFacturacion = async (filters = {}) => {
     const endDate = nullIfEmpty(filters.endDate);
     const filterType = nullIfEmpty(filters.filterType);
 
-    // Solo si vienen fechas, decidimos a qué campo aplicarlas
     if (startDate || endDate) {
       switch (filterType || "Creacion") {
         case "Creacion":
@@ -1390,7 +1389,7 @@ const getReservaAllFacturacion = async (filters = {}) => {
       nullIfEmpty(filters.hotel),
       nullIfEmpty(filters.nombre_agente ?? filters.client),
       nullIfEmpty(filters.correo),
-      nullIfEmpty(filters.rfc),
+      nullIfEmpty(filters.id_agente),
       created_start,
       created_end,
       check_in_start,
@@ -1408,11 +1407,13 @@ const getReservaAllFacturacion = async (filters = {}) => {
     const response = await executeQuery(query, params);
     const rows = Array.isArray(response?.[0]) ? response[0] : response;
 
-    return rows.map((row) => ({
-      ...row,
-      facturas_asociadas: parseJsonSafe(row.facturas_asociadas),
-      items: parseJsonSafe(row.items),
-    }));
+    return rows.map((row) => {
+      const { items_saldo, ...rest } = row;
+      return {
+        ...rest,
+        items: parseJsonSafe(items_saldo),
+      };
+    });
   } catch (error) {
     throw error;
   }
