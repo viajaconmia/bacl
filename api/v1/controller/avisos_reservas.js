@@ -1,15 +1,13 @@
 const { executeQuery } = require("../../../config/db");
 
-const read = async () => {
+const read = async (req, res) => {
   try {
-    const query = `select * from vw_new_reservas limit  50`;
-
-    // Ejecutar el procedimiento almacenado
+    const query = `SELECT * FROM vw_new_reservas LIMIT 50`;
     const response = await executeQuery(query);
-
-    return response; // Retorna el resultado de la ejecución
+    return res.status(200).json(response);
   } catch (error) {
-    throw error; // Lanza el error para que puedas manejarlo donde llames la función
+    console.error(error);
+    return res.status(500).json({ error: "Error al obtener avisos de reservas", details: error.message });
   }
 };
 
