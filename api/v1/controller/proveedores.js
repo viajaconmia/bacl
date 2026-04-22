@@ -158,8 +158,10 @@ const createProveedor = async (req, res) => {
     );
 
     const proveedores = await executeQuery(
-      `SELECT * FROM proveedores where type = ?`,
-      [type],
+      type
+        ? `SELECT * FROM proveedores WHERE type = ?`
+        : `SELECT * FROM proveedores WHERE type IS NULL`,
+      type ? [type] : [],
     );
     res.status(200).json({ message: "Creado con exito", data: proveedores });
   } catch (error) {
