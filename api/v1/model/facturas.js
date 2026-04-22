@@ -378,7 +378,7 @@ await conn.execute(insertFacturaQuery, [
   total,                          // saldo
   id_user,                        // id_agente
   info_user?.fecha_vencimiento ?? null, // fecha_vencimiento
-]);
+].map(i=> i == undefined? null : i));
 
         // 4 NUEVO: Insertar en items factura
         // 4 NUEVO: validar monto disponible por item antes de insertar en items_facturas
