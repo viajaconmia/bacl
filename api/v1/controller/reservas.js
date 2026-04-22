@@ -1538,7 +1538,7 @@ const readAll = async (req, res) => {
 const readAllFacturacion = async (req, res) => {
   try {
     const filters = req.query || {};
-    console.log(filters)
+    console.log(filters);
 
     const data = await model.getReservaAllFacturacion(filters);
 
@@ -1800,7 +1800,7 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
         .json({ message: "Reservas encontradas", data: reservas });
     }
   } catch (error) {
-    console.error(error); 
+    console.error(error);
     return res
       .status(500)
       .json({ error: "Internal Server Error", details: error.message });
@@ -1874,7 +1874,8 @@ const verificarEmpalmeHotel = async (req, res) => {
   const fechaValida = !isNaN(Date.parse(fecha));
   if (!fechaValida) {
     return res.status(400).json({
-      message: "El parámetro 'fecha' no es una fecha válida (usa formato YYYY-MM-DD)",
+      message:
+        "El parámetro 'fecha' no es una fecha válida (usa formato YYYY-MM-DD)",
       data: null,
       error: null,
     });
@@ -1887,11 +1888,11 @@ const verificarEmpalmeHotel = async (req, res) => {
       `SELECT COUNT(*) as total
        FROM vw_new_reservas
        WHERE type = 'hotel'
-         AND LOWER(viajero) LIKE LOWER(?)
-         AND LOWER(estado) != 'cancelada'
+         AND viajero LIKE ?
+         AND LOWER(estado) != 'Cancelada'
          AND DATE(?) >= check_in
          AND DATE(?) < check_out`,
-      [patron, fecha, fecha]
+      [patron, fecha, fecha],
     );
 
     const existe = result[0].total > 0;
