@@ -9,7 +9,7 @@ const read = async (req, res) => {
     console.error(error);
     return res.status(500).json({ error: "Error al obtener avisos de reservas", details: error.message });
   }
-};
+}; 
 
 module.exports = {
     read
