@@ -4900,7 +4900,6 @@ const EditCampos = async (req, res) => {
           montoPagadoOverride: montoPagadoNeto,
           origen: "dispersion_pagos_proveedor",
           dispersionRows,
-          reserva,
         });
 
         updatesMap.set("estado_solicitud", nuevoEstadoSolicitado);
@@ -4996,7 +4995,6 @@ const EditCampos = async (req, res) => {
               comentarios: rowActual.comentarios,
             },
             usuario,
-            reserva,
           });
 
           if (!saldoResp?.ok) {
