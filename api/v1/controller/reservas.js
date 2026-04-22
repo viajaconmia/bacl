@@ -1887,10 +1887,9 @@ const verificarEmpalmeHotel = async (req, res) => {
     const result = await executeQuery(
       `SELECT COUNT(*) as total
 FROM vw_new_reservas
-WHERE type = 'hotel'
-  AND CONVERT(viajero USING utf8mb4) COLLATE utf8mb4_unicode_ci 
-      LIKE CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci
-  AND LOWER(CONVERT(estado USING utf8mb4)) COLLATE utf8mb4_unicode_ci != 'cancelada'
+WHERE CONVERT(type USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = 'hotel'
+  AND CONVERT(viajero USING utf8mb4) COLLATE utf8mb4_0900_ai_ci LIKE CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
+  AND LOWER(CONVERT(estado USING utf8mb4)) COLLATE utf8mb4_0900_ai_ci != 'cancelada'
   AND DATE(?) >= check_in
   AND DATE(?) < check_out;`,
       [patron, fecha, fecha],
