@@ -11,6 +11,7 @@ const hospedaje = require("../mia/hospedaje");
 const impuestos = require("../mia/impuestos");
 const reservas = require("../mia/reservas");
 const datosFiscales = require("../mia/datosFiscales");
+const avisos_reservas = require("../mia/avisos_reservas");
 const pagos = require("../mia/pagos");
 const credito = require("../mia/credito");
 const stats = require("../mia/stats");
@@ -30,6 +31,7 @@ const cotizaciones = require("../mia/cotizaciones");
 
 router.use("/auth", auth);
 router.use("/cart", cart);
+router.use("/avisos_reservas",avisos_reservas);
 router.use("/proveedores", proveedores);
 router.use("/aeropuerto", aeropuerto);
 router.use("/renta_carros", renta_carros);
