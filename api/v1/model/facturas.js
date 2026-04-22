@@ -193,7 +193,6 @@ function pickFirst(obj, keys) {
   return null;
 }
 
-
 const createFacturaCombinada = async (req, { cfdi, info_user }) => {
   req.context.logStep(
     "LLgando al model de crear factura combinada con los datos:",
@@ -263,46 +262,59 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
         console.log("responses", info_user);
 
         const receiver = cfdi?.Receiver || {};
-const items = cfdi?.Items || [];
+        const items = cfdi?.Items || [];
 
-const total = items.reduce((a, it) => a + num(it?.Total), 0);
-const subtotal = items.reduce((a, it) => a + num(it?.Subtotal), 0);
-const impuestos = items.reduce((a, it) => {
-  const t = (it?.Taxes || []).reduce((b, tx) => b + num(tx?.Total), 0);
-  return a + t;
-}, 0);
+        const total = items.reduce((a, it) => a + num(it?.Total), 0);
+        const subtotal = items.reduce((a, it) => a + num(it?.Subtotal), 0);
+        const impuestos = items.reduce((a, it) => {
+          const t = (it?.Taxes || []).reduce((b, tx) => b + num(tx?.Total), 0);
+          return a + t;
+        }, 0);
 
-const iva16 = sumTaxesByRate(items, 0.16);
-const iva8  = sumTaxesByRate(items, 0.08);
+        const iva16 = sumTaxesByRate(items, 0.16);
+        const iva8 = sumTaxesByRate(items, 0.08);
 
+        const taxStamp = response_factura?.data?.Complement?.TaxStamp || {};
 
-const taxStamp = response_factura?.data?.Complement?.TaxStamp || {};
+        // Facturama suele traer algo tipo Timestamp/Date/etc (depende del SDK/versión)
+        const fechaTimbradoRaw = pickFirst(taxStamp, [
+          "Timestamp",
+          "Date",
+          "FechaTimbrado",
+          "DateTime",
+          "CreatedAt",
+        ]);
 
-// Facturama suele traer algo tipo Timestamp/Date/etc (depende del SDK/versión)
-const fechaTimbradoRaw = pickFirst(taxStamp, [
-  "Timestamp",
-  "Date",
-  "FechaTimbrado",
-  "DateTime",
-  "CreatedAt",
-]);
+        const cfdiVersion = pickFirst(response_factura?.data, [
+          "CfdiVersion",
+          "Version",
+          "CFDIversion",
+        ]);
 
-const cfdiVersion = pickFirst(response_factura?.data, ["CfdiVersion", "Version", "CFDIversion"]);
+        const estadoSat = pickFirst(response_factura?.data, [
+          "Status",
+          "EstadoSat",
+          "SatStatus",
+        ]);
 
-const estadoSat = pickFirst(response_factura?.data, ["Status", "EstadoSat", "SatStatus"]);
+        const issuer =
+          response_factura?.data?.Issuer ||
+          response_factura?.data?.Emisor ||
+          response_factura?.data?.Emitter ||
+          {};
 
-const issuer = response_factura?.data?.Issuer || response_factura?.data?.Emisor || response_factura?.data?.Emitter || {};
+        const fechaEmision = cfdi?.Date ? new Date(cfdi.Date) : new Date();
+        const fechaTimbrado = fechaTimbradoRaw
+          ? new Date(fechaTimbradoRaw)
+          : null;
 
-const fechaEmision = cfdi?.Date ? new Date(cfdi.Date) : new Date();
-const fechaTimbrado = fechaTimbradoRaw ? new Date(fechaTimbradoRaw) : null;
+        // 👇 Guarda conceptos + observations en un solo longtext JSON
+        const conceptosJson = JSON.stringify({
+          observations: cfdi?.Observations ?? null,
+          items: cfdi?.Items ?? [],
+        });
 
-// 👇 Guarda conceptos + observations en un solo longtext JSON
-const conceptosJson = JSON.stringify({
-  observations: cfdi?.Observations ?? null,
-  items: cfdi?.Items ?? [],
-});
-
-const insertFacturaQuery = `
+        const insertFacturaQuery = `
   INSERT INTO facturas (
     id_factura,
     fecha_emision,
@@ -342,59 +354,59 @@ const insertFacturaQuery = `
   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
 `;
 
-await conn.execute(insertFacturaQuery, [
-  id_factura,                     // id_factura
-  fechaEmision,                   // fecha_emision (DATE)
-  fechaTimbrado,                  // fecha_timbrado (DATETIME)
-  cfdi?.Serie ?? null,            // serie
-  cfdi?.Folio != null ? String(cfdi.Folio) : null, // folio
-  "Confirmada",                   // estado
-  estadoSat ?? null,              // estado_sat
-  cfdiVersion ?? null,            // cfdi_version
-  cfdi?.CfdiType ?? null,         // cfdi_tipo
-  id_user,                        // usuario_creador
-  total,                          // total
-  subtotal,                       // subtotal
-  iva16 || null,                  // iva_16
-  iva8 || null,                   // iva_8
-  impuestos,                      // impuestos
-  receiver?.FiscalRegime ?? null, // regimen_fiscal_receptor
-  receiver?.TaxZipCode ?? null,   // domicilio_fiscal_receptor
-  response_factura?.data?.Id ?? null, // id_facturama
-  datos_empresa?.rfc ?? receiver?.Rfc ?? null, // rfc (tu columna legacy)
-  datos_empresa?.id_empresa ?? null, // id_empresa
-  taxStamp?.Uuid ?? response_factura?.data?.Complement?.TaxStamp?.Uuid, // uuid_factura (NOT NULL)
-  issuer?.Rfc ?? null,            // rfc_emisor
-  issuer?.Name ?? null,           // nombre_emisor
-  cfdi?.ExpeditionPlace ?? null,  // lugar_expedicion
-  receiver?.Rfc ?? null,          // rfc_receptor
-  receiver?.Name ? String(receiver.Name).trim() : null, // nombre_receptor
-  receiver?.CfdiUse ?? null,      // uso_cfdi
-  cfdi?.Currency ?? null,         // moneda
-  cfdi?.PaymentForm ?? null,      // forma_pago
-  cfdi?.PaymentMethod ?? null,    // metodo_pago
-  null,                           // condicion_pago (no viene en tu objeto)
-  conceptosJson,                  // conceptos (longtext)
-  total,                          // saldo
-  id_user,                        // id_agente
-  info_user?.fecha_vencimiento ?? null, // fecha_vencimiento
-]);
+        await conn.execute(insertFacturaQuery, [
+          id_factura, // id_factura
+          fechaEmision, // fecha_emision (DATE)
+          fechaTimbrado, // fecha_timbrado (DATETIME)
+          cfdi?.Serie ?? null, // serie
+          cfdi?.Folio != null ? String(cfdi.Folio) : null, // folio
+          "Confirmada", // estado
+          estadoSat ?? null, // estado_sat
+          cfdiVersion ?? null, // cfdi_version
+          cfdi?.CfdiType ?? null, // cfdi_tipo
+          id_user, // usuario_creador
+          total, // total
+          subtotal, // subtotal
+          iva16 || null, // iva_16
+          iva8 || null, // iva_8
+          impuestos, // impuestos
+          receiver?.FiscalRegime ?? null, // regimen_fiscal_receptor
+          receiver?.TaxZipCode ?? null, // domicilio_fiscal_receptor
+          response_factura?.data?.Id ?? null, // id_facturama
+          datos_empresa?.rfc ?? receiver?.Rfc ?? null, // rfc (tu columna legacy)
+          datos_empresa?.id_empresa ?? null, // id_empresa
+          taxStamp?.Uuid ?? response_factura?.data?.Complement?.TaxStamp?.Uuid, // uuid_factura (NOT NULL)
+          issuer?.Rfc ?? null, // rfc_emisor
+          issuer?.Name ?? null, // nombre_emisor
+          cfdi?.ExpeditionPlace ?? null, // lugar_expedicion
+          receiver?.Rfc ?? null, // rfc_receptor
+          receiver?.Name ? String(receiver.Name).trim() : null, // nombre_receptor
+          receiver?.CfdiUse ?? null, // uso_cfdi
+          cfdi?.Currency ?? null, // moneda
+          cfdi?.PaymentForm ?? null, // forma_pago
+          cfdi?.PaymentMethod ?? null, // metodo_pago
+          null, // condicion_pago (no viene en tu objeto)
+          conceptosJson, // conceptos (longtext)
+          total, // saldo
+          id_user, // id_agente
+          info_user?.fecha_vencimiento ?? null, // fecha_vencimiento
+        ]);
 
         // 4 NUEVO: Insertar en items factura
         // 4 NUEVO: validar monto disponible por item antes de insertar en items_facturas
-const round2 = (value) => Number((Number(value) || 0).toFixed(2));
+        const round2 = (value) => Number((Number(value) || 0).toFixed(2));
 
-const insertItemsFacturasQuery = `
+        const insertItemsFacturasQuery = `
   INSERT INTO items_facturas (id_factura, id_relacion, id_item, monto)
   VALUES (?, ?, ?, ?);
 `;
 
-// ids a consultar/bloquear
-const itemIds = itemsArray.map((it) => it.id_item);
+        // ids a consultar/bloquear
+        const itemIds = itemsArray.map((it) => it.id_item);
 
-// Traer items y bloquearlos dentro de la transacción
-const [itemsDB] = await conn.execute(
-  `
+        // Traer items y bloquearlos dentro de la transacción
+        const [itemsDB] = await conn.execute(
+          `
     SELECT
       id_item,
       id_relacion,
@@ -404,76 +416,78 @@ const [itemsDB] = await conn.execute(
     WHERE id_item IN (${itemIds.map(() => "?").join(",")})
     FOR UPDATE
   `,
-  itemIds,
-);
+          itemIds,
+        );
 
-const itemsMap = new Map(itemsDB.map((row) => [row.id_item, row]));
+        const itemsMap = new Map(itemsDB.map((row) => [row.id_item, row]));
 
-const detalleItemsAsociados = [];
-const warningsItems = [];
+        const detalleItemsAsociados = [];
+        const warningsItems = [];
 
-for (const payloadItem of itemsArray) {
-  const itemDB = itemsMap.get(payloadItem.id_item);
+        for (const payloadItem of itemsArray) {
+          const itemDB = itemsMap.get(payloadItem.id_item);
 
-  if (!itemDB) {
-    throw new Error(`El item ${payloadItem.id_item} no existe en la tabla items`);
-  }
+          if (!itemDB) {
+            throw new Error(
+              `El item ${payloadItem.id_item} no existe en la tabla items`,
+            );
+          }
 
-  const montoSolicitado = round2(payloadItem.monto);
-  const montoDisponible = round2(
-    Number(itemDB.total) - Number(itemDB.monto_facturado)
-  );
+          const montoSolicitado = round2(payloadItem.monto);
+          const montoDisponible = round2(
+            Number(itemDB.total) - Number(itemDB.monto_facturado),
+          );
 
-  const montoAsociar = round2(
-    Math.max(0, Math.min(montoSolicitado, montoDisponible))
-  );
+          const montoAsociar = round2(
+            Math.max(0, Math.min(montoSolicitado, montoDisponible)),
+          );
 
-  const diferencia = round2(montoSolicitado - montoAsociar);
+          const diferencia = round2(montoSolicitado - montoAsociar);
 
-  // Si no hay disponible, no insertes nada
-  if (montoAsociar > 0) {
-    await conn.execute(insertItemsFacturasQuery, [
-      id_factura,
-      payloadItem.id_relacion || itemDB.id_relacion,
-      payloadItem.id_item,
-      montoAsociar,
-    ]);
+          // Si no hay disponible, no insertes nada
+          if (montoAsociar > 0) {
+            await conn.execute(insertItemsFacturasQuery, [
+              id_factura,
+              payloadItem.id_relacion || itemDB.id_relacion,
+              payloadItem.id_item,
+              montoAsociar,
+            ]);
 
-    // IMPORTANTE:
-    // solo deja esto si items.monto_facturado es la fuente real que usas para validar después
-    await conn.execute(
-      `
+            // IMPORTANTE:
+            // solo deja esto si items.monto_facturado es la fuente real que usas para validar después
+            await conn.execute(
+              `
         UPDATE items
         SET monto_facturado = COALESCE(monto_facturado, 0) + ?
         WHERE id_item = ?
       `,
-      [montoAsociar, payloadItem.id_item],
-    );
-  }
+              [montoAsociar, payloadItem.id_item],
+            );
+          }
 
-  const asociadoConMenorCantidad = montoAsociar < montoSolicitado;
+          const asociadoConMenorCantidad = montoAsociar < montoSolicitado;
 
-  const detalle = {
-    id_item: payloadItem.id_item,
-    id_relacion: payloadItem.id_relacion || itemDB.id_relacion,
-    monto_solicitado: montoSolicitado,
-    monto_disponible: montoDisponible,
-    monto_asociado: montoAsociar,
-    diferencia,
-    mensaje:
-      montoAsociar === 0
-        ? "item sin monto disponible para asociar"
-        : asociadoConMenorCantidad
-        ? "item asociado con menor cantidad"
-        : "item asociado correctamente",
-  };
+          const detalle = {
+            id_item: payloadItem.id_item,
+            id_relacion: payloadItem.id_relacion || itemDB.id_relacion,
+            monto_solicitado: montoSolicitado,
+            monto_disponible: montoDisponible,
+            monto_asociado: montoAsociar,
+            diferencia,
+            mensaje:
+              montoAsociar === 0
+                ? "item sin monto disponible para asociar"
+                : asociadoConMenorCantidad
+                  ? "item asociado con menor cantidad"
+                  : "item asociado correctamente",
+          };
 
-  detalleItemsAsociados.push(detalle);
+          detalleItemsAsociados.push(detalle);
 
-  if (asociadoConMenorCantidad || montoAsociar === 0) {
-    warningsItems.push(detalle);
-  }
-}
+          if (asociadoConMenorCantidad || montoAsociar === 0) {
+            warningsItems.push(detalle);
+          }
+        }
 
         const insertPagosSql = `
   INSERT INTO facturas_pagos_y_saldos (
@@ -498,11 +512,11 @@ for (const payloadItem of itemsArray) {
         console.log("resultado pagos", resultados_pagos);
 
         return {
-  id_factura,
-  ...response_factura,
-  items_asociados: detalleItemsAsociados,
-  warnings_items: warningsItems,
-};
+          id_factura,
+          ...response_factura,
+          items_asociados: detalleItemsAsociados,
+          warnings_items: warningsItems,
+        };
       } catch (error) {
         console.log(error.response);
         console.log(error);
@@ -924,7 +938,7 @@ USING (uuid_factura, fecha_emision, total, subtotal, impuestos, rfc)
 -- (Opcional) si además quieres limitar a saldo = 0 o NULL:
 -- WHERE vf.saldo = 0 OR vf.saldo IS NULL
 ORDER BY vf.uuid_factura, vf.fecha_emision;`;
-    let  response = await executeQuery(query, []);
+    let response = await executeQuery(query, []);
 
     return response;
   } catch (error) {
@@ -1357,5 +1371,5 @@ module.exports = {
   crearFacturaEmi,
   facturasPagoPendiente,
   getResumenFacturasCxC,
-  getDetalleFacturasCxC
+  getDetalleFacturasCxC,
 };
