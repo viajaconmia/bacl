@@ -59,20 +59,39 @@ const norificaciones = async (req, res) => {
 
 const prefacturar = async (req, res) => {
   try {
+    const { user } = req.session;
+    const id_user = user.id;
     const { ids } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({
-        error: "El payload debe traer un arreglo 'ids' con al menos un id",
+        error: "El payload debe traer un arreglo 'ids' con al menos un registro",
       });
     }
 
     const resultados = [];
 
-    for (const id of ids) {
-      const response = await executeSP2("sp_prefacturar", [id]);
+    for (const item of ids) {
+      const { id_relacion, id_booking } = item;
+
+      if (!id_relacion || !id_booking) {
+        resultados.push({
+          id_relacion,
+          id_booking,
+          error: "Faltan id_relacion o id_booking",
+        });
+        continue;
+      }
+
+      const response = await executeSP2("sp_prefacturar", [
+        id_relacion,
+        id_booking,
+        id_user,
+      ]);
+
       resultados.push({
-        id,
+        id_relacion,
+        id_booking,
         response,
       });
     }
@@ -89,4 +108,5 @@ const prefacturar = async (req, res) => {
     });
   }
 };
+
 module.exports = { read, enviadas, norificaciones,prefacturar };
