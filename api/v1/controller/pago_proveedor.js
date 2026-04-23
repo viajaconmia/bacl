@@ -272,7 +272,9 @@ const obteneSrReservaDesdeSolicitud = async (
     id_solicitud_proveedor,
   ]);
 
-  return rBookingReserva?.length ? rBookingReserva[0].id_booking ?? null : null;
+  return rBookingReserva?.length
+    ? (rBookingReserva[0].id_booking ?? null)
+    : null;
 };
 
 const obteneSrRelacionDesdeSolicitud = async (
@@ -303,7 +305,7 @@ const obteneSrRelacionDesdeSolicitud = async (
 
   const relacopm = await executeQuery(q_relacion, [id_booking]);
 
-  return relacopm?.length ? relacopm[0].id_relacion ?? null : null;
+  return relacopm?.length ? (relacopm[0].id_relacion ?? null) : null;
 };
 
 async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
@@ -467,9 +469,9 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
       .filter(Boolean)
       .join(" | ");
 
-      const reserva = await obteneSrReservaDesdeSolicitud(executeQuery, id);
-      const id_hospedaje = await obteneSrRelacionDesdeSolicitud(executeQuery, id);
-      
+    const reserva = await obteneSrReservaDesdeSolicitud(executeQuery, id);
+    const id_hospedaje = await obteneSrRelacionDesdeSolicitud(executeQuery, id);
+
     const qInsSaldo = `
       INSERT INTO saldos
         (id_saldo, id_proveedor, monto, restante, forma_pago, fecha_procesamiento,
@@ -489,7 +491,7 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
       transaction_id,
       motivo,
       comentarios,
-      reserva
+      reserva,
     ]);
 
     return {
@@ -3640,10 +3642,6 @@ const getSolicitudes2 = async (req, res) => {
 
       comentarios: clean(req.query.comentarios),
       comentario_CXP: clean(req.query.comentario_CXP),
-
-      uuid_factura: clean(req.query.uuid_factura),
-      pag: Number(req.query.pag ?? 1) || 1,
-      limite: Number(req.query.limite ?? 50) || 50,
     };
 
     const spRows = await executeSP(
@@ -3674,10 +3672,6 @@ const getSolicitudes2 = async (req, res) => {
 
         filters.comentarios,
         filters.comentario_CXP,
-
-        filters.uuid_factura,
-        filters.pag,
-        filters.limite,
       ],
     );
 
@@ -3811,54 +3805,6 @@ const getSolicitudes2 = async (req, res) => {
       };
     });
 
-    // Buckear por forma_pago_solicitada y estado_solicitud
-    const assignBucket = (row) => {
-      const forma  = String(row?.forma_pago_solicitada ?? "").toLowerCase().trim();
-      const estado = String(row?.solicitud_proveedor?.estado_solicitud ?? row?.estado_solicitud ?? "").toUpperCase().trim();
-      const estatus = String(row?.estatus_pagos ?? "").toLowerCase().trim();
-
-      if (
-        estatus === "pagado" ||
-        estado === "PAGADO TARJETA" ||
-        estado === "PAGADO TRANSFERENCIA" ||
-        estado === "PAGADO LINK"
-      ) return "pagada";
-
-      if (estado === "CANCELADA") return "canceladas";
-
-      if (
-        estado === "DISPERSION" ||
-        estado === "TRANSFERENCIA_SOLICITADA" ||
-        estado === "CUPON ENVIADO" ||
-        estado.startsWith("NOTIF")
-      ) return "notificados";
-
-      if (estado === "CARTA_ENVIADA") return "carta_enviada";
-
-      if (forma === "credit" || estado === "SOLICITADA") return "carta_garantia";
-
-      if (forma === "transfer") return "spei_solicitado";
-      if (forma === "card")     return "pago_tdc";
-      if (forma === "link")     return "pago_link";
-
-      return "spei_solicitado";
-    };
-
-    const buckets = {
-      spei_solicitado:  [],
-      pago_tdc:         [],
-      pago_link:        [],
-      carta_enviada:    [],
-      carta_garantia:   [],
-      pagada:           [],
-      notificados:      [],
-      canceladas:       [],
-    };
-
-    for (const row of data) {
-      buckets[assignBucket(row)].push(row);
-    }
-
     res.set({
       "Cache-Control": "no-store",
       Pragma: "no-cache",
@@ -3869,7 +3815,7 @@ const getSolicitudes2 = async (req, res) => {
       return res.status(200).json({
         ok: true,
         message: "Registros obtenidos con exito",
-        data: buckets,
+        data,
         meta: {
           filters,
           counts: {
@@ -3884,7 +3830,7 @@ const getSolicitudes2 = async (req, res) => {
     return res.status(200).json({
       ok: true,
       message: "Registros obtenidos con exito",
-      data: buckets,
+      data,
     });
   } catch (error) {
     console.error(error);
@@ -5180,7 +5126,9 @@ const EditCampos = async (req, res) => {
         ]);
 
         const affectedBooking =
-          rUpdateBooking?.affectedRows ?? rUpdateBooking?.[0]?.affectedRows ?? 0;
+          rUpdateBooking?.affectedRows ??
+          rUpdateBooking?.[0]?.affectedRows ??
+          0;
 
         bookingSyncInfo = {
           ok: affectedBooking > 0,
@@ -5255,7 +5203,7 @@ const EditCampos = async (req, res) => {
           WHERE id_solicitud_proveedor = ?
           LIMIT 1
         `,
-        [userIdDB, id_solicitud_proveedor]
+        [userIdDB, id_solicitud_proveedor],
       );
     }
 
@@ -5330,7 +5278,7 @@ const EditCampos = async (req, res) => {
 };
 
 const monto_factura = async (req, res) => {
-  try { 
+  try {
     const {
       id_solicitud,
       id_solicitud_proveedor,
@@ -6778,17 +6726,17 @@ const asignar_factura_previa = async (req, res) => {
         message: "No se encontró la factura",
       });
     }
-const cacheRazonesSociales = new Map();
+    const cacheRazonesSociales = new Map();
 
-const obtenerRazonesSocialesProveedor = async (idProveedor) => {
-  const id = safeString(idProveedor);
-  if (!id) return [];
+    const obtenerRazonesSocialesProveedor = async (idProveedor) => {
+      const id = safeString(idProveedor);
+      if (!id) return [];
 
-  if (cacheRazonesSociales.has(id)) {
-    return cacheRazonesSociales.get(id);
-  }
+      if (cacheRazonesSociales.has(id)) {
+        return cacheRazonesSociales.get(id);
+      }
 
-  const qRazones = `
+      const qRazones = `
     SELECT DISTINCT
       UPPER(TRIM(pdfr.razon_social)) AS razon_social
     FROM proveedores_datos_fiscales_relacion pdfr
@@ -6796,32 +6744,32 @@ const obtenerRazonesSocialesProveedor = async (idProveedor) => {
       AND TRIM(COALESCE(pdfr.razon_social, '')) <> '';
   `;
 
-  const rows = getRows(await executeQuery(qRazones, [id]));
-  const razones = rows
-    .map((row) => safeString(row?.razon_social).toUpperCase())
-    .filter(Boolean);
+      const rows = getRows(await executeQuery(qRazones, [id]));
+      const razones = rows
+        .map((row) => safeString(row?.razon_social).toUpperCase())
+        .filter(Boolean);
 
-  cacheRazonesSociales.set(id, razones);
-  return razones;
-};
+      cacheRazonesSociales.set(id, razones);
+      return razones;
+    };
 
-const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
-  const idA = safeString(idProveedorA);
-  const idB = safeString(idProveedorB);
+    const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
+      const idA = safeString(idProveedorA);
+      const idB = safeString(idProveedorB);
 
-  if (!idA || !idB) return false;
-  if (idA === idB) return true;
+      if (!idA || !idB) return false;
+      if (idA === idB) return true;
 
-  const [razonesA, razonesB] = await Promise.all([
-    obtenerRazonesSocialesProveedor(idA),
-    obtenerRazonesSocialesProveedor(idB),
-  ]);
+      const [razonesA, razonesB] = await Promise.all([
+        obtenerRazonesSocialesProveedor(idA),
+        obtenerRazonesSocialesProveedor(idB),
+      ]);
 
-  if (!razonesA.length || !razonesB.length) return false;
+      if (!razonesA.length || !razonesB.length) return false;
 
-  const setB = new Set(razonesB);
-  return razonesA.some((razon) => setB.has(razon));
-};
+      const setB = new Set(razonesB);
+      return razonesA.some((razon) => setB.has(razon));
+    };
     const factura = facturaRows[0];
     const idFactura = safeString(factura.id_factura);
     const uuidFacturaReal = safeString(factura.uuid_factura);
@@ -6846,35 +6794,35 @@ const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
     }
 
     // 2) Validar proveedor del payload contra factura por razón social
-for (const item of proveedores) {
-  const idProveedorPayload = safeString(item?.id_proveedor);
+    for (const item of proveedores) {
+      const idProveedorPayload = safeString(item?.id_proveedor);
 
-  if (idProveedorPayload && idProveedorFactura) {
-    const coincideProveedor = await compartenRazonSocial(
-      idProveedorFactura,
-      idProveedorPayload
-    );
+      if (idProveedorPayload && idProveedorFactura) {
+        const coincideProveedor = await compartenRazonSocial(
+          idProveedorFactura,
+          idProveedorPayload,
+        );
 
-    if (!coincideProveedor) {
-      const [razonesFactura, razonesPayload] = await Promise.all([
-        obtenerRazonesSocialesProveedor(idProveedorFactura),
-        obtenerRazonesSocialesProveedor(idProveedorPayload),
-      ]);
+        if (!coincideProveedor) {
+          const [razonesFactura, razonesPayload] = await Promise.all([
+            obtenerRazonesSocialesProveedor(idProveedorFactura),
+            obtenerRazonesSocialesProveedor(idProveedorPayload),
+          ]);
 
-      return res.status(400).json({
-        ok: false,
-        message:
-          "El proveedor del payload no coincide con la factura ni comparte una razón social fiscal.",
-        data: {
-          proveedor_factura: idProveedorFactura,
-          proveedor_payload: idProveedorPayload,
-          razones_sociales_factura: razonesFactura,
-          razones_sociales_payload: razonesPayload,
-        },
-      });
+          return res.status(400).json({
+            ok: false,
+            message:
+              "El proveedor del payload no coincide con la factura ni comparte una razón social fiscal.",
+            data: {
+              proveedor_factura: idProveedorFactura,
+              proveedor_payload: idProveedorPayload,
+              razones_sociales_factura: razonesFactura,
+              razones_sociales_payload: razonesPayload,
+            },
+          });
+        }
+      }
     }
-  }
-}
 
     // 3) Total solicitado en esta operación
     const totalOperacion = round2(
@@ -6951,30 +6899,30 @@ for (const item of proveedores) {
         solicitud.monto_por_facturar_actual ?? 0,
       );
 
-     if (idProveedorFactura && idProveedorSolicitud) {
-  const coincideProveedorSolicitud = await compartenRazonSocial(
-    idProveedorFactura,
-    idProveedorSolicitud
-  );
+      if (idProveedorFactura && idProveedorSolicitud) {
+        const coincideProveedorSolicitud = await compartenRazonSocial(
+          idProveedorFactura,
+          idProveedorSolicitud,
+        );
 
-  if (!coincideProveedorSolicitud) {
-    const [razonesFactura, razonesSolicitud] = await Promise.all([
-      obtenerRazonesSocialesProveedor(idProveedorFactura),
-      obtenerRazonesSocialesProveedor(idProveedorSolicitud),
-    ]);
+        if (!coincideProveedorSolicitud) {
+          const [razonesFactura, razonesSolicitud] = await Promise.all([
+            obtenerRazonesSocialesProveedor(idProveedorFactura),
+            obtenerRazonesSocialesProveedor(idProveedorSolicitud),
+          ]);
 
-    return res.status(400).json({
-      ok: false,
-      message: `La solicitud ${idSolicitud} no pertenece al proveedor de la factura ni comparte una razón social fiscal.`,
-      data: {
-        proveedor_factura: idProveedorFactura,
-        proveedor_solicitud: idProveedorSolicitud,
-        razones_sociales_factura: razonesFactura,
-        razones_sociales_solicitud: razonesSolicitud,
-      },
-    });
-  }
-}
+          return res.status(400).json({
+            ok: false,
+            message: `La solicitud ${idSolicitud} no pertenece al proveedor de la factura ni comparte una razón social fiscal.`,
+            data: {
+              proveedor_factura: idProveedorFactura,
+              proveedor_solicitud: idProveedorSolicitud,
+              razones_sociales_factura: razonesFactura,
+              razones_sociales_solicitud: razonesSolicitud,
+            },
+          });
+        }
+      }
 
       const montoSolicitadoReal =
         montoSolicitadoDB > 0 ? montoSolicitadoDB : montoSolicitadoPayload;
@@ -7290,7 +7238,7 @@ const buscaruuid = async (req, res) => {
   WHERE v.uuid_factura LIKE TRIM(?)
     AND NULLIF(TRIM(v.codigo_confirmacion), '') IS NOT NULL
   ORDER BY v.id_relacion_pago_factura DESC;
-`;    // -- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
+`; // -- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
 
     const rows = getRows(await executeQuery(qBuscar, [uuid]));
 
@@ -7342,7 +7290,3 @@ module.exports = {
   createComprobantePago,
   buscaruuid,
 };
-
-
-
-
