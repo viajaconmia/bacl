@@ -199,18 +199,19 @@ app.get("/", (req, res) =>
 app.post("/message", handleChat);
 
 app.post("/search-hotel", async (req, res) => {
-  const { ciudad, checkin, checkout, huespedes = 1 } = req.body;
+  const { hoteles, checkin, checkout } = req.body;
 
-  if (!ciudad || !checkin || !checkout) {
+  if (!hoteles?.length || !checkin || !checkout) {
     return res.status(400).json({
-      message: "Los campos ciudad, checkin y checkout son requeridos",
+      message: "Los campos hoteles (array), checkin y checkout son requeridos",
       data: null,
       error: null,
     });
   }
 
   try {
-    const mensaje = `Busca hoteles en ${ciudad} para ${huespedes} huésped(es), check-in ${checkin}, check-out ${checkout}. Necesito precios reales de sitios como Expedia, Booking o similares.`;
+    const lista = hoteles.map((h, i) => `${i + 1}. ${h}`).join("\n");
+    const mensaje = `Busca el precio de los siguientes hoteles para check-in ${checkin} y check-out ${checkout}:\n${lista}`;
 
     const parts = await executer("search_hotel", mensaje);
     const texto = parts.find((p) => p.text)?.text || "";
@@ -221,7 +222,7 @@ app.post("/search-hotel", async (req, res) => {
     });
   } catch (error) {
     return res.status(500).json({
-      message: "Error al buscar hoteles",
+      message: "Error al buscar precios",
       data: null,
       error,
     });

@@ -33,10 +33,8 @@ FORMATO DE RESPUESTA:
     <hotel>
       <nombre>[Nombre del hotel]</nombre>
       <precio_por_noche>[número o "no disponible"]</precio_por_noche>
-      <precio_total>[número o "no disponible"]</precio_total>
       <moneda>[MXN/USD]</moneda>
       <fuente>[Expedia / Booking / sitio oficial / etc.]</fuente>
-      <url>[url donde se encontró el precio]</url>
     </hotel>
   </hoteles>
 </root>

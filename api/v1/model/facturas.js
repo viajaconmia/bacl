@@ -529,6 +529,7 @@ const createFacturaCombinada = async (req, { cfdi, info_user }) => {
       data: result,
     };
   } catch (error) {
+    console.log(error);
     throw error;
   }
 };
