@@ -3640,6 +3640,10 @@ const getSolicitudes2 = async (req, res) => {
 
       comentarios: clean(req.query.comentarios),
       comentario_CXP: clean(req.query.comentario_CXP),
+
+      uuid_factura: clean(req.query.uuid_factura),
+      pag: Number(req.query.pag ?? 1) || 1,
+      limite: Number(req.query.limite ?? 50) || 50,
     };
 
     const spRows = await executeSP(
@@ -3670,6 +3674,10 @@ const getSolicitudes2 = async (req, res) => {
 
         filters.comentarios,
         filters.comentario_CXP,
+
+        filters.uuid_factura,
+        filters.pag,
+        filters.limite,
       ],
     );
 
@@ -3803,6 +3811,54 @@ const getSolicitudes2 = async (req, res) => {
       };
     });
 
+    // Buckear por forma_pago_solicitada y estado_solicitud
+    const assignBucket = (row) => {
+      const forma  = String(row?.forma_pago_solicitada ?? "").toLowerCase().trim();
+      const estado = String(row?.solicitud_proveedor?.estado_solicitud ?? row?.estado_solicitud ?? "").toUpperCase().trim();
+      const estatus = String(row?.estatus_pagos ?? "").toLowerCase().trim();
+
+      if (
+        estatus === "pagado" ||
+        estado === "PAGADO TARJETA" ||
+        estado === "PAGADO TRANSFERENCIA" ||
+        estado === "PAGADO LINK"
+      ) return "pagada";
+
+      if (estado === "CANCELADA") return "canceladas";
+
+      if (
+        estado === "DISPERSION" ||
+        estado === "TRANSFERENCIA_SOLICITADA" ||
+        estado === "CUPON ENVIADO" ||
+        estado.startsWith("NOTIF")
+      ) return "notificados";
+
+      if (estado === "CARTA_ENVIADA") return "carta_enviada";
+
+      if (forma === "credit" || estado === "SOLICITADA") return "carta_garantia";
+
+      if (forma === "transfer") return "spei_solicitado";
+      if (forma === "card")     return "pago_tdc";
+      if (forma === "link")     return "pago_link";
+
+      return "spei_solicitado";
+    };
+
+    const buckets = {
+      spei_solicitado:  [],
+      pago_tdc:         [],
+      pago_link:        [],
+      carta_enviada:    [],
+      carta_garantia:   [],
+      pagada:           [],
+      notificados:      [],
+      canceladas:       [],
+    };
+
+    for (const row of data) {
+      buckets[assignBucket(row)].push(row);
+    }
+
     res.set({
       "Cache-Control": "no-store",
       Pragma: "no-cache",
@@ -3813,7 +3869,7 @@ const getSolicitudes2 = async (req, res) => {
       return res.status(200).json({
         ok: true,
         message: "Registros obtenidos con exito",
-        data,
+        data: buckets,
         meta: {
           filters,
           counts: {
@@ -3828,7 +3884,7 @@ const getSolicitudes2 = async (req, res) => {
     return res.status(200).json({
       ok: true,
       message: "Registros obtenidos con exito",
-      data,
+      data: buckets,
     });
   } catch (error) {
     console.error(error);
