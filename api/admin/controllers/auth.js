@@ -237,7 +237,12 @@ const verifySession = async (req, res) => {
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
     res
-      .clearCookie("access-token")
+      .clearCookie("access-token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        path: "/",
+      })
       .status(error.statusCode || error.status || 500)
       .json({
         message: error.message || "Error al registrar el usuario",
