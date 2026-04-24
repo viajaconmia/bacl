@@ -178,6 +178,43 @@ app.get("/probando", async (req, res) => {
       id_hotel,
     } = req.query;
 
+    // Si hotel es un objeto JSON con id, usar ese flujo
+    let hotelObj = null;
+    if (hotel) {
+      try {
+        const parsed = JSON.parse(hotel);
+        if (parsed && parsed.id) hotelObj = parsed;
+      } catch (_) {}
+    }
+
+    if (hotelObj) {
+      const dbResult = await buscarHotelesConFiltros({ id_hotel: hotelObj.id });
+      if (!dbResult[0]) {
+        return res.status(404).json({
+          message: "no encontramos el hotel con ese id",
+          error: null,
+        });
+      }
+
+      const buffer = await generarPDFHotel({
+        hotel: hotelObj.nombre,
+        total: hotelObj.precio_venta,
+        subtotal: (parseFloat(hotelObj.precio_venta) / 1.16).toFixed(2),
+        checkin: hotelObj.checkin,
+        checkout: hotelObj.checkout,
+        desayuno: dbResult[0].desayuno,
+        direccion: dbResult[0].direccion,
+      });
+
+      const iter = hotelObj.iteracion ?? 0;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=cotizacion_opcion${Number(iter) + 1}.pdf`,
+      );
+      return res.send(buffer);
+    }
+
     const response = await buscarHotelesConFiltros({
       ciudad,
       hotel,
