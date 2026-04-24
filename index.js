@@ -178,9 +178,12 @@ app.get("/probando", async (req, res) => {
       id_hotel,
     } = req.query;
 
-    // Si hotel es un objeto JSON con id, usar ese flujo
+    // Si hotel es un objeto con id, usar ese flujo
+    // Express/qs puede parsearlo como objeto anidado o llegar como JSON string
     let hotelObj = null;
-    if (hotel) {
+    if (hotel && typeof hotel === "object" && hotel.id) {
+      hotelObj = hotel;
+    } else if (hotel && typeof hotel === "string") {
       try {
         const parsed = JSON.parse(hotel);
         if (parsed && parsed.id) hotelObj = parsed;
