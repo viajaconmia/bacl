@@ -1364,12 +1364,10 @@ const getReservaAllFacturacion = async (filters = {}) => {
           created_start = startDate;
           created_end = endDate;
           break;
-
         case "Check-out":
           check_out_start = startDate;
           check_out_end = endDate;
           break;
-
         case "Check-in":
         default:
           check_in_start = startDate;
@@ -1377,6 +1375,9 @@ const getReservaAllFacturacion = async (filters = {}) => {
           break;
       }
     }
+
+    const pag    = Math.max(1, parseInt(filters.pag   ?? 1,  10) || 1);
+    const limite = Math.max(1, parseInt(filters.limite ?? 50, 10) || 50);
 
     const params = [
       nullIfEmpty(filters.id_booking),
@@ -1396,24 +1397,37 @@ const getReservaAllFacturacion = async (filters = {}) => {
       check_in_end,
       check_out_start,
       check_out_end,
+      pag,
+      limite,
     ];
 
     const query = `
-      CALL sp_get_reserva_all_facturacion2(
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      CALL sp_get_reserva_all_facturacion3(
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       );
     `;
 
     const response = await executeQuery(query, params);
-    const rows = Array.isArray(response?.[0]) ? response[0] : response;
 
-    return rows.map((row) => {
+    // El SP retorna 2 result sets: [0] = total_count, [1] = filas
+    const countRows = Array.isArray(response?.[0]) ? response[0] : [];
+    const dataRows  = Array.isArray(response?.[1]) ? response[1] : [];
+    const total     = Number(countRows?.[0]?.total_count ?? 0);
+
+    const data = dataRows.map((row) => {
       const { items_saldo, ...rest } = row;
-      return {
-        ...rest,
-        items: parseJsonSafe(items_saldo),
-      };
+      return { ...rest, items: parseJsonSafe(items_saldo) };
     });
+
+    return {
+      data,
+      meta: {
+        pag,
+        limite,
+        total,
+        totalPaginas: Math.ceil(total / limite) || 1,
+      },
+    };
   } catch (error) {
     throw error;
   }

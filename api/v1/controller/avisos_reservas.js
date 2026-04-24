@@ -48,8 +48,28 @@ const enviadas = async (req, res) => {
 
 const norificaciones = async (req, res) => {
   try {
-    const { pag, cant, id_agente, nombre_agente, hotel, codigo_reservacion, traveler, tipo_hospedaje } = extractFilters(req.body);
-    const response = await executeSP2("sp_vw_new_reservas_paginado", [pag, cant, id_agente, nombre_agente, hotel, codigo_reservacion, traveler, tipo_hospedaje]);
+    const {
+      pag = 1,
+      cant = 50,
+      nombre_agente = null,
+      hotel = null,            // → p_proveedor
+      codigo_reservacion = null, // → p_codigo_confirmacion
+      traveler = null,         // → p_viajero
+      id_booking = null,
+    } = req.body ?? {};
+
+    // Orden exacto del SP: codigo_confirmacion, viajero, nombre_agente, id_booking, proveedor, pagina, limite
+    const params = [
+      codigo_reservacion || null,
+      traveler           || null,
+      nombre_agente      || null,
+      id_booking         || null,
+      hotel              || null,
+      Number(pag)  || 1,
+      Number(cant) || 50,
+    ];
+
+    const response = await executeSP2("sp_get_notificadas_reservas", params);
     return res.status(200).json(response);
   } catch (error) {
     console.error(error);
