@@ -14,7 +14,7 @@ router.use((req, res, next) => {
       const session = jwt.verify(token, SECRET_KEY);
       req.session.user = session;
     } catch (error) {
-      console.log(error);
+      console.log("esta en routes auth", error);
       if (error.message == "jwt expired")
         error.message = "sesion expirada, inicia sesión nuevamente";
       res

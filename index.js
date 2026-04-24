@@ -130,12 +130,17 @@ app.use((req, res, next) => {
       const session = jwt.verify(token, SECRET_KEY);
       req.session.user = session;
     } catch (error) {
-      console.log(error);
+      console.log("esta en index", error);
       if (error.message == "jwt expired")
         error.message = "sesion expirada, inicia sesión nuevamente";
       res
         .status(500)
-        .clearCookie("access-token")
+        .clearCookie("access-token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          path: "/",
+        })
         .json({
           message: error.message || "Error al salir",
           error,
@@ -161,9 +166,26 @@ app.use(
 
 app.get("/probando", async (req, res) => {
   try {
-    const { ciudad, hotel, cp, lat, lng, iteracion = 0, checkin, checkout, id_hotel } = req.query;
+    const {
+      ciudad,
+      hotel,
+      cp,
+      lat,
+      lng,
+      iteracion = 0,
+      checkin,
+      checkout,
+      id_hotel,
+    } = req.query;
 
-    const response = await buscarHotelesConFiltros({ ciudad, hotel, cp, lat, lng, id_hotel });
+    const response = await buscarHotelesConFiltros({
+      ciudad,
+      hotel,
+      cp,
+      lat,
+      lng,
+      id_hotel,
+    });
 
     if (!response[iteracion]) {
       return res.status(404).json({
@@ -174,7 +196,11 @@ app.get("/probando", async (req, res) => {
       });
     }
 
-    const buffer = await generarPDFHotel({ ...response[iteracion], checkin, checkout });
+    const buffer = await generarPDFHotel({
+      ...response[iteracion],
+      checkin,
+      checkout,
+    });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
