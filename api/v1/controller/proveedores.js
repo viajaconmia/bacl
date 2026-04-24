@@ -33,6 +33,7 @@ const getProveedores = async (req, res) => {
       ],
     );
 
+    data.sort((a, b) => a.proveedor.localeCompare(b.proveedor));
     res.status(200).json({ message: "", data, metadata: { total } });
   } catch (error) {
     console.log(error);
