@@ -4251,7 +4251,7 @@ const getSolicitudes2 = async (req, res) => {
       data: buckets,
     });
   } catch (error) {
-    console.error(error);
+    console.error("this error is vucfkjtgxrfcjygvkugvkuj",error);
     return res.status(500).json({
       ok: false,
       error: "Internal Server Error",
