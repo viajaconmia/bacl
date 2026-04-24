@@ -13,6 +13,7 @@ const Item = require("../model/item.model");
 const { Calculo, calcularNoches } = require("../../lib/utils/calculates");
 const { Formato } = require("../../lib/utils/formats");
 const controller = require("../../api/v1/controller/pago_proveedor");
+const { notificado }= require("../../api/v1/controller/avisos_reservas");
 
 
 /* =========================
@@ -1122,6 +1123,7 @@ function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
 
 
 const { randomUUID, randomBytes } = require("crypto");
+const { Session } = require("inspector/promises");
 
 
 function money2(value) {
@@ -1457,6 +1459,8 @@ async function procesarSolicitudProveedorAlEditarReserva({
   };
 }
 
+
+
 /* =========================
  * CONTROLADOR PRINCIPAL
  * ========================= */
@@ -1465,6 +1469,9 @@ const editar_reserva_definitivo = async (req, res) => {
   console.log("😒😒😒😒😒😒", req.body.venta.current.total);
 
   try {
+    const { user } = req.session;
+    const id_user = user.id;
+    
     return await runTransaction(async (connection) => {
       console.log("🚀 [EDITAR_RESERVA] Iniciando editar_reserva_definitivo");
 
@@ -1499,7 +1506,12 @@ const editar_reserva_definitivo = async (req, res) => {
           error: "Faltan IDs clave (id_servicio, id_hospedaje, id_booking).",
         });
       }
-
+// Fire-and-forget: corre en paralelo sin bloquear la transacción principal.
+// Errores internos se loguean pero no abortan el flujo.
+notificado({ id_booking: metadata.id_booking, body: req.body, id_user })
+  .catch((err) =>
+    console.error("[notificado] error background:", err?.message ?? err),
+  );
       const resultadoSolicitud =
         await procesarSolicitudProveedorAlEditarReserva({
           connection,
@@ -1510,7 +1522,7 @@ const editar_reserva_definitivo = async (req, res) => {
       console.log(
         "🧾 [EDITAR_RESERVA][SOLICITUD_PROVEEDOR]:",
         resultadoSolicitud,
-      );
+      ); 
 
       const hayCambioPrecio = hasPrecioChange(venta);
       const hayCambioNoches = hasNochesChange(noches);
@@ -2337,6 +2349,8 @@ const editar_reserva_definitivo = async (req, res) => {
         resultado_paso_1: respBase,
       });
     });
+
+    
   } catch (error) {
     console.error(
       "💥 [EDITAR_RESERVA][ERROR] Capturado en el controlador:",

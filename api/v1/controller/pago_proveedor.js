@@ -4175,48 +4175,34 @@ const getSolicitudes2 = async (req, res) => {
       };
     });
 
-    // Buckear por forma_pago_solicitada y estado_solicitud
+    // Buckear por estado_solicitud (prioridad: is_ajuste → notificados)
     const assignBucket = (row) => {
-      const forma  = String(row?.forma_pago_solicitada ?? "").toLowerCase().trim();
       const estado = String(row?.solicitud_proveedor?.estado_solicitud ?? row?.estado_solicitud ?? "").toUpperCase().trim();
-      const estatus = String(row?.estatus_pagos ?? "").toLowerCase().trim();
+      const isAjuste = Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) === 1;
 
-      if (
-        estatus === "pagado" ||
-        estado === "PAGADO TARJETA" ||
-        estado === "PAGADO TRANSFERENCIA" ||
-        estado === "PAGADO LINK"
-      ) return "pagada";
+      if (isAjuste) return "notificados";
 
       if (estado === "CANCELADA") return "canceladas";
 
-      if (
-        estado === "DISPERSION" ||
-        estado === "TRANSFERENCIA_SOLICITADA" ||
-        estado === "CUPON ENVIADO" ||
-        estado.startsWith("NOTIF")
-      ) return "notificados";
+      if (estado === "PAGADO TARJETA" || estado === "PAGADO TRANSFERENCIA") return "pagada";
+      if (estado === "PAGADO LINK")           return "pago_link";
+      if (estado === "TRANSFERENCIA_SOLICITADA" || estado === "DISPERSION") return "spei";
+      if (estado === "CARTA_ENVIADA")         return "pago_tdc";
+      if (estado === "CUPON ENVIADO")         return "pendiente_credito";
+      if (estado === "SOLICITADA")            return "ap_credito";
 
-      if (estado === "CARTA_ENVIADA") return "carta_enviada";
-
-      if (forma === "credit" || estado === "SOLICITADA") return "carta_garantia";
-
-      if (forma === "transfer") return "spei_solicitado";
-      if (forma === "card")     return "pago_tdc";
-      if (forma === "link")     return "pago_link";
-
-      return "spei_solicitado";
+      return "ap_credito";
     };
 
     const buckets = {
-      spei_solicitado:  [],
-      pago_tdc:         [],
-      pago_link:        [],
-      carta_enviada:    [],
-      carta_garantia:   [],
-      pagada:           [],
-      notificados:      [],
-      canceladas:       [],
+      spei:              [],
+      pago_tdc:          [],
+      pago_link:         [],
+      pendiente_credito: [],
+      ap_credito:        [],
+      pagada:            [],
+      notificados:       [],
+      canceladas:        [],
     };
 
     for (const row of data) {
@@ -4229,12 +4215,19 @@ const getSolicitudes2 = async (req, res) => {
       Expires: "0",
     });
 
+    const meta = {
+      pag: filters.pag,
+      limite: filters.limite,
+      count: spRows.length,
+    };
+
     if (debug) {
       return res.status(200).json({
         ok: true,
         message: "Registros obtenidos con exito",
         data: buckets,
         meta: {
+          ...meta,
           filters,
           counts: {
             spRows_len: spRows.length,
@@ -4249,6 +4242,7 @@ const getSolicitudes2 = async (req, res) => {
       ok: true,
       message: "Registros obtenidos con exito",
       data: buckets,
+      meta,
     });
   } catch (error) {
     console.error("this error is vucfkjtgxrfcjygvkugvkuj",error);
