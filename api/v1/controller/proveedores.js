@@ -33,6 +33,7 @@ const getProveedores = async (req, res) => {
       ],
     );
 
+    data.sort((a, b) => a.proveedor.localeCompare(b.proveedor));
     res.status(200).json({ message: "", data, metadata: { total } });
   } catch (error) {
     console.log(error);
@@ -66,11 +67,11 @@ const getDetalles = async (req, res) => {
 
     const datos_fiscales = await executeQuery(
       `
-      SELECT df.*
+      SELECT df.*, r.id as id_relacion, r.active
       FROM proveedores_datos_fiscales_relacion r
       INNER JOIN proveedores_datos_fiscales df
         ON df.id = r.id_datos_fiscales
-      WHERE r.id_proveedor = ?;
+      WHERE r.id_proveedor = ? AND r.active = 1;
       `,
       [id_proveedor],
     );
@@ -93,6 +94,21 @@ const getCuentas = async (req, res) => {
       [id_proveedor],
     );
     res.status(200).json({ message: "", data: cuentas });
+  } catch (error) {
+    console.log(error);
+    res
+      .status(error.statusCode || 500)
+      .json({ message: error.message, data: null, error });
+  }
+};
+const deleteDatosFiscales = async (req, res) => {
+  try {
+    const { id } = req.query;
+    await executeQuery(
+      `UPDATE proveedores_datos_fiscales_relacion SET active = 0 WHERE id = ?;`,
+      [id],
+    );
+    res.status(204).json({ message: "Eliminado con éxito", data: null });
   } catch (error) {
     console.log(error);
     res
@@ -143,8 +159,10 @@ const createProveedor = async (req, res) => {
     );
 
     const proveedores = await executeQuery(
-      `SELECT * FROM proveedores where type = ?`,
-      [type],
+      type
+        ? `SELECT * FROM proveedores WHERE type = ?`
+        : `SELECT * FROM proveedores WHERE type IS NULL`,
+      type ? [type] : [],
     );
     res.status(200).json({ message: "Creado con exito", data: proveedores });
   } catch (error) {
@@ -560,12 +578,10 @@ const getProveedorType = async (req, res) => {
     const { type, id } = req.query;
     if (!id) throw new Error("Falta el type o el id");
     if (!type)
-      return res
-        .status(200)
-        .json({
-          message: "",
-          data: { vuelos: null, renta_carro: null, vuelo: null },
-        });
+      return res.status(200).json({
+        message: "",
+        data: { vuelos: null, renta_carro: null, vuelo: null },
+      });
 
     const querys = {
       renta_carro: `SELECT is_con_chofer, is_sin_chofer, is_chofer_bilingue, notas_sin_chofer, notas_con_chofer, notas_chofer_bilingue, incidencia, notas_generales FROM proveedor_auto WHERE id_proveedor = ?`,
@@ -728,6 +744,7 @@ module.exports = {
   getCuentas,
   updateProveedorCuenta,
   createProveedorCuenta,
+  deleteDatosFiscales,
   //Proveedor Type
   getProveedorType,
   //vuelo

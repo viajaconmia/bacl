@@ -1433,7 +1433,6 @@ const getReservaAllFacturacion = async (filters = {}) => {
   }
 };
 
-
 const getOnlyReservaByID = async (id) => {
   try {
     const query = `select *, b.total as total_client, b.subtotal as subtotal_client, b.impuestos as impuestos_client from bookings as b

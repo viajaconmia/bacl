@@ -1050,6 +1050,120 @@ const cargaImagen = async (req, res) => {
   }
 };
 
+const actualizarPrioridadHotel = async (req, res) => {
+  const { id } = req.params;
+  const { zona, priority, is_allowed } = req.body;
+
+  try {
+    await model.actualizarPrioridadHotel(id, { zona, priority, is_allowed });
+    return res.json({
+      message: "Prioridad actualizada correctamente",
+      data: { id, zona, priority, is_allowed },
+    });
+  } catch (error) {
+    if (error.code === "NO_FIELDS") {
+      return res.status(400).json({
+        message: "Debes enviar al menos un campo a actualizar: zona, priority o is_allowed",
+        data: null,
+        error: null,
+      });
+    }
+
+    if (error.code === "NOT_FOUND") {
+      return res.status(404).json({
+        message: "No se encontró el registro con el id proporcionado",
+        data: null,
+        error: null,
+      });
+    }
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        message: "Ya existe un registro con esa combinación de agente, zona y hotel",
+        data: null,
+        error: null,
+      });
+    }
+
+    return res.status(500).json({
+      message: "Error al actualizar prioridad",
+      data: null,
+      error,
+    });
+  }
+};
+
+const agregarPrioridadHotel = async (req, res) => {
+  const { id_agente, id_hotel, zona, priority } = req.body;
+
+  if (!id_agente || !id_hotel || !zona || priority === undefined) {
+    return res.status(400).json({
+      message: "Faltan campos obligatorios: id_agente, id_hotel, zona, priority",
+      data: null,
+      error: null,
+    });
+  }
+
+  try {
+    await model.insertarPrioridadHotel({ id_agente, id_hotel, zona, priority });
+    return res.status(201).json({
+      message: "Prioridad agregada correctamente",
+      data: { id_agente, id_hotel, zona, priority },
+    });
+  } catch (error) {
+    if (error.code === "HOTEL_NOT_FOUND") {
+      return res.status(404).json({
+        message: "No se encontró el hotel con el id proporcionado",
+        data: null,
+        error: null,
+      });
+    }
+
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        message: `Ya existe una prioridad para el hotel "${id_hotel}" en la zona "${zona}" para este agente`,
+        data: null,
+        error: null,
+      });
+    }
+
+    return res.status(500).json({
+      message: "Error al agregar prioridad",
+      data: null,
+      error,
+    });
+  }
+};
+
+const buscarHotelesParaCotizacion = async (req, res) => {
+  try {
+    const { ciudad, hotel, cp, lat, lng, checkin, checkout, id_hotel } = req.query;
+
+    const hoteles = await model.buscarHotelesConFiltros({ ciudad, hotel, cp, lat, lng, id_hotel });
+
+    if (!hoteles.length) {
+      return res.status(404).json({
+        message: id_hotel
+          ? "No se encontró el hotel con ese id"
+          : "No se encontraron hoteles con esos filtros",
+        data: null,
+        error: null,
+      });
+    }
+
+    return res.json({
+      message: "Hoteles encontrados",
+      data: hoteles.map((h) => ({ ...h, checkin, checkout })),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error al buscar hoteles",
+      data: null,
+      error,
+    });
+  }
+};
+
 module.exports = {
   readGroupByHotel,
   AgregarHotel,
@@ -1071,4 +1185,7 @@ module.exports = {
   cargaImagen,
   readHotelesTarifasById,
   obtenerHotelesPrioridad,
+  agregarPrioridadHotel,
+  actualizarPrioridadHotel,
+  buscarHotelesParaCotizacion,
 };

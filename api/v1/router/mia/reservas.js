@@ -82,6 +82,7 @@ router.get(
 );
 
 router.get("/detalles_reservas", controller.detalles_reservas);
+router.get("/verificar-empalme", controller.verificarEmpalmeHotel);
 router.get("/services", controller_v2.obtener);
 router.get("/cotizaciones", async (req, res) => {
   try {
