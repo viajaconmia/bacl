@@ -13,6 +13,8 @@ const Item = require("../model/item.model");
 const { Calculo, calcularNoches } = require("../../lib/utils/calculates");
 const { Formato } = require("../../lib/utils/formats");
 const controller = require("../../api/v1/controller/pago_proveedor");
+const { notificado }= require("../../api/v1/controller/avisos_reservas");
+
 
 /* =========================
  * UTILIDADES / HELPERS
@@ -1075,6 +1077,7 @@ async function caso_base_tolerante({
   });
 }
 
+
 function money2(n) {
   // evita cosas tipo 199.99999997
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -1118,7 +1121,10 @@ function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
   return "TRANSFERENCIA";
 }
 
+
 const { randomUUID, randomBytes } = require("crypto");
+const { Session } = require("inspector/promises");
+
 
 function money2(value) {
   const n = Number(value || 0);
@@ -1191,7 +1197,9 @@ async function procesarSolicitudProveedorAlEditarReserva({
   }
 
   const id_hospedaje =
-    metadata?.id_relacion != null ? String(metadata.id_hospedaje).trim() : null;
+    metadata?.id_relacion != null
+      ? String(metadata.id_hospedaje).trim()
+      : null;
 
   const [rowsBooking] = await connection.execute(
     `
@@ -1213,19 +1221,17 @@ async function procesarSolicitudProveedorAlEditarReserva({
     };
   }
 
-  const idsSolicitud = [
-    ...new Set(
-      rowsBooking.map((row) => {
-        const id = Number(row?.id_solicitud);
-        if (!Number.isInteger(id) || id <= 0) {
-          throw new Error(
-            `booking_solicitud.id_solicitud inválido para id_booking=${id_booking}: ${row?.id_solicitud}`,
-          );
-        }
-        return id;
-      }),
-    ),
-  ];
+  const idsSolicitud = [...new Set(
+    rowsBooking.map((row) => {
+      const id = Number(row?.id_solicitud);
+      if (!Number.isInteger(id) || id <= 0) {
+        throw new Error(
+          `booking_solicitud.id_solicitud inválido para id_booking=${id_booking}: ${row?.id_solicitud}`,
+        );
+      }
+      return id;
+    }),
+  )];
 
   const resultados = [];
 
@@ -1342,9 +1348,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
             ? `Código dispersión: ${pagoBase.codigo_dispersion}.`
             : null,
           pagoBase?.concepto ? `Concepto: ${pagoBase.concepto}.` : null,
-          pagoBase?.descripcion
-            ? `Descripción: ${pagoBase.descripcion}.`
-            : null,
+          pagoBase?.descripcion ? `Descripción: ${pagoBase.descripcion}.` : null,
           solicitud?.comentarios
             ? `Comentarios solicitud: ${solicitud.comentarios}`
             : null,
@@ -1369,7 +1373,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
               comentarios,
               estado,
               id_solicitud,
-              update_at,
+              update_at
               reserva
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?,?)
@@ -1388,7 +1392,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
             comentariosSaldo,
             id_solicitud_proveedor,
             new Date(),
-            id_booking,
+            id_booking
           ],
         );
       }
@@ -1455,6 +1459,8 @@ async function procesarSolicitudProveedorAlEditarReserva({
   };
 }
 
+
+
 /* =========================
  * CONTROLADOR PRINCIPAL
  * ========================= */
@@ -1463,6 +1469,9 @@ const editar_reserva_definitivo = async (req, res) => {
   console.log("😒😒😒😒😒😒", req.body.venta.current.total);
 
   try {
+    const { user } = req.session;
+    const id_user = user.id;
+    
     return await runTransaction(async (connection) => {
       console.log("🚀 [EDITAR_RESERVA] Iniciando editar_reserva_definitivo");
 
@@ -1497,7 +1506,12 @@ const editar_reserva_definitivo = async (req, res) => {
           error: "Faltan IDs clave (id_servicio, id_hospedaje, id_booking).",
         });
       }
-
+// Fire-and-forget: corre en paralelo sin bloquear la transacción principal.
+// Errores internos se loguean pero no abortan el flujo.
+notificado({ id_booking: metadata.id_booking, body: req.body, id_user })
+  .catch((err) =>
+    console.error("[notificado] error background:", err?.message ?? err),
+  );
       const resultadoSolicitud =
         await procesarSolicitudProveedorAlEditarReserva({
           connection,
@@ -1508,7 +1522,7 @@ const editar_reserva_definitivo = async (req, res) => {
       console.log(
         "🧾 [EDITAR_RESERVA][SOLICITUD_PROVEEDOR]:",
         resultadoSolicitud,
-      );
+      ); 
 
       const hayCambioPrecio = hasPrecioChange(venta);
       const hayCambioNoches = hasNochesChange(noches);
@@ -2335,6 +2349,8 @@ const editar_reserva_definitivo = async (req, res) => {
         resultado_paso_1: respBase,
       });
     });
+
+    
   } catch (error) {
     console.error(
       "💥 [EDITAR_RESERVA][ERROR] Capturado en el controlador:",
@@ -2491,12 +2507,11 @@ ${whereSQL}
 
   const sqlData = `
   SELECT 
-  ${finanzas ? `vw.*, f.uuid_factura, f.total as total_factura, vp.uuid_factura as uuid_recibido, vp.monto_facturado as monto_facturado_factura_recibida` : "vw.*"}
+  ${finanzas ? `vw.*, f.uuid_factura, f.total as total_factura` : "vw.*"}
   FROM vw_new_reservas vw
 ${
   finanzas
-    ? `LEFT JOIN items_facturas fi ON vw.id_relacion = fi.id_relacion LEFT JOIN facturas f ON fi.id_factura = f.id_factura
-    left join vw_pagos_facturas_proveedores_detalle vp on vp.id_solicitud = vw.id_solicitud_proveedor`
+    ? `LEFT JOIN items_facturas fi ON vw.id_relacion = fi.id_relacion LEFT JOIN facturas f ON fi.id_factura = f.id_factura`
     : ""
 }
 ${whereSQL}
@@ -2539,39 +2554,63 @@ ${finanzas ? "GROUP BY vw.id_booking, f.id_factura" : ""}
     });
   } catch (error) {
     console.error(error);
-    res
-      .status(error.statusCode || error.status || 500)
-      .json({ error, message: error.message || "Error al obtener los datos" });
+    res.status(500).json({ error });
   }
 };
 
 const cancelarBooking = async (req, res) => {
   const { id_booking } = req.body;
+  const { user } = req.session;
+  const id_user = user.id;
+
   try {
     const response = await runTransaction(async (conn) => {
       console.log(
         "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
-        id_booking,
+        id_booking
       );
+
       const response = await cancelar(conn, id_booking);
+
       console.log(
-        "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor...",
+        "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor..."
       );
-      const res = await procesarSolicitudProveedorAlEditarReserva({
+
+      const proveedorResponse = await procesarSolicitudProveedorAlEditarReserva({
         connection: conn,
         metadata: { id_booking },
-        usuario: req?.user?.id || req?.user?.email || "system",
+        usuario: user?.id || user?.email || "system",
       });
+
       console.log(
         "🚫 [CANCELAR_RESERVA] Solicitud al proveedor procesada:",
-        res,
+        proveedorResponse
       );
+
+      const notificacionResponse = await notificado({
+        connection: conn,
+        id_booking,
+        body: {
+          ...req.body,
+          tipo: "reserva_cancelada",
+        },
+        id_user,
+      });
+
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Resultado de notificado:",
+        notificacionResponse
+      );
+
       return response;
     });
-    res.status(200).json({ message: "obtenido bien", data: response });
+
+    return res.status(200).json({
+      message: "obtenido bien",
+      data: response,
+    });
   } catch (error) {
-    console.log(error);
-    res.status(error.status || error.statusCode || 500).json({
+    return res.status(error.status || error.statusCode || 500).json({
       message: error.message || "Error al obtenr los datos",
       error,
       data: null,
