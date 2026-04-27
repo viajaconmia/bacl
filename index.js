@@ -1,4 +1,5 @@
 const { handleChat } = require("./services/gemini/Core");
+const { executer } = require("./services/gemini/assistants/Dispatcher");
 // src/index.js
 const express = require("express");
 const app = express();
@@ -67,10 +68,8 @@ const requestContext = require("./middleware/requestContext");
 //   generarYSubirImagenHotel,
 //   generarImagenHotel,
 // } = require("./api/v1/utils/generarImagenCotizacion");
-const { executeQuery } = require("./config/db");
 const { generarPDFHotel } = require("./api/v1/utils/generarImagenCotizacion");
-const { check } = require("zod");
-const { getLatLngFromCP } = require("./lib/utils/geo");
+const { buscarHotelesConFiltros } = require("./api/v1/model/hoteles");
 
 // Control de CORS
 const corsOptions = {
@@ -131,12 +130,17 @@ app.use((req, res, next) => {
       const session = jwt.verify(token, SECRET_KEY);
       req.session.user = session;
     } catch (error) {
-      console.log(error);
+      console.log("esta en index", error);
       if (error.message == "jwt expired")
         error.message = "sesion expirada, inicia sesión nuevamente";
       res
         .status(500)
-        .clearCookie("access-token")
+        .clearCookie("access-token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          path: "/",
+        })
         .json({
           message: error.message || "Error al salir",
           error,
@@ -171,134 +175,63 @@ app.get("/probando", async (req, res) => {
       iteracion = 0,
       checkin,
       checkout,
+      id_hotel,
     } = req.query;
 
-    const where = [];
-    const whereParams = [];
-    const orderParams = [];
-    const distanceParams = [];
-
-    let orderBy = "vw.precio_sencilla ASC";
-
-    // =========================
-    // 🏨 BUSQUEDA POR NOMBRE
-    // =========================
-    if (hotel) {
-      where.push(`
-        (
-          vw.nombre LIKE CONCAT('%', ?, '%')
-          OR chp.zona = (
-            SELECT chp2.zona
-            FROM client_hotel_priority chp2
-            INNER JOIN hoteles h2 ON h2.id_hotel = chp2.id_hotel
-            WHERE h2.nombre LIKE CONCAT('%', ?, '%')
-            LIMIT 1
-          )
-        )
-      `);
-
-      whereParams.push(hotel, hotel);
-
-      // Solo usamos este ORDER si NO hay distancia
-      orderBy = `
-        CASE 
-          WHEN vw.nombre LIKE CONCAT('%', ?, '%') THEN 0
-          ELSE 1 
-        END,
-        vw.precio_sencilla ASC
-      `;
-      orderParams.push(hotel);
+    // Si hotel es un objeto con id, usar ese flujo
+    // Express/qs puede parsearlo como objeto anidado o llegar como JSON string
+    let hotelObj = null;
+    if (hotel && typeof hotel === "object" && hotel.id) {
+      hotelObj = hotel;
+    } else if (hotel && typeof hotel === "string") {
+      try {
+        const parsed = JSON.parse(hotel);
+        if (parsed && parsed.id) hotelObj = parsed;
+      } catch (_) {}
     }
 
-    // =========================
-    // 📍 CP → LAT/LNG
-    // =========================
-    let latFinal = lat;
-    let lngFinal = lng;
-
-    if (cp && (!lat || !lng)) {
-      const coords = await getLatLngFromCP(cp);
-      if (coords) {
-        latFinal = coords.lat;
-        lngFinal = coords.lng;
+    if (hotelObj) {
+      const dbResult = await buscarHotelesConFiltros({ id_hotel: hotelObj.id });
+      if (!dbResult[0]) {
+        return res.status(404).json({
+          message: "no encontramos el hotel con ese id",
+          error: null,
+        });
       }
+
+      const buffer = await generarPDFHotel({
+        hotel: hotelObj.nombre,
+        total: hotelObj.precio_venta,
+        subtotal: (parseFloat(hotelObj.precio_venta) / 1.16).toFixed(2),
+        checkin: hotelObj.checkin,
+        checkout: hotelObj.checkout,
+        desayuno: dbResult[0].desayuno,
+        direccion: dbResult[0].direccion,
+      });
+
+      const iter = hotelObj.iteracion ?? 0;
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=cotizacion_opcion${Number(iter) + 1}.pdf`,
+      );
+      return res.send(buffer);
     }
 
-    // =========================
-    // 📏 ORDEN POR DISTANCIA
-    // =========================
-    let distanciaSelect = "NULL AS distancia";
-
-    if (latFinal && lngFinal) {
-      distanciaSelect = `
-        ST_Distance_Sphere(
-          h.ubicacion,
-          ST_SRID(POINT(?, ?), 4326)
-        ) AS distancia
-      `;
-
-      distanceParams.push(Number(lngFinal), Number(latFinal));
-
-      // Sobrescribe ORDER BY
-      orderBy = `
-        ST_Distance_Sphere(
-          h.ubicacion,
-          ST_SRID(POINT(${Number(lngFinal)}, ${Number(latFinal)}), 4326)
-        ) ASC
-      `;
-    }
-
-    // =========================
-    // 🗺 FILTRO POR ZONA
-    // =========================
-    if (ciudad) {
-      where.push(`chp.zona LIKE ?`);
-      whereParams.push(`%${ciudad.toUpperCase().split(" ").join("%")}%`);
-
-      if (!latFinal && !lngFinal && !hotel) {
-        orderBy = `chp.priority ASC`;
-      }
-    }
-
-    // ⚠️ IMPORTANTE: agrupamos correctamente
-    const whereSQL = where.length ? `WHERE (${where.join(" OR ")})` : "";
-
-    // =========================
-    // 🔥 QUERY FINAL
-    // =========================
-    const query = `
-      SELECT
-        vw.id_hotel as id,
-        vw.nombre AS hotel,
-        vw.precio_sencilla AS total,
-        ROUND(vw.precio_sencilla /1.16,2) AS subtotal,
-        IF(vw.desayuno_sencilla = 1, 1, 0) AS desayuno,
-        vw.direccion,
-        chp.zona,
-        chp.priority,
-        ${distanciaSelect}
-      FROM vw_hoteles_tarifas_completa vw
-      INNER JOIN client_hotel_priority chp 
-        ON chp.id_hotel = vw.id_hotel
-      INNER JOIN hoteles h 
-        ON h.id_hotel = vw.id_hotel
-      ${whereSQL}
-      ORDER BY ${orderBy}
-      LIMIT 20
-    `;
-
-    // 🔥 ORDEN CORRECTO SIEMPRE
-    const finalParams = [
-      ...distanceParams,
-      ...whereParams,
-      ...(latFinal && lngFinal ? [] : orderParams),
-    ];
-
-    const response = await executeQuery(query, finalParams);
+    const response = await buscarHotelesConFiltros({
+      ciudad,
+      hotel,
+      cp,
+      lat,
+      lng,
+      id_hotel,
+    });
 
     if (!response[iteracion]) {
       return res.status(404).json({
-        message: "no encontramos esta iteracion",
+        message: id_hotel
+          ? "no encontramos el hotel con ese id"
+          : "no encontramos esta iteracion",
         error: null,
       });
     }
@@ -318,10 +251,7 @@ app.get("/probando", async (req, res) => {
     return res.send(buffer);
   } catch (error) {
     console.error("Error creando PDF:", error);
-    return res.status(500).json({
-      message: "Error creando PDF",
-      error,
-    });
+    return res.status(500).json({ message: "Error creando PDF", error });
   }
 });
 // Ruta pública raíz
@@ -333,6 +263,37 @@ app.get("/", (req, res) =>
 );
 
 app.post("/message", handleChat);
+
+app.post("/search-hotel", async (req, res) => {
+  const { hoteles, checkin, checkout } = req.body;
+
+  if (!hoteles?.length || !checkin || !checkout) {
+    return res.status(400).json({
+      message: "Los campos hoteles (array), checkin y checkout son requeridos",
+      data: null,
+      error: null,
+    });
+  }
+
+  try {
+    const lista = hoteles.map((h, i) => `${i + 1}. ${h}`).join("\n");
+    const mensaje = `Busca el precio de los siguientes hoteles para check-in ${checkin} y check-out ${checkout}:\n${lista}`;
+
+    const parts = await executer("search_hotel", mensaje);
+    const texto = parts.find((p) => p.text)?.text || "";
+
+    return res.json({
+      message: "Búsqueda completada",
+      data: { resultado: texto },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error al buscar precios",
+      data: null,
+      error,
+    });
+  }
+});
 
 // 7. Manejador de errores global (solo formatea respuesta; no llama a logger.error)
 app.use(errorHandler);

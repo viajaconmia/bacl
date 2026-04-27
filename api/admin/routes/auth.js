@@ -14,12 +14,17 @@ router.use((req, res, next) => {
       const session = jwt.verify(token, SECRET_KEY);
       req.session.user = session;
     } catch (error) {
-      console.log(error);
+      console.log("esta en routes auth", error);
       if (error.message == "jwt expired")
         error.message = "sesion expirada, inicia sesión nuevamente";
       res
         .status(500)
-        .clearCookie("access-token")
+        .clearCookie("access-token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+          path: "/",
+        })
         .json({
           message: error.message || "Error al salir",
           error,
@@ -36,7 +41,7 @@ router.get("/verify-session", controller.verifySession);
 router.get(
   "/usuarios",
   // verificarPermiso("usuarios.get"),
-  controller.getUsuariosAdmin
+  controller.getUsuariosAdmin,
 );
 
 router.get("/permisos", controller.getPermisos);
@@ -45,18 +50,18 @@ router.post(
   "/signup",
   validacion.validateParams(["username", "password", "email"]),
   // verificarPermiso("vista(admin):creacion(usuarios)"),
-  controller.signUp
+  controller.signUp,
 );
 router.post(
   "/login",
   validacion.validateParams(["password", "email"]),
-  controller.logIn
+  controller.logIn,
 );
 router.post("/logout", controller.logOut);
 router.post(
   "/role",
   // verificarPermiso("vista(admin):creacion(roles)"),
-  controller.createRole
+  controller.createRole,
 );
 router.patch("/role", controller.updatePermissionRole);
 router.get("/role", controller.getPermissionByRole);

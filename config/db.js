@@ -115,6 +115,7 @@ async function runTransaction(callback) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    await connection.execute("SET SQL_SAFE_UPDATES = 0");
     const resultsCallback = await callback(connection);
     await connection.commit();
     return resultsCallback;

@@ -60,7 +60,10 @@ async function debugBcryptFlow({ email, plainPassword, storedHash }) {
       .slice(0, 12);
 
     console.log("[AUTH_DEBUG] inputPasswordLength:", len);
-    console.log("[AUTH_DEBUG] inputPasswordFingerprint(sha256-12):", pwFingerprint);
+    console.log(
+      "[AUTH_DEBUG] inputPasswordFingerprint(sha256-12):",
+      pwFingerprint,
+    );
 
     // Simula el compare: re-hash usando el MISMO salt del hash guardado
     const rehash = await bcrypt.hash(String(plainPassword), saltFromHash);
@@ -71,7 +74,7 @@ async function debugBcryptFlow({ email, plainPassword, storedHash }) {
     if (rehash.length === storedHash.length) {
       const safeEqual = crypto.timingSafeEqual(
         Buffer.from(rehash),
-        Buffer.from(storedHash)
+        Buffer.from(storedHash),
       );
       console.log("[AUTH_DEBUG] timingSafeEqual:", safeEqual);
     }
@@ -90,7 +93,7 @@ const signUp = async (req, res) => {
 
     const [usuario] = await executeQuery(
       `SELECT * FROM users_admin WHERE email = ?`,
-      [email]
+      [email],
     );
     if (usuario) throw new ShortError("El usuario ya existe", 403);
 
@@ -101,13 +104,13 @@ const signUp = async (req, res) => {
         // Crear el usuario
         await conn.execute(
           `INSERT INTO users_admin (name, email, password) VALUES (?,?,?)`,
-          [username, email, hashedPassword]
+          [username, email, hashedPassword],
         );
 
         // Extraer el usuario
         const [user] = await conn.execute(
           `SELECT * FROM users_admin WHERE email = ?`,
-          [email]
+          [email],
         );
         if (!user[0]) throw new ShortError("Error al crear el usuario", 404);
 
@@ -116,7 +119,7 @@ const signUp = async (req, res) => {
 
         await conn.execute(
           `INSERT INTO user_roles (user_id, role_id) VALUES (?,?)`,
-          [user[0].id, role.role_id]
+          [user[0].id, role.role_id],
         );
       } catch (error) {
         throw new CustomError(
@@ -125,7 +128,7 @@ const signUp = async (req, res) => {
             "Ha ocurrido un error al hacer la petición",
           error.statusCode || 500,
           "DATABASE_ERROR",
-          error
+          error,
         );
       }
     });
@@ -154,7 +157,7 @@ const logIn = async (req, res) => {
 
     const [user_completo] = await executeQuery(
       `SELECT * FROM users_admin WHERE email = ? AND active = 1`,
-      [email]
+      [email],
     );
     if (!user_completo) throw new Error("Credenciales incorrectas");
 
@@ -178,8 +181,7 @@ const logIn = async (req, res) => {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-        // 7 días para empatar el JWT (opcional)
-        maxAge: 1000 * 60 * 60 * 24 * 7,
+        maxAge: 1000 * 60 * 60 * 24 * 30,
       })
       .status(200)
       .json({
@@ -229,11 +231,18 @@ const verifySession = async (req, res) => {
       return;
     }
 
-    res.status(200).json({ message: "Comprobando verificación", data: usuario });
+    res
+      .status(200)
+      .json({ message: "Comprobando verificación", data: usuario });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
     res
-      .clearCookie("access-token")
+      .clearCookie("access-token", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        path: "/",
+      })
       .status(error.statusCode || error.status || 500)
       .json({
         message: error.message || "Error al registrar el usuario",
@@ -255,7 +264,9 @@ const getUsuariosAdmin = async (req, res) => {
       group by ua.id;
     `);
 
-    res.status(200).json({ message: "Comprobando verificación", data: usuarios });
+    res
+      .status(200)
+      .json({ message: "Comprobando verificación", data: usuarios });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
     res.status(error.statusCode || error.status || 500).json({
@@ -282,10 +293,12 @@ const getPermisos = async (req, res) => {
       LEFT JOIN vw_permisos_by_user vw 
         ON vw.permission_id = p.id 
        AND vw.user_id = ?;`,
-      [id || ""]
+      [id || ""],
     );
 
-    res.status(200).json({ message: "Permisos obtenidos con exito", data: permisos });
+    res
+      .status(200)
+      .json({ message: "Permisos obtenidos con exito", data: permisos });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
     res.status(error.statusCode || error.status || 500).json({
@@ -318,12 +331,12 @@ const updatePermissionRole = async (req, res) => {
     if (value) {
       await executeQuery(
         `INSERT INTO role_permissions (role_id, permission_id) VALUES (?,?)`,
-        [id_role, id_permission]
+        [id_role, id_permission],
       );
     } else {
       await executeQuery(
         `DELETE from role_permissions where role_id = ? AND permission_id = ?`,
-        [id_role, id_permission]
+        [id_role, id_permission],
       );
     }
 
@@ -347,7 +360,7 @@ const getPermissionByRole = async (req, res) => {
         (CASE WHEN (rp.role_id is null) THEN 0 ELSE 1 END) as active 
       FROM permissions as p
       LEFT JOIN role_permissions as rp on rp.permission_id = p.id AND rp.role_id = ?;`,
-      [id]
+      [id],
     );
 
     res.status(200).json({ message: "Actualizado con exito", data: permisos });

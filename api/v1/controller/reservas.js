@@ -1538,7 +1538,7 @@ const readAll = async (req, res) => {
 const readAllFacturacion = async (req, res) => {
   try {
     const filters = req.query || {};
-    console.log(filters)
+    console.log(filters);
 
     const data = await model.getReservaAllFacturacion(filters);
 
@@ -1800,7 +1800,7 @@ const getReservasWithIAtemsByidAgente = async (req, res) => {
         .json({ message: "Reservas encontradas", data: reservas });
     }
   } catch (error) {
-    console.error(error); 
+    console.error(error);
     return res
       .status(500)
       .json({ error: "Internal Server Error", details: error.message });
@@ -1852,6 +1852,66 @@ const getDetallesConexionReservas = async (req, res) => {
   }
 };
 
+const verificarEmpalmeHotel = async (req, res) => {
+  const { viajero, fecha } = req.query;
+
+  if (!viajero || !viajero.trim()) {
+    return res.status(400).json({
+      message: "El parámetro 'viajero' es requerido",
+      data: null,
+      error: null,
+    });
+  }
+
+  if (!fecha) {
+    return res.status(400).json({
+      message: "El parámetro 'fecha' es requerido",
+      data: null,
+      error: null,
+    });
+  }
+
+  const fechaValida = !isNaN(Date.parse(fecha));
+  if (!fechaValida) {
+    return res.status(400).json({
+      message:
+        "El parámetro 'fecha' no es una fecha válida (usa formato YYYY-MM-DD)",
+      data: null,
+      error: null,
+    });
+  }
+
+  try {
+    const patron = "%" + viajero.trim().split(/\s+/).join("%") + "%";
+
+    const result = await executeQuery(
+      `SELECT COUNT(*) as total
+FROM vw_new_reservas
+WHERE CONVERT(type USING utf8mb4) COLLATE utf8mb4_0900_ai_ci = 'hotel'
+  AND CONVERT(viajero USING utf8mb4) COLLATE utf8mb4_0900_ai_ci LIKE CONVERT(? USING utf8mb4) COLLATE utf8mb4_0900_ai_ci
+  AND LOWER(CONVERT(estado USING utf8mb4)) COLLATE utf8mb4_0900_ai_ci != 'cancelada'
+  AND DATE(?) >= check_in
+  AND DATE(?) < check_out;`,
+      [patron, fecha, fecha],
+    );
+
+    const existe = result[0].total > 0;
+
+    return res.json({
+      message: existe
+        ? "El viajero tiene una reserva activa en esa fecha"
+        : "No hay reservas activas para el viajero en esa fecha",
+      data: { empalme: existe },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error al verificar empalme",
+      data: null,
+      error,
+    });
+  }
+};
+
 module.exports = {
   create,
   read,
@@ -1870,4 +1930,5 @@ module.exports = {
   getDetallesConexionReservas,
   validateCodigo,
   detalles_reservas,
+  verificarEmpalmeHotel,
 };
