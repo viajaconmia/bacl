@@ -3974,14 +3974,31 @@ const getSolicitudes2 = async (req, res) => {
         ? String(rawFiltrarFechaPorReserva).toLowerCase()
         : null;
 
-    console.log(clean(req.query.comentarios), "🤬🤬🤬🤬");
+    // Traduce nombre de bucket (frontend) → valor real en DB para el SP
+    const BUCKET_TO_ESTADO = {
+      ap_credito:        "SOLICITADA",
+      spei:              "TRANSFERENCIA_SOLICITADA",
+      pago_tdc:          "CARTA_ENVIADA",
+      pago_link:         "PAGADO LINK",
+      pendiente_credito: "CUPON ENVIADO",
+      pagada:            null,
+      notificados:       null,
+      canceladas:        "CANCELADA",
+    };
+
+    const rawEstado = clean(req.query.estado_solicitud);
+    const estadoFiltro = rawEstado
+      ? (Object.prototype.hasOwnProperty.call(BUCKET_TO_ESTADO, rawEstado.toLowerCase())
+          ? BUCKET_TO_ESTADO[rawEstado.toLowerCase()]
+          : rawEstado)
+      : null;
 
     const filters = {
       folio: clean(req.query.folio),
       cliente: clean(req.query.cliente),
       viajero: clean(req.query.viajero),
       hotel: clean(req.query.hotel),
-      estado_solicitud: clean(req.query.estado_solicitud),
+      estado_solicitud: estadoFiltro,
       estado_facturacion: clean(req.query.estado_facturacion),
       forma_pago: clean(req.query.forma_pago),
 
@@ -4178,19 +4195,19 @@ const getSolicitudes2 = async (req, res) => {
     // Buckear por estado_solicitud (prioridad: is_ajuste → notificados)
     const assignBucket = (row) => {
       const estado = String(row?.solicitud_proveedor?.estado_solicitud ?? row?.estado_solicitud ?? "").toUpperCase().trim();
-      const isAjuste = Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) === 1;
+      const isAjuste = Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) === 1 && estado !="SOLICITA";
 
-      if (isAjuste) return "notificados";
-
+      
+      if (estado === "SOLICITADA")            return "ap_credito";
       if (estado === "CANCELADA") return "canceladas";
-
+      
+      if (isAjuste) return "notificados";
       if (estado === "PAGADO TARJETA" || estado === "PAGADO TRANSFERENCIA") return "pagada";
       if (estado === "PAGADO LINK")           return "pago_link";
       if (estado === "TRANSFERENCIA_SOLICITADA" || estado === "DISPERSION") return "spei";
       if (estado === "CARTA_ENVIADA")         return "pago_tdc";
       if (estado === "CUPON ENVIADO")         return "pendiente_credito";
-      if (estado === "SOLICITADA")            return "ap_credito";
-
+      
       return "ap_credito";
     };
 
@@ -4273,6 +4290,7 @@ const getDatosFiscalesProveedor = async (req, res) => {
       `,
       [id_proveedor],
     );
+
 
     return res.status(200).json({ data });
   } catch (error) {
