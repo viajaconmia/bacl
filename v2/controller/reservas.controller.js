@@ -2560,30 +2560,57 @@ ${finanzas ? "GROUP BY vw.id_booking, f.id_factura" : ""}
 
 const cancelarBooking = async (req, res) => {
   const { id_booking } = req.body;
+  const { user } = req.session;
+  const id_user = user.id;
+
   try {
     const response = await runTransaction(async (conn) => {
       console.log(
         "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
-        id_booking,
+        id_booking
       );
+
       const response = await cancelar(conn, id_booking);
+
       console.log(
-        "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor...",
+        "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor..."
       );
-      const res = await procesarSolicitudProveedorAlEditarReserva({
+
+      const proveedorResponse = await procesarSolicitudProveedorAlEditarReserva({
         connection: conn,
         metadata: { id_booking },
-        usuario: req?.user?.id || req?.user?.email || "system",
+        usuario: user?.id || user?.email || "system",
       });
+
       console.log(
         "🚫 [CANCELAR_RESERVA] Solicitud al proveedor procesada:",
-        res,
+        proveedorResponse
       );
+
+      const notificacionResponse = await notificado({
+        connection: conn,
+        id_booking,
+        body: {
+          ...req.body,
+          tipo: "reserva_cancelada",
+        },
+        id_user,
+      });
+
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Resultado de notificado:",
+        notificacionResponse
+      );
+
       return response;
     });
-    res.status(200).json({ message: "obtenido bien", data: response });
+
+    return res.status(200).json({
+      message: "obtenido bien",
+      data: response,
+    });
   } catch (error) {
-    res.status(error.status || error.statusCode || 500).json({
+    return res.status(error.status || error.statusCode || 500).json({
       message: error.message || "Error al obtenr los datos",
       error,
       data: null,

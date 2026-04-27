@@ -138,17 +138,33 @@ const obtenerCambios = (body) => {
   return cambios;
 };
 
-const notificado = async ({ id_booking, body, id_user }) => {
+const notificado = async ({ connection, id_booking, body, id_user }) => {
+  console.log("📢 [NOTIFICADO] Entró a la función notificado", {
+    id_booking,
+    id_user,
+    tipo: body?.tipo,
+  });
+
+  if (!connection) {
+    throw new Error("Falta la conexión de la transacción en notificado");
+  }
+
   if (!id_booking) {
     throw new Error("Falta id_booking para crear notificación");
   }
 
-  const rows = await executeQuery(
+  const query = async (sql, params = []) => {
+    const [rows] = await connection.query(sql, params);
+    return rows;
+  };
+
+  const rows = await query(
     `
     SELECT 
       id_relacion,
       id_booking,
-      prefacturado
+      prefacturado,
+      id_confirmacion
     FROM vw_details_booking
     WHERE id_booking = ?
     LIMIT 1
@@ -157,6 +173,7 @@ const notificado = async ({ id_booking, body, id_user }) => {
   );
 
   if (!rows || rows.length === 0) {
+    console.log("⚠️ [NOTIFICADO] No se encontró la reserva en vw_details_booking");
     return {
       creado: false,
       message: "No se encontró la reserva en vw_details_booking",
@@ -166,41 +183,61 @@ const notificado = async ({ id_booking, body, id_user }) => {
   const reserva = rows[0];
   const id_relacion = reserva.id_relacion;
   const prefacturado = reserva.prefacturado;
+  const id_confirmacion = reserva.id_confirmacion;
 
-  const cambios = obtenerCambios(body);
+  const cambios = obtenerCambios(body) || {};
+  const tieneCambios = Object.keys(cambios).length > 0;
 
-  if (Object.keys(cambios).length === 0) {
-    return {
-      creado: false,
-      message: "No hay cambios para notificar",
-    };
-  }
+  const rowsFacturas = await query(
+    `
+    SELECT DISTINCT ifa.id_factura
+    FROM items_facturas ifa
+    INNER JOIN items i
+      ON i.id_item = ifa.id_item
+    WHERE i.id_relacion = ?
+      AND ifa.id_factura IS NOT NULL
+    `,
+    [id_relacion]
+  );
+
+  const idFacturas = rowsFacturas.map((row) => row.id_factura).filter(Boolean);
 
   let detalle = {
-    tipo: "reserva_editada",
+    tipo: body?.tipo || (tieneCambios ? "reserva_editada" : "reserva_cancelada"),
     prefacturado,
-    cambios,
+    id_confirmacion,
   };
 
+  if (idFacturas.length === 1) {
+    detalle.id_factura = idFacturas[0];
+  }
+
+  if (idFacturas.length > 1) {
+    detalle.id_facturas = idFacturas;
+  }
+
   if (prefacturado !== "sin_enviar") {
-    detalle.estatus = "alterada";
+    detalle.estatus = tieneCambios ? "alterada" : "cancelada";
+
+    // aquí mandas todos los cambios cuando NO es sin_enviar
+    detalle.cambios = cambios;
   }
 
   if (prefacturado === "sin_enviar") {
-    const rowsFacturada = await executeQuery(
+    const rowsFacturada = await query(
       `
       SELECT 1 AS existe
       FROM items i
       WHERE i.id_relacion = ?
         AND (
           EXISTS (
-            SELECT 1 
-            FROM items_pagos ip 
+            SELECT 1
+            FROM items_pagos ip
             WHERE ip.id_item = i.id_item
           )
           OR EXISTS (
-            SELECT 1 
-            FROM items_facturas ifa 
+            SELECT 1
+            FROM items_facturas ifa
             WHERE ifa.id_item = i.id_item
           )
         )
@@ -210,18 +247,24 @@ const notificado = async ({ id_booking, body, id_user }) => {
     );
 
     if (rowsFacturada?.length > 0) {
-      detalle.estatus = "alterada pero ya facturada";
+      detalle.estatus = "facturada";
+    } else if (!tieneCambios) {
+      detalle.estatus = "cancelada";
+    } else {
+      detalle.estatus = "alterada";
+      detalle.cambios = cambios;
     }
   }
 
   if (!detalle.estatus) {
+    console.log("⚠️ [NOTIFICADO] No se pudo determinar el estatus de la notificación");
     return {
       creado: false,
-      message: "La reserva está sin_enviar y no tiene pagos/facturas asociadas",
+      message: "No se pudo determinar el estatus de la notificación",
     };
   }
 
-  await executeQuery(
+  await query(
     `
     INSERT INTO notificadas (
       id_relacion,
@@ -240,6 +283,14 @@ const notificado = async ({ id_booking, body, id_user }) => {
       id_user,
     ]
   );
+
+  console.log("✅ [NOTIFICADO] Notificación insertada correctamente", {
+    id_relacion,
+    id_booking: reserva.id_booking,
+    estatus: detalle.estatus,
+    id_confirmacion,
+    idFacturas,
+  });
 
   return {
     creado: true,
