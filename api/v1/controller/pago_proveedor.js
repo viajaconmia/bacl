@@ -3899,6 +3899,10 @@ const getSolicitudes2 = async (req, res) => {
       return [];
     };
 
+    const unique = (arr) => {
+      return [...new Set((arr || []).filter(Boolean))];
+    };
+
     const flattenPagosArr = (v) => {
       const arr = Array.isArray(v) ? v : toArray(v);
       const lvl1 = arr.flatMap((x) => (Array.isArray(x) ? x : [x]));
@@ -3965,32 +3969,37 @@ const getSolicitudes2 = async (req, res) => {
       "check_in",
       "check_out",
     ]);
+
     const rawFiltrarFechaPorReserva = clean(
       req.query.filtrar_fecha_por_reserva,
     );
+
     const filtrarFechaPorReserva =
       rawFiltrarFechaPorReserva &&
       allowedFechaReserva.has(String(rawFiltrarFechaPorReserva).toLowerCase())
         ? String(rawFiltrarFechaPorReserva).toLowerCase()
         : null;
 
-    // Traduce nombre de bucket (frontend) → valor real en DB para el SP
     const BUCKET_TO_ESTADO = {
-      ap_credito:        "SOLICITADA",
-      spei:              "TRANSFERENCIA_SOLICITADA",
-      pago_tdc:          "CARTA_ENVIADA",
-      pago_link:         "PAGADO LINK",
+      ap_credito: "SOLICITADA",
+      spei: "TRANSFERENCIA_SOLICITADA",
+      pago_tdc: "CARTA_ENVIADA",
+      pago_link: "PAGADO LINK",
       pendiente_credito: "CUPON ENVIADO",
-      pagada:            null,
-      notificados:       null,
-      canceladas:        "CANCELADA",
+      pagada: null,
+      notificados: null,
+      canceladas: "CANCELADA",
     };
 
     const rawEstado = clean(req.query.estado_solicitud);
+
     const estadoFiltro = rawEstado
-      ? (Object.prototype.hasOwnProperty.call(BUCKET_TO_ESTADO, rawEstado.toLowerCase())
-          ? BUCKET_TO_ESTADO[rawEstado.toLowerCase()]
-          : rawEstado)
+      ? Object.prototype.hasOwnProperty.call(
+          BUCKET_TO_ESTADO,
+          rawEstado.toLowerCase(),
+        )
+        ? BUCKET_TO_ESTADO[rawEstado.toLowerCase()]
+        : rawEstado
       : null;
 
     const filters = {
@@ -4066,20 +4075,30 @@ const getSolicitudes2 = async (req, res) => {
       .map((r) => r.id_solicitud_proveedor)
       .filter((id) => id !== null && id !== undefined);
 
+    // facturas_json viene del SP filtrado (uuid_factura, url_pdf, url_xml, etc.)
+    const facturasBySolicitud = {};
+    for (const row of spRows || []) {
+      const key = String(row.id_solicitud_proveedor);
+      const facturas = toArray(row.facturas_json);
+      if (facturas.length > 0) facturasBySolicitud[key] = facturas;
+    }
+
     let pagosRaw = [];
     if (ids.length > 0) {
       pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
     }
 
-    const pagosBySolicitud = (pagosRaw || []).reduce((acc, row) => {
-      const key = String(row.id_solicitud_proveedor);
+    const idsSet = new Set(ids.map(String));
+    const pagosBySolicitud = {};
 
+    for (const row of pagosRaw || []) {
+      const key = String(row.id_solicitud_proveedor);
+      if (!idsSet.has(key)) continue;
       const dispersiones = toArray(row.dispersiones_json);
       const pagos = toArray(row.pagos_json);
-
-      (acc[key] ||= []).push(...dispersiones, ...pagos);
-      return acc;
-    }, {});
+      if (!pagosBySolicitud[key]) pagosBySolicitud[key] = [];
+      pagosBySolicitud[key].push(...dispersiones, ...pagos);
+    }
 
     const data = (spRows || []).map((r) => {
       const {
@@ -4102,27 +4121,46 @@ const getSolicitudes2 = async (req, res) => {
         comentario_ajuste,
 
         pagos_facturas_proveedores_json,
-        uuids_facturas_json,
-        rfcs_facturas_json,
-        razones_sociales_facturas_json,
-        uuid_factura_principal,
-        rfc_factura_principal,
-        razon_social_factura_principal,
-
+        // facturas_json queda en ...rest → raw.facturas_json para extractFacturas del front
         ...rest
       } = r;
 
       const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
+      const facturasExtra =
+        facturasBySolicitud[String(id_solicitud_proveedor)] ?? [];
+
       const forma = norm(forma_pago_solicitada);
 
       const pagoStats = getPagoStats(pagos);
       const saldoNum = num(saldo);
       const factNums = getFacturaNums({ ...r, ...rest });
 
-      const facturasProveedor = toArray(pagos_facturas_proveedores_json);
-      const uuidsFacturas = toArray(uuids_facturas_json);
-      const rfcsFacturas = toArray(rfcs_facturas_json);
-      const razonesSocialesFacturas = toArray(razones_sociales_facturas_json);
+      const facturasPfp = toArray(pagos_facturas_proveedores_json);
+
+      const uuidsFacturasExtra = facturasExtra
+        .map((f) => f?.uuid_factura)
+        .filter(Boolean);
+
+      const rfcsFacturasExtra = facturasExtra
+        .map((f) => f?.rfc_emisor ?? f?.rfc ?? null)
+        .filter(Boolean);
+
+      const razonesSocialesFacturasExtra = facturasExtra
+        .map((f) => f?.razon_social_fiscal)
+        .filter(Boolean);
+
+      const facturasProveedor = [...facturasPfp, ...facturasExtra];
+
+      const uuidsFacturas = unique([...uuidsFacturasExtra]);
+      const rfcsFacturas = unique([...rfcsFacturasExtra]);
+      const razonesSocialesFacturas = unique([...razonesSocialesFacturasExtra]);
+
+      const facturaPrincipal = facturasExtra[0] ?? null;
+      const uuidFacturaPrincipal = facturaPrincipal?.uuid_factura ?? null;
+      const rfcFacturaPrincipal =
+        facturaPrincipal?.rfc_emisor ?? facturaPrincipal?.rfc ?? null;
+      const razonSocialFacturaPrincipal =
+        facturaPrincipal?.razon_social_fiscal ?? null;
 
       const estaPagada =
         norm(estatus_pagos) === "pagado" ||
@@ -4162,14 +4200,14 @@ const getSolicitudes2 = async (req, res) => {
         },
 
         proveedor: {
-          rfc: rfc_factura_principal,
-          razon_social: razon_social_factura_principal,
+          rfc: rfcFacturaPrincipal,
+          razon_social: razonSocialFacturaPrincipal,
         },
 
         facturas_proveedor: {
-          uuid_factura_principal,
-          rfc_factura_principal,
-          razon_social_factura_principal,
+          uuid_factura_principal: uuidFacturaPrincipal,
+          rfc_factura_principal: rfcFacturaPrincipal,
+          razon_social_factura_principal: razonSocialFacturaPrincipal,
           uuids_facturas: uuidsFacturas,
           rfcs_facturas: rfcsFacturas,
           razones_sociales_facturas: razonesSocialesFacturas,
@@ -4192,34 +4230,43 @@ const getSolicitudes2 = async (req, res) => {
       };
     });
 
-    // Buckear por estado_solicitud (prioridad: is_ajuste → notificados)
     const assignBucket = (row) => {
-      const estado = String(row?.solicitud_proveedor?.estado_solicitud ?? row?.estado_solicitud ?? "").toUpperCase().trim();
-      const isAjuste = Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) === 1 && estado !="SOLICITA";
+      const estado = String(
+        row?.solicitud_proveedor?.estado_solicitud ??
+          row?.estado_solicitud ??
+          "",
+      )
+        .toUpperCase()
+        .trim();
 
-      
-      if (estado === "SOLICITADA")            return "ap_credito";
+      const isAjuste =
+        Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) ===
+          1 && estado !== "SOLICITA";
+
+      if (estado === "SOLICITADA") return "ap_credito";
       if (estado === "CANCELADA") return "canceladas";
-      
+
       if (isAjuste) return "notificados";
-      if (estado === "PAGADO TARJETA" || estado === "PAGADO TRANSFERENCIA") return "pagada";
-      if (estado === "PAGADO LINK")           return "pago_link";
-      if (estado === "TRANSFERENCIA_SOLICITADA" || estado === "DISPERSION") return "spei";
-      if (estado === "CARTA_ENVIADA")         return "pago_tdc";
-      if (estado === "CUPON ENVIADO")         return "pendiente_credito";
-      
+      if (estado === "PAGADO TARJETA" || estado === "PAGADO TRANSFERENCIA")
+        return "pagada";
+      if (estado === "PAGADO LINK") return "pago_link";
+      if (estado === "TRANSFERENCIA_SOLICITADA" || estado === "DISPERSION")
+        return "spei";
+      if (estado === "CARTA_ENVIADA") return "pago_tdc";
+      if (estado === "CUPON ENVIADO") return "pendiente_credito";
+
       return "ap_credito";
     };
 
     const buckets = {
-      spei:              [],
-      pago_tdc:          [],
-      pago_link:         [],
+      spei: [],
+      pago_tdc: [],
+      pago_link: [],
       pendiente_credito: [],
-      ap_credito:        [],
-      pagada:            [],
-      notificados:       [],
-      canceladas:        [],
+      ap_credito: [],
+      pagada: [],
+      notificados: [],
+      canceladas: [],
     };
 
     for (const row of data) {
@@ -4250,6 +4297,7 @@ const getSolicitudes2 = async (req, res) => {
             spRows_len: spRows.length,
             mapped_len: data.length,
             pagosRaw_len: pagosRaw.length,
+            solicitudes_con_facturas: Object.keys(facturasBySolicitud).length,
           },
         },
       });
@@ -4262,7 +4310,7 @@ const getSolicitudes2 = async (req, res) => {
       meta,
     });
   } catch (error) {
-    console.error("this error is vucfkjtgxrfcjygvkugvkuj",error);
+    console.error("this error is vucfkjtgxrfcjygvkugvkuj", error);
     return res.status(500).json({
       ok: false,
       error: "Internal Server Error",

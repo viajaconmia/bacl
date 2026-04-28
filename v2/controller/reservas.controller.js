@@ -2373,7 +2373,106 @@
     }
   };
 
-  const obtener = async (req, res) => {
+
+  const cancelarBooking = async (req, res) => {
+    const { id_booking } = req.body;
+    const { user } = req.session;
+    const id_user = user.id;
+
+    try {
+      const response = await runTransaction(async (conn) => {
+        console.log(
+          "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
+          id_booking
+        );
+
+        const response = await cancelar(conn, id_booking);
+
+        console.log(
+          "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor..."
+        );
+
+        const proveedorResponse = await procesarSolicitudProveedorAlEditarReserva({
+          connection: conn,
+          metadata: { id_booking },
+          usuario: user?.id || user?.email || "system",
+        });
+
+        console.log(
+          "🚫 [CANCELAR_RESERVA] Solicitud al proveedor procesada:",
+          proveedorResponse
+        );
+
+        const notificacionResponse = await notificado({
+          connection: conn,
+          id_booking,
+          body: {
+            ...req.body,
+            tipo: "reserva_cancelada",
+          },
+          id_user,
+        });
+
+        console.log(
+          "🚫 [CANCELAR_RESERVA] Resultado de notificado:",
+          notificacionResponse
+        );
+
+        return response;
+      });
+
+      return res.status(200).json({
+        message: "obtenido bien",
+        data: response,
+      });
+    } catch (error) {
+      return res.status(error.status || error.statusCode || 500).json({
+        message: error.message || "Error al obtenr los datos",
+        error,
+        data: null,
+      });
+    }
+  };
+
+  const cancelar = async (conn, id_booking) => {
+    try {
+      const [reserva] = await conn.execute(
+        `SELECT * FROM vw_new_reservas WHERE id_booking = ?`,
+        [id_booking],
+      );
+      if (!reserva) {
+        throw new CustomError(
+          "No se encontro la reservacion",
+          404,
+          "ERROR_NOT_FOUND",
+          null,
+        );
+      }
+      console.log(reserva);
+      const [response] = await conn.execute(
+        `UPDATE bookings SET estado = "Cancelada" WHERE id_booking = ?`,
+        [id_booking],
+      );
+      const response2 = await conn.execute(
+        "UPDATE viajes_aereos SET codigo_confirmacion = CONCAT(codigo_confirmacion,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+        [id_booking],
+      );
+      const response3 = await conn.execute(
+        "UPDATE renta_autos SET codigo_renta_carro = CONCAT(codigo_renta_carro,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+        [id_booking],
+      );
+      const response4 = await conn.execute(
+        "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+        [id_booking],
+      );
+
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+    const obtener = async (req, res) => {
     let {
       page,
       length,
@@ -2558,104 +2657,7 @@
     }
   };
 
-  const cancelarBooking = async (req, res) => {
-    const { id_booking } = req.body;
-    const { user } = req.session;
-    const id_user = user.id;
-
-    try {
-      const response = await runTransaction(async (conn) => {
-        console.log(
-          "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
-          id_booking
-        );
-
-        const response = await cancelar(conn, id_booking);
-
-        console.log(
-          "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor..."
-        );
-
-        const proveedorResponse = await procesarSolicitudProveedorAlEditarReserva({
-          connection: conn,
-          metadata: { id_booking },
-          usuario: user?.id || user?.email || "system",
-        });
-
-        console.log(
-          "🚫 [CANCELAR_RESERVA] Solicitud al proveedor procesada:",
-          proveedorResponse
-        );
-
-        const notificacionResponse = await notificado({
-          connection: conn,
-          id_booking,
-          body: {
-            ...req.body,
-            tipo: "reserva_cancelada",
-          },
-          id_user,
-        });
-
-        console.log(
-          "🚫 [CANCELAR_RESERVA] Resultado de notificado:",
-          notificacionResponse
-        );
-
-        return response;
-      });
-
-      return res.status(200).json({
-        message: "obtenido bien",
-        data: response,
-      });
-    } catch (error) {
-      return res.status(error.status || error.statusCode || 500).json({
-        message: error.message || "Error al obtenr los datos",
-        error,
-        data: null,
-      });
-    }
-  };
-
-  const cancelar = async (conn, id_booking) => {
-    try {
-      const [reserva] = await conn.execute(
-        `SELECT * FROM vw_new_reservas WHERE id_booking = ?`,
-        [id_booking],
-      );
-      if (!reserva) {
-        throw new CustomError(
-          "No se encontro la reservacion",
-          404,
-          "ERROR_NOT_FOUND",
-          null,
-        );
-      }
-      console.log(reserva);
-      const [response] = await conn.execute(
-        `UPDATE bookings SET estado = "Cancelada" WHERE id_booking = ?`,
-        [id_booking],
-      );
-      const response2 = await conn.execute(
-        "UPDATE viajes_aereos SET codigo_confirmacion = CONCAT(codigo_confirmacion,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
-        [id_booking],
-      );
-      const response3 = await conn.execute(
-        "UPDATE renta_autos SET codigo_renta_carro = CONCAT(codigo_renta_carro,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
-        [id_booking],
-      );
-      const response4 = await conn.execute(
-        "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
-        [id_booking],
-      );
-
-      return response;
-    } catch (error) {
-      throw error;
-    }
-  };
-
+  
   const get_reservasClient_by_id_agente = async (body) => {
     try {
       const { id_client, usuario_creador } = body;
