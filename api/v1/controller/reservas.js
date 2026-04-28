@@ -1739,7 +1739,7 @@ const detalles_reservas = async (req, res) => {
     // --- Llamada al SP ---
     // sp_hospedaje_detalles(IN p_payload LONGTEXT)
     const sets = await executeSP2("sp_hospedaje_detalles", [p_payload], {
-      allSets: true,
+      allSets: true,    
     });
 
     const safe = (i) => (Array.isArray(sets?.[i]) ? sets[i] : []);

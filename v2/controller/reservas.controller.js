@@ -13,6 +13,7 @@ const Item = require("../model/item.model");
 const { Calculo, calcularNoches } = require("../../lib/utils/calculates");
 const { Formato } = require("../../lib/utils/formats");
 const controller = require("../../api/v1/controller/pago_proveedor");
+const { notificado } = require("../../api/v1/controller/avisos_reservas");
 
 /* =========================
  * UTILIDADES / HELPERS
@@ -57,11 +58,11 @@ async function liberar_items_facturados(connection, items_desactivados) {
   // 1) Trae los vínculos actuales (y bloquea filas)
   const [rows] = await connection.execute(
     `
-    SELECT id_item, id_factura, monto
-    FROM items_facturas
-    WHERE id_item IN (${ph}) AND monto > 0
-    FOR UPDATE
-    `,
+      SELECT id_item, id_factura, monto
+      FROM items_facturas
+      WHERE id_item IN (${ph}) AND monto > 0
+      FOR UPDATE
+      `,
     ids,
   );
 
@@ -85,15 +86,15 @@ async function liberar_items_facturados(connection, items_desactivados) {
   for (const [id_factura, monto_liberado] of porFactura.entries()) {
     await connection.execute(
       `
-      UPDATE facturas
-      SET saldo_x_aplicar_items =
-        CASE
-          WHEN saldo_x_aplicar_items IS NULL
-            THEN LEAST(total, total + ?)
-          ELSE LEAST(saldo_x_aplicar_items + ?, total)
-        END
-      WHERE id_factura = ?
-      `,
+        UPDATE facturas
+        SET saldo_x_aplicar_items =
+          CASE
+            WHEN saldo_x_aplicar_items IS NULL
+              THEN LEAST(total, total + ?)
+            ELSE LEAST(saldo_x_aplicar_items + ?, total)
+          END
+        WHERE id_factura = ?
+        `,
       [monto_liberado, monto_liberado, id_factura],
     );
     console.log(
@@ -123,13 +124,13 @@ async function insertar_items_facturas_y_descuento(
   // Descuenta saldo fiscal disponible (capado a >= 0; NULL => total)
   await connection.execute(
     `
-    UPDATE facturas
-    SET saldo_x_aplicar_items = CASE
-      WHEN saldo_x_aplicar_items IS NULL THEN GREATEST(total - ?, 0)
-      ELSE GREATEST(saldo_x_aplicar_items - ?, 0)
-    END
-    WHERE id_factura = ?
-    `,
+      UPDATE facturas
+      SET saldo_x_aplicar_items = CASE
+        WHEN saldo_x_aplicar_items IS NULL THEN GREATEST(total - ?, 0)
+        ELSE GREATEST(saldo_x_aplicar_items - ?, 0)
+      END
+      WHERE id_factura = ?
+      `,
     [m, m, id_factura],
   );
 }
@@ -231,11 +232,11 @@ async function crear_pago_desde_wallet(
   const transaccion = id_pago;
 
   const insert = `
-    INSERT INTO pagos (
-      id_pago, id_servicio, total, concepto, metodo_de_pago, tipo_de_pago,
-      id_saldo_a_favor, id_agente, estado, fecha_creacion, fecha_pago,
-      transaccion, saldo_aplicado
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?, ?)`;
+      INSERT INTO pagos (
+        id_pago, id_servicio, total, concepto, metodo_de_pago, tipo_de_pago,
+        id_saldo_a_favor, id_agente, estado, fecha_creacion, fecha_pago,
+        transaccion, saldo_aplicado
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?, ?)`;
 
   const params = [
     id_pago,
@@ -300,12 +301,12 @@ async function asociar_items_a_pago(
 
 async function get_payment_type(id_solicitud, id_servicio) {
   const query_credito = `select case when id_credito is not null then 1 else 0 end as is_credito 
-    from vw_reservas_client where id_solicitud = ?;`;
+      from vw_reservas_client where id_solicitud = ?;`;
 
   const query_pago_directo = `Select case when id_saldo_a_favor is null then 1 else 0 end as is_pago_directo
-    from pagos where id_servicio = ?`;
+      from pagos where id_servicio = ?`;
   const query_wallet = `Select case when id_saldo_a_favor is not null then 1 else 0 end as is_wallet
-    from pagos where id_servicio = ?`;
+      from pagos where id_servicio = ?`;
 
   let tipo_pago;
   const result_credito = await executeQuery(query_credito, [id_solicitud]);
@@ -433,10 +434,10 @@ async function are_invoiced_payments({ saldos }) {
   // 1) Saldo facturado?
   const ph = makeInPlaceholders(ids.length);
   const q1 = `
-    SELECT id_saldos
-    FROM saldos_a_favor
-    WHERE id_saldos IN (${ph}) AND is_facturado = 1
-  `;
+      SELECT id_saldos
+      FROM saldos_a_favor
+      WHERE id_saldos IN (${ph}) AND is_facturado = 1
+    `;
   const r1 = await executeQuery(q1, ids);
   const ids_facturados = new Set(r1.map((r) => String(r.id_saldos)));
   const saldos_filtrados = saldos.filter((s) =>
@@ -455,34 +456,34 @@ async function are_invoiced_payments({ saldos }) {
   const ids2 = saldos_filtrados.map((s) => String(s.id_saldos));
   const ph2 = makeInPlaceholders(ids2.length);
   const sql = `
-    WITH fps_dedup AS (
-      SELECT
-        fps.id_saldo_a_favor,
-        fps.id_factura,
-        SUM(COALESCE(fps.monto, 0)) AS monto_asociado_al_saldo
-      FROM facturas_pagos_y_saldos fps
-      WHERE fps.id_saldo_a_favor IN (${ph2})
-      GROUP BY fps.id_saldo_a_favor, fps.id_factura
-    )
-    SELECT 
-      saf.id_saldos,
-      d.id_factura,
-      COALESCE(f.total, 0) AS total_factura,
-      d.monto_asociado_al_saldo,
-      CASE 
-        WHEN f.saldo_x_aplicar_items IS NULL THEN f.total
-        ELSE f.saldo_x_aplicar_items
-      END AS saldo_interpretado_para_items,
-      f.created_at
-    FROM saldos_a_favor saf
-    LEFT JOIN fps_dedup d
-           ON d.id_saldo_a_favor = saf.id_saldos
-    LEFT JOIN facturas f
-           ON f.id_factura = d.id_factura
-    WHERE saf.id_saldos IN (${ph2})
-      AND saf.is_facturado = 1
-    ORDER BY saf.id_saldos, f.created_at, d.id_factura
-  `;
+      WITH fps_dedup AS (
+        SELECT
+          fps.id_saldo_a_favor,
+          fps.id_factura,
+          SUM(COALESCE(fps.monto, 0)) AS monto_asociado_al_saldo
+        FROM facturas_pagos_y_saldos fps
+        WHERE fps.id_saldo_a_favor IN (${ph2})
+        GROUP BY fps.id_saldo_a_favor, fps.id_factura
+      )
+      SELECT 
+        saf.id_saldos,
+        d.id_factura,
+        COALESCE(f.total, 0) AS total_factura,
+        d.monto_asociado_al_saldo,
+        CASE 
+          WHEN f.saldo_x_aplicar_items IS NULL THEN f.total
+          ELSE f.saldo_x_aplicar_items
+        END AS saldo_interpretado_para_items,
+        f.created_at
+      FROM saldos_a_favor saf
+      LEFT JOIN fps_dedup d
+            ON d.id_saldo_a_favor = saf.id_saldos
+      LEFT JOIN facturas f
+            ON f.id_factura = d.id_factura
+      WHERE saf.id_saldos IN (${ph2})
+        AND saf.is_facturado = 1
+      ORDER BY saf.id_saldos, f.created_at, d.id_factura
+    `;
   const r2 = await executeQuery(sql, [...ids2, ...ids2]);
 
   const facturas_wallet = r2
@@ -525,8 +526,8 @@ async function rebajar_wallet_saldos(connection, saldos_aplicados) {
 
     await connection.execute(
       `UPDATE saldos_a_favor 
-         SET saldo = GREATEST(COALESCE(saldo,0) - ?, 0) 
-       WHERE id_saldos = ?`,
+          SET saldo = GREATEST(COALESCE(saldo,0) - ?, 0) 
+        WHERE id_saldos = ?`,
       [usado, id_saldos],
     );
     console.log(`💳 [WALLET] Descontado ${usado} de saldo ${id_saldos}`);
@@ -681,7 +682,7 @@ async function manejar_reduccion_fiscal(
     );
     await connection.execute(
       `INSERT INTO saldos_a_favor (id_agente, monto, concepto, activo, is_facturable, is_devolucion, monto_facturado, fecha_creacion, fecha_pago) 
-       VALUES (?, ?, ?, 1, 0, 1, 0, CURDATE(), CURDATE())`,
+        VALUES (?, ?, ?, 1, 0, 1, 0, CURDATE(), CURDATE())`,
       [
         id_agente,
         monto_liberado_reasignable,
@@ -718,10 +719,10 @@ async function manejar_reduccion_fiscal(
       // 1) suma previa
       const [prevSumRows] = await connection.execute(
         `
-      SELECT COALESCE(SUM(monto), 0) AS suma
-      FROM items_facturas
-      WHERE id_factura IN (${ph})
-      `,
+        SELECT COALESCE(SUM(monto), 0) AS suma
+        FROM items_facturas
+        WHERE id_factura IN (${ph})
+        `,
         facturas_ids,
       );
 
@@ -737,15 +738,15 @@ async function manejar_reduccion_fiscal(
 
       // 2) update igualitario
       const updateEqualSql = `
-      UPDATE items_facturas i
-      JOIN (
-        SELECT COUNT(*) AS n
-        FROM items_facturas
-        WHERE id_factura IN (${ph})
-      ) t
-      SET i.monto = ROUND(? / NULLIF(t.n, 0), 2)
-      WHERE i.id_factura IN (${ph});
-    `;
+        UPDATE items_facturas i
+        JOIN (
+          SELECT COUNT(*) AS n
+          FROM items_facturas
+          WHERE id_factura IN (${ph})
+        ) t
+        SET i.monto = ROUND(? / NULLIF(t.n, 0), 2)
+        WHERE i.id_factura IN (${ph});
+      `;
 
       const updateEqualParams = [...facturas_ids, objetivo, ...facturas_ids];
 
@@ -761,10 +762,10 @@ async function manejar_reduccion_fiscal(
       // 3) ajustar centavos
       const [afterSumRows] = await connection.execute(
         `
-      SELECT COALESCE(SUM(monto), 0) AS suma, MIN(id_item) AS any_item
-      FROM items_facturas
-      WHERE id_factura IN (${ph})
-      `,
+        SELECT COALESCE(SUM(monto), 0) AS suma, MIN(id_item) AS any_item
+        FROM items_facturas
+        WHERE id_factura IN (${ph})
+        `,
         facturas_ids,
       );
 
@@ -774,11 +775,11 @@ async function manejar_reduccion_fiscal(
       if (Math.abs(delta) >= 0.01 && afterSumRows?.[0]?.any_item) {
         await connection.execute(
           `
-        UPDATE items_facturas 
-        SET monto = ROUND(monto + ?, 2)
-        WHERE id_item = ?
-        LIMIT 1
-        `,
+          UPDATE items_facturas 
+          SET monto = ROUND(monto + ?, 2)
+          WHERE id_item = ?
+          LIMIT 1
+          `,
           [delta, afterSumRows[0].any_item],
         );
         console.log("🔧 [FISCAL] Ajuste de redondeo aplicado:", delta);
@@ -813,15 +814,15 @@ async function actualizar_credito_existente(
 
   const id_credito_a_actualizar = rows[0].id_credito;
   const updateQuery = `
-    UPDATE pagos_credito 
-    SET 
-      total = total + ?, 
-      subtotal = (total + ?) / 1.16,
-      impuestos = (total + ?) - ((total + ?) / 1.16),
-      monto_a_credito = monto_a_credito + ?,
-      pendiente_por_cobrar = pendiente_por_cobrar + ?,
-      pago_por_credito =  ?
-    WHERE id_credito = ?`;
+      UPDATE pagos_credito 
+      SET 
+        total = total + ?, 
+        subtotal = (total + ?) / 1.16,
+        impuestos = (total + ?) - ((total + ?) / 1.16),
+        monto_a_credito = monto_a_credito + ?,
+        pendiente_por_cobrar = pendiente_por_cobrar + ?,
+        pago_por_credito =  ?
+      WHERE id_credito = ?`;
 
   const [updateResult] = await connection.execute(updateQuery, [
     delta_total,
@@ -867,11 +868,11 @@ async function crear_nuevo_pago_credito(
   const { subtotal, impuestos } = Calculo.precio({ total: delta_total });
 
   const insertQuery = `
-    INSERT INTO pagos_credito 
-      (id_credito, id_servicio, monto_a_credito, total, subtotal, impuestos, 
-       pendiente_por_cobrar, pago_por_credito, fecha_creacion, concepto, 
-       responsable_pago_agente)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 0, CURDATE(), ?, ?)`;
+      INSERT INTO pagos_credito 
+        (id_credito, id_servicio, monto_a_credito, total, subtotal, impuestos, 
+        pendiente_por_cobrar, pago_por_credito, fecha_creacion, concepto, 
+        responsable_pago_agente)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, CURDATE(), ?, ?)`;
 
   const [insertResult] = await connection.execute(insertQuery, [
     nuevo_id_credito,
@@ -896,9 +897,9 @@ async function obtener_total_pagado_credito(connection, id_servicio) {
     `🏦 [CREDITO] Obteniendo total pagado para servicio (crédito) ${id_servicio}`,
   );
   const query = `
-        SELECT SUM(pago_por_credito) as total_pagado 
-        FROM pagos_credito 
-        WHERE id_servicio = ?`;
+          SELECT SUM(pago_por_credito) as total_pagado 
+          FROM pagos_credito 
+          WHERE id_servicio = ?`;
   const [rows] = await connection.execute(query, [id_servicio]);
   const total_pagado = parseFloat(rows[0]?.total_pagado || 0);
   console.log(
@@ -1119,6 +1120,7 @@ function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
 }
 
 const { randomUUID, randomBytes } = require("crypto");
+const { Session } = require("inspector/promises");
 
 function money2(value) {
   const n = Number(value || 0);
@@ -1195,11 +1197,11 @@ async function procesarSolicitudProveedorAlEditarReserva({
 
   const [rowsBooking] = await connection.execute(
     `
-      SELECT DISTINCT id_solicitud
-      FROM booking_solicitud
-      WHERE id_booking = ?
-      FOR UPDATE
-    `,
+        SELECT DISTINCT id_solicitud
+        FROM booking_solicitud
+        WHERE id_booking = ?
+        FOR UPDATE
+      `,
     [id_booking],
   );
 
@@ -1232,19 +1234,19 @@ async function procesarSolicitudProveedorAlEditarReserva({
   for (const id_solicitud_proveedor of idsSolicitud) {
     const [rowsSolicitud] = await connection.execute(
       `
-        SELECT
-          id_solicitud_proveedor,
-          estado_solicitud,
-          forma_pago_solicitada,
-          id_proveedor,
-          monto_solicitado,
-          saldo,
-          comentarios
-        FROM solicitudes_pago_proveedor
-        WHERE id_solicitud_proveedor = ?
-        LIMIT 1
-        FOR UPDATE
-      `,
+          SELECT
+            id_solicitud_proveedor,
+            estado_solicitud,
+            forma_pago_solicitada,
+            id_proveedor,
+            monto_solicitado,
+            saldo,
+            comentarios
+          FROM solicitudes_pago_proveedor
+          WHERE id_solicitud_proveedor = ?
+          LIMIT 1
+          FOR UPDATE
+        `,
       [id_solicitud_proveedor],
     );
 
@@ -1270,30 +1272,30 @@ async function procesarSolicitudProveedorAlEditarReserva({
 
     const [rowsPagos] = await connection.execute(
       `
-        SELECT
-          id_pago_proveedores,
-          id_pago_dispersion,
-          id_solicitud_proveedor,
-          codigo_dispersion,
-          monto_pagado,
-          fecha_pago,
-          fecha_emision,
-          monto,
-          total,
-          metodo_de_pago,
-          referencia_pago,
-          concepto,
-          numero_comprobante,
-          cuenta_origen,
-          cuenta_destino,
-          nombre_pagador,
-          nombre_beneficiario,
-          descripcion
-        FROM pago_proveedores
-        WHERE id_solicitud_proveedor = ?
-        ORDER BY COALESCE(fecha_pago, fecha_emision) DESC, id_pago_proveedores DESC
-        FOR UPDATE
-      `,
+          SELECT
+            id_pago_proveedores,
+            id_pago_dispersion,
+            id_solicitud_proveedor,
+            codigo_dispersion,
+            monto_pagado,
+            fecha_pago,
+            fecha_emision,
+            monto,
+            total,
+            metodo_de_pago,
+            referencia_pago,
+            concepto,
+            numero_comprobante,
+            cuenta_origen,
+            cuenta_destino,
+            nombre_pagador,
+            nombre_beneficiario,
+            descripcion
+          FROM pago_proveedores
+          WHERE id_solicitud_proveedor = ?
+          ORDER BY COALESCE(fecha_pago, fecha_emision) DESC, id_pago_proveedores DESC
+          FOR UPDATE
+        `,
       [id_solicitud_proveedor],
     );
 
@@ -1355,24 +1357,25 @@ async function procesarSolicitudProveedorAlEditarReserva({
 
         await connection.execute(
           `
-    INSERT INTO saldos (
-      id_saldo,
-      id_proveedor,
-      monto,
-      restante,
-      forma_pago,
-      fecha_procesamiento,
-      referencia,
-      id_hospedaje,
-      transaction_id,
-      motivo,
-      comentarios,
-      id_solicitud,
-      update_at,
-      reserva
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `,
+              INSERT INTO saldos (
+                id_saldo,
+                id_proveedor,
+                monto,
+                restante,
+                forma_pago,
+                fecha_procesamiento,
+                referencia,
+                id_hospedaje,
+                transaction_id,
+                motivo,
+                comentarios,
+                estado,
+                id_solicitud,
+                update_at,
+                reserva
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?,?)
+            `,
           [
             id_saldo,
             String(solicitud.id_proveedor),
@@ -1407,22 +1410,22 @@ async function procesarSolicitudProveedorAlEditarReserva({
     if (estadoAnterior === "DISPERSION") {
       await connection.execute(
         `
-          UPDATE solicitudes_pago_proveedor
-          SET
-            estado_solicitud = 'CANCELADA',
-            is_ajuste = 1,
-            comentario_ajuste = ?
-          WHERE id_solicitud_proveedor = ?
-        `,
+            UPDATE solicitudes_pago_proveedor
+            SET
+              estado_solicitud = 'CANCELADA',
+              is_ajuste = 1,
+              comentario_ajuste = ?
+            WHERE id_solicitud_proveedor = ?
+          `,
         ["Cancelada por edición de reserva", id_solicitud_proveedor],
       );
     } else {
       await connection.execute(
         `
-          UPDATE solicitudes_pago_proveedor
-          SET estado_solicitud = 'CANCELADA'
-          WHERE id_solicitud_proveedor = ?
-        `,
+            UPDATE solicitudes_pago_proveedor
+            SET estado_solicitud = 'CANCELADA'
+            WHERE id_solicitud_proveedor = ?
+          `,
         [id_solicitud_proveedor],
       );
     }
@@ -1462,6 +1465,9 @@ const editar_reserva_definitivo = async (req, res) => {
   console.log("😒😒😒😒😒😒", req.body.venta.current.total);
 
   try {
+    const { user } = req.session;
+    const id_user = user.id;
+
     return await runTransaction(async (connection) => {
       console.log("🚀 [EDITAR_RESERVA] Iniciando editar_reserva_definitivo");
 
@@ -1496,7 +1502,15 @@ const editar_reserva_definitivo = async (req, res) => {
           error: "Faltan IDs clave (id_servicio, id_hospedaje, id_booking).",
         });
       }
-
+      // Fire-and-forget: corre en paralelo sin bloquear la transacción principal.
+      // Errores internos se loguean pero no abortan el flujo.
+      notificado({
+        id_booking: metadata.id_booking,
+        body: req.body,
+        id_user,
+      }).catch((err) =>
+        console.error("[notificado] error background:", err?.message ?? err),
+      );
       const resultadoSolicitud =
         await procesarSolicitudProveedorAlEditarReserva({
           connection,
@@ -2215,9 +2229,7 @@ const editar_reserva_definitivo = async (req, res) => {
         restanteNum <= 0
       ) {
         const monto_devolucion = Math.abs(restanteNum);
-        const concepto = `Devolucion por ajuste de reserva en ${
-          metadata.hotel_reserva ?? ""
-        }`;
+        const concepto = `Devolucion por ajuste de reserva en ${metadata.hotel_reserva ?? ""}`;
 
         if (!metadata?.id_agente) {
           console.warn(
@@ -2231,7 +2243,7 @@ const editar_reserva_definitivo = async (req, res) => {
           // 1. Buscamos el pago y verificamos si ya tiene un saldo asociado y si está facturado
           const [rows_pago] = await connection.execute(
             `SELECT id_pago, id_saldo_a_favor, is_facturado, total, saldo_aplicado 
-       FROM pagos WHERE id_servicio = ? ORDER BY fecha_creacion ASC LIMIT 1`,
+        FROM pagos WHERE id_servicio = ? ORDER BY fecha_creacion ASC LIMIT 1`,
             [metadata.id_servicio],
           );
 
@@ -2246,16 +2258,16 @@ const editar_reserva_definitivo = async (req, res) => {
               );
               await connection.execute(
                 `UPDATE saldos_a_favor 
-           SET saldo = saldo + ?, updated_at = NOW(), activo = 1 
-           WHERE id_saldos = ?`,
+            SET saldo = saldo + ?, updated_at = NOW(), activo = 1 
+            WHERE id_saldos = ?`,
                 [monto_devolucion, pago.id_saldo_a_favor],
               );
 
               await connection.execute(
                 `UPDATE pagos 
-           SET saldo_aplicado = GREATEST(0, COALESCE(saldo_aplicado, 0) - ?),
-               estado = IF(COALESCE(saldo_aplicado, 0) - ? <= 0, 'Devuelto', estado)
-           WHERE id_pago = ?`,
+            SET saldo_aplicado = GREATEST(0, COALESCE(saldo_aplicado, 0) - ?),
+                estado = IF(COALESCE(saldo_aplicado, 0) - ? <= 0, 'Devuelto', estado)
+            WHERE id_pago = ?`,
                 [monto_devolucion, monto_devolucion, id_pago_original],
               );
             } else {
@@ -2266,9 +2278,9 @@ const editar_reserva_definitivo = async (req, res) => {
 
               const [resultSaldo] = await connection.execute(
                 `INSERT INTO saldos_a_favor (
-            id_agente, monto, saldo, concepto, activo, is_facturable, 
-            is_devolucion, is_facturado, monto_facturado, fecha_creacion, fecha_pago
-          ) VALUES (?, ?, ?, ?, 1, 0, 1, ?, 0, NOW(), NOW())`,
+              id_agente, monto, saldo, concepto, activo, is_facturable, 
+              is_devolucion, is_facturado, monto_facturado, fecha_creacion, fecha_pago
+            ) VALUES (?, ?, ?, ?, 1, 0, 1, ?, 0, NOW(), NOW())`,
                 [
                   metadata.id_agente,
                   pago.total, // El monto total del pago original
@@ -2283,16 +2295,16 @@ const editar_reserva_definitivo = async (req, res) => {
               // Actualizar el pago con el nuevo saldo
               await connection.execute(
                 `UPDATE pagos 
-           SET id_saldo_a_favor = ?, saldo_aplicado = ?, estado = 'Devuelto' 
-           WHERE id_pago = ?`,
+            SET id_saldo_a_favor = ?, saldo_aplicado = ?, estado = 'Devuelto' 
+            WHERE id_pago = ?`,
                 [newIdSaldo, monto_devolucion, id_pago_original],
               );
 
               // VINCULACIÓN DE FACTURACIÓN: Si el pago estaba en una factura, asociamos el saldo
               await connection.execute(
                 `UPDATE facturas_pagos_y_saldos 
-           SET id_saldo_a_favor = ?, updated_at = NOW() 
-           WHERE id_pago = ?`,
+            SET id_saldo_a_favor = ?, updated_at = NOW() 
+            WHERE id_pago = ?`,
                 [newIdSaldo, id_pago_original],
               );
             }
@@ -2303,16 +2315,16 @@ const editar_reserva_definitivo = async (req, res) => {
 
             await connection.execute(
               `UPDATE items_pagos ip
-         JOIN (SELECT id_pago, COUNT(*) AS n FROM items_pagos WHERE id_pago = ?) t ON t.id_pago = ip.id_pago
-         SET ip.monto = ROUND(? / NULLIF(t.n, 0), 2)
-         WHERE ip.id_pago = ?`,
+          JOIN (SELECT id_pago, COUNT(*) AS n FROM items_pagos WHERE id_pago = ?) t ON t.id_pago = ip.id_pago
+          SET ip.monto = ROUND(? / NULLIF(t.n, 0), 2)
+          WHERE ip.id_pago = ?`,
               [id_pago_original, objetivoPago, id_pago_original],
             );
 
             // Ajuste de centavos final
             const [sumRows] = await connection.execute(
               `SELECT COALESCE(SUM(monto), 0) AS suma, MIN(id_item) AS any_item 
-         FROM items_pagos WHERE id_pago = ?`,
+          FROM items_pagos WHERE id_pago = ?`,
               [id_pago_original],
             );
             const delta = Number((objetivoPago - sumRows[0].suma).toFixed(2));
@@ -2355,6 +2367,153 @@ const editar_reserva_definitivo = async (req, res) => {
       error: "Ocurrió un error al procesar la edición.",
       detalle: error?.message,
     });
+  }
+};
+
+const cancelarBooking = async (req, res) => {
+  const { id_booking } = req.body;
+  const { user } = req.session;
+  const id_user = user.id;
+
+  try {
+    const response = await runTransaction(async (conn) => {
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
+        id_booking,
+      );
+
+      const response = await cancelar(conn, id_booking);
+
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor...",
+      );
+
+      const proveedorResponse = await procesarSolicitudProveedorAlEditarReserva(
+        {
+          connection: conn,
+          metadata: { id_booking },
+          usuario: user?.id || user?.email || "system",
+        },
+      );
+
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Solicitud al proveedor procesada:",
+        proveedorResponse,
+      );
+
+      const notificacionResponse = await notificado({
+        connection: conn,
+        id_booking,
+        body: {
+          ...req.body,
+          tipo: "reserva_cancelada",
+        },
+        id_user,
+      });
+
+      console.log(
+        "🚫 [CANCELAR_RESERVA] Resultado de notificado:",
+        notificacionResponse,
+      );
+
+      return response;
+    });
+
+    return res.status(200).json({
+      message: "obtenido bien",
+      data: response,
+    });
+  } catch (error) {
+    return res.status(error.status || error.statusCode || 500).json({
+      message: error.message || "Error al obtenr los datos",
+      error,
+      data: null,
+    });
+  }
+};
+
+const cancelar = async (conn, id_booking) => {
+  try {
+    const [reserva] = await conn.execute(
+      `SELECT * FROM vw_new_reservas WHERE id_booking = ?`,
+      [id_booking],
+    );
+    if (!reserva) {
+      throw new CustomError(
+        "No se encontro la reservacion",
+        404,
+        "ERROR_NOT_FOUND",
+        null,
+      );
+    }
+    console.log(reserva);
+    const [response] = await conn.execute(
+      `UPDATE bookings SET estado = "Cancelada" WHERE id_booking = ?`,
+      [id_booking],
+    );
+    const response2 = await conn.execute(
+      "UPDATE viajes_aereos SET codigo_confirmacion = CONCAT(codigo_confirmacion,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+      [id_booking],
+    );
+    const response3 = await conn.execute(
+      "UPDATE renta_autos SET codigo_renta_carro = CONCAT(codigo_renta_carro,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+      [id_booking],
+    );
+    const response4 = await conn.execute(
+      "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
+      [id_booking],
+    );
+
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+const get_reservasClient_by_id_agente = async (body) => {
+  try {
+    const { id_client, usuario_creador } = body;
+    if (!id_client) {
+      throw new CustomError(
+        "Falta el parametro id_client",
+        400,
+        "ERROR_MISSING_PARAMETER",
+        null,
+      );
+    }
+    let result = await executeSP("sp_get_reservasClient_by_id_cliente", [
+      id_client,
+    ]);
+
+    const [{ restringido }] = await executeQuery(
+      `select restringido from agentes where id_agente = ?`,
+      [id_client],
+    );
+
+    if (Boolean(restringido) && usuario_creador) {
+      result = result.filter((item) => item.usuario_creador == usuario_creador);
+    }
+    result = result.filter((item) => !item.id_booking);
+    result = result.map((item) => ({
+      ...item,
+      codigo_confirmacion: "",
+      proveedor: item.hotel || null,
+      type: "hotel",
+      tipo_cuarto_vuelo:
+        item.room == "single"
+          ? "SENCILLO"
+          : item.room == "double"
+            ? "DOBLE"
+            : null,
+      id_user_creador: item.usuario_creador || null,
+      room: item.tipo_cuarto_vuelo || null,
+      total: item.total ? String(item.total) : null,
+      viajero: item.nombre_viajero_reservacion.replace("  ", " ") || "",
+    }));
+    console.log("🔍 [FILTRO CLIENTE] Resultado final:", result.length);
+    return result;
+  } catch (error) {
+    throw error;
   }
 };
 
@@ -2518,125 +2677,6 @@ ${finanzas ? "GROUP BY vw.id_booking, f.id_factura" : ""}
     res
       .status(error.statusCode || error.status || 500)
       .json({ error, message: error.message || "Error al obtener los datos" });
-  }
-};
-
-const cancelarBooking = async (req, res) => {
-  const { id_booking } = req.body;
-  try {
-    const response = await runTransaction(async (conn) => {
-      console.log(
-        "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
-        id_booking,
-      );
-      const response = await cancelar(conn, id_booking);
-      console.log(
-        "🚫 [CANCELAR_RESERVA] Reserva cancelada en base de datos, procesando solicitud al proveedor...",
-      );
-      const res = await procesarSolicitudProveedorAlEditarReserva({
-        connection: conn,
-        metadata: { id_booking },
-        usuario: req?.user?.id || req?.user?.email || "system",
-      });
-      console.log(
-        "🚫 [CANCELAR_RESERVA] Solicitud al proveedor procesada:",
-        res,
-      );
-      return response;
-    });
-    res.status(200).json({ message: "obtenido bien", data: response });
-  } catch (error) {
-    console.log(error);
-    res.status(error.status || error.statusCode || 500).json({
-      message: error.message || "Error al obtenr los datos",
-      error,
-      data: null,
-    });
-  }
-};
-
-const cancelar = async (conn, id_booking) => {
-  try {
-    const [reserva] = await conn.execute(
-      `SELECT * FROM vw_new_reservas WHERE id_booking = ?`,
-      [id_booking],
-    );
-    if (!reserva) {
-      throw new CustomError(
-        "No se encontro la reservacion",
-        404,
-        "ERROR_NOT_FOUND",
-        null,
-      );
-    }
-    console.log(reserva);
-    const [response] = await conn.execute(
-      `UPDATE bookings SET estado = "Cancelada" WHERE id_booking = ?`,
-      [id_booking],
-    );
-    const response2 = await conn.execute(
-      "UPDATE viajes_aereos SET codigo_confirmacion = CONCAT(codigo_confirmacion,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
-      [id_booking],
-    );
-    const response3 = await conn.execute(
-      "UPDATE renta_autos SET codigo_renta_carro = CONCAT(codigo_renta_carro,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
-      [id_booking],
-    );
-    const response4 = await conn.execute(
-      "UPDATE hospedajes SET codigo_reservacion_hotel = CONCAT(codigo_reservacion_hotel,'_CANCEL_', RIGHT(REPLACE(id_booking, '-', ''), 8)) WHERE id_booking = ?",
-      [id_booking],
-    );
-
-    return response;
-  } catch (error) {
-    throw error;
-  }
-};
-
-const get_reservasClient_by_id_agente = async (body) => {
-  try {
-    const { id_client, usuario_creador } = body;
-    if (!id_client) {
-      throw new CustomError(
-        "Falta el parametro id_client",
-        400,
-        "ERROR_MISSING_PARAMETER",
-        null,
-      );
-    }
-    let result = await executeSP("sp_get_reservasClient_by_id_cliente", [
-      id_client,
-    ]);
-
-    const [{ restringido }] = await executeQuery(
-      `select restringido from agentes where id_agente = ?`,
-      [id_client],
-    );
-
-    if (Boolean(restringido) && usuario_creador) {
-      result = result.filter((item) => item.usuario_creador == usuario_creador);
-    }
-    result = result.filter((item) => !item.id_booking);
-    result = result.map((item) => ({
-      ...item,
-      codigo_confirmacion: "",
-      proveedor: item.hotel || null,
-      type: "hotel",
-      tipo_cuarto_vuelo:
-        item.room == "single"
-          ? "SENCILLO"
-          : item.room == "double"
-            ? "DOBLE"
-            : null,
-      id_user_creador: item.usuario_creador || null,
-      room: item.tipo_cuarto_vuelo || null,
-      total: item.total ? String(item.total) : null,
-      viajero: item.nombre_viajero_reservacion.replace("  ", " ") || "",
-    }));
-    console.log("🔍 [FILTRO CLIENTE] Resultado final:", result.length);
-    return result;
-  } catch (error) {
-    throw error;
   }
 };
 
