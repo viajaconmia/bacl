@@ -2513,32 +2513,35 @@ ${finanzas ? "GROUP BY vw.id_booking, f.id_factura" : ""}
 `;
 
   try {
-    let data = await executeQuery(sqlData, [...params]);
-    const response_tracker = await executeQuery(sqlTotal, params);
-    console.log("🔍 [SQL] Total obtenido:", response_tracker);
-    const [{ total }] = response_tracker;
+    const needsRestringido = !!(usuario_creador && req.query.id_client);
 
-    if (is_client) {
-      console.log("🔍 [FILTRO CLIENTE] Datos del cliente:", data);
+    const [dataRaw, [{ total }]] = await Promise.all([
+      executeQuery(sqlData, [...params]),
+      executeQuery(sqlTotal, params),
+    ]);
+    let data = dataRaw;
+
+    if (is_client && needsRestringido) {
+      const [dataClient, [{ restringido }]] = await Promise.all([
+        get_reservasClient_by_id_agente({ id_client: req.query.id_client, usuario_creador }),
+        executeQuery(`SELECT restringido FROM agentes WHERE id_agente = ?`, [req.query.id_client]),
+      ]);
+      data = [...dataClient, ...data];
+      if (restringido) data = data.filter((i) => i.id_user_creador == usuario_creador);
+    } else if (is_client) {
       const dataClient = await get_reservasClient_by_id_agente({
         id_client: req.query.id_client,
         usuario_creador,
       });
       data = [...dataClient, ...data];
-      console.log(
-        "🔍 [FILTRO CLIENTE] Datos del cliente filtrados:",
-        dataClient[0]
-      );
-    }
-    if (usuario_creador && req.query.id_client) {
+    } else if (needsRestringido) {
       const [{ restringido }] = await executeQuery(
-        `select restringido from agentes where id_agente = ?`,
+        `SELECT restringido FROM agentes WHERE id_agente = ?`,
         [req.query.id_client]
       );
-      if (Boolean(restringido)) {
-        data = data.filter((i) => i.id_user_creador == usuario_creador);
-      }
+      if (restringido) data = data.filter((i) => i.id_user_creador == usuario_creador);
     }
+
     res.status(200).json({
       message: "ok",
       data,
