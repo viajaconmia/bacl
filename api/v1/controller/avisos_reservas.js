@@ -142,20 +142,23 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
   console.log("📢 [NOTIFICADO] Entró a la función notificado", {
     id_booking,
     id_user,
-    tipo: body?.tipo,
   });
 
-  if (!connection) {
-    throw new Error("Falta la conexión de la transacción en notificado");
-  }
+  // if (!connection||id_user) {
+  //   throw new Error("Falta la conexión de la transacción en notificado");
+  // }
 
   if (!id_booking) {
     throw new Error("Falta id_booking para crear notificación");
   }
 
   const query = async (sql, params = []) => {
-    const [rows] = await connection.query(sql, params);
-    return rows;
+    if (connection) {
+      const [rows] = await connection.query(sql, params);
+      return rows;
+    }
+    // Sin conexión de transacción: usa el pool directamente
+    return await executeQuery(sql, params);
   };
 
   const rows = await query(
@@ -185,24 +188,40 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
   const prefacturado = reserva.prefacturado;
   const id_confirmacion = reserva.id_confirmacion;
 
+  const esSinEnviar =
+    prefacturado === "sin_enviar" || prefacturado === "sin enviar";
+
+  const rowsFacturada = await query(
+    `
+    SELECT DISTINCT id_factura
+    FROM items_facturas
+    WHERE id_relacion IN (
+      SELECT id_relacion
+      FROM vw_details_booking
+      WHERE id_booking = ?
+    )
+      AND id_factura IS NOT NULL
+    `,
+    [id_booking]
+  );
+
+  if (esSinEnviar && (!rowsFacturada || rowsFacturada.length === 0)) {
+    console.log("⚠️ [NOTIFICADO] sin_enviar sin relación en items_facturas, no se inserta");
+
+    return {
+      creado: false,
+      message: "Reserva sin_enviar sin relación en items_facturas, no se genera notificación",
+    };
+  }
+
   const cambios = obtenerCambios(body) || {};
   const tieneCambios = Object.keys(cambios).length > 0;
 
-  const rowsFacturas = await query(
-    `
-    SELECT DISTINCT ifa.id_factura
-    FROM items_facturas ifa
-    INNER JOIN items i
-      ON i.id_item = ifa.id_item
-    WHERE i.id_relacion = ?
-      AND ifa.id_factura IS NOT NULL
-    `,
-    [id_relacion]
-  );
+  const idFacturas = rowsFacturada
+    .map((row) => row.id_factura)
+    .filter(Boolean);
 
-  const idFacturas = rowsFacturas.map((row) => row.id_factura).filter(Boolean);
-
-  let detalle = {
+  const detalle = {
     tipo: body?.tipo || (tieneCambios ? "reserva_editada" : "reserva_cancelada"),
     prefacturado,
     id_confirmacion,
@@ -216,39 +235,16 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
     detalle.id_facturas = idFacturas;
   }
 
-  if (prefacturado !== "sin_enviar") {
-    detalle.estatus = tieneCambios ? "alterada" : "cancelada";
-
-    // aquí mandas todos los cambios cuando NO es sin_enviar
-    detalle.cambios = cambios;
-  }
-
-  if (prefacturado === "sin_enviar") {
-    const rowsFacturada = await query(
-      `
-      SELECT 1 AS existe
-      FROM items i
-      WHERE i.id_relacion = ?
-        AND (
-          EXISTS (
-            SELECT 1
-            FROM items_pagos ip
-            WHERE ip.id_item = i.id_item
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM items_facturas ifa
-            WHERE ifa.id_item = i.id_item
-          )
-        )
-      LIMIT 1
-      `,
-      [id_relacion]
-    );
-
+  if (esSinEnviar) {
     if (rowsFacturada?.length > 0) {
       detalle.estatus = "facturada";
     } else if (!tieneCambios) {
+      detalle.estatus = "cancelada";
+    } else {
+      detalle.estatus = "alterada";
+    }
+  } else {
+    if (!tieneCambios) {
       detalle.estatus = "cancelada";
     } else {
       detalle.estatus = "alterada";
@@ -258,6 +254,7 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
 
   if (!detalle.estatus) {
     console.log("⚠️ [NOTIFICADO] No se pudo determinar el estatus de la notificación");
+
     return {
       creado: false,
       message: "No se pudo determinar el estatus de la notificación",
@@ -299,7 +296,6 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
     detalle,
   };
 };
-
 // notificado se exporta junto con el resto al final del archivo
 
 const prefacturar = async (req, res) => {
