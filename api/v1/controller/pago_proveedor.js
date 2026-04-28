@@ -272,9 +272,7 @@ const obteneSrReservaDesdeSolicitud = async (
     id_solicitud_proveedor,
   ]);
 
-  return rBookingReserva?.length
-    ? (rBookingReserva[0].id_booking ?? null)
-    : null;
+  return rBookingReserva?.length ? rBookingReserva[0].id_booking ?? null : null;
 };
 
 const obteneSrRelacionDesdeSolicitud = async (
@@ -305,7 +303,7 @@ const obteneSrRelacionDesdeSolicitud = async (
 
   const relacopm = await executeQuery(q_relacion, [id_booking]);
 
-  return relacopm?.length ? (relacopm[0].id_relacion ?? null) : null;
+  return relacopm?.length ? relacopm[0].id_relacion ?? null : null;
 };
 
 async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
@@ -469,9 +467,9 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
       .filter(Boolean)
       .join(" | ");
 
-    const reserva = await obteneSrReservaDesdeSolicitud(executeQuery, id);
-    const id_hospedaje = await obteneSrRelacionDesdeSolicitud(executeQuery, id);
-
+      const reserva = await obteneSrReservaDesdeSolicitud(executeQuery, id);
+      const id_hospedaje = await obteneSrRelacionDesdeSolicitud(executeQuery, id);
+      
     const qInsSaldo = `
       INSERT INTO saldos
         (id_saldo, id_proveedor, monto, restante, forma_pago, fecha_procesamiento,
@@ -491,7 +489,7 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
       transaction_id,
       motivo,
       comentarios,
-      reserva,
+      reserva
     ]);
 
     return {
@@ -3976,14 +3974,31 @@ const getSolicitudes2 = async (req, res) => {
         ? String(rawFiltrarFechaPorReserva).toLowerCase()
         : null;
 
-    console.log(clean(req.query.comentarios), "🤬🤬🤬🤬");
+    // Traduce nombre de bucket (frontend) → valor real en DB para el SP
+    const BUCKET_TO_ESTADO = {
+      ap_credito:        "SOLICITADA",
+      spei:              "TRANSFERENCIA_SOLICITADA",
+      pago_tdc:          "CARTA_ENVIADA",
+      pago_link:         "PAGADO LINK",
+      pendiente_credito: "CUPON ENVIADO",
+      pagada:            null,
+      notificados:       null,
+      canceladas:        "CANCELADA",
+    };
+
+    const rawEstado = clean(req.query.estado_solicitud);
+    const estadoFiltro = rawEstado
+      ? (Object.prototype.hasOwnProperty.call(BUCKET_TO_ESTADO, rawEstado.toLowerCase())
+          ? BUCKET_TO_ESTADO[rawEstado.toLowerCase()]
+          : rawEstado)
+      : null;
 
     const filters = {
       folio: clean(req.query.folio),
       cliente: clean(req.query.cliente),
       viajero: clean(req.query.viajero),
       hotel: clean(req.query.hotel),
-      estado_solicitud: clean(req.query.estado_solicitud),
+      estado_solicitud: estadoFiltro,
       estado_facturacion: clean(req.query.estado_facturacion),
       forma_pago: clean(req.query.forma_pago),
 
@@ -4177,61 +4192,34 @@ const getSolicitudes2 = async (req, res) => {
       };
     });
 
-    // Buckear por forma_pago_solicitada y estado_solicitud
+    // Buckear por estado_solicitud (prioridad: is_ajuste → notificados)
     const assignBucket = (row) => {
-      const forma = String(row?.forma_pago_solicitada ?? "")
-        .toLowerCase()
-        .trim();
-      const estado = String(
-        row?.solicitud_proveedor?.estado_solicitud ??
-          row?.estado_solicitud ??
-          "",
-      )
-        .toUpperCase()
-        .trim();
-      const estatus = String(row?.estatus_pagos ?? "")
-        .toLowerCase()
-        .trim();
+      const estado = String(row?.solicitud_proveedor?.estado_solicitud ?? row?.estado_solicitud ?? "").toUpperCase().trim();
+      const isAjuste = Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) === 1 && estado !="SOLICITA";
 
-      if (
-        estatus === "pagado" ||
-        estado === "PAGADO TARJETA" ||
-        estado === "PAGADO TRANSFERENCIA" ||
-        estado === "PAGADO LINK"
-      )
-        return "pagada";
-
+      
+      if (estado === "SOLICITADA")            return "ap_credito";
       if (estado === "CANCELADA") return "canceladas";
-
-      if (
-        estado === "DISPERSION" ||
-        estado === "TRANSFERENCIA_SOLICITADA" ||
-        estado === "CUPON ENVIADO" ||
-        estado.startsWith("NOTIF")
-      )
-        return "notificados";
-
-      if (estado === "CARTA_ENVIADA") return "carta_enviada";
-
-      if (forma === "credit" || estado === "SOLICITADA")
-        return "carta_garantia";
-
-      if (forma === "transfer") return "spei_solicitado";
-      if (forma === "card") return "pago_tdc";
-      if (forma === "link") return "pago_link";
-
-      return "spei_solicitado";
+      
+      if (isAjuste) return "notificados";
+      if (estado === "PAGADO TARJETA" || estado === "PAGADO TRANSFERENCIA") return "pagada";
+      if (estado === "PAGADO LINK")           return "pago_link";
+      if (estado === "TRANSFERENCIA_SOLICITADA" || estado === "DISPERSION") return "spei";
+      if (estado === "CARTA_ENVIADA")         return "pago_tdc";
+      if (estado === "CUPON ENVIADO")         return "pendiente_credito";
+      
+      return "ap_credito";
     };
 
     const buckets = {
-      spei_solicitado: [],
-      pago_tdc: [],
-      pago_link: [],
-      carta_enviada: [],
-      carta_garantia: [],
-      pagada: [],
-      notificados: [],
-      canceladas: [],
+      spei:              [],
+      pago_tdc:          [],
+      pago_link:         [],
+      pendiente_credito: [],
+      ap_credito:        [],
+      pagada:            [],
+      notificados:       [],
+      canceladas:        [],
     };
 
     for (const row of data) {
@@ -4244,12 +4232,19 @@ const getSolicitudes2 = async (req, res) => {
       Expires: "0",
     });
 
+    const meta = {
+      pag: filters.pag,
+      limite: filters.limite,
+      count: spRows.length,
+    };
+
     if (debug) {
       return res.status(200).json({
         ok: true,
         message: "Registros obtenidos con exito",
         data: buckets,
         meta: {
+          ...meta,
           filters,
           counts: {
             spRows_len: spRows.length,
@@ -4264,9 +4259,10 @@ const getSolicitudes2 = async (req, res) => {
       ok: true,
       message: "Registros obtenidos con exito",
       data: buckets,
+      meta,
     });
   } catch (error) {
-    console.error(error);
+    console.error("this error is vucfkjtgxrfcjygvkugvkuj",error);
     return res.status(500).json({
       ok: false,
       error: "Internal Server Error",
@@ -4294,6 +4290,7 @@ const getDatosFiscalesProveedor = async (req, res) => {
       `,
       [id_proveedor],
     );
+
 
     return res.status(200).json({ data });
   } catch (error) {
@@ -5559,9 +5556,7 @@ const EditCampos = async (req, res) => {
         ]);
 
         const affectedBooking =
-          rUpdateBooking?.affectedRows ??
-          rUpdateBooking?.[0]?.affectedRows ??
-          0;
+          rUpdateBooking?.affectedRows ?? rUpdateBooking?.[0]?.affectedRows ?? 0;
 
         bookingSyncInfo = {
           ok: affectedBooking > 0,
@@ -5636,7 +5631,7 @@ const EditCampos = async (req, res) => {
           WHERE id_solicitud_proveedor = ?
           LIMIT 1
         `,
-        [userIdDB, id_solicitud_proveedor],
+        [userIdDB, id_solicitud_proveedor]
       );
     }
 
@@ -5711,7 +5706,7 @@ const EditCampos = async (req, res) => {
 };
 
 const monto_factura = async (req, res) => {
-  try {
+  try { 
     const {
       id_solicitud,
       id_solicitud_proveedor,
@@ -7159,17 +7154,17 @@ const asignar_factura_previa = async (req, res) => {
         message: "No se encontró la factura",
       });
     }
-    const cacheRazonesSociales = new Map();
+const cacheRazonesSociales = new Map();
 
-    const obtenerRazonesSocialesProveedor = async (idProveedor) => {
-      const id = safeString(idProveedor);
-      if (!id) return [];
+const obtenerRazonesSocialesProveedor = async (idProveedor) => {
+  const id = safeString(idProveedor);
+  if (!id) return [];
 
-      if (cacheRazonesSociales.has(id)) {
-        return cacheRazonesSociales.get(id);
-      }
+  if (cacheRazonesSociales.has(id)) {
+    return cacheRazonesSociales.get(id);
+  }
 
-      const qRazones = `
+  const qRazones = `
     SELECT DISTINCT
       UPPER(TRIM(pdfr.razon_social)) AS razon_social
     FROM proveedores_datos_fiscales_relacion pdfr
@@ -7177,32 +7172,32 @@ const asignar_factura_previa = async (req, res) => {
       AND TRIM(COALESCE(pdfr.razon_social, '')) <> '';
   `;
 
-      const rows = getRows(await executeQuery(qRazones, [id]));
-      const razones = rows
-        .map((row) => safeString(row?.razon_social).toUpperCase())
-        .filter(Boolean);
+  const rows = getRows(await executeQuery(qRazones, [id]));
+  const razones = rows
+    .map((row) => safeString(row?.razon_social).toUpperCase())
+    .filter(Boolean);
 
-      cacheRazonesSociales.set(id, razones);
-      return razones;
-    };
+  cacheRazonesSociales.set(id, razones);
+  return razones;
+};
 
-    const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
-      const idA = safeString(idProveedorA);
-      const idB = safeString(idProveedorB);
+const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
+  const idA = safeString(idProveedorA);
+  const idB = safeString(idProveedorB);
 
-      if (!idA || !idB) return false;
-      if (idA === idB) return true;
+  if (!idA || !idB) return false;
+  if (idA === idB) return true;
 
-      const [razonesA, razonesB] = await Promise.all([
-        obtenerRazonesSocialesProveedor(idA),
-        obtenerRazonesSocialesProveedor(idB),
-      ]);
+  const [razonesA, razonesB] = await Promise.all([
+    obtenerRazonesSocialesProveedor(idA),
+    obtenerRazonesSocialesProveedor(idB),
+  ]);
 
-      if (!razonesA.length || !razonesB.length) return false;
+  if (!razonesA.length || !razonesB.length) return false;
 
-      const setB = new Set(razonesB);
-      return razonesA.some((razon) => setB.has(razon));
-    };
+  const setB = new Set(razonesB);
+  return razonesA.some((razon) => setB.has(razon));
+};
     const factura = facturaRows[0];
     const idFactura = safeString(factura.id_factura);
     const uuidFacturaReal = safeString(factura.uuid_factura);
@@ -7227,35 +7222,35 @@ const asignar_factura_previa = async (req, res) => {
     }
 
     // 2) Validar proveedor del payload contra factura por razón social
-    for (const item of proveedores) {
-      const idProveedorPayload = safeString(item?.id_proveedor);
+for (const item of proveedores) {
+  const idProveedorPayload = safeString(item?.id_proveedor);
 
-      if (idProveedorPayload && idProveedorFactura) {
-        const coincideProveedor = await compartenRazonSocial(
-          idProveedorFactura,
-          idProveedorPayload,
-        );
+  if (idProveedorPayload && idProveedorFactura) {
+    const coincideProveedor = await compartenRazonSocial(
+      idProveedorFactura,
+      idProveedorPayload
+    );
 
-        if (!coincideProveedor) {
-          const [razonesFactura, razonesPayload] = await Promise.all([
-            obtenerRazonesSocialesProveedor(idProveedorFactura),
-            obtenerRazonesSocialesProveedor(idProveedorPayload),
-          ]);
+    if (!coincideProveedor) {
+      const [razonesFactura, razonesPayload] = await Promise.all([
+        obtenerRazonesSocialesProveedor(idProveedorFactura),
+        obtenerRazonesSocialesProveedor(idProveedorPayload),
+      ]);
 
-          return res.status(400).json({
-            ok: false,
-            message:
-              "El proveedor del payload no coincide con la factura ni comparte una razón social fiscal.",
-            data: {
-              proveedor_factura: idProveedorFactura,
-              proveedor_payload: idProveedorPayload,
-              razones_sociales_factura: razonesFactura,
-              razones_sociales_payload: razonesPayload,
-            },
-          });
-        }
-      }
+      return res.status(400).json({
+        ok: false,
+        message:
+          "El proveedor del payload no coincide con la factura ni comparte una razón social fiscal.",
+        data: {
+          proveedor_factura: idProveedorFactura,
+          proveedor_payload: idProveedorPayload,
+          razones_sociales_factura: razonesFactura,
+          razones_sociales_payload: razonesPayload,
+        },
+      });
     }
+  }
+}
 
     // 3) Total solicitado en esta operación
     const totalOperacion = round2(
@@ -7332,30 +7327,30 @@ const asignar_factura_previa = async (req, res) => {
         solicitud.monto_por_facturar_actual ?? 0,
       );
 
-      if (idProveedorFactura && idProveedorSolicitud) {
-        const coincideProveedorSolicitud = await compartenRazonSocial(
-          idProveedorFactura,
-          idProveedorSolicitud,
-        );
+     if (idProveedorFactura && idProveedorSolicitud) {
+  const coincideProveedorSolicitud = await compartenRazonSocial(
+    idProveedorFactura,
+    idProveedorSolicitud
+  );
 
-        if (!coincideProveedorSolicitud) {
-          const [razonesFactura, razonesSolicitud] = await Promise.all([
-            obtenerRazonesSocialesProveedor(idProveedorFactura),
-            obtenerRazonesSocialesProveedor(idProveedorSolicitud),
-          ]);
+  if (!coincideProveedorSolicitud) {
+    const [razonesFactura, razonesSolicitud] = await Promise.all([
+      obtenerRazonesSocialesProveedor(idProveedorFactura),
+      obtenerRazonesSocialesProveedor(idProveedorSolicitud),
+    ]);
 
-          return res.status(400).json({
-            ok: false,
-            message: `La solicitud ${idSolicitud} no pertenece al proveedor de la factura ni comparte una razón social fiscal.`,
-            data: {
-              proveedor_factura: idProveedorFactura,
-              proveedor_solicitud: idProveedorSolicitud,
-              razones_sociales_factura: razonesFactura,
-              razones_sociales_solicitud: razonesSolicitud,
-            },
-          });
-        }
-      }
+    return res.status(400).json({
+      ok: false,
+      message: `La solicitud ${idSolicitud} no pertenece al proveedor de la factura ni comparte una razón social fiscal.`,
+      data: {
+        proveedor_factura: idProveedorFactura,
+        proveedor_solicitud: idProveedorSolicitud,
+        razones_sociales_factura: razonesFactura,
+        razones_sociales_solicitud: razonesSolicitud,
+      },
+    });
+  }
+}
 
       const montoSolicitadoReal =
         montoSolicitadoDB > 0 ? montoSolicitadoDB : montoSolicitadoPayload;
@@ -7640,38 +7635,38 @@ const buscaruuid = async (req, res) => {
     }
 
     const qBuscar = `
-  SELECT
-    v.id_relacion_pago_factura,
-    v.id_pago_proveedor,
-    v.id_solicitud,
-    v.monto_solicitado,
-    v.id_factura,
-    v.monto_facturado,
-    v.uuid_factura,
-    v.url_pdf,
-    v.url_xml,
-    v.rfc_emisor,
-    v.id_agente,
-    v.total,
-    v.subtotal,
-    v.impuestos,
-    v.uso_cfdi,
-    v.moneda,
-    v.forma_pago,
-    v.metodo_pago,
-    v.total_moneda_O,
-    v.sub_total_moneda_O,
-    v.impuestos_moneda_O,
-    v.razon_social_fiscal,
-    v.id_booking,
-    v.codigo_confirmacion
-  FROM vw_pagos_facturas_proveedores_detalle v
-  INNER JOIN solicitudes_pago_proveedor spp
-    ON spp.id_solicitud_proveedor = v.id_solicitud
-  WHERE v.uuid_factura LIKE TRIM(?)
-    AND NULLIF(TRIM(v.codigo_confirmacion), '') IS NOT NULL
-  ORDER BY v.id_relacion_pago_factura DESC;
-`; // -- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
+      SELECT
+        v.id_relacion_pago_factura,
+        v.id_pago_proveedor,
+        v.id_solicitud,
+        v.monto_solicitado,
+        v.id_factura,
+        v.monto_facturado,
+        v.uuid_factura,
+        v.url_pdf,
+        v.url_xml,
+        v.rfc_emisor,
+        v.id_agente,
+        v.total,
+        v.subtotal,
+        v.impuestos,
+        v.uso_cfdi,
+        v.moneda,
+        v.forma_pago,
+        v.metodo_pago,
+        v.total_moneda_O,
+        v.sub_total_moneda_O,
+        v.impuestos_moneda_O,
+        v.razon_social_fiscal,
+        v.id_booking,
+        v.codigo_confirmacion
+      FROM vw_pagos_facturas_proveedores_detalle v
+      INNER JOIN solicitudes_pago_proveedor spp
+        ON spp.id_solicitud_proveedor = v.id_solicitud
+      WHERE v.uuid_factura LIKE trim(?)
+      ORDER BY v.id_relacion_pago_factura DESC;
+      `;
+    // -- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
 
     const rows = getRows(await executeQuery(qBuscar, [uuid]));
 
