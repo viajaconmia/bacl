@@ -444,10 +444,10 @@ const crearItemdeAjuste = async (req, res) => {
   const toMysqlDateTime = (val) => {
     if (!val) return null;
     // si viene como 'YYYY-MM-DD'
-    if (typeof val === 'string' && val.length === 10) return `${val} 00:00:00`;
+    if (typeof val === "string" && val.length === 10) return `${val} 00:00:00`;
     // intenta ISO -> MySQL DATETIME
     try {
-      return new Date(val).toISOString().slice(0, 19).replace('T', ' ');
+      return new Date(val).toISOString().slice(0, 19).replace("T", " ");
     } catch {
       return null;
     }
@@ -463,7 +463,7 @@ const crearItemdeAjuste = async (req, res) => {
       const id_item_ajuste = "ite-" + uuidv4();
       const {
         updatedItem = {},
-        updatedSaldos = [],  // <- lo tratamos como ARRAY siempre
+        updatedSaldos = [], // <- lo tratamos como ARRAY siempre
         diferencia = 0,
         precioActualizado,
         id_booking,
@@ -488,8 +488,12 @@ const crearItemdeAjuste = async (req, res) => {
         is_facturado: updatedItem?.is_facturado ?? 0,
         fecha_uso: toMysqlDateTime(updatedItem?.fecha_uso),
         id_hospedaje: updatedItem?.id_hospedaje ?? null,
-        created_at: toMysqlDateTime(updatedItem?.created_at) ?? toMysqlDateTime(new Date()),
-        updated_at: toMysqlDateTime(updatedItem?.updated_at) ?? toMysqlDateTime(new Date()),
+        created_at:
+          toMysqlDateTime(updatedItem?.created_at) ??
+          toMysqlDateTime(new Date()),
+        updated_at:
+          toMysqlDateTime(updatedItem?.updated_at) ??
+          toMysqlDateTime(new Date()),
         costo_total: Number(updatedItem?.costo_total ?? 0),
         costo_subtotal: Number(updatedItem?.costo_subtotal ?? 0),
         costo_impuestos: Number(updatedItem?.costo_impuestos ?? 0),
@@ -514,32 +518,29 @@ const crearItemdeAjuste = async (req, res) => {
 
       // Si diferencia no es múltiplo del precio por noche => un solo ítem de ajuste (cambio de precio)
       const esAjusteDePrecio =
-        !precioUnitario || (Number(diferencia) % precioUnitario !== 0);
+        !precioUnitario || Number(diferencia) % precioUnitario !== 0;
 
       if (esAjusteDePrecio) {
         // 1) Insertar el item de ajuste (un único ítem)
-        await connection.query(
-          query_insert_item,
-          [
-            baseItem.id_item,
-            baseItem.id_catalogo_item,
-            baseItem.id_factura,
-            baseItem.total,
-            baseItem.subtotal,
-            baseItem.impuestos,
-            baseItem.is_facturado,
-            baseItem.fecha_uso,
-            baseItem.id_hospedaje,
-            baseItem.created_at,
-            baseItem.updated_at,
-            baseItem.costo_total,
-            baseItem.costo_subtotal,
-            baseItem.costo_impuestos,
-            baseItem.saldo,
-            baseItem.costo_iva,
-            baseItem.is_ajuste,
-          ]
-        );
+        await connection.query(query_insert_item, [
+          baseItem.id_item,
+          baseItem.id_catalogo_item,
+          baseItem.id_factura,
+          baseItem.total,
+          baseItem.subtotal,
+          baseItem.impuestos,
+          baseItem.is_facturado,
+          baseItem.fecha_uso,
+          baseItem.id_hospedaje,
+          baseItem.created_at,
+          baseItem.updated_at,
+          baseItem.costo_total,
+          baseItem.costo_subtotal,
+          baseItem.costo_impuestos,
+          baseItem.saldo,
+          baseItem.costo_iva,
+          baseItem.is_ajuste,
+        ]);
 
         // 2) Actualizar servicios
         // Nota: En MySQL, las asignaciones en SET se evalúan izq->der;
@@ -552,7 +553,7 @@ const crearItemdeAjuste = async (req, res) => {
               subtotal  = (total) - ((total) * 0.16)
           WHERE id_servicio = ?
           `,
-          [Number(diferencia), id_servicio]
+          [Number(diferencia), id_servicio],
         );
 
         // 3) Actualizar bookings al precioActualizado (si viene)
@@ -566,7 +567,7 @@ const crearItemdeAjuste = async (req, res) => {
                 subtotal  = ? - (? * 0.16)
             WHERE id_booking = ?
             `,
-            [p, p, p, p, id_booking]
+            [p, p, p, p, id_booking],
           );
         }
 
@@ -584,7 +585,7 @@ const crearItemdeAjuste = async (req, res) => {
                 activo         = ?
             WHERE id_saldos = ?
             `,
-            [fechaCreacion, nuevoSaldo, activo, saldoObj?.id_saldos]
+            [fechaCreacion, nuevoSaldo, activo, saldoObj?.id_saldos],
           );
         }
 
@@ -621,17 +622,17 @@ const crearItemdeAjuste = async (req, res) => {
               saldoObj?.tipo_tarjeta ?? null,
               saldoObj?.link_stripe ?? null,
               saldoObj?.ult_digits ?? null,
-              totalVenta,              // total del pago (venta actualizada)
-              montoAsociado,           // saldo aplicado a este item
+              totalVenta, // total del pago (venta actualizada)
+              montoAsociado, // saldo aplicado a este item
               transaccion,
               montoAsociado,
-            ]
+            ],
           );
 
           // Relación pago-item (ajuste)
           await connection.query(
             `INSERT INTO items_pagos (id_pago, id_item, monto) VALUES (?, ?, ?)`,
-            [id_pago, id_item_ajuste, montoAsociado]
+            [id_pago, id_item_ajuste, montoAsociado],
           );
         }
       } else {
@@ -657,28 +658,25 @@ const crearItemdeAjuste = async (req, res) => {
           const subtotal = +(total_por_item / 1.16).toFixed(2);
           const impuestos = +(total_por_item - subtotal).toFixed(2);
 
-          await connection.query(
-            query_insert_item,
-            [
-              id_item,
-              null,                       // id_catalogo_item
-              null,                       // id_factura (si necesitas ligar luego por facturas_items)
-              total_por_item,
-              subtotal,
-              impuestos,
-              null,                       // is_facturado -> lo manejará la facturación
-              baseItem.fecha_uso,         // TODO: distribuir fecha_uso por noche si aplica
-              baseItem.id_hospedaje,
-              baseItem.created_at,
-              baseItem.updated_at,
-              baseItem.costo_total,
-              baseItem.costo_subtotal,
-              baseItem.costo_impuestos,
-              0,                          // saldo: ya pagado
-              baseItem.costo_iva,
-              1,                          // is_ajuste
-            ]
-          );
+          await connection.query(query_insert_item, [
+            id_item,
+            null, // id_catalogo_item
+            null, // id_factura (si necesitas ligar luego por facturas_items)
+            total_por_item,
+            subtotal,
+            impuestos,
+            null, // is_facturado -> lo manejará la facturación
+            baseItem.fecha_uso, // TODO: distribuir fecha_uso por noche si aplica
+            baseItem.id_hospedaje,
+            baseItem.created_at,
+            baseItem.updated_at,
+            baseItem.costo_total,
+            baseItem.costo_subtotal,
+            baseItem.costo_impuestos,
+            0, // saldo: ya pagado
+            baseItem.costo_iva,
+            1, // is_ajuste
+          ]);
         }
       }
 
@@ -687,24 +685,25 @@ const crearItemdeAjuste = async (req, res) => {
       // Devolver IDs de pagos creados (si hubo)
       return {
         message: "Item(s) de ajuste creado(s) correctamente",
-        item_creado: id_item_ajuste,      // cuando fue un solo ítem
-        ids_pagos_creados: idsPagos,      // <- ya no "undefined"
+        item_creado: id_item_ajuste, // cuando fue un solo ítem
+        ids_pagos_creados: idsPagos, // <- ya no "undefined"
       };
     });
 
     // 200 con body (no uses 204 si envías JSON)
-    return res.status(200).json({message: "Ajuste realizado correctamente", data: response });
-
+    return res
+      .status(200)
+      .json({ message: "Ajuste realizado correctamente", data: response });
   } catch (error) {
     console.error(error);
     return res.status(error?.statusCode || 500).json({
-      message: error?.message || "Error desconocido al actualizar precio de crédito",
+      message:
+        error?.message || "Error desconocido al actualizar precio de crédito",
       error: error || "ERROR_BACK",
       data: null,
     });
   }
 };
-
 
 const round2 = (n) => Math.round((+n + Number.EPSILON) * 100) / 100;
 
@@ -812,7 +811,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
           `SELECT id_item, fecha_uso FROM items
             WHERE id_hospedaje = ? AND estado = 1
             ORDER BY fecha_uso ASC`,
-          [id_hospedaje]
+          [id_hospedaje],
         );
         const yaActivas = Array.isArray(activos) ? activos.length : 0;
 
@@ -863,7 +862,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
               updatedItem.costo_iva ?? null,
               0, // is_ajuste
               1, // activo
-            ]
+            ],
           );
 
           idsItemsCreados.push(id_item);
@@ -880,7 +879,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
             precioActualizado,
             precioActualizado,
             id_servicio,
-          ]
+          ],
         );
         await connection.query(
           `UPDATE bookings
@@ -892,7 +891,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
             precioActualizado,
             precioActualizado,
             id_booking,
-          ]
+          ],
         );
 
         // Aplicar saldos: pagos + items_pagos + items_facturas
@@ -908,7 +907,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
             `UPDATE saldos_a_favor
                SET fecha_creacion = ?, saldo = ?, activo = ?
              WHERE id_saldos = ?`,
-            [s.fecha_creacion_dt, s.nuevoSaldo, s.activo, s.id_saldos]
+            [s.fecha_creacion_dt, s.nuevoSaldo, s.activo, s.id_saldos],
           );
 
           await connection.query(
@@ -935,7 +934,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
               s.monto_aplicado,
               transaccion,
               s.monto_aplicado,
-            ]
+            ],
           );
 
           // Reparto simple: llenar items secuencialmente
@@ -944,7 +943,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
             const id_item = idsItemsCreados[idxItem];
             const [rows] = await connection.query(
               `SELECT total FROM items WHERE id_item = ?`,
-              [id_item]
+              [id_item],
             );
             if (!rows?.length) break;
             const totalItem = +rows[0].total;
@@ -953,13 +952,13 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
 
             await connection.query(
               `INSERT INTO items_pagos (id_pago, id_item, monto) VALUES (?, ?, ?)`,
-              [id_pago, id_item, aplicar]
+              [id_pago, id_item, aplicar],
             );
 
             if (s.id_factura) {
               await connection.query(
                 `INSERT INTO items_facturas (id_item, id_factura, monto) VALUES (?, ?, ?)`,
-                [id_item, s.id_factura, aplicar]
+                [id_item, s.id_factura, aplicar],
               );
               itemsFacturas.push({
                 id_item,
@@ -1014,7 +1013,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
             updatedItem.costo_iva ?? null,
             1, // ajuste
             1,
-          ]
+          ],
         );
 
         idsItemsCreados.push(id_item_ajuste);
@@ -1029,7 +1028,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
             precioActualizado,
             precioActualizado,
             id_servicio,
-          ]
+          ],
         );
         await connection.query(
           `UPDATE bookings
@@ -1041,7 +1040,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
             precioActualizado,
             precioActualizado,
             id_booking,
-          ]
+          ],
         );
 
         for (const s0 of updatedSaldos.map(normalizaSaldo)) {
@@ -1053,7 +1052,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
             `UPDATE saldos_a_favor
                SET fecha_creacion = ?, saldo = ?, activo = ?
              WHERE id_saldos = ?`,
-            [s0.fecha_creacion_dt, s0.nuevoSaldo, s0.activo, s0.id_saldos]
+            [s0.fecha_creacion_dt, s0.nuevoSaldo, s0.activo, s0.id_saldos],
           );
 
           await connection.query(
@@ -1080,18 +1079,18 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
               s0.monto_aplicado,
               transaccion,
               s0.monto_aplicado,
-            ]
+            ],
           );
 
           await connection.query(
             `INSERT INTO items_pagos (id_pago, id_item, monto) VALUES (?, ?, ?)`,
-            [id_pago, id_item_ajuste, s0.monto_aplicado]
+            [id_pago, id_item_ajuste, s0.monto_aplicado],
           );
 
           if (s0.id_factura) {
             await connection.query(
               `INSERT INTO items_facturas (id_item, id_factura, monto) VALUES (?, ?, ?)`,
-              [id_item_ajuste, s0.id_factura, s0.monto_aplicado]
+              [id_item_ajuste, s0.id_factura, s0.monto_aplicado],
             );
             itemsFacturas.push({
               id_item: id_item_ajuste,
@@ -1119,7 +1118,7 @@ const aplicarCambioNochesOAjuste = async (req, res) => {
         ids_items_creados: idsItemsCreados,
         ids_pagos_creados: idsPagos,
         items_facturas: itemsFacturas,
-      }
+      },
     });
   } catch (error) {
     console.error(error);
@@ -1138,7 +1137,6 @@ const read = async (req, res) => {
     res.status(500).json({ error: "Error en el servidor", details: error });
   }
 };
-
 
 const getPagosAgente = async (req, res) => {
   try {
@@ -1180,7 +1178,7 @@ const getMetodosPago = async (req, res) => {
       throw new CustomError("Falta el id de usuario", 400, "MISSING_ID", null);
     const agente = await executeQuery(
       `SELECT * FROM agentes WHERE id_agente = ?`,
-      [id]
+      [id],
     );
     if (agente.length == 0)
       throw new CustomError("No se encontro el agente", 404, "NOT_FOUND", null);
@@ -1192,10 +1190,10 @@ const getMetodosPago = async (req, res) => {
         and metodo_pago not in("tarjeta_de_credito","tarjeta_de_debito","")
         and activo = 1
       group by id_agente;`,
-      [id]
+      [id],
     );
 
-    console.log(saldos);
+    // console.log(saldos);
 
     res.status(200).json({
       message: "Saldos obtenidos con exito",
@@ -1308,7 +1306,7 @@ const pagarCarritoConCredito = async (req, res) => {
     //Obtenemos el cliente de stripe
     const rows = await executeQuery(
       "SELECT * FROM agentes WHERE id_agente = ?;",
-      [id_agente]
+      [id_agente],
     );
     if (rows.length === 0)
       throw new ShortError("No se encontro el agente", 404);
@@ -1373,11 +1371,11 @@ const pagarCarritoConCredito = async (req, res) => {
 
         await conn.execute(
           query_agregar_credito_pago,
-          params_agregar_pago_credito
+          params_agregar_pago_credito,
         );
 
         const ids_solicitudes = itemsCart.map(
-          (item) => item.details.id_solicitud
+          (item) => item.details.id_solicitud,
         );
         const ids_carrito = itemsCart.map((item) => item.id);
 
@@ -1385,14 +1383,14 @@ const pagarCarritoConCredito = async (req, res) => {
           ids_solicitudes.map((id) =>
             conn.execute(
               `UPDATE solicitudes SET id_servicio = ? WHERE id_solicitud = ?`,
-              [id_servicio, id]
-            )
-          )
+              [id_servicio, id],
+            ),
+          ),
         );
         await Promise.all(
           ids_carrito.map((id) =>
-            conn.execute(`UPDATE cart SET active = 0 WHERE id = ?`, [id], [id])
-          )
+            conn.execute(`UPDATE cart SET active = 0 WHERE id = ?`, [id], [id]),
+          ),
         );
         await conn.execute(`UPDATE agentes SET saldo = ? WHERE id_agente = ?`, [
           (Number(saldo_agente) - monto).toFixed(2),
@@ -1405,7 +1403,7 @@ const pagarCarritoConCredito = async (req, res) => {
           error.message || "Error al intentar hacer el pago",
           error.status || error.statusCode || 500,
           "CREATE_PAYMENT_ERROR",
-          error
+          error,
         );
       }
     });
@@ -1459,7 +1457,7 @@ const allocatePaymentAcrossItems = (itemsOrdered, pagoTotal) => {
   }
   if (restante !== 0 && rows.length > 0) {
     rows[rows.length - 1].monto = round2(
-      rows[rows.length - 1].monto - restante
+      rows[rows.length - 1].monto - restante,
     );
   }
   return rows;
@@ -1509,7 +1507,8 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
     }
 
     const refundSolicitado = round2(Math.max(0, -1 * Number(diferencia)));
-    const nightsDelta = Number(hotel.noches.current) - Number(hotel.noches.before);
+    const nightsDelta =
+      Number(hotel.noches.current) - Number(hotel.noches.before);
     const checkInYMD = ymdFromInput(check_in);
 
     const data = await runTransaction(async (conn) => {
@@ -1522,19 +1521,19 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
            FROM items
           WHERE id_hospedaje = ? AND estado = 1
           ORDER BY fecha_uso ASC`,
-        [id_hospedaje]
+        [id_hospedaje],
       );
       if (!oldItems || oldItems.length === 0) {
         throw new CustomError(
           `No hay items activos para el hospedaje ${id_hospedaje}`,
           404,
           "NO_ITEMS",
-          { id_hospedaje }
+          { id_hospedaje },
         );
       }
       const oldItemIds = oldItems.map((r) => r.id_item);
       const T_old = new Map(
-        oldItems.map((r) => [r.id_item, round2(+r.total || 0)])
+        oldItems.map((r) => [r.id_item, round2(+r.total || 0)]),
       );
 
       // 1) Mapa de aplicaciones por (pago,item)
@@ -1550,7 +1549,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
              JOIN pagos p ON p.id_pago = ip.id_pago
             WHERE ip.id_item IN (${placeholders})
             GROUP BY ip.id_item, ip.id_pago`,
-          oldItemIds
+          oldItemIds,
         );
         applied = rows.map((r) => ({
           id_item: r.id_item,
@@ -1586,7 +1585,13 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
       }
 
       // 2) Mutación de noches
-      let itemsFinal = [...oldItems.map(o => ({ id_item: o.id_item, fecha_uso: o.fecha_uso, total: 0 }))];
+      let itemsFinal = [
+        ...oldItems.map((o) => ({
+          id_item: o.id_item,
+          fecha_uso: o.fecha_uso,
+          total: 0,
+        })),
+      ];
 
       if (nightsDelta > 0) {
         // Crear N items nuevos con fecha_uso = check_in + (oldItems.length + i)
@@ -1602,7 +1607,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
               costo_total, costo_subtotal, costo_impuestos,
               saldo, costo_iva, is_ajuste, estado
             ) VALUES (?, ?, ?, 0, 0, 0, NULL, ?, ?, ?, ?, NULL, NULL, NULL, 0, NULL, 0, 1)`,
-            [id_item_new, null, null, fechaUso, id_hospedaje, nowStr, nowStr]
+            [id_item_new, null, null, fechaUso, id_hospedaje, nowStr, nowStr],
           );
           itemsFinal.push({
             id_item: id_item_new,
@@ -1614,13 +1619,13 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
         // LIFO: desactivar últimas |Δ| noches
         const toDeactivate = Math.min(Math.abs(nightsDelta), itemsFinal.length);
         const orderedDesc = [...itemsFinal].sort((a, b) =>
-          a.fecha_uso > b.fecha_uso ? -1 : 1
+          a.fecha_uso > b.fecha_uso ? -1 : 1,
         );
         const deactivate = orderedDesc.slice(0, toDeactivate);
         for (const it of deactivate) {
           await conn.execute(
             "UPDATE items SET estado = 0, updated_at = ? WHERE id_item = ?",
-            [nowStr, it.id_item]
+            [nowStr, it.id_item],
           );
         }
         const deactivateIds = new Set(deactivate.map((x) => x.id_item));
@@ -1629,16 +1634,18 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
           throw new CustomError(
             "No pueden quedar 0 items activos después de reducir noches.",
             409,
-            "NO_ITEMS_AFTER_REDUCTION"
+            "NO_ITEMS_AFTER_REDUCTION",
           );
         }
       }
 
       // 3) Reasignar fechas de uso secuenciales desde check_in
-      itemsFinal.sort((a, b) => (a.fecha_uso < b.fecha_uso ? -1 : a.fecha_uso > b.fecha_uso ? 1 : 0));
+      itemsFinal.sort((a, b) =>
+        a.fecha_uso < b.fecha_uso ? -1 : a.fecha_uso > b.fecha_uso ? 1 : 0,
+      );
       const nActivos = itemsFinal.length;
       const fechasUso = Array.from({ length: nActivos }, (_, i) =>
-        addDaysYMD(checkInYMD, i)
+        addDaysYMD(checkInYMD, i),
       );
 
       // 4) Redistribuir montos a precio_actualizado y actualizar items
@@ -1651,14 +1658,14 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
           `UPDATE items
              SET total = ?, subtotal = ?, impuestos = ?, fecha_uso = ?, updated_at = ?
            WHERE id_item = ?`,
-          [total, subtotal, impuestos, fecha_uso, nowStr, id_item]
+          [total, subtotal, impuestos, fecha_uso, nowStr, id_item],
         );
         itemsFinal[i].total = total;
         itemsFinal[i].fecha_uso = fecha_uso;
       }
 
       const T_new = new Map(
-        itemsFinal.map((r) => [r.id_item, round2(+r.total || 0)])
+        itemsFinal.map((r) => [r.id_item, round2(+r.total || 0)]),
       );
       const activeNow = new Set(itemsFinal.map((r) => r.id_item));
 
@@ -1689,12 +1696,12 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
           if (nuevoAplicado > 0) {
             await conn.execute(
               `UPDATE items_pagos SET monto = ? WHERE id_item = ? AND id_pago = ?`,
-              [nuevoAplicado, it.id_item, pid]
+              [nuevoAplicado, it.id_item, pid],
             );
           } else {
             await conn.execute(
               `DELETE FROM items_pagos WHERE id_item = ? AND id_pago = ?`,
-              [it.id_item, pid]
+              [it.id_item, pid],
             );
           }
 
@@ -1712,7 +1719,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
         if (!info) {
           const [[p]] = await conn.execute(
             `SELECT * FROM pagos WHERE id_pago = ?`,
-            [pid]
+            [pid],
           );
           if (!p) continue;
           info = pagoInfo[pid] = {
@@ -1743,27 +1750,27 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
           if (sid != null) {
             const [[s]] = await conn.execute(
               `SELECT saldo, monto FROM saldos_a_favor WHERE id_saldos = ? FOR UPDATE`,
-              [sid]
+              [sid],
             );
             if (s) {
               const saldoAntes = round2(+s.saldo || 0);
               const newSaldo = Math.min(+s.monto, round2(saldoAntes + delta));
               await conn.execute(
                 `UPDATE saldos_a_favor SET saldo = ?, activo = ? WHERE id_saldos = ?`,
-                [newSaldo, newSaldo > 0 ? 1 : 0, sid]
+                [newSaldo, newSaldo > 0 ? 1 : 0, sid],
               );
             }
           }
           const [[p]] = await conn.execute(
             `SELECT total FROM pagos WHERE id_pago = ? FOR UPDATE`,
-            [pid]
+            [pid],
           );
           const newPagoTotal = Math.max(0, round2((+p.total || 0) - delta));
           const sub = round2(newPagoTotal / 1.16);
           const iva = round2(newPagoTotal - sub);
           await conn.execute(
             `UPDATE pagos SET total = ?, subtotal = ?, impuestos = ? WHERE id_pago = ?`,
-            [newPagoTotal, sub, iva, pid]
+            [newPagoTotal, sub, iva, pid],
           );
         } else {
           // 6.B) Directo -> crear wallet y amarrarlo
@@ -1773,7 +1780,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
               "El monto a devolver excede el pago registrado.",
               400,
               "REFUND_EXCEEDS_PAYMENT",
-              { id_pago: pid, delta, oldPagoTotal }
+              { id_pago: pid, delta, oldPagoTotal },
             );
           }
           const newPagoTotal = round2(oldPagoTotal - delta);
@@ -1798,8 +1805,8 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
               info.tipo_de_tarjeta === "credit"
                 ? "credito"
                 : info.tipo_de_tarjeta === "debit"
-                ? "debito"
-                : null,
+                  ? "debito"
+                  : null,
               null,
               info.link_pago || null,
               1,
@@ -1809,7 +1816,7 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
               info.last_digits ? parseInt(info.last_digits) : null,
               info.autorizacion_stripe || null,
               info.banco || null,
-            ]
+            ],
           );
           const id_saldo_creado = result.insertId;
 
@@ -1818,13 +1825,13 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
             `UPDATE pagos
                SET id_saldo_a_favor = ?, total = ?, subtotal = ?, impuestos = ?
              WHERE id_pago = ?`,
-            [id_saldo_creado, nv.total, nv.subtotal, nv.impuestos, pid]
+            [id_saldo_creado, nv.total, nv.subtotal, nv.impuestos, pid],
           );
 
           try {
             await conn.execute(
               `UPDATE facturas_pagos_y_saldos SET id_saldo_a_favor = ? WHERE id_pago = ?`,
-              [id_saldo_creado, pid]
+              [id_saldo_creado, pid],
             );
           } catch (e) {
             /* vista no actualizable, ignorar */
@@ -1835,15 +1842,15 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
       // 7) Recalcular servicio / booking a precio_actualizado
       {
         const { total, subtotal, impuestos } = splitVenta(
-          Number(precio_actualizado)
+          Number(precio_actualizado),
         );
         await conn.execute(
           `UPDATE servicios SET total = ?, subtotal = ?, impuestos = ? WHERE id_servicio = ?`,
-          [total, subtotal, impuestos, id_servicio]
+          [total, subtotal, impuestos, id_servicio],
         );
         await conn.execute(
           `UPDATE bookings  SET total = ?, subtotal = ?, impuestos = ? WHERE id_booking  = ?`,
-          [total, subtotal, impuestos, id_booking]
+          [total, subtotal, impuestos, id_booking],
         );
       }
 
@@ -1862,9 +1869,10 @@ const handlerPagoContadoRegresarSaldo = async (req, res) => {
 
     return res.status(200).json({
       ok: true,
-      
-      message: "Rebaja aplicada correctamente (wallet/directo) con fechas por noche desde check-in.",
-      data
+
+      message:
+        "Rebaja aplicada correctamente (wallet/directo) con fechas por noche desde check-in.",
+      data,
     });
   } catch (error) {
     console.error(error);
@@ -1900,7 +1908,7 @@ const pagoPorSaldoAFavor = async (req, res) => {
     // 3️⃣ Montos para la respuesta
     const montoAplicado = itemsConPago.reduce(
       (sum, it) => sum + (it.saldo - it.saldonuevo),
-      0
+      0,
     );
     const nuevoSaldo = SaldoAFavor.saldo;
 
@@ -1940,10 +1948,10 @@ const getAllPagosPrepago = async (req, res) => {
   try {
     const pagos = await executeQuery(
       `SELECT *
-FROM vw_pagos_prepago_facturables where is_facturado = 1;`
+FROM vw_pagos_prepago_facturables where is_facturado = 1;`,
     );
     const balance = await executeQuery(
-      `SELECT * FROM vw_balance_pagos_facturas;`
+      `SELECT * FROM vw_balance_pagos_facturas;`,
     );
 
     res.status(200).json({
@@ -1964,10 +1972,10 @@ const getAllPagosPrepagoFacturasPendientes = async (req, res) => {
   try {
     const pagos = await executeQuery(
       `SELECT *
-FROM vw_pagos_prepago_facturables WHERE is_facturado = 0;`
+FROM vw_pagos_prepago_facturables WHERE is_facturado = 0;`,
     );
     const balance = await executeQuery(
-      `SELECT * FROM vw_balance_pagos_facturas;`
+      `SELECT * FROM vw_balance_pagos_facturas;`,
     );
 
     res.status(200).json({
@@ -1999,7 +2007,7 @@ const getPagoPrepago = async (req, res) => {
     // 2) Ejecuta la consulta con parámetro seguro
     const pago = await executeQuery(
       `SELECT * FROM vw_pagos_prepago_facturables WHERE raw_id = ?`,
-      [raw_id]
+      [raw_id],
     );
 
     // 4) Envía la respuesta
@@ -2016,7 +2024,7 @@ const getPagoPrepago = async (req, res) => {
     });
   }
 };
- 
+
 const getDetallesConexionesPagos = async (req, res) => {
   try {
     const { id_agente } = req.query;
@@ -2053,21 +2061,29 @@ const getDetallesConexionesPagos = async (req, res) => {
       const trimmed = id_raw.trim();
 
       // Si ya es JSON (p.ej. ["152","153"] o [152,153])
-      if ((trimmed.startsWith("[") && trimmed.endsWith("]")) ||
-          (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
+      if (
+        (trimmed.startsWith("[") && trimmed.endsWith("]")) ||
+        (trimmed.startsWith("{") && trimmed.endsWith("}"))
+      ) {
         try {
           const parsed = JSON.parse(trimmed);
           idRawArray = Array.isArray(parsed) ? parsed : [parsed];
         } catch {
           // Si falla el parse, intentamos CSV
           idRawArray = trimmed.includes(",")
-            ? trimmed.split(",").map(s => s.trim()).filter(Boolean)
+            ? trimmed
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean)
             : [trimmed];
         }
       } else {
         // CSV o valor único
         idRawArray = trimmed.includes(",")
-          ? trimmed.split(",").map(s => s.trim()).filter(Boolean)
+          ? trimmed
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
           : [trimmed];
       }
     } else {
@@ -2076,7 +2092,7 @@ const getDetallesConexionesPagos = async (req, res) => {
     }
 
     // Convertimos a número cuando aplique (opcional)
-    idRawArray = idRawArray.map(v => {
+    idRawArray = idRawArray.map((v) => {
       const n = Number(v);
       return Number.isFinite(n) ? n : `${v}`;
     });
@@ -2088,15 +2104,18 @@ const getDetallesConexionesPagos = async (req, res) => {
     const [facturas = [], reservas = []] = await executeSP2(
       "sp_get_conexion_full",
       [id_agente, "pago", id_raw_json],
-      { allSets: true }
+      { allSets: true },
     );
 
-    if ((!facturas || facturas.length === 0) && (!reservas || reservas.length === 0)) {
+    if (
+      (!facturas || facturas.length === 0) &&
+      (!reservas || reservas.length === 0)
+    ) {
       throw new CustomError(
         "No se encontraron detalles para el pago especificado",
         404,
         "NOT_FOUND",
-        { id_agente, id_raw: idRawArray }
+        { id_agente, id_raw: idRawArray },
       );
     }
 
@@ -2110,7 +2129,8 @@ const getDetallesConexionesPagos = async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(error.statusCode || 500).json({
-      message: error.message || "Error desconocido al obtener detalles de conexiones",
+      message:
+        error.message || "Error desconocido al obtener detalles de conexiones",
       error: error.code || error.name || "ERROR_BACK",
       data: null,
     });
@@ -2152,12 +2172,18 @@ const get_detalles_pagos = async (req, res) => {
           idRawArray = Array.isArray(parsed) ? parsed : [parsed];
         } catch {
           idRawArray = trimmed.includes(",")
-            ? trimmed.split(",").map((s) => s.trim()).filter(Boolean)
+            ? trimmed
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean)
             : [trimmed];
         }
       } else {
         idRawArray = trimmed.includes(",")
-          ? trimmed.split(",").map((s) => s.trim()).filter(Boolean)
+          ? trimmed
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
           : [trimmed];
       }
     } else {
@@ -2176,11 +2202,9 @@ const get_detalles_pagos = async (req, res) => {
 
     // --- Llamada al SP ---
     // sp_pago_detalles(IN p_payload LONGTEXT)
-    const sets = await executeSP2(
-      "sp_pago_detalles",
-      [p_payload],
-      { allSets: true }
-    );
+    const sets = await executeSP2("sp_pago_detalles", [p_payload], {
+      allSets: true,
+    });
 
     // Dependiendo de tu wrapper, puede regresar:
     //  - [facturas, reservas]
@@ -2203,13 +2227,13 @@ const get_detalles_pagos = async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(error.statusCode || 500).json({
-      message: error.message || "Error desconocido al obtener detalles de pagos",
+      message:
+        error.message || "Error desconocido al obtener detalles de pagos",
       error: error.code || error.name || "ERROR_BACK",
       data: null,
     });
   }
 };
-
 
 const get_pagos_prepago_by_ID = async (req, res) => {
   try {
@@ -2268,5 +2292,5 @@ module.exports = {
   aplicarCambioNochesOAjuste,
   getPagoPrepago,
   getAllPagosPrepagoFacturasPendientes,
-  get_detalles_pagos
+  get_detalles_pagos,
 };
