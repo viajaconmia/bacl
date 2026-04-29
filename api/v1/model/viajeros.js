@@ -1,13 +1,13 @@
 const { executeQuery, executeTransaction } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 
-const createViajero = async (viajero) => {
+const createViajero = async (viajero, user) => {
   try {
     const id_viajero = `via-${uuidv4()}`;
 
     // Insertar el viajero en la tabla "viajeros"
     const query =
-      "INSERT INTO viajeros (id_viajero, primer_nombre, segundo_nombre, apellido_paterno, apellido_materno, correo, fecha_nacimiento, genero, telefono, nacionalidad, numero_pasaporte, numero_empleado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+      "INSERT INTO viajeros (id_viajero, primer_nombre, segundo_nombre, apellido_paterno, apellido_materno, correo, fecha_nacimiento, genero, telefono, nacionalidad, numero_pasaporte, numero_empleado, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
     const params = [
       id_viajero,
       viajero.primer_nombre,
@@ -21,6 +21,7 @@ const createViajero = async (viajero) => {
       viajero.nacionalidad,
       viajero.numero_pasaporte,
       viajero.numero_empleado,
+      user?.id_usuario || null, // Agregar el ID del usuario que crea el viajero
     ];
 
     await executeTransaction(query, params, async (result, connection) => {

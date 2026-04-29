@@ -735,6 +735,60 @@ const editarVuelo = async (req, res) => {
     );
 
     if (cambios.keys.length == 0) throw new Error(ERROR.CHANGES.EMPTY);
+
+    let diferencia_ajuste = 0;
+    let precio_ajuste = null;
+    let precio_nuevo = null;
+    let items_con_nuevos_totales = [];
+    let id_relacion_db = null;
+    if (cambios.keys.includes("precio")) {
+      diferencia_ajuste =
+        cambios.logs.precio.current - cambios.logs.precio.before;
+      if (diferencia_ajuste > 0) {
+        const [agente] = await executeQuery(
+          `SELECT * FROM agente_details WHERE id_agente = ?`,
+          [data_meta.id_agente],
+        );
+        if (!agente) throw new Error("No existe agente");
+        if (Number(agente.saldo) < diferencia_ajuste)
+          throw new Error("El agente no tiene el crédito suficiente");
+        precio_ajuste = calcularPrecios(diferencia_ajuste);
+        precio_nuevo = calcularPrecios(cambios.logs.precio.current);
+      } else if (diferencia_ajuste < 0) {
+        precio_ajuste = calcularPrecios(Math.abs(diferencia_ajuste));
+        precio_nuevo = calcularPrecios(cambios.logs.precio.current);
+
+        const items_db = await executeQuery(
+          `SELECT id_item FROM items WHERE id_viaje_aereo = ?`,
+          [viaje_aereo_db.id_viaje_aereo],
+        );
+
+        const [booking_details] = await executeQuery(
+          `SELECT id_relacion FROM vw_details_booking WHERE id_booking = ?`,
+          [data_meta.id_booking],
+        );
+        id_relacion_db = booking_details?.id_relacion || null;
+
+        const nuevo_total_num = Number(cambios.logs.precio.current);
+        const n = items_db.length;
+        const total_por_item = Number((nuevo_total_num / n).toFixed(2));
+        let acumulado = 0;
+        items_con_nuevos_totales = items_db.map((item, i) => {
+          const total_item =
+            i === n - 1
+              ? Number((nuevo_total_num - acumulado).toFixed(2))
+              : (() => { acumulado += total_por_item; return total_por_item; })();
+          const calculo = calcularPrecios(total_item);
+          return {
+            id_item: item.id_item,
+            nuevo_total: calculo.total,
+            nuevo_subtotal: calculo.subtotal,
+            nuevo_impuestos: calculo.impuestos,
+          };
+        });
+      }
+    }
+
     const response = await runTransaction(async (connection) => {
       try {
         await procesarSolicitudProveedorAlEditarReserva({
@@ -762,6 +816,126 @@ const editarVuelo = async (req, res) => {
             `UPDATE items SET costo_total = ? WHERE id_viaje_aereo = ?`,
             [reserva.costo, viaje_aereo_db.id_viaje_aereo],
           );
+        }
+        if (precio_ajuste && diferencia_ajuste > 0) {
+          await connection.execute(
+            `UPDATE servicios SET total = total + ?, subtotal = subtotal + ?, impuestos = impuestos + ? WHERE id_servicio = ?`,
+            [
+              precio_ajuste.total,
+              Number(precio_ajuste.subtotal) / 1.16,
+              precio_ajuste.impuestos,
+              viaje_aereo_db.id_servicio,
+            ],
+          );
+          await connection.execute(
+            `UPDATE bookings SET total = ? WHERE id_booking = ?`,
+            [precio_nuevo.total, viaje_aereo_db.id_booking],
+          );
+          await connection.execute(
+            `UPDATE viajes_aereos SET total = ?, subtotal = ?, taxes = ? WHERE id_viaje_aereo = ?`,
+            [
+              precio_nuevo.total,
+              precio_nuevo.subtotal,
+              precio_nuevo.impuestos,
+              viaje_aereo_db.id_viaje_aereo,
+            ],
+          );
+          const id_item_ajuste = `ite-${uuidv4()}`;
+          await connection.execute(
+            `INSERT INTO items (id_item, total, subtotal, impuestos, fecha_uso, costo_total, saldo, id_viaje_aereo, is_ajuste) VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, 1)`,
+            [
+              id_item_ajuste,
+              precio_ajuste.total,
+              precio_ajuste.subtotal,
+              precio_ajuste.impuestos,
+              null,
+              diferencia_ajuste.toFixed(2),
+              viaje_aereo_db.id_viaje_aereo,
+            ],
+          );
+          const id_credito_ajuste = `cre-${uuidv4()}`;
+          await connection.execute(
+            `INSERT INTO pagos_credito (id_credito, id_servicio, monto_a_credito, responsable_pago_agente, fecha_creacion, pago_por_credito, pendiente_por_cobrar, total, subtotal, impuestos, concepto) VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?)`,
+            [
+              id_credito_ajuste,
+              viaje_aereo_db.id_servicio,
+              precio_ajuste.total,
+              data_meta.id_agente,
+              precio_ajuste.total,
+              diferencia_ajuste.toFixed(2),
+              precio_ajuste.total,
+              precio_ajuste.subtotal,
+              precio_ajuste.impuestos,
+              "Ajuste de precio - Vuelo",
+            ],
+          );
+          await connection.execute(
+            `UPDATE agentes SET saldo = saldo - ? WHERE id_agente = ?`,
+            [diferencia_ajuste, data_meta.id_agente],
+          );
+        } else if (precio_ajuste && diferencia_ajuste < 0) {
+          await connection.execute(
+            `UPDATE servicios SET total = total - ?, subtotal = subtotal - ?, impuestos = impuestos - ? WHERE id_servicio = ?`,
+            [
+              precio_ajuste.total,
+              Number(precio_ajuste.subtotal) / 1.16,
+              precio_ajuste.impuestos,
+              viaje_aereo_db.id_servicio,
+            ],
+          );
+          await connection.execute(
+            `UPDATE bookings SET total = ? WHERE id_booking = ?`,
+            [precio_nuevo.total, viaje_aereo_db.id_booking],
+          );
+          await connection.execute(
+            `UPDATE viajes_aereos SET total = ?, subtotal = ?, taxes = ? WHERE id_viaje_aereo = ?`,
+            [
+              precio_nuevo.total,
+              precio_nuevo.subtotal,
+              precio_nuevo.impuestos,
+              viaje_aereo_db.id_viaje_aereo,
+            ],
+          );
+          await Promise.all(
+            items_con_nuevos_totales.map(async (item) => {
+              const [rowsPagos] = await connection.execute(
+                `SELECT COALESCE(SUM(monto), 0) AS pagado FROM items_pagos WHERE id_item = ?`,
+                [item.id_item],
+              );
+              const pagado = Number(rowsPagos?.[0]?.pagado || 0);
+              const nuevoSaldo = Math.max(Number(item.nuevo_total) - pagado, 0);
+              await connection.execute(
+                `UPDATE items SET total = ?, subtotal = ?, impuestos = ?, saldo = ? WHERE id_item = ?`,
+                [
+                  item.nuevo_total,
+                  item.nuevo_subtotal,
+                  item.nuevo_impuestos,
+                  nuevoSaldo.toFixed(2),
+                  item.id_item,
+                ],
+              );
+            }),
+          );
+          await connection.execute(
+            `UPDATE agentes SET saldo = saldo + ? WHERE id_agente = ?`,
+            [Math.abs(diferencia_ajuste), data_meta.id_agente],
+          );
+          if (id_relacion_db) {
+            const [filas_facturas] = await connection.execute(
+              `SELECT id_item FROM items_facturas WHERE id_relacion = ? LIMIT 1`,
+              [id_relacion_db],
+            );
+            if (filas_facturas.length > 0) {
+              await Promise.all(
+                items_con_nuevos_totales.map((item) =>
+                  connection.execute(
+                    `UPDATE items_facturas SET monto = ? WHERE id_item = ? AND id_relacion = ?`,
+                    [item.nuevo_total, item.id_item, id_relacion_db],
+                  ),
+                ),
+              );
+            }
+          }
         }
         //Inicia verificación de cambios en vuelos
         if (cambios.keys.includes("vuelos")) {

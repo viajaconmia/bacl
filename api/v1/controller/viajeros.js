@@ -3,7 +3,8 @@ const model = require("../model/viajeros");
 
 const create = async (req, res) => {
   try {
-    const response = await model.createViajero(req.body);
+    const { user } = req?.session;
+    const response = await model.createViajero(req.body, user);
     res
       .status(201)
       .json({ message: "Viajero creado correctamente", data: response });
