@@ -120,13 +120,36 @@ async function generarPDFHotel(data) {
             View,
             { style: styles.section },
             React.createElement(Row, { label: "HOTEL:", value: data.hotel }),
-            React.createElement(Row, { label: "HABITACIÓN:", value: "SENCILLA" }),
-            React.createElement(Row, { label: "CHECK-IN:", value: formatLargeDate(data.checkin) }),
-            React.createElement(Row, { label: "CHECK-OUT:", value: formatLargeDate(data.checkout) }),
-            React.createElement(Row, { label: "SUBTOTAL:", value: `$ ${data.subtotal}`, note: "Precio sin impuestos por noche" }),
-            React.createElement(Row, { label: "PRECIO TOTAL:", value: `$ ${data.total}`, note: "Precio con impuestos por noche" }),
-            React.createElement(Row, { label: "DESAYUNO INCLUIDO:", value: data.desayuno ? "SI" : "NO" }),
-            React.createElement(Row, { label: "DIRECCIÓN:", value: data.direccion }),
+            React.createElement(Row, {
+              label: "HABITACIÓN:",
+              value: "SENCILLA",
+            }),
+            React.createElement(Row, {
+              label: "CHECK-IN:",
+              value: formatLargeDate(data.checkin),
+            }),
+            React.createElement(Row, {
+              label: "CHECK-OUT:",
+              value: formatLargeDate(data.checkout),
+            }),
+            React.createElement(Row, {
+              label: "SUBTOTAL:",
+              value: `$ ${data.subtotal}`,
+              note: "Precio sin impuestos por noche por habitación",
+            }),
+            React.createElement(Row, {
+              label: "PRECIO TOTAL:",
+              value: `$ ${data.total}`,
+              note: "Precio con impuestos por noche por habitación",
+            }),
+            React.createElement(Row, {
+              label: "DESAYUNO INCLUIDO:",
+              value: data.desayuno ? "SI" : "NO",
+            }),
+            React.createElement(Row, {
+              label: "DIRECCIÓN:",
+              value: data.direccion,
+            }),
           ),
 
           // FOOTER
@@ -142,8 +165,16 @@ async function generarPDFHotel(data) {
           ? React.createElement(
               View,
               { style: styles.notesBox },
-              React.createElement(Text, { style: styles.notesHeader }, "NOTAS:"),
-              React.createElement(Text, { style: styles.notesContent }, data.notas),
+              React.createElement(
+                Text,
+                { style: styles.notesHeader },
+                "NOTAS:",
+              ),
+              React.createElement(
+                Text,
+                { style: styles.notesContent },
+                data.notas,
+              ),
             )
           : null,
       ),
