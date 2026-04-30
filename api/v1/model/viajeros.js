@@ -7,7 +7,7 @@ const createViajero = async (viajero, user) => {
 
     // Insertar el viajero en la tabla "viajeros"
     const query =
-      "INSERT INTO viajeros (id_viajero, primer_nombre, segundo_nombre, apellido_paterno, apellido_materno, correo, fecha_nacimiento, genero, telefono, nacionalidad, numero_pasaporte, numero_empleado, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+      "INSERT INTO viajeros (id_viajero, primer_nombre, segundo_nombre, apellido_paterno, apellido_materno, correo, fecha_nacimiento, genero, telefono, nacionalidad, numero_pasaporte, numero_empleado, created_by) VALUES (?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?);";
     const params = [
       id_viajero,
       viajero.primer_nombre,
