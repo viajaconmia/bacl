@@ -101,7 +101,7 @@ async function generarPDFHotel(data) {
       null,
       React.createElement(
         Page,
-        { size: [800, "auto"], style: styles.page },
+        { size: [800, 500], style: styles.page },
 
         // CONTENIDO PRINCIPAL
         React.createElement(
