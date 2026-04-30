@@ -112,7 +112,7 @@ async function generarPDFHotel(data) {
           React.createElement(
             View,
             { style: styles.header },
-            React.createElement(Text, null, "HOSPEDAJE 2026"),
+            React.createElement(Text, null, "HOSPEDAJE"),
           ),
 
           // CONTENT
@@ -131,6 +131,10 @@ async function generarPDFHotel(data) {
             React.createElement(Row, {
               label: "CHECK-OUT:",
               value: formatLargeDate(data.checkout),
+            }),
+            React.createElement(Row, {
+              label: "NOCHES:",
+              value: String(Math.round((new Date(data.checkout) - new Date(data.checkin)) / (1000 * 60 * 60 * 24))),
             }),
             React.createElement(Row, {
               label: "SUBTOTAL:",
