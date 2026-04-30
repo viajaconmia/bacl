@@ -14,16 +14,11 @@ async function generarPDFHotel(data) {
     page: {
       padding: 20,
       fontSize: 11,
-      flexDirection: "row",
-      alignItems: "stretch",
-    },
-    main: {
-      flex: 1,
+      flexDirection: "column",
     },
     container: {
       borderWidth: 1,
       borderColor: "#e5e7eb",
-      flex: 1,
     },
     header: {
       backgroundColor: "#0b5fa5",
@@ -62,27 +57,25 @@ async function generarPDFHotel(data) {
       color: "#444",
     },
     notesBox: {
-      width: 160,
-      marginLeft: 6,
+      marginTop: 8,
       borderWidth: 1,
       borderColor: "#aaa",
-      borderStyle: "dashed",
-      borderLeftWidth: 2,
-      borderLeftColor: "#555",
+      borderTopWidth: 2,
+      borderTopColor: "#555",
       padding: 8,
+      flexDirection: "row",
+      gap: 8,
     },
     notesHeader: {
       fontSize: 10,
       fontWeight: "bold",
       color: "#0b5fa5",
-      marginBottom: 6,
-      borderBottomWidth: 1,
-      borderBottomColor: "#ccc",
-      paddingBottom: 4,
+      width: 60,
     },
     notesContent: {
       fontSize: 9,
       color: "#333",
+      flex: 1,
     },
   });
 
@@ -108,87 +101,51 @@ async function generarPDFHotel(data) {
       null,
       React.createElement(
         Page,
-        { size: [800, 400], style: styles.page },
+        { size: [800, "auto"], style: styles.page },
 
         // CONTENIDO PRINCIPAL
         React.createElement(
           View,
-          { style: styles.main },
+          { style: styles.container },
+
+          // HEADER
           React.createElement(
             View,
-            { style: styles.container },
+            { style: styles.header },
+            React.createElement(Text, null, "HOSPEDAJE 2026"),
+          ),
 
-            // HEADER
-            React.createElement(
-              View,
-              { style: styles.header },
-              React.createElement(Text, null, "HOSPEDAJE 2026"),
-            ),
+          // CONTENT
+          React.createElement(
+            View,
+            { style: styles.section },
+            React.createElement(Row, { label: "HOTEL:", value: data.hotel }),
+            React.createElement(Row, { label: "HABITACIÓN:", value: "SENCILLA" }),
+            React.createElement(Row, { label: "CHECK-IN:", value: formatLargeDate(data.checkin) }),
+            React.createElement(Row, { label: "CHECK-OUT:", value: formatLargeDate(data.checkout) }),
+            React.createElement(Row, { label: "SUBTOTAL:", value: `$ ${data.subtotal}`, note: "Precio sin impuestos por noche" }),
+            React.createElement(Row, { label: "PRECIO TOTAL:", value: `$ ${data.total}`, note: "Precio con impuestos por noche" }),
+            React.createElement(Row, { label: "DESAYUNO INCLUIDO:", value: data.desayuno ? "SI" : "NO" }),
+            React.createElement(Row, { label: "DIRECCIÓN:", value: data.direccion }),
+          ),
 
-            // CONTENT
-            React.createElement(
-              View,
-              { style: styles.section },
-              React.createElement(Row, {
-                label: "HOTEL:",
-                value: data.hotel,
-              }),
-              React.createElement(Row, {
-                label: "HABITACIÓN:",
-                value: "SENCILLA",
-              }),
-              React.createElement(Row, {
-                label: "CHECK-IN:",
-                value: formatLargeDate(data.checkin),
-              }),
-              React.createElement(Row, {
-                label: "CHECK-OUT:",
-                value: formatLargeDate(data.checkout),
-              }),
-              React.createElement(Row, {
-                label: "SUBTOTAL:",
-                value: `$ ${data.subtotal}`,
-                note: "Precio sin impuestos por noche",
-              }),
-              React.createElement(Row, {
-                label: "PRECIO TOTAL:",
-                value: `$ ${data.total}`,
-                note: "Precio con impuestos por noche",
-              }),
-              React.createElement(Row, {
-                label: "DESAYUNO INCLUIDO:",
-                value: data.desayuno ? "SI" : "NO",
-              }),
-              React.createElement(Row, {
-                label: "DIRECCIÓN:",
-                value: data.direccion,
-              }),
-            ),
-
-            // FOOTER
-            React.createElement(
-              View,
-              { style: styles.footer },
-              React.createElement(Text, null, "Tarifa no reembolsable"),
-            ),
+          // FOOTER
+          React.createElement(
+            View,
+            { style: styles.footer },
+            React.createElement(Text, null, "Tarifa no reembolsable"),
           ),
         ),
 
-        // CUADRO DE NOTAS (orilla derecha, recortable)
-        React.createElement(
-          View,
-          { style: styles.notesBox },
-          React.createElement(
-            Text,
-            { style: styles.notesHeader },
-            "NOTAS",
-          ),
-          React.createElement(
-            Text,
-            { style: styles.notesContent },
-            data.notas || "",
-          ),
-        ),
+        // NOTAS (franja inferior, ancho completo)
+        data.notas
+          ? React.createElement(
+              View,
+              { style: styles.notesBox },
+              React.createElement(Text, { style: styles.notesHeader }, "NOTAS:"),
+              React.createElement(Text, { style: styles.notesContent }, data.notas),
+            )
+          : null,
       ),
     );
 

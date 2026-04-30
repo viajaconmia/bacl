@@ -207,6 +207,7 @@ app.get("/probando", async (req, res) => {
         checkout: hotelObj.checkout,
         desayuno: dbResult[0].desayuno,
         direccion: dbResult[0].direccion,
+        notas: hotelObj.notas || "",
       });
 
       const iter = hotelObj.iteracion ?? 0;

@@ -10,6 +10,7 @@ const { ca } = require("zod/locales");
 const {
   procesarSolicitudProveedorAlEditarReserva,
 } = require("../../../v2/controller/reservas.controller");
+const { notificado } = require("./avisos_reservas");
 // const Booking = require("../../../v2/model/bookings.model");
 // const Item = require("../../../v2/model/model/item.model");
 
@@ -777,7 +778,10 @@ const editarVuelo = async (req, res) => {
           const total_item =
             i === n - 1
               ? Number((nuevo_total_num - acumulado).toFixed(2))
-              : (() => { acumulado += total_por_item; return total_por_item; })();
+              : (() => {
+                  acumulado += total_por_item;
+                  return total_por_item;
+                })();
           const calculo = calcularPrecios(total_item);
           return {
             id_item: item.id_item,
@@ -791,6 +795,21 @@ const editarVuelo = async (req, res) => {
 
     const response = await runTransaction(async (connection) => {
       try {
+        await notificado({
+          connection,
+          id_booking: viaje_aereo_db.id_booking,
+          body: {
+            cambios: (Object.entries(cambios?.logs) || []).reduce(
+              (curr, [key, value]) => {
+                curr["current"] = { ...curr["current"], [key]: value.current };
+                curr["before"] = { ...curr["before"], [key]: value.before };
+                return curr;
+              },
+              { current: {}, before: {} },
+            ),
+          },
+          id_user: req?.session?.user?.id || null,
+        });
         await procesarSolicitudProveedorAlEditarReserva({
           connection,
           metadata: {

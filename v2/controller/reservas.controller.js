@@ -2371,11 +2371,29 @@ const editar_reserva_definitivo = async (req, res) => {
 };
 
 const cancelarBooking = async (req, res) => {
-  const { id_booking } = req.body;
+  const { id_booking, confirm = false } = req.body;
   const { user } = req.session;
   const id_user = user.id;
 
   try {
+    const [{ id_relacion }] = await executeQuery(
+      `SELECT id_relacion FROM vw_details_booking WHERE id_booking = ?`,
+      [id_booking],
+    );
+    const facturas = await executeQuery(
+      `SELECT f.uuid_factura FROM items_facturas fi
+      JOIN facturas f ON f.id_factura = fi.id_factura
+      WHERE id_relacion = ? group by fi.id_factura`,
+      [id_relacion],
+    );
+    console.log(typeof confirm, confirm, facturas);
+    if (confirm !== true && facturas.length > 0) {
+      return res.status(202).json({
+        message: "Se requiere confirmación para cancelar la reserva.",
+        data: { estatus: "required_confirmation" },
+      });
+    }
+
     const response = await runTransaction(async (conn) => {
       console.log(
         "🚫 [CANCELAR_RESERVA] Iniciando transacción para cancelar reserva:",
@@ -2410,6 +2428,9 @@ const cancelarBooking = async (req, res) => {
         },
         id_user,
       });
+      await conn.execute(`DELETE FROM items_facturas where id_relacion = ?`, [
+        id_relacion,
+      ]);
 
       console.log(
         "🚫 [CANCELAR_RESERVA] Resultado de notificado:",
@@ -2424,6 +2445,7 @@ const cancelarBooking = async (req, res) => {
       data: response,
     });
   } catch (error) {
+    console.log(error);
     return res.status(error.status || error.statusCode || 500).json({
       message: error.message || "Error al obtenr los datos",
       error,
