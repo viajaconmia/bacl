@@ -56,15 +56,21 @@ const norificaciones = async (req, res) => {
       codigo_reservacion = null, // → p_codigo_confirmacion
       traveler = null,         // → p_viajero
       id_booking = null,
+      atendida,
     } = req.body ?? {};
 
-    // Orden exacto del SP: codigo_confirmacion, viajero, nombre_agente, id_booking, proveedor, pagina, limite
+    const atendidaParam = (atendida === null || atendida === undefined || atendida === "")
+      ? null
+      : Number(atendida);
+
+    // Orden exacto del SP: codigo_confirmacion, viajero, nombre_agente, id_booking, proveedor, atendida, pagina, limite
     const params = [
       codigo_reservacion || null,
       traveler           || null,
       nombre_agente      || null,
       id_booking         || null,
       hotel              || null,
+      atendidaParam,
       Number(pag)  || 1,
       Number(cant) || 50,
     ];
@@ -74,6 +80,33 @@ const norificaciones = async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: "Error al obtener avisos de reservas", details: error.message });
+  }
+};
+
+const facturacion = async (req, res) => {
+  try {
+    const { id_factura, id_relacion } = req.body;
+
+    console.log(req.body, "✅✅✅");
+
+    if (!id_factura || !id_relacion) {
+      return res.status(400).json({
+        error: "Faltan parámetros",
+        details: "id_factura e id_relacion son obligatorios",
+      });
+    }
+
+    const params = [id_factura, id_relacion];
+
+    const response = await executeSP2("sp_get_factura_reserva", params);
+
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Error al obtener factura de reserva",
+      details: error.message,
+    });
   }
 };
 
@@ -142,11 +175,9 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
   console.log("📢 [NOTIFICADO] Entró a la función notificado", {
     id_booking,
     id_user,
+    body,
+    tieneConnection: !!connection,
   });
-
-  // if (!connection||id_user) {
-  //   throw new Error("Falta la conexión de la transacción en notificado");
-  // }
 
   if (!id_booking) {
     throw new Error("Falta id_booking para crear notificación");
@@ -157,7 +188,6 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
       const [rows] = await connection.query(sql, params);
       return rows;
     }
-    // Sin conexión de transacción: usa el pool directamente
     return await executeQuery(sql, params);
   };
 
@@ -176,7 +206,11 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
   );
 
   if (!rows || rows.length === 0) {
-    console.log("⚠️ [NOTIFICADO] No se encontró la reserva en vw_details_booking");
+    console.log("⚠️ [NOTIFICADO] No se encontró la reserva en vw_details_booking", {
+      id_booking,
+      body,
+    });
+
     return {
       creado: false,
       message: "No se encontró la reserva en vw_details_booking",
@@ -206,16 +240,38 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
   );
 
   if (esSinEnviar && (!rowsFacturada || rowsFacturada.length === 0)) {
-    console.log("⚠️ [NOTIFICADO] sin_enviar sin relación en items_facturas, no se inserta");
+    console.log("⚠️ [NOTIFICADO] sin_enviar sin relación en items_facturas, no se inserta", {
+      id_booking,
+      id_relacion,
+      prefacturado,
+      body,
+    });
 
     return {
       creado: false,
-      message: "Reserva sin_enviar sin relación en items_facturas, no se genera notificación",
+      message:
+        "Reserva sin_enviar sin relación en items_facturas, no se genera notificación",
     };
   }
 
-  const cambios = obtenerCambios(body) || {};
+  // Toma cambios detectados por la función y también los que vengan directamente en body.cambios
+  const cambiosDetectados = obtenerCambios(body) || {};
+  const cambiosBody =
+    body?.cambios && typeof body.cambios === "object" ? body.cambios : {};
+
+  const cambios = {
+    ...cambiosDetectados,
+    ...cambiosBody,
+  };
+
   const tieneCambios = Object.keys(cambios).length > 0;
+
+  console.log("📝 [NOTIFICADO] Cambios detectados", {
+    cambiosDetectados,
+    cambiosBody,
+    cambiosFinales: cambios,
+    tieneCambios,
+  });
 
   const idFacturas = rowsFacturada
     .map((row) => row.id_factura)
@@ -235,6 +291,11 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
     detalle.id_facturas = idFacturas;
   }
 
+  // Agrega siempre los cambios al detalle si sí llegaron
+  if (tieneCambios) {
+    detalle.cambios = cambios;
+  }
+
   if (esSinEnviar) {
     if (rowsFacturada?.length > 0) {
       detalle.estatus = "facturada";
@@ -248,18 +309,27 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
       detalle.estatus = "cancelada";
     } else {
       detalle.estatus = "alterada";
-      detalle.cambios = cambios;
     }
   }
 
   if (!detalle.estatus) {
-    console.log("⚠️ [NOTIFICADO] No se pudo determinar el estatus de la notificación");
+    console.log("⚠️ [NOTIFICADO] No se pudo determinar el estatus de la notificación", {
+      body,
+      detalle,
+    });
 
     return {
       creado: false,
       message: "No se pudo determinar el estatus de la notificación",
     };
   }
+
+  console.log("📦 [NOTIFICADO] Detalle final antes de insertar", {
+    id_relacion,
+    id_booking: reserva.id_booking,
+    detalle,
+    body,
+  });
 
   await query(
     `
@@ -287,6 +357,9 @@ const notificado = async ({ connection, id_booking, body, id_user }) => {
     estatus: detalle.estatus,
     id_confirmacion,
     idFacturas,
+    cambios,
+    body,
+    detalle,
   });
 
   return {
@@ -350,4 +423,162 @@ const prefacturar = async (req, res) => {
   }
 };
 
-module.exports = { read, enviadas, norificaciones, prefacturar, notificado };
+const atendida = async (req, res) => {
+  try {
+    const { user } = req.session;
+    const id_user = user.id;
+
+    const id_notificacion = req.body.ids[0].id_notificacion;
+
+    console.log(req.body,"1️⃣1️⃣1️⃣1️⃣")
+    console.log(id_notificacion,"1️⃣1️⃣1️⃣1️⃣")
+
+    const rows = await executeQuery(
+    `
+    SELECT 
+      id_relacion,
+      id_booking,
+      prefacturado,
+      id_confirmacion
+    FROM vw_details_booking
+    WHERE id_booking = ?
+    LIMIT 1
+    `,
+    [id_notificacion]
+  );
+      
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({
+        error: "Error al marcar como prefacturada",
+        details: error.message,
+      });
+    }
+}
+
+const marcarAtendida = async (id_notificacion) => {
+  if (!id_notificacion) return;
+  await executeQuery(
+    `UPDATE notificadas SET atendida = 1, update_at = NOW() WHERE id_notificacion = ?`,
+    [id_notificacion]
+  );
+};
+
+const aprobar = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "El payload debe traer un arreglo 'ids'" });
+    }
+
+    const { id_notificacion } = ids[0];
+
+    await marcarAtendida(id_notificacion);
+
+    return res.status(200).json({ message: "Aprobado correctamente" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Error al aprobar", details: error.message });
+  }
+};
+
+const desligar = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "El payload debe traer un arreglo 'ids'" });
+    }
+
+    const { id_relacion, id_factura, id_notificacion } = ids[0];
+
+    if (!id_relacion || !id_factura) {
+      return res.status(400).json({ error: "id_relacion e id_factura son requeridos" });
+    }
+
+    // Elimina los items — los triggers BEFORE/AFTER se encargan de:
+    // BEFORE: revertir items.monto_facturado
+    // AFTER:  llamar sp_recalc_saldo_factura
+    
+    // Recalcula saldo_x_aplicar_items con los items restantes de esa factura
+    await executeQuery(
+      `UPDATE facturas
+      SET saldo_x_aplicar_items = (
+        SELECT IFNULL(SUM(monto), 0.00)
+        FROM items_facturas
+        WHERE id_factura = ?
+        )
+        WHERE id_factura = ?`,
+        [id_factura, id_factura]
+      );
+      
+      await marcarAtendida(id_notificacion);
+      
+      await executeQuery(
+        `DELETE FROM items_facturas WHERE id_relacion = ? AND id_factura = ?`,
+        [id_relacion, id_factura]
+      );
+    return res.status(200).json({ message: "Desligado correctamente" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Error al desligar", details: error.message });
+  }
+};
+
+const generar_layaut = async (req, res) => {
+  try {
+    const { id_relaciones, id_agente } = req.body;
+
+    if (!id_relaciones || !id_agente) {
+      return res.status(400).json({ error: "id_relaciones y id_agente son requeridos" });
+    }
+
+    const idsArray = Array.isArray(id_relaciones) ? id_relaciones : [id_relaciones];
+
+    if (idsArray.length === 0) {
+      return res.status(400).json({ error: "id_relaciones no puede estar vacío" });
+    }
+
+    const placeholders = idsArray.map(() => "?").join(",");
+
+    const reservas = await executeQuery(
+      `SELECT
+        proveedor AS HOTEL,
+        nombre_viajero as viajero,
+        \`CHECK_IN\`,
+        \`CHECK_OUT\`,
+        tipo_cuarto_vuelo AS HABITACION,
+        TOTAL,
+        metodo_pago AS \`METODO DE PAGO\`
+      FROM vw_details_booking
+      WHERE id_relacion IN (${placeholders})`,
+      idsArray
+    );
+
+    const agenteRows = await executeQuery(
+      `SELECT nombre_comercial AS nombre FROM agente_details WHERE id_agente = ? LIMIT 1`,
+      [id_agente]
+    );
+
+    const facturasRows = await executeQuery(
+      `SELECT itf.id_factura, f.url_pdf, f.url_xml, f.id_facturama
+       FROM items_facturas itf
+       LEFT JOIN facturas f ON f.id_factura = itf.id_factura
+       WHERE itf.id_relacion IN (${placeholders})
+         AND itf.id_factura IS NOT NULL`,
+      idsArray
+    );
+
+    return res.status(200).json({
+      reservas: reservas ?? [],
+      agente: agenteRows?.[0] ?? null,
+      facturas: facturasRows ?? [],
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Error al generar layout", details: error.message });
+  }
+};
+
+module.exports = { read, enviadas, norificaciones, prefacturar, notificado, facturacion, atendida, aprobar, desligar, generar_layaut };
