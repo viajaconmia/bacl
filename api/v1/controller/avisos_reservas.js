@@ -56,15 +56,21 @@ const norificaciones = async (req, res) => {
       codigo_reservacion = null, // → p_codigo_confirmacion
       traveler = null,         // → p_viajero
       id_booking = null,
+      atendida,
     } = req.body ?? {};
 
-    // Orden exacto del SP: codigo_confirmacion, viajero, nombre_agente, id_booking, proveedor, pagina, limite
+    const atendidaParam = (atendida === null || atendida === undefined || atendida === "")
+      ? null
+      : Number(atendida);
+
+    // Orden exacto del SP: codigo_confirmacion, viajero, nombre_agente, id_booking, proveedor, atendida, pagina, limite
     const params = [
       codigo_reservacion || null,
       traveler           || null,
       nombre_agente      || null,
       id_booking         || null,
       hotel              || null,
+      atendidaParam,
       Number(pag)  || 1,
       Number(cant) || 50,
     ];
@@ -494,25 +500,25 @@ const desligar = async (req, res) => {
     // Elimina los items — los triggers BEFORE/AFTER se encargan de:
     // BEFORE: revertir items.monto_facturado
     // AFTER:  llamar sp_recalc_saldo_factura
-    await executeQuery(
-      `DELETE FROM items_facturas WHERE id_relacion = ? AND id_factura = ?`,
-      [id_relacion, id_factura]
-    );
-
+    
     // Recalcula saldo_x_aplicar_items con los items restantes de esa factura
     await executeQuery(
       `UPDATE facturas
-          SET saldo_x_aplicar_items = (
-            SELECT IFNULL(SUM(monto), 0.00)
-              FROM items_facturas
-             WHERE id_factura = ?
-          )
+      SET saldo_x_aplicar_items = (
+        SELECT IFNULL(SUM(monto), 0.00)
+        FROM items_facturas
+        WHERE id_factura = ?
+        )
         WHERE id_factura = ?`,
-      [id_factura, id_factura]
-    );
-
-    await marcarAtendida(id_notificacion);
-
+        [id_factura, id_factura]
+      );
+      
+      await marcarAtendida(id_notificacion);
+      
+      await executeQuery(
+        `DELETE FROM items_facturas WHERE id_relacion = ? AND id_factura = ?`,
+        [id_relacion, id_factura]
+      );
     return res.status(200).json({ message: "Desligado correctamente" });
   } catch (error) {
     console.error(error);
