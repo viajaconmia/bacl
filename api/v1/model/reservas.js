@@ -1423,7 +1423,7 @@ const getReservaAllFacturacion = async (filters = {}) => {
       data,
       meta: {
         pag,
-        limite,
+        limite, 
         total,
         totalPaginas: Math.ceil(total / limite) || 1,
       },
