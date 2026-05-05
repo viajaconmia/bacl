@@ -633,10 +633,10 @@ const asignarFacturaItems = async (req, res) => {
         .json({ error: "El saldo de la factura no puede ser negativo" });
     }
 
-    await executeQuery(updateFactura, [
-      toDecimal2String(nuevo_saldo),
-      id_factura,
-    ]);
+    // await executeQuery(updateFactura, [
+    //   toDecimal2String(nuevo_saldo),
+    //   id_factura,
+    // ]);
 
     await executeQuery("COMMIT;");
 
