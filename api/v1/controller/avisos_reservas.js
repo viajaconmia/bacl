@@ -423,106 +423,165 @@ const prefacturar = async (req, res) => {
   }
 };
 
+const marcarAtendida = async (id_notificacion, id_user) => {
+  if (!id_notificacion) return;
+
+  return executeQuery(
+    `
+    UPDATE notificadas
+    SET 
+      atendida = 1,
+      id_user_update = ?,
+      atendida_at = NOW()
+    WHERE id_notificacion = ?
+    `,
+    [id_user, id_notificacion]
+  );
+};
+
+const getIdUser = (req) => {
+  return req.session?.user?.id;
+};
+
+const getPrimeraNotificacion = (req) => {
+  const { ids } = req.body;
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return null;
+  }
+
+  return ids[0];
+};
+
 const atendida = async (req, res) => {
   try {
-    const { user } = req.session;
-    const id_user = user.id;
+    const id_user = getIdUser(req);
+    const item = getPrimeraNotificacion(req);
 
-    const id_notificacion = req.body.ids[0].id_notificacion;
-
-    console.log(req.body,"1️⃣1️⃣1️⃣1️⃣")
-    console.log(id_notificacion,"1️⃣1️⃣1️⃣1️⃣")
-
-    const rows = await executeQuery(
-    `
-    SELECT 
-      id_relacion,
-      id_booking,
-      prefacturado,
-      id_confirmacion
-    FROM vw_details_booking
-    WHERE id_booking = ?
-    LIMIT 1
-    `,
-    [id_notificacion]
-  );
-      
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({
-        error: "Error al marcar como prefacturada",
-        details: error.message,
+    if (!item) {
+      return res.status(400).json({
+        error: "El payload debe traer un arreglo 'ids'",
       });
     }
-}
 
-const marcarAtendida = async (id_notificacion) => {
-  if (!id_notificacion) return;
-  await executeQuery(
-    `UPDATE notificadas SET atendida = 1, update_at = NOW() WHERE id_notificacion = ?`,
-    [id_notificacion]
-  );
+    const { id_notificacion } = item;
+
+    if (!id_notificacion) {
+      return res.status(400).json({
+        error: "Falta id_notificacion",
+      });
+    }
+
+    const result = await marcarAtendida(id_notificacion, id_user);
+
+    return res.status(200).json({
+      message: "Notificación marcada como atendida",
+      id_notificacion,
+      affectedRows: result.affectedRows,
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Error al marcar como atendida",
+      details: error.message,
+    });
+  }
 };
 
 const aprobar = async (req, res) => {
   try {
-    const { ids } = req.body;
+    const id_user = getIdUser(req);
+    const item = getPrimeraNotificacion(req);
 
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: "El payload debe traer un arreglo 'ids'" });
+    if (!item) {
+      return res.status(400).json({
+        error: "El payload debe traer un arreglo 'ids'",
+      });
     }
 
-    const { id_notificacion } = ids[0];
+    const { id_notificacion } = item;
 
-    await marcarAtendida(id_notificacion);
+    if (!id_notificacion) {
+      return res.status(400).json({
+        error: "Falta id_notificacion",
+      });
+    }
 
-    return res.status(200).json({ message: "Aprobado correctamente" });
+    await marcarAtendida(id_notificacion, id_user);
+
+    return res.status(200).json({
+      message: "Aprobado correctamente",
+    });
+
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "Error al aprobar", details: error.message });
+    return res.status(500).json({
+      error: "Error al aprobar",
+      details: error.message,
+    });
   }
 };
 
 const desligar = async (req, res) => {
   try {
-    const { ids } = req.body;
+    const id_user = getIdUser(req);
+    const item = getPrimeraNotificacion(req);
 
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: "El payload debe traer un arreglo 'ids'" });
+    if (!item) {
+      return res.status(400).json({
+        error: "El payload debe traer un arreglo 'ids'",
+      });
     }
 
-    const { id_relacion, id_factura, id_notificacion } = ids[0];
+    const { id_relacion, id_factura, id_notificacion } = item;
 
     if (!id_relacion || !id_factura) {
-      return res.status(400).json({ error: "id_relacion e id_factura son requeridos" });
+      return res.status(400).json({
+        error: "id_relacion e id_factura son requeridos",
+      });
     }
 
-    // Elimina los items — los triggers BEFORE/AFTER se encargan de:
-    // BEFORE: revertir items.monto_facturado
-    // AFTER:  llamar sp_recalc_saldo_factura
-    
-    // Recalcula saldo_x_aplicar_items con los items restantes de esa factura
+    if (!id_notificacion) {
+      return res.status(400).json({
+        error: "Falta id_notificacion",
+      });
+    }
+
     await executeQuery(
-      `UPDATE facturas
+      `
+      DELETE FROM items_facturas 
+      WHERE id_relacion = ? 
+        AND id_factura = ?
+      `,
+      [id_relacion, id_factura]
+    );
+
+    await executeQuery(
+      `
+      UPDATE facturas
       SET saldo_x_aplicar_items = (
         SELECT IFNULL(SUM(monto), 0.00)
         FROM items_facturas
         WHERE id_factura = ?
-        )
-        WHERE id_factura = ?`,
-        [id_factura, id_factura]
-      );
-      
-      await marcarAtendida(id_notificacion);
-      
-      await executeQuery(
-        `DELETE FROM items_facturas WHERE id_relacion = ? AND id_factura = ?`,
-        [id_relacion, id_factura]
-      );
-    return res.status(200).json({ message: "Desligado correctamente" });
+      )
+      WHERE id_factura = ?
+      `,
+      [id_factura, id_factura]
+    );
+
+    await marcarAtendida(id_notificacion, id_user);
+
+    return res.status(200).json({
+      message: "Desligado correctamente",
+    });
+
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: "Error al desligar", details: error.message });
+    return res.status(500).json({
+      error: "Error al desligar",
+      details: error.message,
+    });
   }
 };
 

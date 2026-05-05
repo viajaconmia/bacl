@@ -7214,21 +7214,24 @@ const obtenerRazonesSocialesProveedor = async (idProveedor) => {
 
   const qRazones = `
     SELECT DISTINCT
-      UPPER(TRIM(pdfr.razon_social)) AS razon_social
+      UPPER(TRIM(pdf.razon_social)) AS razon_social
     FROM proveedores_datos_fiscales_relacion pdfr
+    INNER JOIN proveedores_datos_fiscales pdf
+      ON TRIM(pdf.id) = TRIM(pdfr.id_datos_fiscales)
     WHERE TRIM(pdfr.id_proveedor) = TRIM(?)
-      AND TRIM(COALESCE(pdfr.razon_social, '')) <> '';
+      AND TRIM(COALESCE(pdf.razon_social, '')) <> '';
   `;
 
   const rows = getRows(await executeQuery(qRazones, [id]));
+
   const razones = rows
     .map((row) => safeString(row?.razon_social).toUpperCase())
     .filter(Boolean);
 
   cacheRazonesSociales.set(id, razones);
+
   return razones;
 };
-
 const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
   const idA = safeString(idProveedorA);
   const idB = safeString(idProveedorB);
