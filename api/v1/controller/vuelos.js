@@ -742,6 +742,7 @@ const editarVuelo = async (req, res) => {
     let precio_nuevo = null;
     let items_con_nuevos_totales = [];
     let id_relacion_db = null;
+    let pagos_con_saldo = [];
     if (cambios.keys.includes("precio")) {
       diferencia_ajuste =
         cambios.logs.precio.current - cambios.logs.precio.before;
@@ -769,6 +770,15 @@ const editarVuelo = async (req, res) => {
           [data_meta.id_booking],
         );
         id_relacion_db = booking_details?.id_relacion || null;
+
+        pagos_con_saldo = await executeQuery(
+          `SELECT p.id_pago, p.id_saldo_a_favor, COALESCE(SUM(ip.monto), 0) AS monto_items
+           FROM pagos p
+           LEFT JOIN items_pagos ip ON ip.id_pago = p.id_pago
+           WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
+           GROUP BY p.id_pago`,
+          [viaje_aereo_db.id_servicio],
+        );
 
         const nuevo_total_num = Number(cambios.logs.precio.current);
         const n = items_db.length;
@@ -935,10 +945,44 @@ const editarVuelo = async (req, res) => {
               );
             }),
           );
-          await connection.execute(
-            `UPDATE agentes SET saldo = saldo + ? WHERE id_agente = ?`,
-            [Math.abs(diferencia_ajuste), data_meta.id_agente],
+          const monto_a_devolver = Math.abs(diferencia_ajuste);
+          const total_pagado_con_saldo = pagos_con_saldo.reduce(
+            (sum, p) => sum + Number(p.monto_items),
+            0,
           );
+          const retorno_a_saldos = Number(
+            Math.min(monto_a_devolver, total_pagado_con_saldo).toFixed(2),
+          );
+          const retorno_a_credito = Number(
+            (monto_a_devolver - retorno_a_saldos).toFixed(2),
+          );
+
+          let pendiente_saldo = retorno_a_saldos;
+          for (const pago of pagos_con_saldo) {
+            if (pendiente_saldo <= 0) break;
+            const devolver_este = Number(
+              Math.min(Number(pago.monto_items), pendiente_saldo).toFixed(2),
+            );
+            if (devolver_este > 0) {
+              await connection.execute(
+                `UPDATE saldos_a_favor SET saldo = saldo + ?, activo = 1, updated_at = NOW() WHERE id_saldos = ?`,
+                [devolver_este, pago.id_saldo_a_favor],
+              );
+              await connection.execute(
+                `UPDATE pagos SET saldo_aplicado = GREATEST(0, COALESCE(saldo_aplicado, 0) - ?) WHERE id_pago = ?`,
+                [devolver_este, pago.id_pago],
+              );
+              pendiente_saldo = Number(
+                (pendiente_saldo - devolver_este).toFixed(2),
+              );
+            }
+          }
+          if (retorno_a_credito > 0) {
+            await connection.execute(
+              `UPDATE agentes SET saldo = saldo + ? WHERE id_agente = ?`,
+              [retorno_a_credito, data_meta.id_agente],
+            );
+          }
           if (id_relacion_db) {
             const [filas_facturas] = await connection.execute(
               `SELECT id_item FROM items_facturas WHERE id_relacion = ? LIMIT 1`,
