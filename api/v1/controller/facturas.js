@@ -66,25 +66,6 @@ const createCombinada = async (req, res) => {
   }
 };
 
-// const createEmi = async (req, res) => {
-//   req.context.logStep(
-//     "createCombinada",
-//     "Inicio del proceso de creación de factura combinada"
-//   );
-//   try {
-//     const resp = await model.crearFacturaEmi(req, req.body);
-//     req.context.logStep("resultado del model.createFacturaCombinada");
-//     console.log(resp);
-//     return res.status(201).json(resp.data.data);
-//   } catch (error) {
-//     console.log("ESTE ES EL ERRORRRRRRRRRrrr", error);
-//     res.status(400).json({
-//       error: "Error en el servidor",
-//       details: error.message || error,
-//       otherDetails: error || error.response?.data || null,
-//     });
-//   }
-// };
 
 const readConsultas = async (req, res) => {
   try {
