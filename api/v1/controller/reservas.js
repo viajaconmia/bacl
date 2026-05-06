@@ -1955,9 +1955,10 @@ const verificarEmpalmeHotel2 = async (req, res) => {
     );
 
     return res.json({
-      message: existe
-        ? "El viajero tiene una reserva activa en esa fecha"
-        : "No hay reservas activas para el viajero en esa fecha",
+      message:
+        result.length > 0
+          ? "El viajero tiene una reserva activa en esa fecha"
+          : "No hay reservas activas para el viajero en esa fecha",
       data: result,
     });
   } catch (error) {
