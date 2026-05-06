@@ -199,10 +199,12 @@ app.get("/probando", async (req, res) => {
         });
       }
 
+      const precio_venta = parseFloat(hotelObj.precio_venta) || parseFloat(dbResult[0].total) || 0;
+
       const buffer = await generarPDFHotel({
         hotel: hotelObj.nombre,
-        total: hotelObj.precio_venta,
-        subtotal: (parseFloat(hotelObj.precio_venta) / 1.16).toFixed(2),
+        total: precio_venta.toFixed(2),
+        subtotal: (precio_venta / 1.16).toFixed(2),
         checkin: hotelObj.checkin,
         checkout: hotelObj.checkout,
         desayuno: dbResult[0].desayuno,
