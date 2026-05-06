@@ -772,11 +772,10 @@ const editarVuelo = async (req, res) => {
         id_relacion_db = booking_details?.id_relacion || null;
 
         pagos_con_saldo = await executeQuery(
-          `SELECT p.id_pago, p.id_saldo_a_favor, COALESCE(SUM(ip.monto), 0) AS monto_items
-           FROM pagos p
-           LEFT JOIN items_pagos ip ON ip.id_pago = p.id_pago
-           WHERE p.id_servicio = ? AND p.id_saldo_a_favor IS NOT NULL
-           GROUP BY p.id_pago`,
+          `SELECT id_pago, id_saldo_a_favor,
+                  COALESCE(saldo_aplicado, monto_saldo, monto, 0) AS monto_aplicado
+           FROM pagos
+           WHERE id_servicio = ? AND id_saldo_a_favor IS NOT NULL`,
           [viaje_aereo_db.id_servicio],
         );
 
@@ -947,7 +946,7 @@ const editarVuelo = async (req, res) => {
           );
           const monto_a_devolver = Math.abs(diferencia_ajuste);
           const total_pagado_con_saldo = pagos_con_saldo.reduce(
-            (sum, p) => sum + Number(p.monto_items),
+            (sum, p) => sum + Number(p.monto_aplicado),
             0,
           );
           const retorno_a_saldos = Number(
@@ -961,7 +960,7 @@ const editarVuelo = async (req, res) => {
           for (const pago of pagos_con_saldo) {
             if (pendiente_saldo <= 0) break;
             const devolver_este = Number(
-              Math.min(Number(pago.monto_items), pendiente_saldo).toFixed(2),
+              Math.min(Number(pago.monto_aplicado), pendiente_saldo).toFixed(2),
             );
             if (devolver_este > 0) {
               await connection.execute(

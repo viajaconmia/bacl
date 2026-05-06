@@ -12,6 +12,7 @@ const getHotelesWithCuartos = async () => {
     h.URLImagenHotel,
     h.URLImagenHotelQ,
     h.URLImagenHotelQQ,
+    h.direccion,
     h.iva,
     h.ish,
     h.otros_impuestos,
@@ -57,6 +58,7 @@ const getHotelesWithCuartos = async () => {
           id_hotel: item.id_hotel,
           nombre_hotel: item.nombre_hotel,
           Estado: item.Estado,
+          direccion: item.direccion,
           Ciudad_Zona: item.Ciudad_Zona,
           geo: { latitud: item.latitud, longitud: item.longitud },
           impuestos: [
@@ -105,10 +107,15 @@ const getHotelesWithTarifasClient = async () => {
   }
 };
 
-const insertarPrioridadHotel = async ({ id_agente, id_hotel, zona, priority }) => {
+const insertarPrioridadHotel = async ({
+  id_agente,
+  id_hotel,
+  zona,
+  priority,
+}) => {
   const hotelExiste = await executeQuery(
     `SELECT id_hotel FROM hoteles WHERE id_hotel = ? LIMIT 1`,
-    [id_hotel]
+    [id_hotel],
   );
 
   if (!hotelExiste.length) {
@@ -119,7 +126,7 @@ const insertarPrioridadHotel = async ({ id_agente, id_hotel, zona, priority }) =
 
   await executeQuery(
     `INSERT INTO client_hotel_priority (id_agente, id_hotel, zona, priority) VALUES (?, ?, ?, ?)`,
-    [id_agente, id_hotel, zona, priority]
+    [id_agente, id_hotel, zona, priority],
   );
 };
 
@@ -144,7 +151,7 @@ const actualizarPrioridadHotel = async (id, campos) => {
   params.push(id);
   const result = await executeQuery(
     `UPDATE client_hotel_priority SET ${sets.join(", ")} WHERE id = ?`,
-    params
+    params,
   );
 
   if (result.affectedRows === 0) {
@@ -154,7 +161,14 @@ const actualizarPrioridadHotel = async (id, campos) => {
   }
 };
 
-const buscarHotelesConFiltros = async ({ ciudad, hotel, cp, lat, lng, id_hotel }) => {
+const buscarHotelesConFiltros = async ({
+  ciudad,
+  hotel,
+  cp,
+  lat,
+  lng,
+  id_hotel,
+}) => {
   if (id_hotel) {
     return await executeQuery(
       `SELECT
@@ -169,7 +183,7 @@ const buscarHotelesConFiltros = async ({ ciudad, hotel, cp, lat, lng, id_hotel }
       INNER JOIN hoteles h ON h.id_hotel = vw.id_hotel
       WHERE vw.id_hotel = ?
       LIMIT 1`,
-      [id_hotel]
+      [id_hotel],
     );
   }
 
