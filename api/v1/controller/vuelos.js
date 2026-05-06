@@ -944,6 +944,15 @@ const editarVuelo = async (req, res) => {
               );
             }),
           );
+          await Promise.all(
+            items_con_nuevos_totales.map((item) =>
+              connection.execute(
+                `UPDATE items_pagos SET monto = ? WHERE id_item = ?`,
+                [item.nuevo_total, item.id_item],
+              ),
+            ),
+          );
+
           const monto_a_devolver = Math.abs(diferencia_ajuste);
           const total_pagado_con_saldo = pagos_con_saldo.reduce(
             (sum, p) => sum + Number(p.monto_aplicado),

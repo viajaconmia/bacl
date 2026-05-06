@@ -122,7 +122,7 @@ async function generarPDFHotel(data) {
             React.createElement(Row, { label: "HOTEL:", value: data.hotel }),
             React.createElement(Row, {
               label: "HABITACIÓN:",
-              value: "SENCILLA",
+              value: data.habitacion || "SENCILLA",
             }),
             React.createElement(Row, {
               label: "CHECK-IN:",

@@ -200,6 +200,9 @@ app.get("/probando", async (req, res) => {
       }
 
       const precio_venta = parseFloat(hotelObj.precio_venta) || parseFloat(dbResult[0].total) || 0;
+      const desayuno = hotelObj.tiene_desayuno !== undefined
+        ? hotelObj.tiene_desayuno === true || hotelObj.tiene_desayuno === "true" || hotelObj.tiene_desayuno === 1
+        : dbResult[0].desayuno;
 
       const buffer = await generarPDFHotel({
         hotel: hotelObj.nombre,
@@ -207,7 +210,8 @@ app.get("/probando", async (req, res) => {
         subtotal: (precio_venta / 1.16).toFixed(2),
         checkin: hotelObj.checkin,
         checkout: hotelObj.checkout,
-        desayuno: dbResult[0].desayuno,
+        desayuno,
+        habitacion: hotelObj.cuarto || "SENCILLA",
         direccion: dbResult[0].direccion,
         notas: hotelObj.notas || "",
       });
