@@ -5,6 +5,7 @@ const v2 = require("../../../../v2/controller/facturas.controller");
 const { hasPermission } = require("../../../../middleware/verifyPermission");
 
 router.post("/filtrarFacturas", controller.filtrarFacturas);
+router.post("/facturas_completas",controller.all_facturas);
 router.post(
   "/",
   middleware.validateParams(["info_user", "cfdi"]),
