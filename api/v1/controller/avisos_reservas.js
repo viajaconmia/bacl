@@ -640,4 +640,93 @@ const generar_layaut = async (req, res) => {
   }
 };
 
-module.exports = { read, enviadas, norificaciones, prefacturar, notificado, facturacion, atendida, aprobar, desligar, generar_layaut };
+
+const validar_items = async (req, res) => {
+  try {
+    const id_relacion =
+      req.id_relacion ||
+      req.body?.id_relacion ||
+      req.params?.id_relacion ||
+      req.query?.id_relacion;
+
+    if (!id_relacion) {
+      return res.status(400).json({
+        error: "Falta id_relacion",
+      });
+    }
+
+    const query = `
+      SELECT
+        i.id_item,
+        i.id_relacion,
+        i.total,
+        i.estado,
+
+        COALESCE(si.total_facturado, 0) AS total_facturado,
+        COALESCE(si.total_pagado, 0) AS total_pagado,
+        COALESCE(si.saldo_restante, i.total) AS saldo_restante,
+
+        CASE
+          WHEN ROUND(COALESCE(si.total, i.total), 2) = ROUND(COALESCE(si.total_pagado, 0), 2)
+            THEN 'DIFERENCIA_YA_PAGADA'
+
+          WHEN ROUND(COALESCE(si.total, i.total), 2) = ROUND(COALESCE(si.total_facturado, 0), 2)
+            THEN 'DIFERENCIA_YA_FACTURADA'
+
+          ELSE 'DISPONIBLE'
+        END AS validacion
+
+      FROM items i
+
+      LEFT JOIN saldo_items si
+        ON si.id_item = i.id_item
+       AND si.id_relacion = i.id_relacion
+
+      WHERE i.id_relacion = ?
+        AND i.estado != 0;
+    `;
+
+    const rows = await executeQuery(query, [id_relacion]);
+
+    const items = Array.isArray(rows) ? rows : rows?.[0] || [];
+
+    const itemsYaPagados = items.filter(
+      (item) => item.validacion === "DIFERENCIA_YA_PAGADA"
+    );
+
+    if (itemsYaPagados.length > 0) {
+      return res.status(200).json({
+        puede_continuar: false,
+        tipo: "DIFERENCIA_YA_PAGADA",
+        message: "Diferencia ya pagada",
+        id_relacion,
+        items: itemsYaPagados,
+      });
+    }
+
+    const itemsDisponibles = items.filter(
+      (item) => item.validacion === "DISPONIBLE"
+    );
+
+    return res.status(200).json({
+      puede_continuar: itemsDisponibles.length > 0,
+      tipo: itemsDisponibles.length > 0 ? "DISPONIBLE" : "SIN_ITEMS_DISPONIBLES",
+      message:
+        itemsDisponibles.length > 0
+          ? "Items disponibles"
+          : "No hay items disponibles",
+      id_relacion,
+      items: itemsDisponibles,
+      total_items: itemsDisponibles.length,
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Error al traer items",
+      details: error.message,
+    });
+  }
+};
+
+module.exports = { read, enviadas, norificaciones, prefacturar, notificado, facturacion, atendida, aprobar, desligar, generar_layaut,validar_items };

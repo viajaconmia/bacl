@@ -4030,6 +4030,7 @@ const getSolicitudes2 = async (req, res) => {
 
       comentarios: clean(req.query.comentarios),
       comentario_CXP: clean(req.query.comentario_CXP),
+      estatus_pagos: clean(req.query.estatus_pagos),
 
       uuid_factura: clean(req.query.uuid_factura),
       pag: Number(req.query.pag ?? 1) || 1,
@@ -4064,6 +4065,7 @@ const getSolicitudes2 = async (req, res) => {
 
         filters.comentarios,
         filters.comentario_CXP,
+        filters.estatus_pagos,
 
         filters.uuid_factura,
         filters.pag,
