@@ -10,5 +10,6 @@ router.patch("/aprobar",controller.aprobar);
 router.patch("/desligar",controller.desligar);
 router.post("/facturacion",controller.facturacion);
 router.post("/generar_layaut", controller.generar_layaut);
+router.post("/avisos_factura", controller.validar_items)
 module.exports = router;
 
