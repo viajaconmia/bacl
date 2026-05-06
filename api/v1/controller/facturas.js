@@ -2552,6 +2552,7 @@ const getDetallesConexionesFactura = async (req, res) => {
 
 const asignarURLS_factura = async (req, res) => {
   const { id_factura, url_pdf, url_xml } = req.query;
+    console.log("si llego 😎😎😎😎😎",url_pdf,url_xml)
   try {
     const response = await executeSP("sp_asignar_urls_a_facturas", [
       id_factura,
@@ -2846,6 +2847,35 @@ const agentes_report_fac = async (req, res) => {
   }
 };
 
+const all_facturas = async (req, res) => {
+  try {
+    // Devuelve facturas que tienen id_facturama (timbradas en Facturama)
+    // pero que todavía no tienen url_pdf o url_xml en BD
+    const query = `
+      SELECT id_facturama, id_factura
+      FROM facturas
+      WHERE id_facturama IS NOT NULL
+        AND id_factura IS NOT NULL
+        AND (url_pdf IS NULL OR url_xml IS NULL)
+    `;
+
+    const result = await executeQuery(query);
+
+    console.log(`📋 [all_facturas] Facturas pendientes de S3: ${result?.length ?? 0}`);
+
+    return res.status(200).json({
+      data: result,
+    });
+
+  } catch (error) {
+    console.error("❌ Error en all_facturas:", error);
+    return res.status(500).json({
+      error: "Error al obtener facturas",
+      details: error.message,
+    });
+  }
+};
+
 module.exports = {
   create,
   getFullDetalles,
@@ -2874,6 +2904,7 @@ module.exports = {
   agentes_report_fac,
   detalleFacturasCxC,
   resumenFacturasCxC,
+  all_facturas,
 };
 
 //ya quedo "#$%&/()="

@@ -85,24 +85,55 @@ const norificaciones = async (req, res) => {
 
 const facturacion = async (req, res) => {
   try {
-    const { id_factura, id_relacion } = req.body;
+    const { id_factura, id_facturas, id_relacion } = req.body;
 
-    console.log(req.body, "✅✅✅");
+    console.log(req.body, "✅ BODY FACTURACION");
 
-    if (!id_factura || !id_relacion) {
+    if (!id_relacion) {
       return res.status(400).json({
         error: "Faltan parámetros",
-        details: "id_factura e id_relacion son obligatorios",
+        details: "id_relacion es obligatorio",
       });
     }
 
-    const params = [id_factura, id_relacion];
+    // Normalizar para que siempre sea array
+    const facturas = Array.isArray(id_facturas)
+      ? id_facturas
+      : id_factura
+        ? [id_factura]
+        : [];
 
-    const response = await executeSP2("sp_get_factura_reserva", params);
+    if (facturas.length === 0) {
+      return res.status(400).json({
+        error: "Faltan parámetros",
+        details: "Debes enviar id_factura o id_facturas",
+      });
+    }
 
-    return res.status(200).json(response);
+    // Ejecuta el SP por cada factura
+    const resultados = await Promise.all(
+      facturas.map(async (idFactura) => {
+        const params = [idFactura, id_relacion];
+
+        const response = await executeSP2("sp_get_factura_reserva", params);
+
+        return {
+          id_factura: idFactura,
+          id_relacion,
+          data: response,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      message: "Facturación obtenida correctamente",
+      total_facturas: facturas.length,
+      resultados,
+    });
+
   } catch (error) {
     console.error(error);
+
     return res.status(500).json({
       error: "Error al obtener factura de reserva",
       details: error.message,
