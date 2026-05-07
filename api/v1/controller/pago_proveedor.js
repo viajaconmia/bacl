@@ -3640,10 +3640,21 @@ const getSolicitudes = async (req, res) => {
 
       comentarios: clean(req.query.comentarios),
       comentario_CXP: clean(req.query.comentario_CXP),
+
+      // pag=pendiente → el SP recibe el centinela 'pendiente' para filtrar
+      // los registros donde estatus_pagos sea 'enviado_a_pago' o NULL/vacío.
+      // Cualquier otro valor se pasa directo como filtro de igualdad exacta.
+      estatus_pagos: (() => {
+        const pag = clean(req.query.pag);
+        if (pag === 'pendiente') return 'pendiente';
+        return clean(req.query.estatus_pagos) ?? null;
+      })(),
+
+      uuid_factura: clean(req.query.uuid_factura),
     };
 
     const spRows = await executeSP(
-      "get_solicitudes_pago_filtradas2",
+      "get_solicitudes_pago_filtradas",
       [
         filters.folio,
         filters.cliente,
@@ -3670,6 +3681,11 @@ const getSolicitudes = async (req, res) => {
 
         filters.comentarios,
         filters.comentario_CXP,
+        filters.estatus_pagos,   // p_estatus_pagos (pos 24)
+
+        filters.uuid_factura,    // p_uuid_factura
+        null,                    // p_pagina  → usa default 1
+        null,                    // p_limite  → usa default 50
       ],
     );
 
