@@ -3653,6 +3653,9 @@ const getSolicitudes = async (req, res) => {
       uuid_factura: clean(req.query.uuid_factura),
     };
 
+    const pagina = Math.max(1, parseInt(req.query.page ?? req.query.pagina ?? "1", 10) || 1);
+    const limite = Math.min(200, Math.max(1, parseInt(req.query.limit ?? req.query.limite ?? "50", 10) || 50));
+
     const spRows = await executeSP(
       "get_solicitudes_pago_filtradas",
       [
@@ -3684,8 +3687,8 @@ const getSolicitudes = async (req, res) => {
         filters.estatus_pagos,   // p_estatus_pagos (pos 24)
 
         filters.uuid_factura,    // p_uuid_factura
-        null,                    // p_pagina  → usa default 1
-        null,                    // p_limite  → usa default 50
+        pagina,                  // p_pagina
+        limite,                  // p_limite
       ],
     );
 
@@ -3825,11 +3828,19 @@ const getSolicitudes = async (req, res) => {
       Expires: "0",
     });
 
+    const pagination = {
+      page: pagina,
+      limit: limite,
+      count: data.length,
+      has_more: spRows.length === limite,
+    };
+
     if (debug) {
       return res.status(200).json({
         ok: true,
         message: "Registros obtenidos con exito",
         data,
+        pagination,
         meta: {
           filters,
           counts: {
@@ -3845,6 +3856,7 @@ const getSolicitudes = async (req, res) => {
       ok: true,
       message: "Registros obtenidos con exito",
       data,
+      pagination,
     });
   } catch (error) {
     console.error(error);
