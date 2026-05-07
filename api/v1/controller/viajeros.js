@@ -4,6 +4,7 @@ const model = require("../model/viajeros");
 const create = async (req, res) => {
   try {
     const { user } = req?.session;
+    console.log(user);
     const response = await model.createViajero(req.body, user);
     res
       .status(201)
