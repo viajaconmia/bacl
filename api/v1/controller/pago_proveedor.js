@@ -3640,10 +3640,24 @@ const getSolicitudes = async (req, res) => {
 
       comentarios: clean(req.query.comentarios),
       comentario_CXP: clean(req.query.comentario_CXP),
+
+      // pag=pendiente → el SP recibe el centinela 'pendiente' para filtrar
+      // los registros donde estatus_pagos sea 'enviado_a_pago' o NULL/vacío.
+      // Cualquier otro valor se pasa directo como filtro de igualdad exacta.
+      estatus_pagos: (() => {
+        const pag = clean(req.query.pag);
+        if (pag === 'pendiente') return 'pendiente';
+        return clean(req.query.estatus_pagos) ?? null;
+      })(),
+
+      uuid_factura: clean(req.query.uuid_factura),
     };
 
+    const pagina = Math.max(1, parseInt(req.query.page ?? req.query.pagina ?? "1", 10) || 1);
+    const limite = Math.min(200, Math.max(1, parseInt(req.query.limit ?? req.query.limite ?? "50", 10) || 50));
+
     const spRows = await executeSP(
-      "get_solicitudes_pago_filtradas2",
+      "get_solicitudes_pago_filtradas",
       [
         filters.folio,
         filters.cliente,
@@ -3670,6 +3684,11 @@ const getSolicitudes = async (req, res) => {
 
         filters.comentarios,
         filters.comentario_CXP,
+        filters.estatus_pagos,   // p_estatus_pagos (pos 24)
+
+        filters.uuid_factura,    // p_uuid_factura
+        pagina,                  // p_pagina
+        limite,                  // p_limite
       ],
     );
 
@@ -3809,11 +3828,19 @@ const getSolicitudes = async (req, res) => {
       Expires: "0",
     });
 
+    const pagination = {
+      page: pagina,
+      limit: limite,
+      count: data.length,
+      has_more: spRows.length === limite,
+    };
+
     if (debug) {
       return res.status(200).json({
         ok: true,
         message: "Registros obtenidos con exito",
         data,
+        pagination,
         meta: {
           filters,
           counts: {
@@ -3829,6 +3856,7 @@ const getSolicitudes = async (req, res) => {
       ok: true,
       message: "Registros obtenidos con exito",
       data,
+      pagination,
     });
   } catch (error) {
     console.error(error);

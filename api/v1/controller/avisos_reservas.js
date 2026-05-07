@@ -652,7 +652,7 @@ const generar_layaut = async (req, res) => {
     );
 
     const facturasRows = await executeQuery(
-      `SELECT itf.id_factura, f.url_pdf, f.url_xml, f.id_facturama
+      `SELECT itf.id_factura, f.url_pdf, f.url_xml, f.id_facturama,f.uuid_factura
        FROM items_facturas itf
        LEFT JOIN facturas f ON f.id_factura = itf.id_factura
        WHERE itf.id_relacion IN (${placeholders})
