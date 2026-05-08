@@ -24,5 +24,6 @@ router.post("/detalles",controller.Detalles);
 router.get("/buscar_factura",controller.Uuid);
 router.delete("/edit_factura",controller.eliminarFactura);
 router.post("/buscaruuid",controller.buscaruuid);
+router.patch("/reasignar_pago", controller.reasignarPago);
 module.exports = router;
 

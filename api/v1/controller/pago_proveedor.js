@@ -7774,6 +7774,51 @@ const buscaruuid = async (req, res) => {
   }
 };
 
+const reasignarPago = async (req, res) => {
+  try {
+    const { id_pago_proveedor, nuevo_id_solicitud_proveedor } = req.body || {};
+
+    if (!id_pago_proveedor || !nuevo_id_solicitud_proveedor) {
+      return res.status(400).json({
+        ok: false,
+        error: "Se requieren id_pago_proveedor y nuevo_id_solicitud_proveedor",
+      });
+    }
+
+    // Valida que la solicitud destino exista y no esté pagada
+    const [rows] = await executeQuery(
+      `SELECT id_solicitud_proveedor, estatus_pagos
+       FROM solicitudes_pago_proveedor
+       WHERE id_solicitud_proveedor = ?
+       LIMIT 1`,
+      [nuevo_id_solicitud_proveedor]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ ok: false, error: "Solicitud destino no encontrada" });
+    }
+
+    if (String(rows[0]?.estatus_pagos ?? "").toLowerCase() === "pagada") {
+      return res.status(400).json({ ok: false, error: "La solicitud destino ya está pagada" });
+    }
+
+    await executeQuery(
+      `UPDATE pago_proveedores
+       SET id_solicitud_proveedor = ?
+       WHERE id_pago_proveedores = ?`,
+      [nuevo_id_solicitud_proveedor, id_pago_proveedor]
+    );
+
+    return res.status(200).json({ ok: true, message: "Pago reasignado correctamente" });
+  } catch (error) {
+    console.error("Error en reasignarPago:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error?.message ?? "Error al reasignar el pago",
+    });
+  }
+};
+
 module.exports = {
   devolverMontoFacturadoAFacturasPorCancelacion,
   createSolicitud,
@@ -7798,4 +7843,5 @@ module.exports = {
   eliminarFactura,
   createComprobantePago,
   buscaruuid,
+  reasignarPago,
 };
