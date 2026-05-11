@@ -4269,11 +4269,15 @@ const getSolicitudes2 = async (req, res) => {
         .toUpperCase()
         .trim();
 
+      const formaAjuste = row.__computed?.forma ?? "";
+
       const isAjuste =
-        Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) ===
-          1 && estado !== "SOLICITA";
+        Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) === 1 &&
+        estado !== "SOLICITA" &&
+        (formaAjuste === "transfer" || formaAjuste === "card");
 
       if (estado === "SOLICITADA") return "ap_credito";
+      
       if (estado === "CANCELADA") return "canceladas";
 
       if (isAjuste) return "notificados";
