@@ -448,4 +448,60 @@ router.get(
   controller.get_agente_with_viajeros_details
 );
 
+router.get("/ficha/hoteles-ciudad-zona", async (req, res) => {
+  try {
+    const { id_agente, estado, zona } = req.query;
+    if (!id_agente || !estado || !zona)
+      return res.status(400).json({ message: "Faltan parámetros: id_agente, estado, zona" });
+
+    const [rows] = await executeQuery(
+      `CALL sp_hoteles_ciudad_zona_agente(?, ?, ?)`,
+      [id_agente, estado, zona],
+    );
+    res.status(200).json({ data: rows, message: "" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message, data: null });
+  }
+});
+
+router.get("/ficha/reservas-ciudad-zona", async (req, res) => {
+  try {
+    const { id_agente, estado } = req.query;
+    if (!id_agente || !estado)
+      return res.status(400).json({ message: "Faltan parámetros: id_agente, estado" });
+
+    const [rows] = await executeQuery(
+      `CALL sp_reservas_ciudad_zona_agente(?, ?)`,
+      [id_agente, estado],
+    );
+    res.status(200).json({ data: rows, message: "" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message, data: null });
+  }
+});
+
+router.get("/ficha/resumen", async (req, res) => {
+  try {
+    const { id_agente } = req.query;
+    if (!id_agente)
+      return res.status(400).json({ message: "Falta parámetro: id_agente" });
+
+    const [[tipo_negociacion], [estado], [gasto_mensual]] = await Promise.all([
+      executeQuery(`CALL sp_reservas_tipo_negociacion_agente(?)`, [id_agente]),
+      executeQuery(`CALL sp_reservas_estado_agente(?)`, [id_agente]),
+      executeQuery(`CALL sp_gasto_mensual_agente(?)`, [id_agente]),
+    ]);
+
+    res.status(200).json({
+      data: { tipo_negociacion, estado, gasto_mensual },
+      message: "",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message, data: null });
+  }
+});
+
 module.exports = router;
