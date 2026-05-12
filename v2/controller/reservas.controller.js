@@ -1180,6 +1180,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
   connection,
   metadata,
   usuario = "system",
+  origen = "edicion_reserva",
 }) {
   if (!connection) {
     throw new Error(
@@ -1237,6 +1238,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
           SELECT
             id_solicitud_proveedor,
             estado_solicitud,
+            estatus_pagos,
             forma_pago_solicitada,
             id_proveedor,
             monto_solicitado,
@@ -1310,7 +1312,11 @@ async function procesarSolicitudProveedorAlEditarReserva({
         }, 0),
       );
 
-      if (monto_pagado_total > 0) {
+      const aptoParaSaldo =
+        estadoAnterior === "PAGADO TRANSFERENCIA" ||
+        String(solicitud.estatus_pagos || "").trim().toUpperCase() === "PAGADA";
+
+      if (monto_pagado_total > 0 && aptoParaSaldo) {
         const pagoBase = rowsPagos[0];
         const forma_pago_saldo = mapFormaPagoSolicitudToSaldo(
           solicitud.forma_pago_solicitada,
@@ -1407,28 +1413,22 @@ async function procesarSolicitudProveedorAlEditarReserva({
       });
 
     // 5) Cancelar SIEMPRE la solicitud
-    if (estadoAnterior === "DISPERSION") {
-      await connection.execute(
-        `
-            UPDATE solicitudes_pago_proveedor
-            SET
-              estado_solicitud = 'CANCELADA',
-              is_ajuste = 1,
-              comentario_ajuste = ?
-            WHERE id_solicitud_proveedor = ?
-          `,
-        ["Cancelada por edición de reserva", id_solicitud_proveedor],
-      );
-    } else {
-      await connection.execute(
-        `
-            UPDATE solicitudes_pago_proveedor
-            SET estado_solicitud = 'CANCELADA'
-            WHERE id_solicitud_proveedor = ?
-          `,
-        [id_solicitud_proveedor],
-      );
-    }
+    const motivoCancelacion =
+      origen === "cancelacion_reserva"
+        ? `Se canceló solicitud — origen: cancelación de reserva. Estado anterior: ${estadoAnterior}. Usuario: ${usuario}.`
+        : `Se canceló solicitud — origen: edición de reserva. Estado anterior: ${estadoAnterior}. Usuario: ${usuario}.`;
+
+    await connection.execute(
+      `
+          UPDATE solicitudes_pago_proveedor
+          SET
+            estado_solicitud = 'CANCELADA',
+            is_ajuste = 1,
+            comentario_ajuste = ?
+          WHERE id_solicitud_proveedor = ?
+        `,
+      [motivoCancelacion, id_solicitud_proveedor],
+    );
 
     resultados.push({
       ok: true,
@@ -1516,6 +1516,7 @@ const editar_reserva_definitivo = async (req, res) => {
           connection,
           metadata,
           usuario: req?.user?.id || req?.user?.email || "system",
+          origen: "edicion_reserva",
         });
 
       console.log(
@@ -2411,6 +2412,7 @@ const cancelarBooking = async (req, res) => {
           connection: conn,
           metadata: { id_booking },
           usuario: user?.id || user?.email || "system",
+          origen: "cancelacion_reserva",
         },
       );
 

@@ -3992,6 +3992,70 @@ const getSolicitudes2 = async (req, res) => {
 
     const debug = Number(req.query.debug ?? 0) === 1;
 
+    // ── Modo conteo rápido ────────────────────────────────────────────────────
+    // ?tipo=<valor> → devuelve solo los conteos por bucket desde
+    // solicitudes_pago_proveedor sin invocar el SP ni hacer joins pesados.
+    const tipoVista = clean(req.query.tipo);
+
+    if (tipoVista) {
+      const [conteosRows] = await executeQuery(`
+        SELECT
+          COUNT(CASE
+            WHEN estado_solicitud IN ('TRANSFERENCIA_SOLICITADA','DISPERSION')
+            THEN 1 END) AS spei,
+
+          COUNT(CASE
+            WHEN forma_pago_solicitada = 'card'
+             AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
+            THEN 1 END) AS pago_tdc,
+
+          COUNT(CASE
+            WHEN forma_pago_solicitada = 'link'
+             AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
+            THEN 1 END) AS pago_link,
+
+          COUNT(CASE
+            WHEN LOWER(TRIM(COALESCE(estatus_pagos,''))) = 'pagado'
+            THEN 1 END) AS pagada,
+
+          COUNT(CASE
+            WHEN is_ajuste = 1
+             AND forma_pago_solicitada IN ('transfer','card')
+             AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'SOLICITA'
+            THEN 1 END) AS notificados,
+
+          COUNT(CASE
+            WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CANCELADA'
+             AND NOT (
+               forma_pago_solicitada = 'transfer'
+               AND is_ajuste = 1
+               AND comentario_ajuste IS NOT NULL
+               AND TRIM(comentario_ajuste) <> ''
+             )
+            THEN 1 END) AS canceladas,
+
+          COUNT(CASE
+            WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'SOLICITADA'
+            THEN 1 END) AS ap_credito,
+
+          COUNT(CASE
+            WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('CUPON ENVIADO','CARTA_ENVIADA')
+            THEN 1 END) AS pendiente_credito,
+
+          COUNT(*) AS todos
+        FROM solicitudes_pago_proveedor
+      `);
+
+      res.set({ "Cache-Control": "no-store", Pragma: "no-cache", Expires: "0" });
+      return res.status(200).json({
+        ok: true,
+        message: "Conteos obtenidos con éxito",
+        data: conteosRows,
+        meta: { tipo: tipoVista },
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const allowedFechaReserva = new Set([
       "created_at",
       "check_in",
@@ -4269,11 +4333,15 @@ const getSolicitudes2 = async (req, res) => {
         .toUpperCase()
         .trim();
 
+      const formaAjuste = row.__computed?.forma ?? "";
+
       const isAjuste =
-        Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) ===
-          1 && estado !== "SOLICITA";
+        Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) === 1 &&
+        estado !== "SOLICITA" &&
+        (formaAjuste === "transfer" || formaAjuste === "card");
 
       if (estado === "SOLICITADA") return "ap_credito";
+      
       if (estado === "CANCELADA") return "canceladas";
 
       if (isAjuste) return "notificados";
@@ -7774,6 +7842,51 @@ const buscaruuid = async (req, res) => {
   }
 };
 
+const reasignarPago = async (req, res) => {
+  try {
+    const { id_pago_proveedor, nuevo_id_solicitud_proveedor } = req.body || {};
+
+    if (!id_pago_proveedor || !nuevo_id_solicitud_proveedor) {
+      return res.status(400).json({
+        ok: false,
+        error: "Se requieren id_pago_proveedor y nuevo_id_solicitud_proveedor",
+      });
+    }
+
+    // Valida que la solicitud destino exista y no esté pagada
+    const [rows] = await executeQuery(
+      `SELECT id_solicitud_proveedor, estatus_pagos
+       FROM solicitudes_pago_proveedor
+       WHERE id_solicitud_proveedor = ?
+       LIMIT 1`,
+      [nuevo_id_solicitud_proveedor]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ ok: false, error: "Solicitud destino no encontrada" });
+    }
+
+    if (String(rows[0]?.estatus_pagos ?? "").toLowerCase() === "pagada") {
+      return res.status(400).json({ ok: false, error: "La solicitud destino ya está pagada" });
+    }
+
+    await executeQuery(
+      `UPDATE pago_proveedores
+       SET id_solicitud_proveedor = ?
+       WHERE id_pago_proveedores = ?`,
+      [nuevo_id_solicitud_proveedor, id_pago_proveedor]
+    );
+
+    return res.status(200).json({ ok: true, message: "Pago reasignado correctamente" });
+  } catch (error) {
+    console.error("Error en reasignarPago:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error?.message ?? "Error al reasignar el pago",
+    });
+  }
+};
+
 module.exports = {
   devolverMontoFacturadoAFacturasPorCancelacion,
   createSolicitud,
@@ -7798,4 +7911,5 @@ module.exports = {
   eliminarFactura,
   createComprobantePago,
   buscaruuid,
+  reasignarPago,
 };
