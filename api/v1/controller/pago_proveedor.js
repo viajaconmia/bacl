@@ -7844,42 +7844,270 @@ const buscaruuid = async (req, res) => {
 
 const reasignarPago = async (req, res) => {
   try {
-    const { id_pago_proveedor, nuevo_id_solicitud_proveedor } = req.body || {};
+    const {
+      monto,
+      id_pago_proveedores,
+      id_solicitud_nueva,
+      id_solicitud_antigua,
+    } = req.body || {};
 
-    if (!id_pago_proveedor || !nuevo_id_solicitud_proveedor) {
+    if (!id_pago_proveedores || !id_solicitud_nueva || !id_solicitud_antigua) {
       return res.status(400).json({
         ok: false,
-        error: "Se requieren id_pago_proveedor y nuevo_id_solicitud_proveedor",
+        error:
+          "Se requieren id_pago_proveedores, id_solicitud_nueva e id_solicitud_antigua",
       });
     }
 
-    // Valida que la solicitud destino exista y no esté pagada
-    const [rows] = await executeQuery(
-      `SELECT id_solicitud_proveedor, estatus_pagos
-       FROM solicitudes_pago_proveedor
-       WHERE id_solicitud_proveedor = ?
-       LIMIT 1`,
-      [nuevo_id_solicitud_proveedor]
+    console.log(
+      "reasignarPago body:",
+      monto,
+      id_pago_proveedores,
+      id_solicitud_nueva,
+      id_solicitud_antigua
     );
 
-    if (!rows.length) {
-      return res.status(404).json({ ok: false, error: "Solicitud destino no encontrada" });
+    const montoReasignado =
+      monto === undefined || monto === null || monto === ""
+        ? null
+        : Number(monto);
+
+    if (montoReasignado !== null && Number.isNaN(montoReasignado)) {
+      return res.status(400).json({
+        ok: false,
+        error: "El monto no es válido",
+      });
     }
 
-    if (String(rows[0]?.estatus_pagos ?? "").toLowerCase() === "pagada") {
-      return res.status(400).json({ ok: false, error: "La solicitud destino ya está pagada" });
-    }
+    /**
+     * Helper por si executeQuery devuelve:
+     * - array: [row]
+     * - objeto directo: row
+     */
+    const getFirstRow = (result) => {
+      if (Array.isArray(result)) return result[0] || null;
+      return result || null;
+    };
 
-    await executeQuery(
-      `UPDATE pago_proveedores
-       SET id_solicitud_proveedor = ?
-       WHERE id_pago_proveedores = ?`,
-      [nuevo_id_solicitud_proveedor, id_pago_proveedor]
+    // 1) Validar solicitud nueva
+    const rowsNuevaResult = await executeQuery(
+      `
+      SELECT 
+        id_solicitud_proveedor,
+        estatus_pagos,
+        forma_pago_solicitada
+      FROM solicitudes_pago_proveedor
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1
+      `,
+      [id_solicitud_nueva]
     );
 
-    return res.status(200).json({ ok: true, message: "Pago reasignado correctamente" });
+    const solicitudNueva = getFirstRow(rowsNuevaResult);
+
+    console.log("solicitud nueva:", solicitudNueva);
+
+    if (!solicitudNueva) {
+      return res.status(404).json({
+        ok: false,
+        error: "Solicitud nueva no encontrada",
+      });
+    }
+
+    if (
+      String(solicitudNueva.estatus_pagos ?? "").toLowerCase() === "pagada" ||
+      String(solicitudNueva.estatus_pagos ?? "").toLowerCase() === "pagado"
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "La solicitud nueva ya está pagada",
+      });
+    }
+
+    if (!solicitudNueva.forma_pago_solicitada) {
+      return res.status(400).json({
+        ok: false,
+        error: "La solicitud nueva no tiene forma_pago_solicitada",
+      });
+    }
+
+    // 2) Validar solicitud antigua
+    const rowsAntiguaResult = await executeQuery(
+      `
+      SELECT 
+        id_solicitud_proveedor,
+        estatus_pagos
+      FROM solicitudes_pago_proveedor
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1
+      `,
+      [id_solicitud_antigua]
+    );
+
+    const solicitudAntigua = getFirstRow(rowsAntiguaResult);
+
+    console.log("solicitud antigua:", solicitudAntigua);
+
+    if (!solicitudAntigua) {
+      return res.status(404).json({
+        ok: false,
+        error: "Solicitud antigua no encontrada",
+      });
+    }
+
+    // 3) Validar que el pago original exista y pertenezca a la solicitud antigua
+    const rowsPagoResult = await executeQuery(
+      `
+      SELECT 
+        id_pago_proveedores,
+        id_solicitud_proveedor,
+        monto_pagado,
+        monto,
+        estatus
+      FROM pago_proveedores
+      WHERE id_pago_proveedores = ?
+        AND id_solicitud_proveedor = ?
+      LIMIT 1
+      `,
+      [id_pago_proveedores, id_solicitud_antigua]
+    );
+
+    const pagoOriginal = getFirstRow(rowsPagoResult);
+
+    console.log("pago original:", pagoOriginal);
+
+    if (!pagoOriginal) {
+      return res.status(404).json({
+        ok: false,
+        error: "Pago original no encontrado para la solicitud antigua",
+      });
+    }
+
+    const formaPagoNueva = solicitudNueva.forma_pago_solicitada;
+    const userId = req.session?.user?.id || null;
+
+    // 4) Insertar nuevo pago copiando el pago original
+    // IMPORTANTE:
+    // No hacer JOIN con solicitudes_pago_proveedor aquí,
+    // porque el trigger actualiza esa misma tabla y MySQL marca error 1442.
+    const insertResult = await executeQuery(
+      `
+      INSERT INTO pago_proveedores (
+        id_pago_dispersion,
+        id_solicitud_proveedor,
+        codigo_dispersion,
+        monto_pagado,
+        fecha_pago,
+        url_pdf,
+        monto_facturado,
+        url_factura,
+        fecha_update,
+        id_factura,
+        user_update,
+        user_created,
+        fecha_emision,
+        numero_comprobante,
+        cuenta_origen,
+        cuenta_destino,
+        monto,
+        moneda,
+        concepto,
+        metodo_de_pago,
+        referencia_pago,
+        nombre_pagador,
+        rfc_pagador,
+        domicilio_pagador,
+        nombre_beneficiario,
+        domicilio_beneficiario,
+        descripcion,
+        iva,
+        total,
+        estatus,
+        origen_pago
+      )
+      SELECT
+        p.id_pago_dispersion,
+        ? AS id_solicitud_proveedor,
+        p.codigo_dispersion,
+        ROUND(COALESCE(?, p.monto_pagado), 2) AS monto_pagado,
+        p.fecha_pago,
+        p.url_pdf,
+        p.monto_facturado,
+        p.url_factura,
+        NOW() AS fecha_update,
+        p.id_factura,
+        ? AS user_update,
+        p.user_created,
+        p.fecha_emision,
+        p.numero_comprobante,
+        p.cuenta_origen,
+        p.cuenta_destino,
+        ROUND(COALESCE(?, p.monto), 2) AS monto,
+        p.moneda,
+        p.concepto,
+        ? AS metodo_de_pago,
+        p.referencia_pago,
+        p.nombre_pagador,
+        p.rfc_pagador,
+        p.domicilio_pagador,
+        p.nombre_beneficiario,
+        p.domicilio_beneficiario,
+        p.descripcion,
+        p.iva,
+        p.total,
+        p.estatus,
+        p.id_pago_proveedores AS origen_pago
+      FROM pago_proveedores p
+      WHERE p.id_pago_proveedores = ?
+        AND p.id_solicitud_proveedor = ?
+      LIMIT 1
+      `,
+      [
+        id_solicitud_nueva,
+        montoReasignado,
+        userId,
+        montoReasignado,
+        formaPagoNueva,
+        id_pago_proveedores,
+        id_solicitud_antigua,
+      ]
+    );
+
+    console.log("insertResult:", insertResult);
+
+    if (!insertResult || Number(insertResult.affectedRows || 0) === 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "No se pudo insertar el pago reasignado",
+      });
+    }
+
+    const updateAjusteResult = await executeQuery(
+  `
+  UPDATE solicitudes_pago_proveedor
+  SET 
+    comentario_ajuste = NULL,
+    is_ajuste = 0
+  WHERE id_solicitud_proveedor = ?
+  `,
+  [id_solicitud_nueva]
+);
+
+console.log("updateAjusteResult:", updateAjusteResult);
+
+    return res.status(200).json({
+      ok: true,
+      message: "Pago reasignado correctamente",
+      id_pago_nuevo: insertResult.insertId || null,
+      id_pago_origen: id_pago_proveedores,
+      id_solicitud_antigua,
+      id_solicitud_nueva,
+      forma_pago_nueva: formaPagoNueva,
+      monto_reasignado: montoReasignado,
+    });
   } catch (error) {
     console.error("Error en reasignarPago:", error);
+
     return res.status(500).json({
       ok: false,
       error: error?.message ?? "Error al reasignar el pago",
@@ -7887,6 +8115,84 @@ const reasignarPago = async (req, res) => {
   }
 };
 
+const cancelar_dispersion = async (req, res) => {
+  try {
+    const { id_solicitud_proveedor } = req.body || {};
+
+    if (!id_solicitud_proveedor) {
+      return res.status(400).json({
+        ok: false,
+        error: "Se requiere id_solicitud_proveedor",
+      });
+    }
+
+    const getFirstRow = (result) => {
+      if (Array.isArray(result)) return result[0] || null;
+      return result || null;
+    };
+
+    // Validar que exista y no tenga pagos registrados
+    const rowsResult = await executeQuery(
+      `
+      SELECT 
+        id_solicitud_proveedor, 
+        monto_pagado
+      FROM dispersion_pagos_proveedor
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1
+      `,
+      [id_solicitud_proveedor]
+    );
+
+    const dispersion = getFirstRow(rowsResult);
+
+    if (!dispersion) {
+      return res.status(404).json({
+        ok: false,
+        error: "Solicitud destino no encontrada en dispersión",
+      });
+    }
+
+    if (Number(dispersion?.monto_pagado ?? 0) > 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "La solicitud ya tiene pagos registrados",
+      });
+    }
+
+    await executeQuery(
+      `
+      DELETE FROM dispersion_pagos_proveedor
+      WHERE id_solicitud_proveedor = ?
+      `,
+      [id_solicitud_proveedor]
+    );
+
+    const updateAjusteResult = await executeQuery(
+      `
+      UPDATE solicitudes_pago_proveedor
+      SET 
+        estado_solicitud = 'TRANSFERENCIA_SOLICITADA'
+      WHERE id_solicitud_proveedor = ?
+      `,
+      [id_solicitud_proveedor]
+    );
+
+    console.log("updateAjusteResult:", updateAjusteResult);
+
+    return res.status(200).json({
+      ok: true,
+      message: "Solicitud separada de dispersión correctamente",
+    });
+  } catch (error) {
+    console.error("Error en cancelar_dispersion:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: error?.message ?? "Error al cancelar la dispersión",
+    });
+  }
+};
 module.exports = {
   devolverMontoFacturadoAFacturasPorCancelacion,
   createSolicitud,
@@ -7895,6 +8201,7 @@ module.exports = {
   createDispersion,
   createPago,
   saldo_a_favor,
+  cancelar_dispersion,
   getDatosFiscalesProveedor,
   editProveedores,
   getProveedores,
