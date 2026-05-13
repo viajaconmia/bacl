@@ -3657,7 +3657,7 @@ const getSolicitudes = async (req, res) => {
     const limite = Math.min(200, Math.max(1, parseInt(req.query.limit ?? req.query.limite ?? "50", 10) || 50));
 
     const spRows = await executeSP(
-      "get_solicitudes_pago_filtradas",
+      "get_solicitudes_pago_filtradas2",
       [
         filters.folio,
         filters.cliente,
@@ -4001,31 +4001,35 @@ if (tipoVista) {
   const [conteosRows] = await executeQuery(`
     SELECT
       COUNT(CASE
-        WHEN estado_solicitud IN ('TRANSFERENCIA_SOLICITADA','DISPERSION')
+        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('TRANSFERENCIA_SOLICITADA','DISPERSION')
         THEN 1 END) AS spei,
 
       COUNT(CASE
-        WHEN forma_pago_solicitada = 'card'
+        WHEN LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'card'
          AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
         THEN 1 END) AS pago_tdc,
 
       COUNT(CASE
-        WHEN forma_pago_solicitada = 'link'
+        WHEN LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'link'
          AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
         THEN 1 END) AS pago_link,
 
       COUNT(CASE
-        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN (
-          'PAGADO TRANSFERENCIA',
-          'PAGADO LINK',
-          'PAGADO TARJETA'
+        WHEN (
+          LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'transfer'
+          AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
+          AND (
+            COALESCE(saldo, 0) = 0
+            OR LOWER(TRIM(COALESCE(estatus_pagos,''))) = 'pagado'
+          )
         )
+        OR UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'PAGADO TRANSFERENCIA'
         THEN 1 END) AS pagada,
 
       COUNT(CASE
         WHEN COALESCE(is_ajuste, 0) = 1
-        AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) IN ('transfer','card')
-        AND UPPER(TRIM(COALESCE(estado_solicitud,''))) NOT IN ('CANCELADA','SOLICITADA')
+         AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) IN ('transfer','card')
+         AND UPPER(TRIM(COALESCE(estado_solicitud,''))) NOT IN ('CANCELADA','SOLICITADA')
         THEN 1 END) AS notificados,
 
       COUNT(CASE
