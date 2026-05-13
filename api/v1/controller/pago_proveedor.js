@@ -3997,63 +3997,80 @@ const getSolicitudes2 = async (req, res) => {
     // solicitudes_pago_proveedor sin invocar el SP ni hacer joins pesados.
     const tipoVista = clean(req.query.tipo);
 
-    if (tipoVista) {
-      const [conteosRows] = await executeQuery(`
-        SELECT
-          COUNT(CASE
-            WHEN estado_solicitud IN ('TRANSFERENCIA_SOLICITADA','DISPERSION')
-            THEN 1 END) AS spei,
+if (tipoVista) {
+  const [conteosRows] = await executeQuery(`
+    SELECT
+      COUNT(CASE
+        WHEN estado_solicitud IN ('TRANSFERENCIA_SOLICITADA','DISPERSION')
+        THEN 1 END) AS spei,
 
-          COUNT(CASE
-            WHEN forma_pago_solicitada = 'card'
-             AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
-            THEN 1 END) AS pago_tdc,
+      COUNT(CASE
+        WHEN forma_pago_solicitada = 'card'
+         AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
+        THEN 1 END) AS pago_tdc,
 
-          COUNT(CASE
-            WHEN forma_pago_solicitada = 'link'
-             AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
-            THEN 1 END) AS pago_link,
+      COUNT(CASE
+        WHEN forma_pago_solicitada = 'link'
+         AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
+        THEN 1 END) AS pago_link,
 
-          COUNT(CASE
-            WHEN LOWER(TRIM(COALESCE(estatus_pagos,''))) = 'pagado'
-            THEN 1 END) AS pagada,
+      COUNT(CASE
+        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN (
+          'PAGADO TRANSFERENCIA',
+          'PAGADO LINK',
+          'PAGADO TARJETA'
+        )
+        THEN 1 END) AS pagada,
 
-          COUNT(CASE
-            WHEN is_ajuste = 1
-             AND forma_pago_solicitada IN ('transfer','card')
-             AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'SOLICITA'
-            THEN 1 END) AS notificados,
+      COUNT(CASE
+        WHEN COALESCE(is_ajuste, 0) = 1
+        AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) IN ('transfer','card')
+        AND UPPER(TRIM(COALESCE(estado_solicitud,''))) NOT IN ('CANCELADA','SOLICITADA')
+        THEN 1 END) AS notificados,
 
-          COUNT(CASE
-            WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CANCELADA'
-             AND NOT (
-               forma_pago_solicitada = 'transfer'
-               AND is_ajuste = 1
-               AND comentario_ajuste IS NOT NULL
-               AND TRIM(comentario_ajuste) <> ''
-             )
-            THEN 1 END) AS canceladas,
+      COUNT(CASE
+        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CANCELADA'
+         AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'transfer'
+         AND COALESCE(is_ajuste, 0) = 1
+         AND comentario_ajuste IS NOT NULL
+         AND TRIM(comentario_ajuste) <> ''
+        THEN 1 END) AS canceladas,
 
-          COUNT(CASE
-            WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'SOLICITADA'
-            THEN 1 END) AS ap_credito,
+      COUNT(CASE
+        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'SOLICITADA'
+        THEN 1 END) AS ap_credito,
 
-          COUNT(CASE
-            WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('CUPON ENVIADO','CARTA_ENVIADA')
-            THEN 1 END) AS pendiente_credito,
+      COUNT(CASE
+        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('CUPON ENVIADO','CARTA_ENVIADA')
+        THEN 1 END) AS pendiente_credito,
 
-          COUNT(*) AS todos
-        FROM solicitudes_pago_proveedor
-      `);
+      COUNT(CASE
+        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
+          OR (
+            UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CANCELADA'
+            AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'transfer'
+            AND COALESCE(is_ajuste, 0) = 1
+            AND comentario_ajuste IS NOT NULL
+            AND TRIM(comentario_ajuste) <> ''
+          )
+        THEN 1 END) AS todos
 
-      res.set({ "Cache-Control": "no-store", Pragma: "no-cache", Expires: "0" });
-      return res.status(200).json({
-        ok: true,
-        message: "Conteos obtenidos con éxito",
-        data: conteosRows,
-        meta: { tipo: tipoVista },
-      });
-    }
+    FROM solicitudes_pago_proveedor
+  `);
+
+  res.set({
+    "Cache-Control": "no-store",
+    Pragma: "no-cache",
+    Expires: "0",
+  });
+
+  return res.status(200).json({
+    ok: true,
+    message: "Conteos obtenidos con éxito",
+    data: conteosRows,
+    meta: { tipo: tipoVista },
+  });
+}
     // ─────────────────────────────────────────────────────────────────────────
 
     const allowedFechaReserva = new Set([
@@ -4129,6 +4146,9 @@ const getSolicitudes2 = async (req, res) => {
       limite: Number(req.query.limite ?? 50) || 50,
     };
 
+    // ?bucket=<nombre> → el SP filtra internamente; aquí solo pasamos el parámetro
+    const bucketFiltro = clean(req.query.bucket);
+
     const spRows = await executeSP(
       STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
       [
@@ -4162,6 +4182,7 @@ const getSolicitudes2 = async (req, res) => {
         filters.uuid_factura,
         filters.pag,
         filters.limite,
+        bucketFiltro ?? null,   // p_bucket — el SP aplica el filtro de bucket
       ],
     );
 
@@ -4367,8 +4388,13 @@ const getSolicitudes2 = async (req, res) => {
       canceladas: [],
     };
 
-    for (const row of data) {
-      buckets[assignBucket(row)].push(row);
+    if (bucketFiltro && bucketFiltro !== "all" && buckets[bucketFiltro] !== undefined) {
+      // El SP ya filtró por bucket: meter todos los rows directamente sin re-clasificar
+      buckets[bucketFiltro] = data;
+    } else {
+      for (const row of data) {
+        buckets[assignBucket(row)].push(row);
+      }
     }
 
     res.set({
@@ -4401,10 +4427,15 @@ const getSolicitudes2 = async (req, res) => {
       });
     }
 
+    const responseData =
+      bucketFiltro && bucketFiltro !== "all"
+        ? { [bucketFiltro]: buckets[bucketFiltro] ?? [] }
+        : buckets;
+
     return res.status(200).json({
       ok: true,
       message: "Registros obtenidos con exito",
-      data: buckets,
+      data: responseData,
       meta,
     });
   } catch (error) {
