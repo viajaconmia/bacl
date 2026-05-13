@@ -4027,9 +4027,7 @@ if (tipoVista) {
         THEN 1 END) AS pagada,
 
       COUNT(CASE
-        WHEN COALESCE(is_ajuste, 0) = 1
-         AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) IN ('transfer','card')
-         AND UPPER(TRIM(COALESCE(estado_solicitud,''))) NOT IN ('CANCELADA','SOLICITADA')
+        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CUPON ENVIADO'
         THEN 1 END) AS notificados,
 
       COUNT(CASE
@@ -4075,6 +4073,7 @@ if (tipoVista) {
     meta: { tipo: tipoVista },
   });
 }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     const allowedFechaReserva = new Set([
