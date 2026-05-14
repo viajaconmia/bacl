@@ -3990,12 +3990,15 @@ const getSolicitudes2 = async (req, res) => {
       return { solicitado, facturado, porFacturar };
     };
 
-    const debug = Number(req.query.debug ?? 0) === 1;
+    // Acepta parámetros de body (POST) o query (GET)
+    const p = (key) => req.body?.[key] ?? req.query?.[key];
+
+    const debug = Number(p("debug") ?? 0) === 1;
 
     // ── Modo conteo rápido ────────────────────────────────────────────────────
     // ?tipo=<valor> → devuelve solo los conteos por bucket desde
     // solicitudes_pago_proveedor sin invocar el SP ni hacer joins pesados.
-    const tipoVista = clean(req.query.tipo);
+    const tipoVista = clean(p("tipo"));
 
 if (tipoVista) {
   const [conteosRows] = await executeQuery(`
@@ -4103,7 +4106,10 @@ if (tipoVista) {
       pagada: null,
       notificados: null,
       canceladas: "CANCELADA",
+      pagado_transferencia: "PAGADO TRANSFERENCIA",
     };
+
+    console.log(BUCKET_TO_ESTADO,req.body)
 
     const rawEstado = clean(req.query.estado_solicitud);
 
