@@ -6,19 +6,19 @@ router.post("/", controller.create);
 router.get(
   "/viajeros-con-empresas",
 
-  controller.read
+  controller.read,
 );
 router.get(
   "/empresas-con-agentes",
 
-  controller.readAgentesCompanies
+  controller.readAgentesCompanies,
 );
 router.get("/restricted", controller.getRestricted);
 router.patch("/restricted", controller.updateRestricted);
 router.get(
   "/empresas-con-datos-fiscales",
 
-  controller.readEmpresasDatosFiscales
+  controller.readEmpresasDatosFiscales,
 );
 router.get("/agentes", controller.readAgentes);
 router.get("/get-agente-id/", controller.getAgenteId);
@@ -169,7 +169,7 @@ router.get("/all-with-active-facturable-saldos", async (req, res) => {
     }
     if (query.client) {
       conditions.push(
-        `(a.nombre_agente_completo LIKE ? OR a.id_agente LIKE ?)`
+        `(a.nombre_agente_completo LIKE ? OR a.id_agente LIKE ?)`,
       );
       values.push(`%${query.client.split(" ").join("%")}%`);
       values.push(`%${query.client.split("").join("%")}%`);
@@ -279,12 +279,13 @@ router.get("/all-with-active-facturable-saldos", async (req, res) => {
 //Extrae los datos del agente por id
 router.get("/id", async (req, res) => {
   try {
-    const query = `select vw_details_agente.*, 
+    const query = `select vw_details_agente.*, vw.wallet_finanzas,
 agentes.tiene_credito_consolidado, 
 agentes.saldo ,
 ad.wallet
 from agentes 
-JOIN vw_details_agente ON vw_details_agente.id_agente = agentes.id_agente 
+JOIN vw_details_agente ON vw_details_agente.id_agente = agentes.id_agente
+left join agente_details vw on vw.id_agente = vw_details_agente.id_agente
 join agente_details ad on ad.id_agente = agentes.id_agente
 WHERE vw_details_agente.id_agente = ?;`;
 
@@ -348,26 +349,26 @@ router.put("/", async (req, res) => {
         const sectionData = dataToUpdate[sectionKey];
 
         for (const idValue in sectionData) {
-  // "emp-...", "via-...", "..."
-  const recordUpdates = sectionData[idValue];
-  const normalizedUpdates = { ...recordUpdates };
-  const fieldsToUpdate = [];
-  const valuesToUpdate = [];
+          // "emp-...", "via-...", "..."
+          const recordUpdates = sectionData[idValue];
+          const normalizedUpdates = { ...recordUpdates };
+          const fieldsToUpdate = [];
+          const valuesToUpdate = [];
 
-  // Si en agente viene tiene_credito_consolidado = 0, también forzar saldo = 0
-  if (
-    sectionKey === "agente" &&
-    Object.prototype.hasOwnProperty.call(
-      normalizedUpdates,
-      "tiene_credito_consolidado"
-    ) &&
-    String(normalizedUpdates.tiene_credito_consolidado) === "0"
-  ) {
-    normalizedUpdates.saldo = 0;
-  }
+          // Si en agente viene tiene_credito_consolidado = 0, también forzar saldo = 0
+          if (
+            sectionKey === "agente" &&
+            Object.prototype.hasOwnProperty.call(
+              normalizedUpdates,
+              "tiene_credito_consolidado",
+            ) &&
+            String(normalizedUpdates.tiene_credito_consolidado) === "0"
+          ) {
+            normalizedUpdates.saldo = 0;
+          }
 
-  // Construir la parte SET de la consulta dinámicamente
-  for (const field in normalizedUpdates) {
+          // Construir la parte SET de la consulta dinámicamente
+          for (const field in normalizedUpdates) {
             // Validar que el campo esté permitido para la tabla actual
             if (
               allowedColumns[tableName] &&
@@ -377,7 +378,7 @@ router.put("/", async (req, res) => {
               valuesToUpdate.push(normalizedUpdates[field]);
             } else {
               console.warn(
-                `Campo '${field}' no permitido o no definido para la tabla '${tableName}' y será ignorado para el ID '${idValue}'.`
+                `Campo '${field}' no permitido o no definido para la tabla '${tableName}' y será ignorado para el ID '${idValue}'.`,
               );
             }
           }
@@ -389,14 +390,14 @@ router.put("/", async (req, res) => {
 
           if (fieldsToUpdate.length > 0) {
             const sqlQuery = `UPDATE ${tableName} SET ${fieldsToUpdate.join(
-              ", "
+              ", ",
             )} WHERE ${idColumn} = ?`;
             const queryParams = [...valuesToUpdate, idValue];
 
             console.log(
               `Ejecutando Query: ${sqlQuery} con Params: ${JSON.stringify(
-                queryParams
-              )}`
+                queryParams,
+              )}`,
             );
 
             // Usamos tu función executeQuery
@@ -414,12 +415,12 @@ router.put("/", async (req, res) => {
             };
             if (!(updateResult && updateResult.affectedRows > 0)) {
               console.warn(
-                `Ninguna fila afectada para ${tableName} con ${idColumn} = ${idValue}. El registro podría no existir o los valores eran los mismos.`
+                `Ninguna fila afectada para ${tableName} con ${idColumn} = ${idValue}. El registro podría no existir o los valores eran los mismos.`,
               );
             }
           } else {
             console.log(
-              `No hay campos válidos para actualizar en la tabla '${tableName}' para el ID '${idValue}'.`
+              `No hay campos válidos para actualizar en la tabla '${tableName}' para el ID '${idValue}'.`,
             );
             results[sectionKey][idValue] = {
               status: "ignorado",
@@ -445,14 +446,16 @@ router.put("/", async (req, res) => {
 
 router.get(
   "/agentes-with-viajeros-details",
-  controller.get_agente_with_viajeros_details
+  controller.get_agente_with_viajeros_details,
 );
 
 router.get("/ficha/hoteles-ciudad-zona", async (req, res) => {
   try {
     const { id_agente, estado, zona } = req.query;
     if (!id_agente || !estado || !zona)
-      return res.status(400).json({ message: "Faltan parámetros: id_agente, estado, zona" });
+      return res
+        .status(400)
+        .json({ message: "Faltan parámetros: id_agente, estado, zona" });
 
     const [rows] = await executeQuery(
       `CALL sp_hoteles_ciudad_zona_agente(?, ?, ?)`,
@@ -469,7 +472,9 @@ router.get("/ficha/reservas-ciudad-zona", async (req, res) => {
   try {
     const { id_agente, estado } = req.query;
     if (!id_agente || !estado)
-      return res.status(400).json({ message: "Faltan parámetros: id_agente, estado" });
+      return res
+        .status(400)
+        .json({ message: "Faltan parámetros: id_agente, estado" });
 
     const [rows] = await executeQuery(
       `CALL sp_reservas_ciudad_zona_agente(?, ?)`,
