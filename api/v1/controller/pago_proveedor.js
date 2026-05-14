@@ -4027,8 +4027,10 @@ if (tipoVista) {
         THEN 1 END) AS pagada,
 
       COUNT(CASE
-        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CUPON ENVIADO'
-        THEN 1 END) AS notificados,
+  WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
+   AND COALESCE(is_ajuste, 0) = 1
+   AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) IN ('transfer', 'card')
+  THEN 1 END) AS notificados,
 
       COUNT(CASE
         WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CANCELADA'
