@@ -8181,6 +8181,196 @@ console.log("updateAjusteResult:", updateAjusteResult);
   }
 };
 
+const generar_saldo_a_favor = async (req, res) => {
+  try {
+    const { id_solicitud_pago, motivo, comentarios } = req.body || {};
+
+    if (!id_solicitud_pago) {
+      return res.status(400).json({
+        ok: false,
+        error: "Se requiere id_solicitud_pago",
+      });
+    }
+
+    const getRows = (result) => {
+      if (Array.isArray(result) && Array.isArray(result[0])) return result[0];
+      if (Array.isArray(result)) return result;
+      return result ? [result] : [];
+    };
+
+    const getFirstRow = (result) => {
+      return getRows(result)[0] || null;
+    };
+
+    // 1) Obtener pago de pago_proveedores
+    const rowsPago = await executeQuery(
+      `
+      SELECT 
+        id_pago_proveedores, 
+        id_solicitud_proveedor, 
+        monto_pagado, 
+        metodo_de_pago, 
+        referencia_pago
+      FROM pago_proveedores
+      WHERE id_pago_proveedores = ?
+      LIMIT 1
+      `,
+      [id_solicitud_pago]
+    );
+
+    const pago = getFirstRow(rowsPago);
+
+    if (!pago) {
+      return res.status(404).json({
+        ok: false,
+        error: "Pago no encontrado",
+      });
+    }
+
+    const {
+      id_solicitud_proveedor,
+      monto_pagado,
+      metodo_de_pago,
+      referencia_pago,
+    } = pago;
+
+    // 2) Obtener datos de la solicitud
+    const rowsSolicitud = await executeQuery(
+      `
+      SELECT 
+        id_proveedor, 
+        forma_pago_solicitada
+      FROM solicitudes_pago_proveedor
+      WHERE id_solicitud_proveedor = ?
+      LIMIT 1
+      `,
+      [id_solicitud_proveedor]
+    );
+
+    const solicitud = getFirstRow(rowsSolicitud);
+
+    if (!solicitud) {
+      return res.status(404).json({
+        ok: false,
+        error: "Solicitud no encontrada",
+      });
+    }
+
+    const { id_proveedor, forma_pago_solicitada } = solicitud;
+
+    const monto = money2(Number(monto_pagado || 0));
+    const id_saldo = makeIdSaldo();
+    const transaction_id = randomTransactionId();
+
+    const forma_pago = mapFormaPagoSolicitudToSaldo(
+      forma_pago_solicitada || metodo_de_pago || ""
+    );
+
+    const reserva = await obteneSrReservaDesdeSolicitud(
+      executeQuery,
+      id_solicitud_proveedor
+    );
+
+    const id_hospedaje = await obteneSrRelacionDesdeSolicitud(
+      executeQuery,
+      id_solicitud_proveedor
+    );
+
+    await executeQuery(
+      `
+      INSERT INTO saldos
+        (
+          id_saldo, 
+          id_proveedor, 
+          monto, 
+          restante, 
+          forma_pago, 
+          fecha_procesamiento,
+          referencia, 
+          id_hospedaje, 
+          transaction_id, 
+          fecha_generado, 
+          motivo, 
+          comentarios,
+          estado, 
+          id_solicitud, 
+          update_at, 
+          reserva
+        )
+      VALUES 
+        (
+          ?, 
+          ?, 
+          ?, 
+          ?, 
+          ?, 
+          NOW(), 
+          ?, 
+          ?, 
+          ?, 
+          NOW(), 
+          ?, 
+          ?, 
+          ?, 
+          ?, 
+          NOW(), 
+          ?
+        )
+      `,
+      [
+        id_saldo,
+        id_proveedor,
+        monto,
+        monto,
+        forma_pago,
+        referencia_pago || "",
+        id_hospedaje,
+        transaction_id,
+        motivo || "Saldo a favor generado manualmente",
+        comentarios || "",
+        "approved",
+        id_solicitud_proveedor,
+        reserva,
+      ]
+    );
+
+    console.log("generar_saldo_a_favor:", {
+      id_saldo,
+      id_proveedor,
+      monto,
+      id_solicitud_proveedor,
+    });
+
+    await executeQuery(
+      `
+      UPDATE solicitudes_pago_proveedor
+      SET 
+        notas_internas = '',
+        is_ajuste = 0
+      WHERE id_solicitud_proveedor = ?
+      `,
+      [id_solicitud_proveedor]
+    );
+
+    return res.status(200).json({
+      ok: true,
+      message: "Saldo a favor generado correctamente",
+      id_saldo,
+      id_proveedor,
+      monto,
+      id_solicitud_proveedor,
+      transaction_id,
+    });
+  } catch (error) {
+    console.error("Error en generar_saldo_a_favor:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: error?.message ?? "Error al generar saldo a favor",
+    });
+  }
+};
+
 const cancelar_dispersion = async (req, res) => {
   try {
     const { id_solicitud_proveedor } = req.body || {};
@@ -8284,5 +8474,6 @@ module.exports = {
   eliminarFactura,
   createComprobantePago,
   buscaruuid,
+  generar_saldo_a_favor,
   reasignarPago,
 };
