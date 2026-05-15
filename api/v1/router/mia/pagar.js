@@ -27,8 +27,11 @@ const normalizeTitularBody = (body = {}) => {
 // router.post("/", middleware.validateParams([]), controller.create);
 router.get("/", async (req, res) => {
   try {
-    let query = `select * from tarjetas;`;
-    let response = await executeQuery(query);
+let query = `
+  SELECT *
+  FROM tarjetas
+  WHERE \`finanzas/operaciones\` IN ('ambos', 'operaciones');
+`;    let response = await executeQuery(query);
     res.status(200).json(
       response.map((tarjeta) => ({
         ...tarjeta,
@@ -275,6 +278,255 @@ router.delete("/titulares/:idTitular", async (req, res) => {
 });
 
 // =========================
+// FINANZAS - GET (solo tarjetas accesibles por finanzas)
+// =========================
+router.get("/finanzas", async (req, res) => {
+  try {
+    const query = `
+      SELECT *
+      FROM tarjetas;
+    `;
+    const response = await executeQuery(query);
+    res.status(200).json(
+      response.map((t) => ({
+        ...t,
+        activa: Boolean(t.activa),
+        activa_finanzas: Boolean(t.activa_finanzas),
+      })),
+    );
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      error: "Error al obtener tarjetas de finanzas",
+      details: error.message,
+    });
+  }
+});
+
+// =========================
+// FINANZAS - PATCH activa_finanzas
+// PATCH /finanzas/:id/activa   Body: { activa_finanzas: true | false }
+// =========================
+router.patch("/finanzas/:id/activa", async (req, res) => {
+  const { id } = req.params;
+
+  if (!isUuid(id)) {
+    return res.status(400).json({ error: "ID inválido." });
+  }
+
+  const valor = req.body?.activa_finanzas;
+  if (valor === undefined) {
+    return res.status(400).json({
+      error: "Falta campo.",
+      message: "Envía { activa_finanzas: true | false }.",
+    });
+  }
+
+  const { user } = req.session;
+  const id_user = user?.id ?? null;
+
+  try {
+    const nuevoValor = toTinyInt01(valor);
+    const textoCambio = nuevoValor === 1
+      ? "Activó uso de finanzas"
+      : "Desactivó uso de finanzas";
+
+    const result = await executeQuery(
+      "UPDATE tarjetas SET activa_finanzas = ?, user_edit = ?, cambios = ? WHERE id = ?",
+      [nuevoValor, id_user, textoCambio, id],
+    );
+
+    if (result?.affectedRows === 0) {
+      return res.status(404).json({ error: "Tarjeta no encontrada." });
+    }
+
+    const rows = await executeQuery("SELECT * FROM tarjetas WHERE id = ?", [id]);
+    const t = rows[0];
+    return res.status(200).json({
+      message: "activa_finanzas actualizada.",
+      data: { ...t, activa: Boolean(t.activa), activa_finanzas: Boolean(t.activa_finanzas) },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Error al actualizar activa_finanzas",
+      details: error.message,
+    });
+  }
+});
+
+// =========================
+// FINANZAS - PATCH finanzas/operaciones
+// PATCH /finanzas/:id/tipo   Body: { tipo: 'finanzas' | 'operaciones' | 'ambos' | 'ninguno' }
+// =========================
+const TIPO_ENUM = new Set(["finanzas", "operaciones", "ambos", "ninguno"]);
+
+router.patch("/finanzas/:id/tipo", async (req, res) => {
+  const { id } = req.params;
+
+  if (!isUuid(id)) {
+    return res.status(400).json({ error: "ID inválido." });
+  }
+
+  const tipo = req.body?.tipo;
+  if (!tipo || !TIPO_ENUM.has(tipo)) {
+    return res.status(400).json({
+      error: "Valor inválido.",
+      message: `'tipo' debe ser uno de: ${[...TIPO_ENUM].join(", ")}`,
+    });
+  }
+
+  const { user } = req.session;
+  const id_user = user?.id ?? null;
+
+  try {
+    const current = await executeQuery(
+      "SELECT `finanzas/operaciones` FROM tarjetas WHERE id = ?",
+      [id],
+    );
+    if (!current.length) {
+      return res.status(404).json({ error: "Tarjeta no encontrada." });
+    }
+    const tipoAnterior = current[0]?.["finanzas/operaciones"] ?? "—";
+    const textoCambio = `Cambió permiso de '${tipoAnterior}' a '${tipo}'`;
+
+    const result = await executeQuery(
+      "UPDATE tarjetas SET `finanzas/operaciones` = ?, user_edit = ?, cambios = ? WHERE id = ?",
+      [tipo, id_user, textoCambio, id],
+    );
+
+    if (result?.affectedRows === 0) {
+      return res.status(404).json({ error: "Tarjeta no encontrada." });
+    }
+
+    const rows = await executeQuery("SELECT * FROM tarjetas WHERE id = ?", [id]);
+    const t = rows[0];
+    return res.status(200).json({
+      message: "Tipo actualizado.",
+      data: { ...t, activa: Boolean(t.activa), activa_finanzas: Boolean(t.activa_finanzas) },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Error al actualizar tipo",
+      details: error.message,
+    });
+  }
+});
+
+// =========================
+// FINANZAS - PUT (editar tarjeta, incluye campos de finanzas)
+// =========================
+const FINANZAS_FIELDS = new Set([
+  "alias",
+  "nombre_titular",
+  "ultimos_4",
+  "numero_completo",
+  "banco_emisor",
+  "tipo_tarjeta",
+  "fecha_vencimiento",
+  "activa",
+  "cvv",
+  "url_identificacion",
+  "activa_finanzas",
+  "finanzas/operaciones",
+  "user_created",
+  "user_edit",
+  "cambios",
+]);
+
+router.put("/finanzas/:id", async (req, res) => {
+  const { id } = req.params;
+
+  if (!isUuid(id)) {
+    return res.status(400).json({ error: "ID inválido." });
+  }
+
+  const { user } = req.session;
+  const id_user = user?.id ?? null;
+
+  try {
+    const body = req.body || {};
+    const setParts = [];
+    const values = [];
+    const camposEditados = [];
+
+    for (const [key, value] of Object.entries(body)) {
+      if (key === "id" || key === "user_edit" || key === "cambios" || !FINANZAS_FIELDS.has(key) || value === undefined) continue;
+      setParts.push(`\`${key}\` = ?`);
+      if (key === "activa" || key === "activa_finanzas") values.push(toTinyInt01(value));
+      else values.push(value);
+      camposEditados.push(key);
+    }
+
+    if (body.numero_completo !== undefined && body.ultimos_4 === undefined) {
+      const last4 = computeLast4(body.numero_completo);
+      if (last4) { setParts.push("ultimos_4 = ?"); values.push(last4); }
+    }
+
+    if (!setParts.length) {
+      return res.status(400).json({ error: "No hay campos válidos para actualizar." });
+    }
+
+    // Auditoría
+    setParts.push("user_edit = ?");
+    values.push(id_user);
+    setParts.push("cambios = ?");
+    values.push(`Editó: ${camposEditados.join(", ")}`);
+
+    values.push(id);
+    const result = await executeQuery(
+      `UPDATE tarjetas SET ${setParts.join(", ")} WHERE id = ?`,
+      values,
+    );
+
+    if (result?.affectedRows === 0) {
+      return res.status(404).json({ error: "Tarjeta no encontrada." });
+    }
+
+    const rows = await executeQuery("SELECT * FROM tarjetas WHERE id = ?", [id]);
+    const t = rows[0];
+    return res.status(200).json({
+      message: "Tarjeta actualizada.",
+      data: { ...t, activa: Boolean(t.activa), activa_finanzas: Boolean(t.activa_finanzas) },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Error al actualizar tarjeta",
+      details: error.message,
+    });
+  }
+});
+
+// =========================
+// FINANZAS - DELETE
+// =========================
+router.delete("/finanzas/:id", async (req, res) => {
+  const { id } = req.params;
+
+  if (!isUuid(id)) {
+    return res.status(400).json({ error: "ID inválido." });
+  }
+
+  try {
+    const result = await executeQuery("DELETE FROM tarjetas WHERE id = ?", [id]);
+
+    if (result?.affectedRows === 0) {
+      return res.status(404).json({ error: "Tarjeta no encontrada." });
+    }
+
+    return res.status(200).json({ message: "Tarjeta eliminada." });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Error al eliminar tarjeta",
+      details: error.message,
+    });
+  }
+});
+
+// =========================
 // TARJETAS - GET BY UUID
 // =========================
 router.get("/:id", async (req, res) => {
@@ -324,6 +576,11 @@ const FIELDS = new Set([
   "activa",
   "cvv",
   "url_identificacion",
+  "activa_finanzas",
+  "finanzas/operaciones",
+  "user_created",
+  "user_edit",
+  "cambios",
 ]);
 
 const toTinyInt01 = (v) => {
@@ -345,6 +602,9 @@ const computeLast4 = (numero_completo) => {
 ========================= */
 router.post("/", async (req, res) => {
   try {
+    const { user } = req.session;
+    const id_user = user?.id ?? null;
+
     let { id, ...body } = req.body || {};
 
     if (id !== undefined && id !== null && id !== "") {
@@ -370,12 +630,20 @@ router.post("/", async (req, res) => {
     for (const [key, value] of Object.entries(body)) {
       if (!FIELDS.has(key)) continue;
       if (value === undefined) continue;
+      if (key === "user_created" || key === "user_edit" || key === "cambios") continue;
 
       cols.push(key);
       placeholders.push("?");
 
-      if (key === "activa") values.push(toTinyInt01(value));
+      if (key === "activa" || key === "activa_finanzas") values.push(toTinyInt01(value));
       else values.push(value);
+    }
+
+    // Auditoría: user_created desde sesión
+    if (id_user !== null) {
+      cols.push("user_created");
+      placeholders.push("?");
+      values.push(id_user);
     }
 
     if (cols.length === 1) {
@@ -420,6 +688,9 @@ router.put("/:id", async (req, res) => {
     });
   }
 
+  const { user } = req.session;
+  const id_user = user?.id ?? null;
+
   try {
     const body = req.body || {};
 
@@ -428,20 +699,22 @@ router.put("/:id", async (req, res) => {
 
     const setParts = [];
     const values = [];
+    const camposEditados = [];
 
     for (const [key, value] of Object.entries(body)) {
-      if (key === "id") continue;
+      if (key === "id" || key === "user_edit" || key === "cambios") continue;
       if (!FIELDS.has(key)) continue;
       if (value === undefined) continue;
 
-      setParts.push(`${key} = ?`);
-      values.push(key === "activa" ? toTinyInt01(value) : value);
+      setParts.push(`\`${key}\` = ?`);
+      values.push(key === "activa" || key === "activa_finanzas" ? toTinyInt01(value) : value);
+      camposEditados.push(key);
     }
 
     if (willUpdateNumero && !willUpdateUltimos4) {
       const last4 = computeLast4(body.numero_completo);
       if (last4) {
-        setParts.push(`ultimos_4 = ?`);
+        setParts.push("ultimos_4 = ?");
         values.push(last4);
       }
     }
@@ -452,6 +725,12 @@ router.put("/:id", async (req, res) => {
         message: "No se enviaron campos válidos para actualizar.",
       });
     }
+
+    // Auditoría
+    setParts.push("user_edit = ?");
+    values.push(id_user);
+    setParts.push("cambios = ?");
+    values.push(`Editó: ${camposEditados.join(", ")}`);
 
     values.push(id);
     const updateQuery = `UPDATE tarjetas SET ${setParts.join(", ")} WHERE id = ?;`;
