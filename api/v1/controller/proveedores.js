@@ -4,6 +4,7 @@ const {
   executeSP,
   executeTransaction,
 } = require("../../../config/db");
+const { subirBufferAS3 } = require("../utils/subir-imagen");
 
 const getProveedores = async (req, res) => {
   try {
@@ -335,6 +336,7 @@ const putEditar = async (req, res) => {
       "notas_pagos",
       "notas_tipo_pago",
       "tipo_pago",
+      "vencimiento_credito",
     ]);
 
     // Body -> construir SET dinámico con solo campos permitidos y definidos
@@ -731,6 +733,89 @@ const createProveedorVuelo = async (req, res) => {
   }
 };
 
+const getArchivos = async (req, res) => {
+  try {
+    const { id_proveedor } = req.query;
+
+    if (!id_proveedor) {
+      return res.status(400).json({ message: "id_proveedor es requerido", data: null, error: null });
+    }
+
+    const data = await executeQuery(
+      `SELECT id, id_proveedor, nombre, url, mime_type, created_at
+       FROM proveedor_archivos
+       WHERE id_proveedor = ?
+       ORDER BY created_at DESC`,
+      [id_proveedor],
+    );
+
+    return res.status(200).json({ message: "Archivos obtenidos", data, error: null });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: error.message, data: null, error });
+  }
+};
+
+const postArchivo = async (req, res) => {
+  try {
+    const { nombre, id_proveedor } = req.body;
+    const file = req.file;
+
+    if (!file || !nombre || !id_proveedor) {
+      return res.status(400).json({ message: "file, nombre e id_proveedor son requeridos", data: null, error: null });
+    }
+
+    const key = `comprobantes/${Date.now()}_${file.originalname}`;
+    const url = await subirBufferAS3(file.buffer, key, file.mimetype);
+
+    await executeQuery(
+      `INSERT INTO proveedor_archivos (id_proveedor, nombre, url, mime_type) VALUES (?, ?, ?, ?)`,
+      [id_proveedor, nombre.trim(), url, file.mimetype],
+    );
+
+    const data = await executeQuery(
+      `SELECT * FROM proveedor_archivos WHERE id_proveedor = ? ORDER BY created_at DESC`,
+      [id_proveedor],
+    );
+
+    return res.status(200).json({ message: "Archivo subido correctamente", data, error: null });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: error.message, data: null, error });
+  }
+};
+
+const deleteArchivo = async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    if (!id) {
+      return res.status(400).json({ message: "id es requerido", data: null, error: null });
+    }
+
+    const [archivo] = await executeQuery(
+      `SELECT id_proveedor FROM proveedor_archivos WHERE id = ?`,
+      [id],
+    );
+
+    if (!archivo) {
+      return res.status(404).json({ message: "Archivo no encontrado", data: null, error: null });
+    }
+
+    await executeQuery(`DELETE FROM proveedor_archivos WHERE id = ?`, [id]);
+
+    const data = await executeQuery(
+      `SELECT * FROM proveedor_archivos WHERE id_proveedor = ? ORDER BY created_at DESC`,
+      [archivo.id_proveedor],
+    );
+
+    return res.status(200).json({ message: "Archivo eliminado correctamente", data, error: null });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: error.message, data: null, error });
+  }
+};
+
 module.exports = {
   getProveedores,
   createProveedor,
@@ -750,4 +835,8 @@ module.exports = {
   //vuelo
   updateProveedorVuelo,
   createProveedorVuelo,
+  //Archivos
+  getArchivos,
+  postArchivo,
+  deleteArchivo,
 };
