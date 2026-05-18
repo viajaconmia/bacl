@@ -11,6 +11,7 @@ const {
 } = require("../../../v2/controller/reservas.controller");
 
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
+const { sendEmail } = require("../../../services/email");
 
 //helpers
 
@@ -1227,6 +1228,43 @@ const createDispersion = async (req, res) => {
         saldo_db: Number(saldoInfo?.saldo ?? 0),
       };
     });
+
+    sendEmail("luis.castaneda@noktos.com", {
+      subject: `Nueva dispersión creada: ${idDispersion}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: #0b5fa5; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h2 style="color: #fff; margin: 0;">Nueva Dispersión de Pago</h2>
+          </div>
+          <div style="background: #f9fafb; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+              <tr>
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151; width: 40%;">ID Dispersión</td>
+                <td style="padding: 8px 12px; color: #111827;">${idDispersion}</td>
+              </tr>
+              <tr style="background: #fff;">
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Referencia</td>
+                <td style="padding: 8px 12px; color: #111827;">${referenciaNumerica ?? "—"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Motivo de pago</td>
+                <td style="padding: 8px 12px; color: #111827;">${motivoPago ?? "—"}</td>
+              </tr>
+              <tr style="background: #fff;">
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Total solicitudes</td>
+                <td style="padding: 8px 12px; color: #111827;">${ids.length}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Monto total</td>
+                <td style="padding: 8px 12px; color: #111827;">$${solicitudesProcesadas.reduce((sum, s) => sum + s.saldo_db, 0).toFixed(2)} MXN</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      `,
+    }).catch((err) =>
+      console.error("❌ Error enviando correo de dispersión:", err?.message),
+    );
 
     return res.status(200).json({
       ok: true,
