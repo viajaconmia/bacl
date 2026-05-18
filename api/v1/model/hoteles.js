@@ -57,6 +57,7 @@ const getHotelesWithCuartos = async () => {
       if (!hotel) {
         agrupado.push({
           id_hotel: item.id_hotel,
+          convenio: item.tiene_convenio_vigente,
           nombre_hotel: item.nombre_hotel,
           Estado: item.Estado,
           direccion: item.direccion,
