@@ -1,5 +1,7 @@
 const controller = require("../../controller/proveedores");
 const router = require("express").Router();
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.get("/", controller.getProveedores); // obtiene una lista de proveedores
 router.get("/detalles", controller.getDetalles); // obtiene los datos fiscales del proveedor
@@ -27,5 +29,10 @@ router.post("/vuelo", controller.createProveedorVuelo);
 
 //Datos fiscales
 router.delete("/datos_fiscales", controller.deleteDatosFiscales);
+
+//Archivos del proveedor
+router.get("/archivos", controller.getArchivos);
+router.post("/archivos", upload.single("file"), controller.postArchivo);
+router.delete("/archivos", controller.deleteArchivo);
 
 module.exports = router;

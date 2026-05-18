@@ -25,6 +25,7 @@ router.get("/buscar_factura",controller.Uuid);
 router.delete("/edit_factura",controller.eliminarFactura);
 router.post("/buscaruuid",controller.buscaruuid);
 router.patch("/reasignar_pago", controller.reasignarPago);
+router.patch("/generar_saldo_a_favor", controller.generar_saldo_a_favor);
 router.post("/cancelar_dispersion", controller.cancelar_dispersion);
 module.exports = router;
 

@@ -23,13 +23,13 @@ const generatePresignedUploadUrl = async (key, contentType) => {
   return { url, key, publicUrl };
 };
 
-async function subirBufferAS3(buffer, key) {
+async function subirBufferAS3(buffer, key, contentType) {
   await s3Client.send(
     new PutObjectCommand({
       Bucket: process.env.S3_BUCKET,
       Key: key,
       Body: buffer,
-      ContentType: "image/png",
+      ContentType: contentType ?? "application/octet-stream",
     }),
   );
 
