@@ -335,7 +335,14 @@ router.put("/", async (req, res) => {
         "fecha_nacimiento",
         "numero_empleado",
       ],
-      agentes: ["tiene_credito_consolidado", "saldo", "vendedor", "notas"],
+      agentes: ["tiene_credito_consolidado", "saldo", "vendedor", "notas", "nombre_comercial"],
+    };
+
+    // Campos cuyo nombre en el body difiere del nombre real en BD
+    const columnAliases = {
+      agentes: {
+        nombre_comercial: "nombre_identificacion",
+      },
     };
 
     for (const sectionKey in dataToUpdate) {
@@ -374,7 +381,8 @@ router.put("/", async (req, res) => {
               allowedColumns[tableName] &&
               allowedColumns[tableName].includes(field)
             ) {
-              fieldsToUpdate.push(`${field} = ?`);
+              const dbField = columnAliases[tableName]?.[field] ?? field;
+              fieldsToUpdate.push(`${dbField} = ?`);
               valuesToUpdate.push(normalizedUpdates[field]);
             } else {
               console.warn(
