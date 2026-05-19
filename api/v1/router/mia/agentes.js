@@ -335,7 +335,7 @@ router.put("/", async (req, res) => {
         "fecha_nacimiento",
         "numero_empleado",
       ],
-      agentes: ["tiene_credito_consolidado", "saldo", "vendedor", "notas", "nombre_comercial"],
+      agentes: ["tiene_credito_consolidado", "saldo", "vendedor", "notas", "nombre_comercial", "linea_credito"],
     };
 
     // Campos cuyo nombre en el body difiere del nombre real en BD

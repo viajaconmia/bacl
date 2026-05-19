@@ -1109,6 +1109,8 @@ const getResumenFacturasCxC = async () => {
       SELECT
         fb.id_agente,
         fb.nombre_agente,
+        ad.linea_credito,
+        ad.nombre_identificacion,
 
         COUNT(*) AS total_facturas,
 
@@ -1133,6 +1135,7 @@ const getResumenFacturasCxC = async () => {
         ROUND(SUM(CASE WHEN fb.dias_atraso <= 0 THEN fb.monto_pendiente ELSE 0 END), 2) AS total_vigente,
         ROUND(SUM(CASE WHEN fb.dias_atraso > 0 THEN fb.monto_pendiente ELSE 0 END), 2) AS total_vencido
       FROM facturas_base fb
+      left join agente_details ad on ad.id_agente = fb.id_agente
       GROUP BY fb.id_agente, fb.nombre_agente
       ORDER BY fb.nombre_agente;
     `;
