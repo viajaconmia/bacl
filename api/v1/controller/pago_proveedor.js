@@ -174,8 +174,6 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
   }
 
   const isPagado =
-    estado === "PAGADO LINK" ||
-    estado === "PAGADO TARJETA" ||
     estado === "PAGADO TRANSFERENCIA";
 
   const isCartaCupon = estado === "CUPON ENVIADO" || estado === "CARTA_ENVIADA";
@@ -221,7 +219,7 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
     action = "DISPERSION_UPDATE_AND_MARK_AJUSTE";
   } else {
     const qUp = `
-      UPDATE solicitudes_pago_proveedor
+      UPDATE solicitudes_pago_proveedor-
       SET
         monto_solicitado = ?,
         saldo = COALESCE(saldo, 0) + ?,
@@ -1076,6 +1074,11 @@ const createDispersion = async (req, res) => {
                 ? String(s.cuenta_de_deposito).trim()
                 : null,
 
+            id_proveedor_cuenta:
+              s?.id_proveedor_cuenta != null && s.id_proveedor_cuenta !== ""
+                ? Number(s.id_proveedor_cuenta)
+                : null,
+
             tipo_cuenta:
               s?.tipo_cuenta != null && s.tipo_cuenta !== ""
                 ? String(s.tipo_cuenta).trim()
@@ -1164,19 +1167,21 @@ const createDispersion = async (req, res) => {
 
       const saldoDb = Number(dataDb?.saldo ?? 0);
       const fechaPago = itemPayload?.fecha_pago ?? null;
+      const idProveedorCuenta = itemPayload?.id_proveedor_cuenta ?? null;
 
       return [
-        idSol, // id_solicitud_proveedor
-        saldoDb, // monto_solicitado
-        saldoDb, // saldo
-        0, // monto_pagado
-        idDispersion, // codigo_dispersion
-        fechaPago, // fecha_pago
+        idSol,             // id_solicitud_proveedor
+        saldoDb,           // monto_solicitado
+        saldoDb,           // saldo
+        0,                 // monto_pagado
+        idDispersion,      // codigo_dispersion
+        fechaPago,         // fecha_pago
+        idProveedorCuenta, // id_proveedor_cuenta
       ];
     });
 
     const insertPlaceholders = values
-      .map(() => "(?, ?, ?, ?, ?, ?)")
+      .map(() => "(?, ?, ?, ?, ?, ?, ?)")
       .join(", ");
 
     const insertSql = `
@@ -1186,7 +1191,8 @@ const createDispersion = async (req, res) => {
         saldo,
         monto_pagado,
         codigo_dispersion,
-        fecha_pago
+        fecha_pago,
+        id_proveedor_cuenta
       ) VALUES ${insertPlaceholders};
     `;
 
@@ -4690,6 +4696,7 @@ const cargarFactura = async (req, res) => {
     proveedoresData,
     montos_originales_factura,
     facturas,
+    propina_data,
   } = req.body;
 
   const id_factura = "fac-" + uuidv4();
@@ -4707,6 +4714,9 @@ const cargarFactura = async (req, res) => {
   };
 
   try {
+    const propinaMonto = toNumber(propina_data?.monto_propina ?? 0);
+    const hasPropina = !!(propina_data?.tiene_propina && propinaMonto > 0);
+
     const proveedoresArr = Array.isArray(proveedoresData)
       ? proveedoresData
       : proveedoresData
@@ -4813,14 +4823,15 @@ const cargarFactura = async (req, res) => {
         );
       }
 
-      if (monto_solicitado > 0 && monto_facturado > monto_solicitado) {
+      // Con propina el monto_facturado puede superar monto_solicitado
+      if (!hasPropina && monto_solicitado > 0 && monto_facturado > monto_solicitado) {
         throw new Error(
           `proveedoresData[${idx}] monto_asociar (${monto_facturado}) excede monto_solicitado (${monto_solicitado})`,
         );
       }
 
       const pendiente_facturar =
-        monto_solicitado > 0 ? monto_solicitado - monto_facturado : null;
+        monto_solicitado > 0 ? Math.max(0, monto_solicitado - monto_facturado) : null;
 
       const id_pago =
         p?.detalles_pagos?.[0]?.id_pago ??
@@ -4851,16 +4862,18 @@ const cargarFactura = async (req, res) => {
       0,
     );
 
-    if (monto_facturado_total > totalN) {
+    const totalMaxN = hasPropina ? totalN + propinaMonto : totalN;
+
+    if (monto_facturado_total > totalMaxN) {
       return res.status(400).json({
         error: "Monto asociado inválido",
-        message: `La suma de monto_asociar (${monto_facturado_total}) no puede ser mayor al total de la factura (${totalN}).`,
+        message: `La suma de monto_asociar (${monto_facturado_total}) no puede ser mayor al total de la factura${hasPropina ? " + propina" : ""} (${totalMaxN}).`,
       });
     }
 
     const proveedoresDataSP = JSON.stringify(detalle);
 
-    const saldo_x_aplicar_items = totalN - monto_facturado_total;
+    const saldo_x_aplicar_items = Math.max(0, totalN - monto_facturado_total);
     const estado_factura = estado;
 
     const response = await executeSP(
@@ -4953,6 +4966,58 @@ const cargarFactura = async (req, res) => {
       `;
 
       await executeQuery(updateEstatus, [...idsSolicitudes, ...idsSolicitudes]);
+
+      // ── Propina ──────────────────────────────────────────────────────────
+      const propinaMonto = toNumber(propina_data?.monto_propina ?? 0);
+      let propinaAdvertencias = [];
+
+      if (propina_data?.tiene_propina && propinaMonto > 0 && idsSolicitudes.length > 0) {
+        const TOLERANCIA = 5;
+        const totalSinPropina = totalN;
+        const totalConPropina = totalN + propinaMonto;
+
+        const idsCalifican = detalle
+          .filter((x) => {
+            const ms = toNumber(x?.solicitud_proveedor?.monto_solicitado);
+            return (
+              Math.abs(ms - totalSinPropina) <= TOLERANCIA ||
+              Math.abs(ms - totalConPropina) <= TOLERANCIA
+            );
+          })
+          .map((x) => x?.solicitud_proveedor?.id_solicitud_proveedor)
+          .filter(Boolean);
+
+        const idsNoCalifican = idsSolicitudes.filter(
+          (id) => !idsCalifican.includes(id),
+        );
+
+        if (idsNoCalifican.length > 0) {
+          propinaAdvertencias = idsNoCalifican.map((id) => {
+            const d = detalle.find(
+              (x) => x?.solicitud_proveedor?.id_solicitud_proveedor === id,
+            );
+            return {
+              id_solicitud: id,
+              monto_solicitado: d?.solicitud_proveedor?.monto_solicitado ?? null,
+              mensaje: "No procede por costos distintos",
+            };
+          });
+        }
+
+        if (idsCalifican.length > 0) {
+          const placeholdersPropina = idsCalifican.map(() => "?").join(",");
+          const updatePropina = `
+            UPDATE solicitudes_pago_proveedor
+            SET
+              propina          = 1,
+              monto_adicional  = ?,
+              monto_original   = CAST(COALESCE(NULLIF(monto_solicitado, ''), '0') AS DECIMAL(12,2)),
+              monto_solicitado = CAST(COALESCE(NULLIF(monto_solicitado, ''), '0') AS DECIMAL(12,2)) + ?
+            WHERE id_solicitud_proveedor IN (${placeholdersPropina});
+          `;
+          await executeQuery(updatePropina, [propinaMonto, propinaMonto, ...idsCalifican]);
+        }
+      }
     }
 
     return res.status(201).json({
@@ -4963,6 +5028,9 @@ const cargarFactura = async (req, res) => {
         monto_facturado_total,
         detalle_asociacion: detalle,
         response,
+        ...(propinaAdvertencias.length > 0 && {
+          propina_advertencias: propinaAdvertencias,
+        }),
       },
     });
   } catch (error) {
@@ -7978,6 +8046,91 @@ const buscaruuid = async (req, res) => {
   }
 };
 
+const cuentas = async (req, res) => {
+  try {
+    console.log("BODY recibido en /cuentas:", req.body);
+
+    const getRows = (result) =>
+      Array.isArray(result) ? result : (result?.[0] ?? []);
+
+    const safeString = (v) => String(v ?? "").trim();
+
+    /*
+      Acepta cualquiera de estas formas:
+
+      { id_proveedor: "3274" }
+      { id_proveedor: ["3274", "3275"] }
+      "3274"
+      ["3274", "3275"]
+    */
+    const rawIds = Array.isArray(req.body)
+      ? req.body
+      : Array.isArray(req.body?.id_proveedor)
+        ? req.body.id_proveedor
+        : [req.body?.id_proveedor ?? req.body];
+
+    const ids = [
+      ...new Set(
+        rawIds
+          .map((id) => safeString(id))
+          .filter(Boolean)
+      ),
+    ];
+
+    console.log("IDs normalizados:", ids);
+
+    if (!ids.length) {
+      return res.status(400).json({
+        ok: false,
+        message: "id_proveedor es requerido",
+      });
+    }
+
+    const invalidIds = ids.filter((id) => !/^\d+$/.test(id));
+
+    if (invalidIds.length) {
+      return res.status(400).json({
+        ok: false,
+        message: "Todos los id_proveedor deben ser numéricos",
+        invalidIds,
+      });
+    }
+
+    const placeholders = ids.map(() => "?").join(",");
+
+    const qBuscar = `
+      SELECT *
+      FROM proveedores_cuentas
+      WHERE id_proveedor IN (${placeholders})
+    `;
+
+    const rows = getRows(await executeQuery(qBuscar, ids));
+
+    if (!rows.length) {
+      return res.status(404).json({
+        ok: false,
+        message: "No se encontraron cuentas para los proveedores enviados",
+        data: [],
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: "Cuentas encontradas correctamente",
+      total: rows.length,
+      data: rows,
+    });
+  } catch (error) {
+    console.error("Error en cuentas:", error);
+
+    return res.status(500).json({
+      ok: false,
+      error: "Error en el servidor",
+      details: error?.sqlMessage || error?.message || error,
+    });
+  }
+};
+
 const reasignarPago = async (req, res) => {
   try {
     const {
@@ -8546,4 +8699,5 @@ module.exports = {
   buscaruuid,
   generar_saldo_a_favor,
   reasignarPago,
+  cuentas,
 };

@@ -133,7 +133,7 @@ const detalleFacturasCxC = async (req, res) => {
     });
   }
 };
-
+  
 const getfacturasPagoPendienteByAgente = async (req, res) => {
   try {
     const id_agente = req.body.id_agente;
