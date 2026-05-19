@@ -28,7 +28,8 @@ const getHotelesWithCuartos = async () => {
     t.costo,
     t.precio,
     t.id_agente,
-    t.incluye_desayuno
+    t.incluye_desayuno,
+    (h.vigencia_convenio IS NOT NULL AND h.vigencia_convenio >= CURDATE()) AS tiene_convenio_vigente
   FROM tarifas t
     JOIN tipos_cuartos tc ON t.id_tipos_cuartos = tc.id_tipo_cuarto
     JOIN hoteles h ON t.id_hotel = h.id_hotel order by nombre_hotel, id_tipo_cuarto; `;
@@ -56,6 +57,7 @@ const getHotelesWithCuartos = async () => {
       if (!hotel) {
         agrupado.push({
           id_hotel: item.id_hotel,
+          convenio: item.tiene_convenio_vigente,
           nombre_hotel: item.nombre_hotel,
           Estado: item.Estado,
           direccion: item.direccion,

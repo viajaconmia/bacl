@@ -11,6 +11,7 @@ const {
 } = require("../../../v2/controller/reservas.controller");
 
 const { STORED_PROCEDURE } = require("../../../lib/constant/stored_procedures");
+const { sendEmail } = require("../../../services/email");
 
 //helpers
 
@@ -270,7 +271,9 @@ const obteneSrReservaDesdeSolicitud = async (
     id_solicitud_proveedor,
   ]);
 
-  return rBookingReserva?.length ? rBookingReserva[0].id_booking ?? null : null;
+  return rBookingReserva?.length
+    ? (rBookingReserva[0].id_booking ?? null)
+    : null;
 };
 
 const obteneSrRelacionDesdeSolicitud = async (
@@ -301,7 +304,7 @@ const obteneSrRelacionDesdeSolicitud = async (
 
   const relacopm = await executeQuery(q_relacion, [id_booking]);
 
-  return relacopm?.length ? relacopm[0].id_relacion ?? null : null;
+  return relacopm?.length ? (relacopm[0].id_relacion ?? null) : null;
 };
 
 async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
@@ -465,9 +468,9 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
       .filter(Boolean)
       .join(" | ");
 
-      const reserva = await obteneSrReservaDesdeSolicitud(executeQuery, id);
-      const id_hospedaje = await obteneSrRelacionDesdeSolicitud(executeQuery, id);
-      
+    const reserva = await obteneSrReservaDesdeSolicitud(executeQuery, id);
+    const id_hospedaje = await obteneSrRelacionDesdeSolicitud(executeQuery, id);
+
     const qInsSaldo = `
       INSERT INTO saldos
         (id_saldo, id_proveedor, monto, restante, forma_pago, fecha_procesamiento,
@@ -487,7 +490,7 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
       transaction_id,
       motivo,
       comentarios,
-      reserva
+      reserva,
     ]);
 
     return {
@@ -1234,6 +1237,48 @@ const createDispersion = async (req, res) => {
       };
     });
 
+    let correo_enviado = false;
+    try {
+      await sendEmail("fin-cxp@noktos.com", {
+        subject: `Nueva dispersión creada: ${idDispersion}`,
+        html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: #0b5fa5; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h2 style="color: #fff; margin: 0;">Nueva Dispersión de Pago</h2>
+          </div>
+          <div style="background: #f9fafb; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+              <tr>
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151; width: 40%;">Codigo de Dispersión</td>
+                <td style="padding: 8px 12px; color: #111827;">${idDispersion}</td>
+              </tr>
+              <tr style="background: #fff;">
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Referencia</td>
+                <td style="padding: 8px 12px; color: #111827;">${referenciaNumerica ?? "—"}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Motivo de pago</td>
+                <td style="padding: 8px 12px; color: #111827;">${motivoPago ?? "—"}</td>
+              </tr>
+              <tr style="background: #fff;">
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Total solicitudes de pago</td>
+                <td style="padding: 8px 12px; color: #111827;">${ids.length}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Monto total</td>
+                <td style="padding: 8px 12px; color: #111827;">$${solicitudesProcesadas.reduce((sum, s) => sum + s.saldo_db, 0).toFixed(2)} MXN</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      `,
+      });
+      correo_enviado = true;
+    } catch (err) {
+      console.error("❌ Error enviando correo de dispersión:", err?.message);
+      console.log(err);
+    }
+
     return res.status(200).json({
       ok: true,
       message: "Dispersión creada y registros guardados correctamente",
@@ -1245,6 +1290,7 @@ const createDispersion = async (req, res) => {
         id_pagos,
         total_registros: ids.length,
         solicitudes_procesadas: solicitudesProcesadas,
+        correo_enviado,
       },
     });
   } catch (error) {
@@ -3652,51 +3698,57 @@ const getSolicitudes = async (req, res) => {
       // Cualquier otro valor se pasa directo como filtro de igualdad exacta.
       estatus_pagos: (() => {
         const pag = clean(req.query.pag);
-        if (pag === 'pendiente') return 'pendiente';
+        if (pag === "pendiente") return "pendiente";
         return clean(req.query.estatus_pagos) ?? null;
       })(),
 
       uuid_factura: clean(req.query.uuid_factura),
     };
 
-    const pagina = Math.max(1, parseInt(req.query.page ?? req.query.pagina ?? "1", 10) || 1);
-    const limite = Math.min(200, Math.max(1, parseInt(req.query.limit ?? req.query.limite ?? "50", 10) || 50));
-
-    const spRows = await executeSP(
-      "get_solicitudes_pago_filtradas2",
-      [
-        filters.folio,
-        filters.cliente,
-        filters.viajero,
-        filters.hotel,
-        filters.estado_solicitud,
-        filters.estado_facturacion,
-        filters.forma_pago,
-        filters.created_start,
-        filters.created_end,
-        filters.check_in_start,
-        filters.check_in_end,
-        filters.check_out_start,
-        filters.check_out_end,
-
-        filters.id_cliente,
-        filters.estado_reserva,
-        filters.etapa_reservacion,
-        filters.reservante,
-        filters.metodo_pago_reserva,
-        filters.fecha_reserva_start,
-        filters.fecha_reserva_end,
-        filters.filtrar_fecha_por_reserva,
-
-        filters.comentarios,
-        filters.comentario_CXP,
-        filters.estatus_pagos,   // p_estatus_pagos (pos 24)
-
-        filters.uuid_factura,    // p_uuid_factura
-        pagina,                  // p_pagina
-        limite,                  // p_limite
-      ],
+    const pagina = Math.max(
+      1,
+      parseInt(req.query.page ?? req.query.pagina ?? "1", 10) || 1,
     );
+    const limite = Math.min(
+      200,
+      Math.max(
+        1,
+        parseInt(req.query.limit ?? req.query.limite ?? "50", 10) || 50,
+      ),
+    );
+
+    const spRows = await executeSP("get_solicitudes_pago_filtradas2", [
+      filters.folio,
+      filters.cliente,
+      filters.viajero,
+      filters.hotel,
+      filters.estado_solicitud,
+      filters.estado_facturacion,
+      filters.forma_pago,
+      filters.created_start,
+      filters.created_end,
+      filters.check_in_start,
+      filters.check_in_end,
+      filters.check_out_start,
+      filters.check_out_end,
+
+      filters.id_cliente,
+      filters.estado_reserva,
+      filters.etapa_reservacion,
+      filters.reservante,
+      filters.metodo_pago_reserva,
+      filters.fecha_reserva_start,
+      filters.fecha_reserva_end,
+      filters.filtrar_fecha_por_reserva,
+
+      filters.comentarios,
+      filters.comentario_CXP,
+      filters.estatus_pagos, // p_estatus_pagos (pos 24)
+
+      filters.uuid_factura, // p_uuid_factura
+      pagina, // p_pagina
+      limite, // p_limite
+    ]);
 
     const ids = (spRows || [])
       .map((r) => r.id_solicitud_proveedor)
@@ -4006,8 +4058,8 @@ const getSolicitudes2 = async (req, res) => {
     // solicitudes_pago_proveedor sin invocar el SP ni hacer joins pesados.
     const tipoVista = clean(p("tipo"));
 
-if (tipoVista) {
-  const [conteosRows] = await executeQuery(`
+    if (tipoVista) {
+      const [conteosRows] = await executeQuery(`
     SELECT
       COUNT(CASE
         WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('TRANSFERENCIA_SOLICITADA','DISPERSION')
@@ -4071,19 +4123,19 @@ if (tipoVista) {
     FROM solicitudes_pago_proveedor
   `);
 
-  res.set({
-    "Cache-Control": "no-store",
-    Pragma: "no-cache",
-    Expires: "0",
-  });
+      res.set({
+        "Cache-Control": "no-store",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
 
-  return res.status(200).json({
-    ok: true,
-    message: "Conteos obtenidos con éxito",
-    data: conteosRows,
-    meta: { tipo: tipoVista },
-  });
-}
+      return res.status(200).json({
+        ok: true,
+        message: "Conteos obtenidos con éxito",
+        data: conteosRows,
+        meta: { tipo: tipoVista },
+      });
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -4115,7 +4167,7 @@ if (tipoVista) {
       pagado_transferencia: "PAGADO TRANSFERENCIA",
     };
 
-    console.log(BUCKET_TO_ESTADO,req.body)
+    console.log(BUCKET_TO_ESTADO, req.body);
 
     const rawEstado = clean(req.query.estado_solicitud);
 
@@ -4199,7 +4251,7 @@ if (tipoVista) {
         filters.uuid_factura,
         filters.pag,
         filters.limite,
-        bucketFiltro ?? null,   // p_bucket — el SP aplica el filtro de bucket
+        bucketFiltro ?? null, // p_bucket — el SP aplica el filtro de bucket
       ],
     );
 
@@ -4374,12 +4426,13 @@ if (tipoVista) {
       const formaAjuste = row.__computed?.forma ?? "";
 
       const isAjuste =
-        Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) === 1 &&
+        Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) ===
+          1 &&
         estado !== "SOLICITA" &&
         (formaAjuste === "transfer" || formaAjuste === "card");
 
       if (estado === "SOLICITADA") return "ap_credito";
-      
+
       if (estado === "CANCELADA") return "canceladas";
 
       if (isAjuste) return "notificados";
@@ -4405,7 +4458,11 @@ if (tipoVista) {
       canceladas: [],
     };
 
-    if (bucketFiltro && bucketFiltro !== "all" && buckets[bucketFiltro] !== undefined) {
+    if (
+      bucketFiltro &&
+      bucketFiltro !== "all" &&
+      buckets[bucketFiltro] !== undefined
+    ) {
       // El SP ya filtró por bucket: meter todos los rows directamente sin re-clasificar
       buckets[bucketFiltro] = data;
     } else {
@@ -4484,7 +4541,6 @@ const getDatosFiscalesProveedor = async (req, res) => {
       `,
       [id_proveedor],
     );
-
 
     return res.status(200).json({ data });
   } catch (error) {
@@ -5583,7 +5639,9 @@ const EditCampos = async (req, res) => {
 
         const usuario = req?.user?.email || req?.user?.name || "system";
         const esTransferNotif =
-          String(solicitudActual.forma_pago_solicitada ?? "").trim().toLowerCase() === "transfer";
+          String(solicitudActual.forma_pago_solicitada ?? "")
+            .trim()
+            .toLowerCase() === "transfer";
 
         let saldoResp = null;
         if (esTransferNotif) {
@@ -5688,7 +5746,9 @@ const EditCampos = async (req, res) => {
         } else if (ESTADOS_PAGADO.has(estadoActual)) {
           const usuario = req?.user?.email || req?.user?.name || "system";
           const esTransferPagado =
-            String(rowActual.forma_pago_solicitada ?? "").trim().toLowerCase() === "transfer";
+            String(rowActual.forma_pago_solicitada ?? "")
+              .trim()
+              .toLowerCase() === "transfer";
 
           let saldoResp = null;
           if (esTransferPagado) {
@@ -5836,7 +5896,9 @@ const EditCampos = async (req, res) => {
         ]);
 
         const affectedBooking =
-          rUpdateBooking?.affectedRows ?? rUpdateBooking?.[0]?.affectedRows ?? 0;
+          rUpdateBooking?.affectedRows ??
+          rUpdateBooking?.[0]?.affectedRows ??
+          0;
 
         bookingSyncInfo = {
           ok: affectedBooking > 0,
@@ -5911,7 +5973,7 @@ const EditCampos = async (req, res) => {
           WHERE id_solicitud_proveedor = ?
           LIMIT 1
         `,
-        [userIdDB, id_solicitud_proveedor]
+        [userIdDB, id_solicitud_proveedor],
       );
     }
 
@@ -5994,7 +6056,7 @@ const EditCampos = async (req, res) => {
 };
 
 const monto_factura = async (req, res) => {
-  try { 
+  try {
     const {
       id_solicitud,
       id_solicitud_proveedor,
@@ -7442,17 +7504,17 @@ const asignar_factura_previa = async (req, res) => {
         message: "No se encontró la factura",
       });
     }
-const cacheRazonesSociales = new Map();
+    const cacheRazonesSociales = new Map();
 
-const obtenerRazonesSocialesProveedor = async (idProveedor) => {
-  const id = safeString(idProveedor);
-  if (!id) return [];
+    const obtenerRazonesSocialesProveedor = async (idProveedor) => {
+      const id = safeString(idProveedor);
+      if (!id) return [];
 
-  if (cacheRazonesSociales.has(id)) {
-    return cacheRazonesSociales.get(id);
-  }
+      if (cacheRazonesSociales.has(id)) {
+        return cacheRazonesSociales.get(id);
+      }
 
-  const qRazones = `
+      const qRazones = `
     SELECT DISTINCT
       UPPER(TRIM(pdf.razon_social)) AS razon_social
     FROM proveedores_datos_fiscales_relacion pdfr
@@ -7462,33 +7524,33 @@ const obtenerRazonesSocialesProveedor = async (idProveedor) => {
       AND TRIM(COALESCE(pdf.razon_social, '')) <> '';
   `;
 
-  const rows = getRows(await executeQuery(qRazones, [id]));
+      const rows = getRows(await executeQuery(qRazones, [id]));
 
-  const razones = rows
-    .map((row) => safeString(row?.razon_social).toUpperCase())
-    .filter(Boolean);
+      const razones = rows
+        .map((row) => safeString(row?.razon_social).toUpperCase())
+        .filter(Boolean);
 
-  cacheRazonesSociales.set(id, razones);
+      cacheRazonesSociales.set(id, razones);
 
-  return razones;
-};
-const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
-  const idA = safeString(idProveedorA);
-  const idB = safeString(idProveedorB);
+      return razones;
+    };
+    const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
+      const idA = safeString(idProveedorA);
+      const idB = safeString(idProveedorB);
 
-  if (!idA || !idB) return false;
-  if (idA === idB) return true;
+      if (!idA || !idB) return false;
+      if (idA === idB) return true;
 
-  const [razonesA, razonesB] = await Promise.all([
-    obtenerRazonesSocialesProveedor(idA),
-    obtenerRazonesSocialesProveedor(idB),
-  ]);
+      const [razonesA, razonesB] = await Promise.all([
+        obtenerRazonesSocialesProveedor(idA),
+        obtenerRazonesSocialesProveedor(idB),
+      ]);
 
-  if (!razonesA.length || !razonesB.length) return false;
+      if (!razonesA.length || !razonesB.length) return false;
 
-  const setB = new Set(razonesB);
-  return razonesA.some((razon) => setB.has(razon));
-};
+      const setB = new Set(razonesB);
+      return razonesA.some((razon) => setB.has(razon));
+    };
     const factura = facturaRows[0];
     const idFactura = safeString(factura.id_factura);
     const uuidFacturaReal = safeString(factura.uuid_factura);
@@ -7513,35 +7575,35 @@ const compartenRazonSocial = async (idProveedorA, idProveedorB) => {
     }
 
     // 2) Validar proveedor del payload contra factura por razón social
-for (const item of proveedores) {
-  const idProveedorPayload = safeString(item?.id_proveedor);
+    for (const item of proveedores) {
+      const idProveedorPayload = safeString(item?.id_proveedor);
 
-  if (idProveedorPayload && idProveedorFactura) {
-    const coincideProveedor = await compartenRazonSocial(
-      idProveedorFactura,
-      idProveedorPayload
-    );
+      if (idProveedorPayload && idProveedorFactura) {
+        const coincideProveedor = await compartenRazonSocial(
+          idProveedorFactura,
+          idProveedorPayload,
+        );
 
-    if (!coincideProveedor) {
-      const [razonesFactura, razonesPayload] = await Promise.all([
-        obtenerRazonesSocialesProveedor(idProveedorFactura),
-        obtenerRazonesSocialesProveedor(idProveedorPayload),
-      ]);
+        if (!coincideProveedor) {
+          const [razonesFactura, razonesPayload] = await Promise.all([
+            obtenerRazonesSocialesProveedor(idProveedorFactura),
+            obtenerRazonesSocialesProveedor(idProveedorPayload),
+          ]);
 
-      return res.status(400).json({
-        ok: false,
-        message:
-          "El proveedor del payload no coincide con la factura ni comparte una razón social fiscal.",
-        data: {
-          proveedor_factura: idProveedorFactura,
-          proveedor_payload: idProveedorPayload,
-          razones_sociales_factura: razonesFactura,
-          razones_sociales_payload: razonesPayload,
-        },
-      });
+          return res.status(400).json({
+            ok: false,
+            message:
+              "El proveedor del payload no coincide con la factura ni comparte una razón social fiscal.",
+            data: {
+              proveedor_factura: idProveedorFactura,
+              proveedor_payload: idProveedorPayload,
+              razones_sociales_factura: razonesFactura,
+              razones_sociales_payload: razonesPayload,
+            },
+          });
+        }
+      }
     }
-  }
-}
 
     // 3) Total solicitado en esta operación
     const totalOperacion = round2(
@@ -7618,30 +7680,30 @@ for (const item of proveedores) {
         solicitud.monto_por_facturar_actual ?? 0,
       );
 
-     if (idProveedorFactura && idProveedorSolicitud) {
-  const coincideProveedorSolicitud = await compartenRazonSocial(
-    idProveedorFactura,
-    idProveedorSolicitud
-  );
+      if (idProveedorFactura && idProveedorSolicitud) {
+        const coincideProveedorSolicitud = await compartenRazonSocial(
+          idProveedorFactura,
+          idProveedorSolicitud,
+        );
 
-  if (!coincideProveedorSolicitud) {
-    const [razonesFactura, razonesSolicitud] = await Promise.all([
-      obtenerRazonesSocialesProveedor(idProveedorFactura),
-      obtenerRazonesSocialesProveedor(idProveedorSolicitud),
-    ]);
+        if (!coincideProveedorSolicitud) {
+          const [razonesFactura, razonesSolicitud] = await Promise.all([
+            obtenerRazonesSocialesProveedor(idProveedorFactura),
+            obtenerRazonesSocialesProveedor(idProveedorSolicitud),
+          ]);
 
-    return res.status(400).json({
-      ok: false,
-      message: `La solicitud ${idSolicitud} no pertenece al proveedor de la factura ni comparte una razón social fiscal.`,
-      data: {
-        proveedor_factura: idProveedorFactura,
-        proveedor_solicitud: idProveedorSolicitud,
-        razones_sociales_factura: razonesFactura,
-        razones_sociales_solicitud: razonesSolicitud,
-      },
-    });
-  }
-}
+          return res.status(400).json({
+            ok: false,
+            message: `La solicitud ${idSolicitud} no pertenece al proveedor de la factura ni comparte una razón social fiscal.`,
+            data: {
+              proveedor_factura: idProveedorFactura,
+              proveedor_solicitud: idProveedorSolicitud,
+              razones_sociales_factura: razonesFactura,
+              razones_sociales_solicitud: razonesSolicitud,
+            },
+          });
+        }
+      }
 
       const montoSolicitadoReal =
         montoSolicitadoDB > 0 ? montoSolicitadoDB : montoSolicitadoPayload;
@@ -8091,7 +8153,7 @@ const reasignarPago = async (req, res) => {
       monto,
       id_pago_proveedores,
       id_solicitud_nueva,
-      id_solicitud_antigua
+      id_solicitud_antigua,
     );
 
     const montoReasignado =
@@ -8127,7 +8189,7 @@ const reasignarPago = async (req, res) => {
       WHERE id_solicitud_proveedor = ?
       LIMIT 1
       `,
-      [id_solicitud_nueva]
+      [id_solicitud_nueva],
     );
 
     const solicitudNueva = getFirstRow(rowsNuevaResult);
@@ -8168,7 +8230,7 @@ const reasignarPago = async (req, res) => {
       WHERE id_solicitud_proveedor = ?
       LIMIT 1
       `,
-      [id_solicitud_antigua]
+      [id_solicitud_antigua],
     );
 
     const solicitudAntigua = getFirstRow(rowsAntiguaResult);
@@ -8196,7 +8258,7 @@ const reasignarPago = async (req, res) => {
         AND id_solicitud_proveedor = ?
       LIMIT 1
       `,
-      [id_pago_proveedores, id_solicitud_antigua]
+      [id_pago_proveedores, id_solicitud_antigua],
     );
 
     const pagoOriginal = getFirstRow(rowsPagoResult);
@@ -8297,7 +8359,7 @@ const reasignarPago = async (req, res) => {
         formaPagoNueva,
         id_pago_proveedores,
         id_solicitud_antigua,
-      ]
+      ],
     );
 
     console.log("insertResult:", insertResult);
@@ -8310,17 +8372,17 @@ const reasignarPago = async (req, res) => {
     }
 
     const updateAjusteResult = await executeQuery(
-  `
+      `
   UPDATE solicitudes_pago_proveedor
   SET 
     comentario_ajuste = NULL,
     is_ajuste = 0
   WHERE id_solicitud_proveedor = ?
   `,
-  [id_solicitud_nueva]
-);
+      [id_solicitud_nueva],
+    );
 
-console.log("updateAjusteResult:", updateAjusteResult);
+    console.log("updateAjusteResult:", updateAjusteResult);
 
     return res.status(200).json({
       ok: true,
@@ -8376,7 +8438,7 @@ const generar_saldo_a_favor = async (req, res) => {
       WHERE id_pago_proveedores = ?
       LIMIT 1
       `,
-      [id_solicitud_pago]
+      [id_solicitud_pago],
     );
 
     const pago = getFirstRow(rowsPago);
@@ -8405,7 +8467,7 @@ const generar_saldo_a_favor = async (req, res) => {
       WHERE id_solicitud_proveedor = ?
       LIMIT 1
       `,
-      [id_solicitud_proveedor]
+      [id_solicitud_proveedor],
     );
 
     const solicitud = getFirstRow(rowsSolicitud);
@@ -8424,17 +8486,17 @@ const generar_saldo_a_favor = async (req, res) => {
     const transaction_id = randomTransactionId();
 
     const forma_pago = mapFormaPagoSolicitudToSaldo(
-      forma_pago_solicitada || metodo_de_pago || ""
+      forma_pago_solicitada || metodo_de_pago || "",
     );
 
     const reserva = await obteneSrReservaDesdeSolicitud(
       executeQuery,
-      id_solicitud_proveedor
+      id_solicitud_proveedor,
     );
 
     const id_hospedaje = await obteneSrRelacionDesdeSolicitud(
       executeQuery,
-      id_solicitud_proveedor
+      id_solicitud_proveedor,
     );
 
     await executeQuery(
@@ -8492,7 +8554,7 @@ const generar_saldo_a_favor = async (req, res) => {
         "approved",
         id_solicitud_proveedor,
         reserva,
-      ]
+      ],
     );
 
     console.log("generar_saldo_a_favor:", {
@@ -8510,7 +8572,7 @@ const generar_saldo_a_favor = async (req, res) => {
         is_ajuste = 0
       WHERE id_solicitud_proveedor = ?
       `,
-      [id_solicitud_proveedor]
+      [id_solicitud_proveedor],
     );
 
     return res.status(200).json({
@@ -8558,7 +8620,7 @@ const cancelar_dispersion = async (req, res) => {
       WHERE id_solicitud_proveedor = ?
       LIMIT 1
       `,
-      [id_solicitud_proveedor]
+      [id_solicitud_proveedor],
     );
 
     const dispersion = getFirstRow(rowsResult);
@@ -8582,7 +8644,7 @@ const cancelar_dispersion = async (req, res) => {
       DELETE FROM dispersion_pagos_proveedor
       WHERE id_solicitud_proveedor = ?
       `,
-      [id_solicitud_proveedor]
+      [id_solicitud_proveedor],
     );
 
     const updateAjusteResult = await executeQuery(
@@ -8592,7 +8654,7 @@ const cancelar_dispersion = async (req, res) => {
         estado_solicitud = 'TRANSFERENCIA_SOLICITADA'
       WHERE id_solicitud_proveedor = ?
       `,
-      [id_solicitud_proveedor]
+      [id_solicitud_proveedor],
     );
 
     console.log("updateAjusteResult:", updateAjusteResult);
