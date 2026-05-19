@@ -13,8 +13,8 @@ const sendEmail = async (to, { subject, html, text }) => {
     to,
     from: "soportemia@noktos.com",
     subject,
-    text: text || "",
     html,
+    ...(text ? { text } : {}),
   };
 
   try {
