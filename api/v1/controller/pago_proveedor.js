@@ -173,8 +173,7 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
     };
   }
 
-  const isPagado =
-    estado === "PAGADO TRANSFERENCIA";
+  const isPagado = estado === "PAGADO TRANSFERENCIA";
 
   const isCartaCupon = estado === "CUPON ENVIADO" || estado === "CARTA_ENVIADA";
 
@@ -1170,12 +1169,12 @@ const createDispersion = async (req, res) => {
       const idProveedorCuenta = itemPayload?.id_proveedor_cuenta ?? null;
 
       return [
-        idSol,             // id_solicitud_proveedor
-        saldoDb,           // monto_solicitado
-        saldoDb,           // saldo
-        0,                 // monto_pagado
-        idDispersion,      // codigo_dispersion
-        fechaPago,         // fecha_pago
+        idSol, // id_solicitud_proveedor
+        saldoDb, // monto_solicitado
+        saldoDb, // saldo
+        0, // monto_pagado
+        idDispersion, // codigo_dispersion
+        fechaPago, // fecha_pago
         idProveedorCuenta, // id_proveedor_cuenta
       ];
     });
@@ -1237,38 +1236,148 @@ const createDispersion = async (req, res) => {
       };
     });
 
+    // 9) Obtener detalle de reservas desde vw_new_reservas
+    const reservasSql = `
+      SELECT
+        id_solicitud_proveedor,
+        COALESCE(intermediario, proveedor) AS proveedor_nombre,
+        codigo_confirmacion,
+        costo_total,
+        total,
+        COALESCE(nombre_identificacion, nombre_comercial) AS cliente,
+        check_in,
+        check_out
+      FROM vw_new_reservas
+      WHERE id_solicitud_proveedor IN (${inPlaceholders})
+    `;
+    const reservasRows = await executeQuery(reservasSql, ids);
+    const reservasMap = new Map(
+      (reservasRows || []).map((r) => [Number(r.id_solicitud_proveedor), r]),
+    );
+
+    const fmtDate = (d) => {
+      if (!d) return "—";
+      const dt = new Date(d);
+      if (isNaN(dt)) return String(d);
+      const dd = String(dt.getUTCDate()).padStart(2, "0");
+      const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+      return `${dd}/${mm}/${dt.getUTCFullYear()}`;
+    };
+
+    const fmtMoney = (value) => {
+      if (value == null) return "";
+      const str = typeof value === "number" ? value.toFixed(2) : String(value).trim();
+      if (!str) return "";
+      const [intPart, decPart] = str.split(".");
+      const reversed = intPart.split("").reverse().join("");
+      let fmt = "";
+      for (let i = 0; i < reversed.length; i++) {
+        if (i > 0 && i % 3 === 0) fmt += ",";
+        fmt += reversed[i];
+      }
+      const formattedInt = fmt.split("").reverse().join("");
+      return decPart !== undefined ? `${formattedInt}.${decPart}` : formattedInt;
+    };
+
+    let totalCosto = 0;
+    let totalVenta = 0;
+
+    const reservasHtml = ids
+      .map((idSol, i) => {
+        const r = reservasMap.get(idSol);
+        if (!r) return "";
+        const costo = Number(r.costo_total ?? 0);
+        const venta = Number(r.total ?? 0);
+        totalCosto += costo;
+        totalVenta += venta;
+        const markupPct =
+          costo > 0 ? (((venta - costo) / venta) * 100).toFixed(2) + "%" : "—";
+        const bg = i % 2 === 0 ? "#f9fafb" : "#fff";
+        return `
+        <tr style="background: ${bg};">
+          <td style="padding: 8px 10px; color: #111827;">${r.cliente ?? "—"}</td>
+          <td style="padding: 8px 10px; color: #111827;">${r.proveedor_nombre ?? "—"}</td>
+          <td style="padding: 8px 10px; color: #111827;">${r.codigo_confirmacion ?? "—"}</td>
+          <td style="padding: 8px 10px; color: #111827;">${fmtDate(r.check_in)}</td>
+          <td style="padding: 8px 10px; color: #111827;">${fmtDate(r.check_out)}</td>
+          <td style="padding: 8px 10px; color: #111827;">$${fmtMoney(costo)}</td>
+          <td style="padding: 8px 10px; color: #111827;">$${fmtMoney(venta)}</td>
+          <td style="padding: 8px 10px; color: #111827;">${markupPct}</td>
+        </tr>
+      `;
+      })
+      .join("");
+
+    const totalMarkupPct =
+      totalCosto > 0
+        ? (((totalVenta - totalCosto) / totalCosto) * 100).toFixed(2) + "%"
+        : "—";
+
+    const totalesHtml = `
+      <tr style="background: #deebff; font-weight: bold; border-top: 2px solid #0b5fa5;">
+        <td colspan="5" style="padding: 8px 10px; color: #0b5fa5;">Total</td>
+        <td style="padding: 8px 10px; color: #0b5fa5;">$${fmtMoney(totalCosto)}</td>
+        <td style="padding: 8px 10px; color: #0b5fa5;">$${fmtMoney(totalVenta)}</td>
+        <td style="padding: 8px 10px; color: #0b5fa5;">${totalMarkupPct}</td>
+      </tr>
+    `;
+
     let correo_enviado = false;
     try {
-      await sendEmail("fin-cxp@noktos.com", {
+      // await sendEmail("fin-cxp@noktos.com", {
+      await sendEmail("luis.castaneda@noktos.com", {
         subject: `Nueva dispersión creada: ${idDispersion}`,
         html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <div style="background: #0b5fa5; padding: 20px; border-radius: 8px 8px 0 0;">
-            <h2 style="color: #fff; margin: 0;">Nueva Dispersión de Pago</h2>
+        <div style="font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #fff;">
+          <div style="background: #deebff; padding: 28px 24px 20px; border-radius: 8px 8px 0 0; text-align: center;">
+            <img src="https://luiscastaneda-tos.github.io/log/files/mia.png" alt="MIA" style="max-height: 56px; margin-bottom: 14px; display: block; margin-left: auto; margin-right: auto;" />
+            <h2 style="color: #0b5fa5; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.3px;">Nueva Dispersión de Pago</h2>
           </div>
-          <div style="background: #f9fafb; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-              <tr>
-                <td style="padding: 8px 12px; font-weight: bold; color: #374151; width: 40%;">Codigo de Dispersión</td>
+          <div style="background: #f9fafb; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #deebff;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px;">
+              <tr style="background: #deebff;">
+                <td style="padding: 8px 12px; font-weight: bold; color: #0b5fa5; width: 40%;">Codigo de Dispersión</td>
                 <td style="padding: 8px 12px; color: #111827;">${idDispersion}</td>
               </tr>
               <tr style="background: #fff;">
                 <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Referencia</td>
                 <td style="padding: 8px 12px; color: #111827;">${referenciaNumerica ?? "—"}</td>
               </tr>
-              <tr>
-                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Motivo de pago</td>
+              <tr style="background: #deebff;">
+                <td style="padding: 8px 12px; font-weight: bold; color: #0b5fa5;">Motivo de pago</td>
                 <td style="padding: 8px 12px; color: #111827;">${motivoPago ?? "—"}</td>
               </tr>
               <tr style="background: #fff;">
                 <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Total solicitudes de pago</td>
                 <td style="padding: 8px 12px; color: #111827;">${ids.length}</td>
               </tr>
-              <tr>
-                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Monto total</td>
-                <td style="padding: 8px 12px; color: #111827;">$${solicitudesProcesadas.reduce((sum, s) => sum + s.saldo_db, 0).toFixed(2)} MXN</td>
+              <tr style="background: #deebff;">
+                <td style="padding: 8px 12px; font-weight: bold; color: #0b5fa5;">Monto total</td>
+                <td style="padding: 8px 12px; color: #111827; font-weight: bold;">$${fmtMoney(solicitudesProcesadas.reduce((sum, s) => sum + s.saldo_db, 0))} MXN</td>
               </tr>
             </table>
+
+            <h3 style="font-size: 14px; color: #0b5fa5; margin: 0 0 12px 0; font-weight: 700;">Detalle de reservas</h3>
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                  <tr style="background: #0b5fa5; color: #fff;">
+                    <th style="padding: 8px 10px; text-align: left;">Cliente</th>
+                    <th style="padding: 8px 10px; text-align: left;">Proveedor</th>
+                    <th style="padding: 8px 10px; text-align: left;">Confirmación</th>
+                    <th style="padding: 8px 10px; text-align: left;">Check-in</th>
+                    <th style="padding: 8px 10px; text-align: left;">Check-out</th>
+                    <th style="padding: 8px 10px; text-align: left;">Costo</th>
+                    <th style="padding: 8px 10px; text-align: left;">Venta</th>
+                    <th style="padding: 8px 10px; text-align: left;">Markup</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${reservasHtml || '<tr><td colspan="8" style="padding: 12px; color: #6b7280;">Sin reservas encontradas</td></tr>'}
+                  ${reservasHtml ? totalesHtml : ""}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       `,
@@ -4824,14 +4933,20 @@ const cargarFactura = async (req, res) => {
       }
 
       // Con propina el monto_facturado puede superar monto_solicitado
-      if (!hasPropina && monto_solicitado > 0 && monto_facturado > monto_solicitado) {
+      if (
+        !hasPropina &&
+        monto_solicitado > 0 &&
+        monto_facturado > monto_solicitado
+      ) {
         throw new Error(
           `proveedoresData[${idx}] monto_asociar (${monto_facturado}) excede monto_solicitado (${monto_solicitado})`,
         );
       }
 
       const pendiente_facturar =
-        monto_solicitado > 0 ? Math.max(0, monto_solicitado - monto_facturado) : null;
+        monto_solicitado > 0
+          ? Math.max(0, monto_solicitado - monto_facturado)
+          : null;
 
       const id_pago =
         p?.detalles_pagos?.[0]?.id_pago ??
@@ -4971,7 +5086,11 @@ const cargarFactura = async (req, res) => {
       const propinaMonto = toNumber(propina_data?.monto_propina ?? 0);
       let propinaAdvertencias = [];
 
-      if (propina_data?.tiene_propina && propinaMonto > 0 && idsSolicitudes.length > 0) {
+      if (
+        propina_data?.tiene_propina &&
+        propinaMonto > 0 &&
+        idsSolicitudes.length > 0
+      ) {
         const TOLERANCIA = 5;
         const totalSinPropina = totalN;
         const totalConPropina = totalN + propinaMonto;
@@ -4998,7 +5117,8 @@ const cargarFactura = async (req, res) => {
             );
             return {
               id_solicitud: id,
-              monto_solicitado: d?.solicitud_proveedor?.monto_solicitado ?? null,
+              monto_solicitado:
+                d?.solicitud_proveedor?.monto_solicitado ?? null,
               mensaje: "No procede por costos distintos",
             };
           });
@@ -5015,7 +5135,11 @@ const cargarFactura = async (req, res) => {
               monto_solicitado = CAST(COALESCE(NULLIF(monto_solicitado, ''), '0') AS DECIMAL(12,2)) + ?
             WHERE id_solicitud_proveedor IN (${placeholdersPropina});
           `;
-          await executeQuery(updatePropina, [propinaMonto, propinaMonto, ...idsCalifican]);
+          await executeQuery(updatePropina, [
+            propinaMonto,
+            propinaMonto,
+            ...idsCalifican,
+          ]);
         }
       }
     }
@@ -8070,11 +8194,7 @@ const cuentas = async (req, res) => {
         : [req.body?.id_proveedor ?? req.body];
 
     const ids = [
-      ...new Set(
-        rawIds
-          .map((id) => safeString(id))
-          .filter(Boolean)
-      ),
+      ...new Set(rawIds.map((id) => safeString(id)).filter(Boolean)),
     ];
 
     console.log("IDs normalizados:", ids);

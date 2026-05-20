@@ -180,7 +180,9 @@ const buscarHotelesConFiltros = async ({
         ROUND(vw.precio_sencilla / 1.16, 2) AS subtotal,
         IF(vw.desayuno_sencilla = 1, 1, 0) AS desayuno,
         vw.direccion,
-        NULL AS distancia
+        NULL AS distancia,
+        IF(h.vigencia_convenio IS NOT NULL AND h.vigencia_convenio >= CURDATE(), 1, 0) AS convenio,
+        'SENCILLA' AS habitacion
       FROM vw_hoteles_tarifas_completa vw
       INNER JOIN hoteles h ON h.id_hotel = vw.id_hotel
       WHERE vw.id_hotel = ?
@@ -262,7 +264,9 @@ const buscarHotelesConFiltros = async ({
       vw.direccion,
       chp.zona,
       chp.priority,
-      ${distanciaSelect}
+      ${distanciaSelect},
+      IF(h.vigencia_convenio IS NOT NULL AND h.vigencia_convenio >= CURDATE(), 1, 0) AS convenio,
+      'SENCILLA' AS habitacion
     FROM vw_hoteles_tarifas_completa vw
     INNER JOIN client_hotel_priority chp ON chp.id_hotel = vw.id_hotel
     INNER JOIN hoteles h ON h.id_hotel = vw.id_hotel
