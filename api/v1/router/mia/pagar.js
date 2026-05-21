@@ -359,7 +359,7 @@ router.patch("/finanzas/:id/activa", async (req, res) => {
 // FINANZAS - PATCH finanzas/operaciones
 // PATCH /finanzas/:id/tipo   Body: { tipo: 'finanzas' | 'operaciones' | 'ambos' | 'ninguno' }
 // =========================
-const TIPO_ENUM = new Set(["finanzas", "operaciones", "ambos", "ninguno"]);
+const TIPO_ENUM = new Set(["finanzas", "operaciones", "ambos"]);
 
 router.patch("/finanzas/:id/tipo", async (req, res) => {
   const { id } = req.params;
@@ -419,7 +419,6 @@ router.patch("/finanzas/:id/tipo", async (req, res) => {
 // =========================
 const FINANZAS_FIELDS = new Set([
   "alias",
-  "nombre_titular",
   "ultimos_4",
   "numero_completo",
   "banco_emisor",
@@ -427,7 +426,6 @@ const FINANZAS_FIELDS = new Set([
   "fecha_vencimiento",
   "activa",
   "cvv",
-  "url_identificacion",
   "activa_finanzas",
   "finanzas/operaciones",
   "user_created",
@@ -567,7 +565,6 @@ router.get("/:id", async (req, res) => {
 
 const FIELDS = new Set([
   "alias",
-  "nombre_titular",
   "ultimos_4",
   "numero_completo",
   "banco_emisor",
@@ -575,7 +572,6 @@ const FIELDS = new Set([
   "fecha_vencimiento",
   "activa",
   "cvv",
-  "url_identificacion",
   "activa_finanzas",
   "finanzas/operaciones",
   "user_created",
@@ -623,7 +619,7 @@ router.post("/", async (req, res) => {
       if (last4) body.ultimos_4 = last4;
     }
 
-    const cols = ["id"];
+    const cols = ["`id`"];
     const placeholders = ["?"];
     const values = [id];
 
@@ -632,18 +628,11 @@ router.post("/", async (req, res) => {
       if (value === undefined) continue;
       if (key === "user_created" || key === "user_edit" || key === "cambios") continue;
 
-      cols.push(key);
+      cols.push(`\`${key}\``);
       placeholders.push("?");
 
       if (key === "activa" || key === "activa_finanzas") values.push(toTinyInt01(value));
       else values.push(value);
-    }
-
-    // Auditoría: user_created desde sesión
-    if (id_user !== null) {
-      cols.push("user_created");
-      placeholders.push("?");
-      values.push(id_user);
     }
 
     if (cols.length === 1) {
@@ -652,6 +641,15 @@ router.post("/", async (req, res) => {
         message: "Envía al menos un campo válido para insertar.",
       });
     }
+
+    // Auditoría: user_created y user_edit son NOT NULL
+    cols.push("user_created");
+    placeholders.push("?");
+    values.push(id_user ?? "");
+
+    cols.push("user_edit");
+    placeholders.push("?");
+    values.push(id_user ?? "");
 
     const insertQuery = `INSERT INTO tarjetas (${cols.join(", ")}) VALUES (${placeholders.join(", ")});`;
     await executeQuery(insertQuery, values);
