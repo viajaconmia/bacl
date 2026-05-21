@@ -1266,7 +1266,8 @@ const createDispersion = async (req, res) => {
 
     const fmtMoney = (value) => {
       if (value == null) return "";
-      const str = typeof value === "number" ? value.toFixed(2) : String(value).trim();
+      const str =
+        typeof value === "number" ? value.toFixed(2) : String(value).trim();
       if (!str) return "";
       const [intPart, decPart] = str.split(".");
       const reversed = intPart.split("").reverse().join("");
@@ -1276,7 +1277,9 @@ const createDispersion = async (req, res) => {
         fmt += reversed[i];
       }
       const formattedInt = fmt.split("").reverse().join("");
-      return decPart !== undefined ? `${formattedInt}.${decPart}` : formattedInt;
+      return decPart !== undefined
+        ? `${formattedInt}.${decPart}`
+        : formattedInt;
     };
 
     let totalCosto = 0;
@@ -1310,7 +1313,7 @@ const createDispersion = async (req, res) => {
 
     const totalMarkupPct =
       totalCosto > 0
-        ? (((totalVenta - totalCosto) / totalCosto) * 100).toFixed(2) + "%"
+        ? (((totalVenta - totalCosto) / totalVenta) * 100).toFixed(2) + "%"
         : "—";
 
     const totalesHtml = `
@@ -1324,28 +1327,20 @@ const createDispersion = async (req, res) => {
 
     let correo_enviado = false;
     try {
-      // await sendEmail("fin-cxp@noktos.com", {
-      await sendEmail("luis.castaneda@noktos.com", {
+      await sendEmail("fin-cxp@noktos.com", {
+        // await sendEmail("luis.castaneda@noktos.com", {
         subject: `Nueva dispersión creada: ${idDispersion}`,
         html: `
         <div style="font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #fff;">
           <div style="background: #deebff; padding: 28px 24px 20px; border-radius: 8px 8px 0 0; text-align: center;">
             <img src="https://luiscastaneda-tos.github.io/log/files/mia.png" alt="MIA" style="max-height: 56px; margin-bottom: 14px; display: block; margin-left: auto; margin-right: auto;" />
-            <h2 style="color: #0b5fa5; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.3px;">Nueva Dispersión de Pago</h2>
+            <h2 style="color: #0b5fa5; margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 0.3px;">Nueva solicitud de dispersión de pago</h2>
           </div>
           <div style="background: #f9fafb; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #deebff;">
             <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 24px;">
               <tr style="background: #deebff;">
                 <td style="padding: 8px 12px; font-weight: bold; color: #0b5fa5; width: 40%;">Codigo de Dispersión</td>
                 <td style="padding: 8px 12px; color: #111827;">${idDispersion}</td>
-              </tr>
-              <tr style="background: #fff;">
-                <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Referencia</td>
-                <td style="padding: 8px 12px; color: #111827;">${referenciaNumerica ?? "—"}</td>
-              </tr>
-              <tr style="background: #deebff;">
-                <td style="padding: 8px 12px; font-weight: bold; color: #0b5fa5;">Motivo de pago</td>
-                <td style="padding: 8px 12px; color: #111827;">${motivoPago ?? "—"}</td>
               </tr>
               <tr style="background: #fff;">
                 <td style="padding: 8px 12px; font-weight: bold; color: #374151;">Total solicitudes de pago</td>
