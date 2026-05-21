@@ -3826,38 +3826,45 @@ const getSolicitudes = async (req, res) => {
       ),
     );
 
-    const spRows = await executeSP("get_solicitudes_pago_filtradas2", [
-      filters.folio,
-      filters.cliente,
-      filters.viajero,
-      filters.hotel,
-      filters.estado_solicitud,
-      filters.estado_facturacion,
-      filters.forma_pago,
-      filters.created_start,
-      filters.created_end,
-      filters.check_in_start,
-      filters.check_in_end,
-      filters.check_out_start,
-      filters.check_out_end,
+    const [spRows, totalRows] = await Promise.all([
+      executeSP("get_solicitudes_pago_filtradas2", [
+        filters.folio,
+        filters.cliente,
+        filters.viajero,
+        filters.hotel,
+        filters.estado_solicitud,
+        filters.estado_facturacion,
+        filters.forma_pago,
+        filters.created_start,
+        filters.created_end,
+        filters.check_in_start,
+        filters.check_in_end,
+        filters.check_out_start,
+        filters.check_out_end,
 
-      filters.id_cliente,
-      filters.estado_reserva,
-      filters.etapa_reservacion,
-      filters.reservante,
-      filters.metodo_pago_reserva,
-      filters.fecha_reserva_start,
-      filters.fecha_reserva_end,
-      filters.filtrar_fecha_por_reserva,
+        filters.id_cliente,
+        filters.estado_reserva,
+        filters.etapa_reservacion,
+        filters.reservante,
+        filters.metodo_pago_reserva,
+        filters.fecha_reserva_start,
+        filters.fecha_reserva_end,
+        filters.filtrar_fecha_por_reserva,
 
-      filters.comentarios,
-      filters.comentario_CXP,
-      filters.estatus_pagos, // p_estatus_pagos (pos 24)
+        filters.comentarios,
+        filters.comentario_CXP,
+        filters.estatus_pagos, // p_estatus_pagos (pos 24)
 
-      filters.uuid_factura, // p_uuid_factura
-      pagina, // p_pagina
-      limite, // p_limite
+        filters.uuid_factura, // p_uuid_factura
+        pagina, // p_pagina
+        limite, // p_limite
+      ]),
+      executeQuery(
+        `SELECT COUNT(*) AS total FROM solicitudes_pago_proveedor WHERE estado_solicitud <> 'CANCELADA'`,
+      ),
     ]);
+
+    const totalNoCanceladas = Number(totalRows?.[0]?.total ?? 0);
 
     const ids = (spRows || [])
       .map((r) => r.id_solicitud_proveedor)
@@ -4000,6 +4007,7 @@ const getSolicitudes = async (req, res) => {
       limit: limite,
       count: data.length,
       has_more: spRows.length === limite,
+      total_no_canceladas: totalNoCanceladas,
     };
 
     if (debug) {
