@@ -1314,7 +1314,9 @@ async function procesarSolicitudProveedorAlEditarReserva({
 
       const aptoParaSaldo =
         estadoAnterior === "PAGADO TRANSFERENCIA" ||
-        String(solicitud.estatus_pagos || "").trim().toUpperCase() === "PAGADA";
+        String(solicitud.estatus_pagos || "")
+          .trim()
+          .toUpperCase() === "PAGADA";
 
       if (monto_pagado_total > 0 && aptoParaSaldo) {
         const pagoBase = rowsPagos[0];
@@ -2430,9 +2432,9 @@ const cancelarBooking = async (req, res) => {
         },
         id_user,
       });
-      await conn.execute(`DELETE FROM items_facturas where id_relacion = ?`, [
-        id_relacion,
-      ]);
+      // await conn.execute(`DELETE FROM items_facturas where id_relacion = ?`, [
+      //   id_relacion,
+      // ]);
 
       console.log(
         "🚫 [CANCELAR_RESERVA] Resultado de notificado:",
