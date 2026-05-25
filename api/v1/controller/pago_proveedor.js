@@ -1254,6 +1254,7 @@ const createDispersion = async (req, res) => {
     const reservasMap = new Map(
       (reservasRows || []).map((r) => [Number(r.id_solicitud_proveedor), r]),
     );
+    const nombreProveedor = (reservasRows || [])[0]?.proveedor_nombre ?? null;
 
     const fmtDate = (d) => {
       if (!d) return "—";
@@ -1329,7 +1330,7 @@ const createDispersion = async (req, res) => {
     try {
       await sendEmail("fin-cxp@noktos.com", {
         // await sendEmail("luis.castaneda@noktos.com", {
-        subject: `Nueva dispersión creada: ${idDispersion}`,
+        subject: `Nueva dispersión creada: ${idDispersion}${nombreProveedor ? ` | ${nombreProveedor}` : ""}`,
         html: `
         <div style="font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #fff;">
           <div style="background: #deebff; padding: 28px 24px 20px; border-radius: 8px 8px 0 0; text-align: center;">
