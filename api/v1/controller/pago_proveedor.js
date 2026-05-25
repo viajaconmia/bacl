@@ -1326,10 +1326,13 @@ const createDispersion = async (req, res) => {
       </tr>
     `;
 
+    const emailDestinatario = process.env.NODE_ENV === "production"
+      ? "fin-cxp@noktos.com"
+      : "luis.castaneda@noktos.com";
+
     let correo_enviado = false;
     try {
-      await sendEmail("fin-cxp@noktos.com", {
-        // await sendEmail("luis.castaneda@noktos.com", {
+      await sendEmail(emailDestinatario, {
         subject: `Nueva dispersión creada: ${idDispersion}${nombreProveedor ? ` | ${nombreProveedor}` : ""}`,
         html: `
         <div style="font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #fff;">
