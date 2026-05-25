@@ -66,7 +66,6 @@ const createCombinada = async (req, res) => {
   }
 };
 
-
 const readConsultas = async (req, res) => {
   try {
     const { user_id } = req.query;
@@ -104,12 +103,14 @@ const resumenFacturasCxC = async (req, res) => {
     res.status(200).json(data);
   } catch (error) {
     console.error("Error resumenFacturasCxC:", error);
-    res.status(500).json({ error: "Error al obtener resumen de cuentas por cobrar" });
+    res
+      .status(500)
+      .json({ error: "Error al obtener resumen de cuentas por cobrar" });
   }
 };
 
 const detalleFacturasCxC = async (req, res) => {
- try {
+  try {
     const {
       bucket = "all",
       id_agente = null,
@@ -133,7 +134,7 @@ const detalleFacturasCxC = async (req, res) => {
     });
   }
 };
-  
+
 const getfacturasPagoPendienteByAgente = async (req, res) => {
   try {
     const id_agente = req.body.id_agente;
@@ -453,44 +454,44 @@ const crearFacturaDesdeCarga = async (req, res) => {
     }
 
     const response = await executeSP("sp_inserta_factura_desde_carga", [
-      id_factura,                                  // 1
+      id_factura, // 1
       fecha_emision || comprobante?.fecha || null, // 2
-      timbreFiscal?.fechaTimbrado || null,         // 3
-      comprobante?.serie || null,                  // 4
-      comprobante?.folio || null,                  // 5
-      estado || "Confirmada",                      // 6
-      timbreFiscal?.uuid ? "Vigente" : null,       // 7 estado_sat
-      "4.0",                                       // 8 cfdi_version
-      comprobante?.tipoDeComprobante || null,      // 9
-      usuario_creador,                             // 10
-      id_agente,                                   // 11
-      Number(total) || 0,                          // 12
-      Number(subtotal) || 0,                       // 13
-      iva16 || 0,                                  // 14
-      iva8 || 0,                                   // 15
-      Number(impuestos) || 0,                      // 16
-      receptor?.regimenFiscal || null,             // 17
-      receptor?.domicilioFiscal || null,           // 18
-      null,                                        // 19 id_facturama
-      rfc || receptor?.rfc || null,                // 20
-      id_empresa,                                  // 21
-      uuid_factura || timbreFiscal?.uuid || null,  // 22
-      rfc_emisor || emisor?.rfc || null,           // 23
-      emisor?.nombre || null,                      // 24
-      comprobante?.lugarExpedicion || null,        // 25
-      receptor?.rfc || null,                       // 26
-      receptor?.nombre || null,                    // 27
-      receptor?.usoCFDI || null,                   // 28
-      comprobante?.moneda || null,                 // 29
-      comprobante?.formaPago || null,              // 30
-      comprobante?.metodoPago || null,             // 31
-      comprobante?.condicionesDePago || null,      // 32
-      conceptosJson,                               // 33
-      Number(saldo) || 0,                          // 34
-      url_pdf || null,                             // 35
-      url_xml || null,                             // 36
-      itemsJson,                                   // 37
-      fecha_vencimiento || null,                   // 38
+      timbreFiscal?.fechaTimbrado || null, // 3
+      comprobante?.serie || null, // 4
+      comprobante?.folio || null, // 5
+      estado || "Confirmada", // 6
+      timbreFiscal?.uuid ? "Vigente" : null, // 7 estado_sat
+      "4.0", // 8 cfdi_version
+      comprobante?.tipoDeComprobante || null, // 9
+      usuario_creador, // 10
+      id_agente, // 11
+      Number(total) || 0, // 12
+      Number(subtotal) || 0, // 13
+      iva16 || 0, // 14
+      iva8 || 0, // 15
+      Number(impuestos) || 0, // 16
+      receptor?.regimenFiscal || null, // 17
+      receptor?.domicilioFiscal || null, // 18
+      null, // 19 id_facturama
+      rfc || receptor?.rfc || null, // 20
+      id_empresa, // 21
+      uuid_factura || timbreFiscal?.uuid || null, // 22
+      rfc_emisor || emisor?.rfc || null, // 23
+      emisor?.nombre || null, // 24
+      comprobante?.lugarExpedicion || null, // 25
+      receptor?.rfc || null, // 26
+      receptor?.nombre || null, // 27
+      receptor?.usoCFDI || null, // 28
+      comprobante?.moneda || null, // 29
+      comprobante?.formaPago || null, // 30
+      comprobante?.metodoPago || null, // 31
+      comprobante?.condicionesDePago || null, // 32
+      conceptosJson, // 33
+      Number(saldo) || 0, // 34
+      url_pdf || null, // 35
+      url_xml || null, // 36
+      itemsJson, // 37
+      fecha_vencimiento || null, // 38
     ]);
 
     if (!response) {
@@ -639,8 +640,6 @@ const asignarFacturaItems = async (req, res) => {
     });
   }
 };
-
-
 
 const asignarFacturaPagos = async (req, res) => {
   // helpers
@@ -975,155 +974,162 @@ const asignarFacturaPagos = async (req, res) => {
     log("Pasos a iniciar (req.body)", req.body);
 
     const {
-  facturaData: facturaDataRaw,
-  id_factura: facturasRaw,
-  ejemplo_saldos: saldosRaw,
-  id_agente = null,
-  metodo_de_pago = "aplicacion_saldo",
-  currency = "MXN",
-  concepto = "aplicacion a facturas",
-} = req.body || {};
+      facturaData: facturaDataRaw,
+      id_factura: facturasRaw,
+      ejemplo_saldos: saldosRaw,
+      id_agente = null,
+      metodo_de_pago = "aplicacion_saldo",
+      currency = "MXN",
+      concepto = "aplicacion a facturas",
+    } = req.body || {};
 
-// ---------
-// Validaciones payload
-// ---------
-if (!Array.isArray(facturaDataRaw) || facturaDataRaw.length === 0) {
-  log("ERROR facturaData faltante/vacío", { facturaDataRaw });
-  return res.status(400).json({
-    error: "Debes enviar 'facturaData' con al menos una factura.",
-  });
-}
+    // ---------
+    // Validaciones payload
+    // ---------
+    if (!Array.isArray(facturaDataRaw) || facturaDataRaw.length === 0) {
+      log("ERROR facturaData faltante/vacío", { facturaDataRaw });
+      return res.status(400).json({
+        error: "Debes enviar 'facturaData' con al menos una factura.",
+      });
+    }
 
-if (!saldosRaw || (Array.isArray(saldosRaw) && saldosRaw.length === 0)) {
-  log("ERROR ejemplo_saldos faltante/vacío", { saldosRaw });
-  return res.status(400).json({
-    error: "No elegiste saldos",
-  });
-}
+    if (!saldosRaw || (Array.isArray(saldosRaw) && saldosRaw.length === 0)) {
+      log("ERROR ejemplo_saldos faltante/vacío", { saldosRaw });
+      return res.status(400).json({
+        error: "No elegiste saldos",
+      });
+    }
 
-const facturasOrden = facturaDataRaw.map((f) => String(f.id_factura)).filter(Boolean);
+    const facturasOrden = facturaDataRaw
+      .map((f) => String(f.id_factura))
+      .filter(Boolean);
 
-if (facturasOrden.length === 0) {
-  log("ERROR id_factura no válido dentro de facturaData", { facturaDataRaw });
-  return res.status(400).json({
-    error: "Las facturas enviadas no son válidas.",
-  });
-}
+    if (facturasOrden.length === 0) {
+      log("ERROR id_factura no válido dentro de facturaData", {
+        facturaDataRaw,
+      });
+      return res.status(400).json({
+        error: "Las facturas enviadas no son válidas.",
+      });
+    }
 
-log("facturasOrden normalizado", facturasOrden);
+    log("facturasOrden normalizado", facturasOrden);
 
-let itemsEntrada = saldosRaw;
+    let itemsEntrada = saldosRaw;
 
-if (typeof itemsEntrada === "string") {
-  log("ejemplo_saldos venía string -> JSON.parse", itemsEntrada);
-  try {
-    itemsEntrada = JSON.parse(itemsEntrada);
-  } catch (e) {
-    log("ERROR JSON.parse(ejemplo_saldos)", { message: e.message });
-    return res.status(400).json({
-      error: "El campo 'ejemplo_saldos' no es un JSON válido",
-      details: e.message,
+    if (typeof itemsEntrada === "string") {
+      log("ejemplo_saldos venía string -> JSON.parse", itemsEntrada);
+      try {
+        itemsEntrada = JSON.parse(itemsEntrada);
+      } catch (e) {
+        log("ERROR JSON.parse(ejemplo_saldos)", { message: e.message });
+        return res.status(400).json({
+          error: "El campo 'ejemplo_saldos' no es un JSON válido",
+          details: e.message,
+        });
+      }
+    }
+
+    if (!Array.isArray(itemsEntrada)) itemsEntrada = [itemsEntrada];
+
+    if (itemsEntrada.length === 0) {
+      log("ERROR ejemplo_saldos vacío después de normalizar", { itemsEntrada });
+      return res.status(400).json({
+        error: "No elegiste saldos",
+      });
+    }
+
+    log("itemsEntrada normalizado", {
+      length: itemsEntrada.length,
+      preview: briefLocal(itemsEntrada, 10),
     });
-  }
-}
 
-if (!Array.isArray(itemsEntrada)) itemsEntrada = [itemsEntrada];
+    // -----------------------------
+    // 1) Cargar facturas (usar monto_asignado)
+    // -----------------------------
+    const facturas = [];
 
-if (itemsEntrada.length === 0) {
-  log("ERROR ejemplo_saldos vacío después de normalizar", { itemsEntrada });
-  return res.status(400).json({
-    error: "No elegiste saldos",
-  });
-}
+    for (const facturaPayload of facturaDataRaw) {
+      const idf = String(facturaPayload.id_factura || "");
+      const montoAsignado = Number(facturaPayload.monto_asignado ?? 0);
 
-log("itemsEntrada normalizado", {
-  length: itemsEntrada.length,
-  preview: briefLocal(itemsEntrada, 10),
-});
+      if (!idf) {
+        log("ERROR: factura sin id_factura", { facturaPayload });
+        return res.status(400).json({
+          error: "Hay una factura sin id_factura en facturaData.",
+        });
+      }
 
-// -----------------------------
-// 1) Cargar facturas (usar monto_asignado)
-// -----------------------------
-const facturas = [];
+      if (!Number.isFinite(montoAsignado) || montoAsignado <= 0) {
+        log("ERROR: monto_asignado inválido", {
+          id_factura: idf,
+          montoAsignado,
+        });
+        return res.status(400).json({
+          error: `El monto_asignado de la factura ${idf} debe ser mayor a 0.`,
+        });
+      }
 
-for (const facturaPayload of facturaDataRaw) {
-  const idf = String(facturaPayload.id_factura || "");
-  const montoAsignado = Number(facturaPayload.monto_asignado ?? 0);
+      const q = "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;";
+      const r = await executeQuery(q, [idf]);
+      logQuery("SELECT factura saldo", q, [idf], r);
 
-  if (!idf) {
-    log("ERROR: factura sin id_factura", { facturaPayload });
-    return res.status(400).json({
-      error: "Hay una factura sin id_factura en facturaData.",
-    });
-  }
+      if (!r?.length) {
+        log("ERROR: Factura no encontrada", { id_factura: idf });
+        return res.status(400).json({
+          error: `Factura no encontrada: ${idf}`,
+        });
+      }
 
-  if (!Number.isFinite(montoAsignado) || montoAsignado <= 0) {
-    log("ERROR: monto_asignado inválido", { id_factura: idf, montoAsignado });
-    return res.status(400).json({
-      error: `El monto_asignado de la factura ${idf} debe ser mayor a 0.`,
-    });
-  }
+      const saldoDisponible = Number(r[0].saldo) || 0;
 
-  const q = "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;";
-  const r = await executeQuery(q, [idf]);
-  logQuery("SELECT factura saldo", q, [idf], r);
+      if (saldoDisponible <= 0) {
+        log("ERROR: Factura sin saldo disponible", {
+          id_factura: idf,
+          saldo: saldoDisponible,
+        });
+        return res.status(400).json({
+          error:
+            "No se puede aplicar pago: la factura ya fue pagada total o parcialmente (saldo <= 0).",
+          details: { id_factura: idf, saldo: saldoDisponible },
+        });
+      }
 
-  if (!r?.length) {
-    log("ERROR: Factura no encontrada", { id_factura: idf });
-    return res.status(400).json({
-      error: `Factura no encontrada: ${idf}`,
-    });
-  }
+      if (montoAsignado > saldoDisponible) {
+        log("ERROR: monto_asignado mayor al saldo disponible", {
+          id_factura: idf,
+          monto_asignado: montoAsignado,
+          saldo_disponible: saldoDisponible,
+        });
+        return res.status(400).json({
+          error: "El monto a asignar no está disponible.",
+          details: {
+            id_factura: idf,
+            monto_asignado: montoAsignado,
+            saldo_disponible: saldoDisponible,
+          },
+        });
+      }
 
-  const saldoDisponible = Number(r[0].saldo) || 0;
-
-  if (saldoDisponible <= 0) {
-    log("ERROR: Factura sin saldo disponible", {
-      id_factura: idf,
-      saldo: saldoDisponible,
-    });
-    return res.status(400).json({
-      error:
-        "No se puede aplicar pago: la factura ya fue pagada total o parcialmente (saldo <= 0).",
-      details: { id_factura: idf, saldo: saldoDisponible },
-    });
-  }
-
-  if (montoAsignado > saldoDisponible) {
-    log("ERROR: monto_asignado mayor al saldo disponible", {
-      id_factura: idf,
-      monto_asignado: montoAsignado,
-      saldo_disponible: saldoDisponible,
-    });
-    return res.status(400).json({
-      error: "El monto a asignar no está disponible.",
-      details: {
-        id_factura: idf,
-        monto_asignado: montoAsignado,
+      const f = {
+        id_factura: String(r[0].id_factura),
+        saldo: montoAsignado,
         saldo_disponible: saldoDisponible,
-      },
+      };
+
+      facturas.push(f);
+      log("facturas.push", f);
+    }
+
+    const totalFacturasCents = facturas.reduce(
+      (acc, f) => acc + toCents(f.saldo),
+      0,
+    );
+
+    log("Facturas cargadas", {
+      facturas,
+      total_facturas: fromCents(totalFacturasCents),
     });
-  }
-
-  const f = {
-    id_factura: String(r[0].id_factura),
-    saldo: montoAsignado,
-    saldo_disponible: saldoDisponible,
-  };
-
-  facturas.push(f);
-  log("facturas.push", f);
-}
-
-const totalFacturasCents = facturas.reduce(
-  (acc, f) => acc + toCents(f.saldo),
-  0,
-);
-
-log("Facturas cargadas", {
-  facturas,
-  total_facturas: fromCents(totalFacturasCents),
-});
 
     // -----------------------------
     // 2) Vista de saldos disponibles (saldo y monto_por_facturar por raw_id)
@@ -1718,7 +1724,7 @@ log("Facturas cargadas", {
 
     log("[BRIDGE] Inserciones completadas", { insertedBridge });
 
-   // ============================================================
+    // ============================================================
     // 9) UPDATE facturas -> saldo = saldo_disponible - monto_asignado
     // ============================================================
     let updatedFacturas = 0;
@@ -2552,7 +2558,7 @@ const getDetallesConexionesFactura = async (req, res) => {
 
 const asignarURLS_factura = async (req, res) => {
   const { id_factura, url_pdf, url_xml } = req.query;
-    console.log("si llego 😎😎😎😎😎",url_pdf,url_xml)
+  console.log("si llego 😎😎😎😎😎", url_pdf, url_xml);
   try {
     const response = await executeSP("sp_asignar_urls_a_facturas", [
       id_factura,
@@ -2824,13 +2830,13 @@ const agentes_report_fac = async (req, res) => {
           chin: toYMD(row.chin),
           chout: toYMD(row.chout),
           codigo_confirmacion_base: getCodigoConfirmacionBase(
-            row.codigo_confirmacion
+            row.codigo_confirmacion,
           ),
           origen_estado,
           destino_estado,
           estado_reserva: estado_reserva_ruta,
         };
-      }
+      },
     );
 
     res.status(200).json({
@@ -2861,17 +2867,77 @@ const all_facturas = async (req, res) => {
 
     const result = await executeQuery(query);
 
-    console.log(`📋 [all_facturas] Facturas pendientes de S3: ${result?.length ?? 0}`);
+    console.log(
+      `📋 [all_facturas] Facturas pendientes de S3: ${result?.length ?? 0}`,
+    );
 
     return res.status(200).json({
       data: result,
     });
-
   } catch (error) {
     console.error("❌ Error en all_facturas:", error);
     return res.status(500).json({
       error: "Error al obtener facturas",
       details: error.message,
+    });
+  }
+};
+
+const stripe = require("stripe")(process.env.API_STRIPE);
+
+const crearLinkPagoFacturas = async (req, res) => {
+  try {
+    const facturas = req.body;
+
+    if (!Array.isArray(facturas) || facturas.length === 0) {
+      return res
+        .status(400)
+        .json({ ok: false, message: "Debe enviar al menos una factura" });
+    }
+
+    const lineItems = facturas.map((f) => {
+      const monto = Number(f.monto_a_pagar);
+      if (!monto || monto <= 0) {
+        throw new Error(
+          `monto_a_pagar inválido en factura ${f.folio ?? f.id_factura}`,
+        );
+      }
+      return {
+        price_data: {
+          currency: "mxn",
+          unit_amount: Math.round(monto * 100),
+          product_data: {
+            name: `Factura ${f.folio ?? f.id_factura}`,
+            description: `UUID: ${f.uuid_factura}`,
+          },
+        },
+        quantity: 1,
+      };
+    });
+
+    const baseUrl = process.env.REDIRECT_URL ?? "http://localhost:5173";
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
+      line_items: lineItems,
+      success_url: `${baseUrl}/pago-exitoso?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/pago-cancelado`,
+      metadata: {
+        ids_facturas: facturas.map((f) => f.id_factura).join(","),
+      },
+    });
+
+    return res.status(200).json({
+      ok: true,
+      url: session.url,
+      session_id: session.id,
+    });
+  } catch (error) {
+    console.error("❌ Error creando link de pago Stripe:", error);
+    return res.status(500).json({
+      ok: false,
+      message: error.message ?? "Error creando link de pago",
     });
   }
 };
@@ -2905,6 +2971,7 @@ module.exports = {
   detalleFacturasCxC,
   resumenFacturasCxC,
   all_facturas,
+  crearLinkPagoFacturas,
 };
 
 //ya quedo "#$%&/()="
