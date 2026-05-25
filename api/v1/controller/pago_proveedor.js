@@ -3807,6 +3807,10 @@ const getSolicitudes = async (req, res) => {
       })(),
 
       uuid_factura: clean(req.query.uuid_factura),
+
+      tipo_reserva_pago: clean(req.query.tipo_reserva_pago),
+      pagos_parciales: clean(req.query.pagos_parciales),
+      facturas_parciales: clean(req.query.facturas_parciales),
     };
 
     const pagina = Math.max(
@@ -3850,16 +3854,17 @@ const getSolicitudes = async (req, res) => {
         filters.comentario_CXP,
         filters.estatus_pagos, // p_estatus_pagos (pos 24)
 
-        filters.uuid_factura, // p_uuid_factura
-        pagina, // p_pagina
-        limite, // p_limite
+        filters.uuid_factura,          // p_uuid_factura
+        filters.tipo_reserva_pago,     // p_tipo_reserva_pago
+        filters.pagos_parciales,       // p_pagos_parciales
+        filters.facturas_parciales,    // p_facturas_parciales
+        pagina,                        // p_pagina
+        limite,                        // p_limite
       ]),
-      executeQuery(
-        `SELECT COUNT(*) AS total FROM solicitudes_pago_proveedor WHERE estado_solicitud <> 'CANCELADA'`,
-      ),
     ]);
 
-    const totalNoCanceladas = Number(totalRows?.[0]?.total ?? 0);
+    const totalFiltrado = Number(spRows?.[0]?.total_filtrado ?? 0);
+    const totalPages = totalFiltrado > 0 ? Math.ceil(totalFiltrado / limite) : 1;
 
     const ids = (spRows || [])
       .map((r) => r.id_solicitud_proveedor)
@@ -4002,7 +4007,8 @@ const getSolicitudes = async (req, res) => {
       limit: limite,
       count: data.length,
       has_more: spRows.length === limite,
-      total_no_canceladas: totalNoCanceladas,
+      total_filtrado: totalFiltrado,
+      total_pages: totalPages,
     };
 
     if (debug) {
