@@ -4823,6 +4823,8 @@ const cargarFactura = async (req, res) => {
 
   const id_factura = "fac-" + uuidv4();
 
+  const userId = req.session?.user?.id || null;
+
   const toNumber = (v) => {
     const n = Number(v);
     return Number.isFinite(n) ? n : 0;
@@ -5042,6 +5044,7 @@ const cargarFactura = async (req, res) => {
         impuestos_moneda_O,
 
         proveedoresDataSP,
+        userId,
       ],
     );
 
