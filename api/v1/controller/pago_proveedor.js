@@ -3,6 +3,7 @@ const {
   executeSP2,
   executeQuery,
   executeTransaction,
+  runTransaction,
 } = require("../../../config/db");
 const { v4: uuidv4 } = require("uuid");
 const {
@@ -4822,7 +4823,6 @@ const cargarFactura = async (req, res) => {
   } = req.body;
 
   const id_factura = "fac-" + uuidv4();
-
   const userId = req.session?.user?.id || null;
 
   const toNumber = (v) => {
@@ -4873,7 +4873,6 @@ const cargarFactura = async (req, res) => {
       proveedorFirst?.is_credito ?? (fecha_vencimiento ? 1 : 0),
     );
 
-    // ✅ nuevos campos para facturas_pago_proveedor
     const razon_social = String(
       facturaData?.receptor?.nombre ?? req.body?.razon_social ?? "",
     ).trim();
@@ -4919,7 +4918,6 @@ const cargarFactura = async (req, res) => {
         impuestos,
     );
 
-    // ✅ Normalizar JSON para SP (ARRAY siempre)
     const detalle = proveedoresArr.map((p, idx) => {
       const id_solicitud_proveedor =
         p?.solicitud_proveedor?.id_solicitud_proveedor ??
@@ -4947,7 +4945,6 @@ const cargarFactura = async (req, res) => {
         );
       }
 
-      // Con propina el monto_facturado puede superar monto_solicitado
       if (
         !hasPropina &&
         monto_solicitado > 0 &&
@@ -4977,10 +4974,7 @@ const cargarFactura = async (req, res) => {
 
       return {
         id_pago,
-        solicitud_proveedor: {
-          id_solicitud_proveedor,
-          monto_solicitado,
-        },
+        solicitud_proveedor: { id_solicitud_proveedor, monto_solicitado },
         monto_facturado,
         pendiente_facturar,
         tipo_cambio,
@@ -5002,51 +4996,42 @@ const cargarFactura = async (req, res) => {
     }
 
     const proveedoresDataSP = JSON.stringify(detalle);
-
     const saldo_x_aplicar_items = Math.max(0, totalN - monto_facturado_total);
     const estado_factura = estado;
 
-    const response = await executeSP(
-      "sp_inserta_factura_desde_carga_proveedores",
-      [
-        id_factura,
-
-        uuid_factura,
-        rfc_emisor,
-        proveedor_razon_social,
-        monto_facturado_total,
-        url_xml,
-        url_pdf,
-        fechaFacturaSQL,
-        es_credito,
-        estado_factura,
-
-        fechaFacturaSQL,
-        estado,
-        usuario_creador,
-        id_agente,
-        totalN,
-        subtotalN,
-        impuestosN,
-        saldo_x_aplicar_items,
-        rfc,
-        id_empresa,
-        fecha_vencimiento,
-
-        // ✅ nuevos campos
-        razon_social,
-        uso_cfdi,
-        moneda,
-        forma_pago,
-        metodo_pago,
-        total_moneda_O,
-        sub_total_moneda_O,
-        impuestos_moneda_O,
-
-        proveedoresDataSP,
-        userId,
-      ],
-    );
+    const spParams = [
+      id_factura,
+      uuid_factura,
+      rfc_emisor,
+      proveedor_razon_social,
+      monto_facturado_total,
+      url_xml,
+      url_pdf,
+      fechaFacturaSQL,
+      es_credito,
+      estado_factura,
+      fechaFacturaSQL,
+      estado,
+      usuario_creador,
+      id_agente,
+      totalN,
+      subtotalN,
+      impuestosN,
+      saldo_x_aplicar_items,
+      rfc,
+      id_empresa,
+      fecha_vencimiento,
+      razon_social,
+      uso_cfdi,
+      moneda,
+      forma_pago,
+      metodo_pago,
+      total_moneda_O,
+      sub_total_moneda_O,
+      impuestos_moneda_O,
+      proveedoresDataSP,
+      userId,
+    ];
 
     const idsSolicitudes = [
       ...new Set(
@@ -5056,109 +5041,104 @@ const cargarFactura = async (req, res) => {
       ),
     ];
 
-    if (idsSolicitudes.length > 0) {
-      const placeholders = idsSolicitudes.map(() => "?").join(",");
+    let propinaAdvertencias = [];
 
-      const updateEstatus = `
-        UPDATE solicitudes_pago_proveedor spp
-        LEFT JOIN (
-          SELECT
-            pfp.id_solicitud,
-            SUM(
-              CAST(COALESCE(NULLIF(pfp.monto_facturado, ''), '0') AS DECIMAL(12,2))
-            ) AS total_facturado
-          FROM pagos_facturas_proveedores pfp
-          WHERE pfp.id_solicitud IN (${placeholders})
-          GROUP BY pfp.id_solicitud
-        ) agg
-          ON agg.id_solicitud = spp.id_solicitud_proveedor
-        SET
-          spp.monto_facturado = IFNULL(agg.total_facturado, 0),
-          spp.monto_por_facturar = GREATEST(
-            CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
-            0
-          ),
-          spp.estado_facturacion = CASE
-            WHEN GREATEST(
-              CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
-              0
-            ) = 0 THEN 'facturado'
-            WHEN GREATEST(
-              CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0),
-              0
-            ) <> CAST(spp.monto_solicitado AS DECIMAL(12,2)) THEN 'parcial'
-            ELSE 'pendiente'
-          END,
-          spp.estatus_pagos = CASE
-            WHEN CAST(COALESCE(NULLIF(spp.saldo, ''), '0') AS DECIMAL(12,2)) = 0 THEN 'pagado'
-            ELSE spp.estatus_pagos
-          END
-        WHERE spp.id_solicitud_proveedor IN (${placeholders});
-      `;
+    const { response } = await runTransaction(async (connection) => {
+      // 1. Ejecutar SP en la misma conexión de la transacción
+      const placeholdersSP = spParams.map(() => "?").join(", ");
+      const [spRows] = await connection.query(
+        `CALL sp_inserta_factura_desde_carga_proveedores(${placeholdersSP})`,
+        spParams,
+      );
+      const response = Array.isArray(spRows[0]) ? spRows[0] : spRows;
 
-      await executeQuery(updateEstatus, [...idsSolicitudes, ...idsSolicitudes]);
+      // 2. Actualizar estatus de solicitudes
+      if (idsSolicitudes.length > 0) {
+        const ph = idsSolicitudes.map(() => "?").join(",");
 
-      // ── Propina ──────────────────────────────────────────────────────────
-      const propinaMonto = toNumber(propina_data?.monto_propina ?? 0);
-      let propinaAdvertencias = [];
-
-      if (
-        propina_data?.tiene_propina &&
-        propinaMonto > 0 &&
-        idsSolicitudes.length > 0
-      ) {
-        const TOLERANCIA = 5;
-        const totalSinPropina = totalN;
-        const totalConPropina = totalN + propinaMonto;
-
-        const idsCalifican = detalle
-          .filter((x) => {
-            const ms = toNumber(x?.solicitud_proveedor?.monto_solicitado);
-            return (
-              Math.abs(ms - totalSinPropina) <= TOLERANCIA ||
-              Math.abs(ms - totalConPropina) <= TOLERANCIA
-            );
-          })
-          .map((x) => x?.solicitud_proveedor?.id_solicitud_proveedor)
-          .filter(Boolean);
-
-        const idsNoCalifican = idsSolicitudes.filter(
-          (id) => !idsCalifican.includes(id),
+        await connection.execute(
+          `UPDATE solicitudes_pago_proveedor spp
+           LEFT JOIN (
+             SELECT
+               pfp.id_solicitud,
+               SUM(CAST(COALESCE(NULLIF(pfp.monto_facturado, ''), '0') AS DECIMAL(12,2))) AS total_facturado
+             FROM pagos_facturas_proveedores pfp
+             WHERE pfp.id_solicitud IN (${ph})
+             GROUP BY pfp.id_solicitud
+           ) agg ON agg.id_solicitud = spp.id_solicitud_proveedor
+           SET
+             spp.monto_facturado    = IFNULL(agg.total_facturado, 0),
+             spp.monto_por_facturar = GREATEST(
+               CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0), 0
+             ),
+             spp.estado_facturacion = CASE
+               WHEN GREATEST(CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0), 0) = 0
+                 THEN 'facturado'
+               WHEN GREATEST(CAST(spp.monto_solicitado AS DECIMAL(12,2)) - IFNULL(agg.total_facturado, 0), 0)
+                    <> CAST(spp.monto_solicitado AS DECIMAL(12,2))
+                 THEN 'parcial'
+               ELSE 'pendiente'
+             END,
+             spp.estatus_pagos = CASE
+               WHEN CAST(COALESCE(NULLIF(spp.saldo, ''), '0') AS DECIMAL(12,2)) = 0 THEN 'pagado'
+               ELSE spp.estatus_pagos
+             END
+           WHERE spp.id_solicitud_proveedor IN (${ph})`,
+          [...idsSolicitudes, ...idsSolicitudes],
         );
 
-        if (idsNoCalifican.length > 0) {
-          propinaAdvertencias = idsNoCalifican.map((id) => {
-            const d = detalle.find(
-              (x) => x?.solicitud_proveedor?.id_solicitud_proveedor === id,
-            );
-            return {
-              id_solicitud: id,
-              monto_solicitado:
-                d?.solicitud_proveedor?.monto_solicitado ?? null,
-              mensaje: "No procede por costos distintos",
-            };
-          });
-        }
+        // 3. Propina
+        if (propina_data?.tiene_propina && propinaMonto > 0) {
+          const TOLERANCIA = 5;
+          const totalSinPropina = totalN;
+          const totalConPropina = totalN + propinaMonto;
 
-        if (idsCalifican.length > 0) {
-          const placeholdersPropina = idsCalifican.map(() => "?").join(",");
-          const updatePropina = `
-            UPDATE solicitudes_pago_proveedor
-            SET
-              propina          = 1,
-              monto_adicional  = ?,
-              monto_original   = CAST(COALESCE(NULLIF(monto_solicitado, ''), '0') AS DECIMAL(12,2)),
-              monto_solicitado = CAST(COALESCE(NULLIF(monto_solicitado, ''), '0') AS DECIMAL(12,2)) + ?
-            WHERE id_solicitud_proveedor IN (${placeholdersPropina});
-          `;
-          await executeQuery(updatePropina, [
-            propinaMonto,
-            propinaMonto,
-            ...idsCalifican,
-          ]);
+          const idsCalifican = detalle
+            .filter((x) => {
+              const ms = toNumber(x?.solicitud_proveedor?.monto_solicitado);
+              return (
+                Math.abs(ms - totalSinPropina) <= TOLERANCIA ||
+                Math.abs(ms - totalConPropina) <= TOLERANCIA
+              );
+            })
+            .map((x) => x?.solicitud_proveedor?.id_solicitud_proveedor)
+            .filter(Boolean);
+
+          const idsNoCalifican = idsSolicitudes.filter(
+            (id) => !idsCalifican.includes(id),
+          );
+
+          if (idsNoCalifican.length > 0) {
+            propinaAdvertencias = idsNoCalifican.map((id) => {
+              const d = detalle.find(
+                (x) => x?.solicitud_proveedor?.id_solicitud_proveedor === id,
+              );
+              return {
+                id_solicitud: id,
+                monto_solicitado: d?.solicitud_proveedor?.monto_solicitado ?? null,
+                mensaje: "No procede por costos distintos",
+              };
+            });
+          }
+
+          if (idsCalifican.length > 0) {
+            const phPropina = idsCalifican.map(() => "?").join(",");
+            await connection.execute(
+              `UPDATE solicitudes_pago_proveedor
+               SET
+                 propina          = 1,
+                 monto_adicional  = ?,
+                 monto_original   = CAST(COALESCE(NULLIF(monto_solicitado, ''), '0') AS DECIMAL(12,2)),
+                 monto_solicitado = CAST(COALESCE(NULLIF(monto_solicitado, ''), '0') AS DECIMAL(12,2)) + ?
+               WHERE id_solicitud_proveedor IN (${phPropina})`,
+              [propinaMonto, propinaMonto, ...idsCalifican],
+            );
+          }
         }
       }
-    }
+
+      return { response };
+    });
 
     return res.status(201).json({
       message: "Factura proveedor creada correctamente desde carga",
