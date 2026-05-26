@@ -170,6 +170,7 @@ const buscarHotelesConFiltros = async ({
   lat,
   lng,
   id_hotel,
+  id_cliente,
 }) => {
   if (id_hotel) {
     return await executeQuery(
@@ -250,9 +251,19 @@ const buscarHotelesConFiltros = async ({
     }
   }
 
-  const whereSQL = where.length
-    ? `WHERE chp.is_allowed = 1 AND (${where.join(" OR ")})`
-    : "";
+  const baseConditions = ["chp.is_allowed = 1"];
+  const baseParams = [];
+  if (id_cliente) {
+    baseConditions.push("chp.id_agente = ?");
+    baseParams.push(String(id_cliente));
+  }
+
+  let whereSQL = "";
+  if (where.length) {
+    whereSQL = `WHERE ${baseConditions.join(" AND ")} AND (${where.join(" OR ")})`;
+  } else if (id_cliente) {
+    whereSQL = `WHERE ${baseConditions.join(" AND ")}`;
+  }
 
   const query = `
     SELECT
@@ -277,6 +288,7 @@ const buscarHotelesConFiltros = async ({
 
   const finalParams = [
     ...distanceParams,
+    ...baseParams,
     ...whereParams,
     ...(latFinal && lngFinal ? [] : orderParams),
   ];

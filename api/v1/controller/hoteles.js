@@ -1137,9 +1137,9 @@ const agregarPrioridadHotel = async (req, res) => {
 
 const buscarHotelesParaCotizacion = async (req, res) => {
   try {
-    const { ciudad, hotel, cp, lat, lng, checkin, checkout, id_hotel } = req.query;
+    const { ciudad, hotel, cp, lat, lng, checkin, checkout, id_hotel, id_cliente } = req.query;
 
-    const hoteles = await model.buscarHotelesConFiltros({ ciudad, hotel, cp, lat, lng, id_hotel });
+    const hoteles = await model.buscarHotelesConFiltros({ ciudad, hotel, cp, lat, lng, id_hotel, id_cliente });
 
     if (!hoteles.length) {
       return res.status(404).json({

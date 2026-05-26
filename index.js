@@ -176,6 +176,7 @@ app.get("/probando", async (req, res) => {
       checkin,
       checkout,
       id_hotel,
+      id_cliente,
     } = req.query;
 
     // Si hotel es un objeto con id, usar ese flujo
@@ -232,6 +233,7 @@ app.get("/probando", async (req, res) => {
       lat,
       lng,
       id_hotel,
+      id_cliente,
     });
 
     if (!response[iteracion]) {

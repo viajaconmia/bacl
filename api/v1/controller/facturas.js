@@ -2915,7 +2915,7 @@ const crearLinkPagoFacturas = async (req, res) => {
       };
     });
 
-    const baseUrl = process.env.REDIRECT_URL ?? "http://localhost:5173";
+    const baseUrl = process.env.REDIRECT_URL ?? "https://www.viajaconmia.com";
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
