@@ -6754,11 +6754,14 @@ const Detalles = async (req, res) => {
       const placeholders = facturaIdsFinales.map(() => "?").join(",");
 
       const facturasSql = `
-        SELECT *
-        FROM facturas_pago_proveedor
-        WHERE id_factura_proveedor IN (${placeholders})
-           OR id_solicitud_proveedor = ?
-        ORDER BY COALESCE(fecha_factura, fecha_emision) DESC, created_at DESC;
+        SELECT fpp.*, COALESCE(ua.name, fpp.id_creador) AS nombre_creador
+        FROM facturas_pago_proveedor fpp
+        LEFT JOIN users_admin ua
+          ON fpp.id_creador IS NOT NULL
+         AND ua.id COLLATE utf8mb4_unicode_ci = fpp.id_creador COLLATE utf8mb4_unicode_ci
+        WHERE fpp.id_factura_proveedor IN (${placeholders})
+           OR fpp.id_solicitud_proveedor = ?
+        ORDER BY COALESCE(fpp.fecha_factura, fpp.fecha_emision) DESC, fpp.created_at DESC;
       `;
 
       facturas = getRows(
@@ -6769,10 +6772,13 @@ const Detalles = async (req, res) => {
       );
     } else {
       const facturasSql = `
-        SELECT *
-        FROM facturas_pago_proveedor
-        WHERE id_solicitud_proveedor = ?
-        ORDER BY COALESCE(fecha_factura, fecha_emision) DESC, created_at DESC;
+        SELECT fpp.*, COALESCE(ua.name, fpp.id_creador) AS nombre_creador
+        FROM facturas_pago_proveedor fpp
+        LEFT JOIN users_admin ua
+          ON fpp.id_creador IS NOT NULL
+         AND ua.id COLLATE utf8mb4_unicode_ci = fpp.id_creador COLLATE utf8mb4_unicode_ci
+        WHERE fpp.id_solicitud_proveedor = ?
+        ORDER BY COALESCE(fpp.fecha_factura, fpp.fecha_emision) DESC, fpp.created_at DESC;
       `;
 
       facturas = getRows(
@@ -6790,12 +6796,16 @@ const Detalles = async (req, res) => {
       facturas = Array.from(map.values());
     }
 
-    // Normalizar URLs
-    facturas = facturas.map((f) => ({
-      ...f,
-      url_pdf: safeString(f?.url_pdf) || null,
-      url_xml: safeString(f?.url_xml) || null,
-    }));
+    // Normalizar URLs e id_creador
+    facturas = facturas.map((f) => {
+      const { nombre_creador, ...rest } = f;
+      return {
+        ...rest,
+        id_creador: nombre_creador ?? f.id_creador ?? null,
+        url_pdf: safeString(f?.url_pdf) || null,
+        url_xml: safeString(f?.url_xml) || null,
+      };
+    });
 
     pagos = pagos.map((p) => ({
       ...p,
@@ -6996,6 +7006,26 @@ const Detalles = async (req, res) => {
       ok: false,
       error: "Error en el servidor",
       details: error?.message ?? error,
+    });
+  }
+};
+
+const solicitudes_lu = async (req, res) => {
+  try {
+    const estado = req.query.estado ?? null;
+
+    const rows = await executeSP("sp_dispersion_solicitudes", [estado]);
+
+    return res.status(200).json({
+      ok: true,
+      estado: estado ?? "todos",
+      data: Array.isArray(rows) ? rows : [],
+    });
+  } catch (error) {
+    console.error("Error en solicitudes_lu:", error);
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || "Error al obtener solicitudes",
     });
   }
 };
@@ -8816,4 +8846,5 @@ module.exports = {
   generar_saldo_a_favor,
   reasignarPago,
   cuentas,
+  solicitudes_lu
 };

@@ -4,6 +4,7 @@ const { TipoCambio } = require("../../controller/tipo_cambio");
 
 router.get("/solicitud", controller.getSolicitudes2);
 router.get("/solicitud_conciliacion", controller.getSolicitudes);
+router.get("/solicitudes_lu",controller.solicitudes_lu)
 router.post("/solicitud", controller.createSolicitud);
 router.get("/saldo_a_favor", controller.saldo_a_favor)
 router.post("/cambio_de_estatus", controller.cambio_estatus)
