@@ -2544,7 +2544,8 @@ const get_reservasClient_by_id_agente = async (body) => {
 };
 
 const obtener = async (req, res) => {
-  let { page, length, finanzas = false } = req.query;
+  let { page, length, finanzas = false, uuid_factura, uuid_recibido } = req.query;
+  if (uuid_factura || uuid_recibido) finanzas = true;
   page = page ? Number(page) : null;
   length = length ? Number(length) : null;
 
@@ -2661,36 +2662,50 @@ const obtener = async (req, res) => {
 
   const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
+  // Filtros que solo aplican cuando finanzas=true (requieren los JOINs de facturas)
+  const whereFinanzas = [];
+  const paramsFinanzas = [];
+  if (uuid_factura) {
+    whereFinanzas.push(`f.uuid_factura LIKE CONCAT('%', ?, '%')`);
+    paramsFinanzas.push(uuid_factura);
+  }
+  if (uuid_recibido) {
+    whereFinanzas.push(`vp.uuid_factura LIKE CONCAT('%', ?, '%')`);
+    paramsFinanzas.push(uuid_recibido);
+  }
+  const whereFinanzasSQL = whereFinanzas.length
+    ? (where.length ? ` AND ${whereFinanzas.join(" AND ")}` : `WHERE ${whereFinanzas.join(" AND ")}`)
+    : "";
+
+  const finanzasJoins = `LEFT JOIN items_facturas fi ON vw.id_relacion = fi.id_relacion LEFT JOIN facturas f ON fi.id_factura = f.id_factura
+    left join vw_pagos_facturas_proveedores_detalle vp on vp.id_solicitud = vw.id_solicitud_proveedor`;
+
   const sqlTotal = `
-    SELECT COUNT(*) AS total
+    SELECT COUNT(DISTINCT vw.id_booking) AS total
     FROM vw_new_reservas vw
-${whereSQL}
+${finanzas ? finanzasJoins : ""}
+${whereSQL}${whereFinanzasSQL}
   `;
 
   const sqlData = `
-  SELECT 
+  SELECT
   ${
     finanzas
-      ? `vw.*, f.uuid_factura, f.total as total_factura, vp.uuid_factura as uuid_recibido, vp.monto_facturado as monto_facturado_factura_recibida`
+      ? `vw.*, GROUP_CONCAT(DISTINCT f.uuid_factura ORDER BY f.uuid_factura SEPARATOR ', ') as uuid_factura, SUM(DISTINCT f.total) as total_factura, GROUP_CONCAT(DISTINCT vp.uuid_factura ORDER BY vp.uuid_factura SEPARATOR ', ') as uuid_recibido, SUM(vp.monto_facturado) as monto_facturado_factura_recibida`
       : "vw.*"
   }
   FROM vw_new_reservas vw
-${
-  finanzas
-    ? `LEFT JOIN items_facturas fi ON vw.id_relacion = fi.id_relacion LEFT JOIN facturas f ON fi.id_factura = f.id_factura
-    left join vw_pagos_facturas_proveedores_detalle vp on vp.id_solicitud = vw.id_solicitud_proveedor`
-    : ""
-}
-${whereSQL}
-${finanzas ? "GROUP BY vw.id_booking, f.id_factura" : ""}
+${finanzas ? finanzasJoins : ""}
+${whereSQL}${whereFinanzasSQL}
+${finanzas ? "GROUP BY vw.id_booking" : ""}
   ORDER BY vw.created_at DESC
   ${hasPagination ? `LIMIT ${length} OFFSET ${offset}` : ""}
 `;
 
   try {
     const [dataRaw, [{ total }]] = await Promise.all([
-      executeQuery(sqlData, [...params]),
-      executeQuery(sqlTotal, params),
+      executeQuery(sqlData, [...params, ...paramsFinanzas]),
+      executeQuery(sqlTotal, [...params, ...paramsFinanzas]),
     ]);
 
     res.status(200).json({

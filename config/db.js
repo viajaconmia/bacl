@@ -219,6 +219,13 @@ async function executeTransactionSP(procedure, params = []) {
   }
 }
 
+async function setAuditUser(connection, user) {
+  await connection.query(
+    `SET @usuario_actual = ?, @nombre_usuario_actual = ?`,
+    [user?.id ?? null, user?.name ?? null],
+  );
+}
+
 module.exports = {
   pool,
   executeQuery,
@@ -231,4 +238,5 @@ module.exports = {
   update,
   getById,
   get,
+  setAuditUser,
 };

@@ -16,8 +16,9 @@ router.get("/fiscal", controller.getDatosFiscales);
 
 //Cuentas del proveedor
 router.get("/cuentas", controller.getCuentas);
-router.post("/cuentas", controller.createProveedorCuenta);
-router.put("/cuentas", controller.updateProveedorCuenta);
+router.post("/cuentas", upload.single("caratula"), controller.createProveedorCuenta);
+router.put("/cuentas", upload.single("caratula"), controller.updateProveedorCuenta);
+router.delete("/cuentas", controller.deleteProveedorCuenta);
 router.post("/", controller.createProveedor);
 
 //Proveedor

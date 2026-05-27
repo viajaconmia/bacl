@@ -3,8 +3,9 @@ const {
   runTransaction,
   executeSP,
   executeTransaction,
+  setAuditUser,
 } = require("../../../config/db");
-const { subirBufferAS3 } = require("../utils/subir-imagen");
+const { subirBufferAS3, eliminarDeS3 } = require("../utils/subir-imagen");
 
 const getProveedores = async (req, res) => {
   try {
@@ -91,7 +92,7 @@ const getCuentas = async (req, res) => {
     const { id_proveedor } = req.query;
     console.log(req.query);
     const cuentas = await executeQuery(
-      `select * from proveedores_cuentas where id_proveedor = ?;`,
+      `select * from proveedores_cuentas where id_proveedor = ? AND active = 1;`,
       [id_proveedor],
     );
     res.status(200).json({ message: "", data: cuentas });
@@ -124,7 +125,7 @@ const getDatosFiscales = async (req, res) => {
     const { id } = req.query;
 
     const cuentas = await executeQuery(
-      `select * from proveedores_cuentas where id_proveedor = ?`,
+      `select * from proveedores_cuentas where id_proveedor = ? AND active = 1`,
       [id],
     );
 
@@ -482,36 +483,51 @@ const createProveedorCuenta = async (req, res) => {
   try {
     const { id_proveedor, cuenta, banco, titular, comentarios, alias } =
       req.body;
+    const { user } = req.session || {};
 
-    // Validaciones básicas (NOT NULL)
+    if (!user)
+      return res.status(401).json({
+        message: "Se requiere usuario autenticado para esta acción",
+        data: null,
+      });
     if (!id_proveedor) throw new Error("El ID del proveedor es obligatorio");
     if (!cuenta || !cuenta.trim()) throw new Error("La cuenta es obligatoria");
 
-    // 2. Insertar la cuenta
-    await executeQuery(
-      `INSERT INTO proveedores_cuentas 
-       (id_proveedor, cuenta, banco, titular, comentarios, alias)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [
-        id_proveedor,
-        cuenta.trim(),
-        banco?.trim().toUpperCase() || null,
-        titular?.trim().toUpperCase() || null,
-        comentarios || null,
-        alias?.trim().toUpperCase() || null,
-      ],
-    );
+    // S3 fuera de la transacción: no tiene rollback y no debe bloquear la conexión
+    let url_caratula = null;
+    if (req.file) {
+      const key = `comprobantes/${Date.now()}_${req.file.originalname}`;
+      url_caratula = await subirBufferAS3(
+        req.file.buffer,
+        key,
+        req.file.mimetype,
+      );
+    }
 
-    // 3. Regresar las cuentas del proveedor
+    await runTransaction(async (conn) => {
+      await setAuditUser(conn, user);
+      await conn.execute(
+        `INSERT INTO proveedores_cuentas
+         (id_proveedor, cuenta, banco, titular, comentarios, alias, url_caratula)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id_proveedor,
+          cuenta.trim(),
+          banco?.trim().toUpperCase() || null,
+          titular?.trim().toUpperCase() || null,
+          comentarios || null,
+          alias?.trim().toUpperCase() || null,
+          url_caratula,
+        ],
+      );
+    });
+
     const response = await executeQuery(
-      `SELECT * FROM proveedores_cuentas WHERE id_proveedor = ?`,
+      `SELECT * FROM proveedores_cuentas WHERE id_proveedor = ? AND active = 1`,
       [id_proveedor],
     );
 
-    res.status(200).json({
-      message: "Cuenta registrada con éxito",
-      data: response,
-    });
+    res.status(200).json({ message: "Cuenta guardada", data: response });
   } catch (error) {
     console.error("Error en createProveedorCuenta:", error);
     res.status(error.statusCode || 500).json({
@@ -525,49 +541,116 @@ const updateProveedorCuenta = async (req, res) => {
   try {
     const { id, id_proveedor, cuenta, banco, titular, comentarios, alias } =
       req.body;
-
+    const { user } = req.session || {};
+    console.log("USER\n\n", user, "\n\n");
+    if (!user)
+      return res.status(401).json({
+        message: "Se requiere usuario autenticado para esta acción",
+        data: null,
+      });
     if (!id) throw new Error("ID de la cuenta no proporcionado");
     if (!cuenta || !cuenta.trim()) throw new Error("La cuenta es obligatoria");
 
-    // 1. Validar que no exista otra cuenta igual para el mismo proveedor
+    // Validación de duplicado: lectura simple, no necesita auditoría
     const [existente] = await executeQuery(
-      `SELECT * FROM proveedores_cuentas 
-       WHERE id_proveedor = ? AND cuenta = ? AND id <> ?`,
+      `SELECT id FROM proveedores_cuentas WHERE id_proveedor = ? AND cuenta = ? AND id <> ?`,
       [id_proveedor, cuenta.trim(), id],
     );
+    if (existente) throw new Error("Ya existe otra cuenta con ese número");
 
-    if (existente) {
-      throw new Error("Ya existe otra cuenta con ese número");
+    // S3 fuera de la transacción
+    let url_caratula = null;
+    if (req.file) {
+      const key = `comprobantes/${Date.now()}_${req.file.originalname}`;
+      url_caratula = await subirBufferAS3(
+        req.file.buffer,
+        key,
+        req.file.mimetype,
+      );
     }
 
-    // 2. Actualizar la cuenta
-    await executeQuery(
-      `UPDATE proveedores_cuentas
-       SET cuenta = ?, banco = ?, titular = ?, comentarios = ?, alias = ?
-       WHERE id = ?`,
-      [
+    await runTransaction(async (conn) => {
+      await setAuditUser(conn, user);
+
+      const setClauses = [
+        "cuenta = ?",
+        "banco = ?",
+        "titular = ?",
+        "comentarios = ?",
+        "alias = ?",
+      ];
+      const setParams = [
         cuenta.trim(),
         banco?.trim().toUpperCase() || null,
         titular?.trim().toUpperCase() || null,
         comentarios || null,
         alias?.trim().toUpperCase() || null,
-        id,
-      ],
-    );
+      ];
 
-    // 3. Regresar las cuentas del proveedor
+      if (url_caratula) {
+        setClauses.push("url_caratula = ?");
+        setParams.push(url_caratula);
+      }
+
+      await conn.execute(
+        `UPDATE proveedores_cuentas SET ${setClauses.join(", ")} WHERE id = ?`,
+        [...setParams, id],
+      );
+    });
+
     const response = await executeQuery(
-      `SELECT * FROM proveedores_cuentas WHERE id_proveedor = ?`,
+      `SELECT * FROM proveedores_cuentas WHERE id_proveedor = ? AND active = 1`,
       [id_proveedor],
     );
 
-    res.status(200).json({
-      message: "Cuenta actualizada con éxito",
-      data: response,
-    });
+    res.status(200).json({ message: "Cuenta guardada", data: response });
   } catch (error) {
     console.error("Error en updateProveedorCuenta:", error);
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error interno del servidor",
+      data: null,
+    });
+  }
+};
+
+const deleteProveedorCuenta = async (req, res) => {
+  try {
+    const { id } = req.query;
+    const { user } = req.session || {};
+
+    if (!user)
+      return res.status(401).json({
+        message: "Se requiere usuario autenticado para esta acción",
+        data: null,
+      });
+    if (!id) throw new Error("id es requerido");
+
+    const [cuenta] = await executeQuery(
+      `SELECT id_proveedor, url_caratula FROM proveedores_cuentas WHERE id = ?`,
+      [id],
+    );
+    if (!cuenta)
+      return res
+        .status(404)
+        .json({ message: "Cuenta no encontrada", data: null });
+
+    await runTransaction(async (conn) => {
+      await setAuditUser(conn, user);
+      await conn.execute(
+        `UPDATE proveedores_cuentas SET active = 0 WHERE id = ?`,
+        [id],
+      );
+    });
+
+    const response = await executeQuery(
+      `SELECT * FROM proveedores_cuentas WHERE id_proveedor = ? AND active = 1`,
+      [cuenta.id_proveedor],
+    );
+
+    res.status(200).json({ message: "Cuenta eliminada", data: response });
+  } catch (error) {
+    console.error("Error en deleteProveedorCuenta:", error);
+    res.status(error.statusCode || 500).json({
       message: error.message || "Error interno del servidor",
       data: null,
     });
@@ -738,7 +821,11 @@ const getArchivos = async (req, res) => {
     const { id_proveedor } = req.query;
 
     if (!id_proveedor) {
-      return res.status(400).json({ message: "id_proveedor es requerido", data: null, error: null });
+      return res.status(400).json({
+        message: "id_proveedor es requerido",
+        data: null,
+        error: null,
+      });
     }
 
     const data = await executeQuery(
@@ -749,7 +836,9 @@ const getArchivos = async (req, res) => {
       [id_proveedor],
     );
 
-    return res.status(200).json({ message: "Archivos obtenidos", data, error: null });
+    return res
+      .status(200)
+      .json({ message: "Archivos obtenidos", data, error: null });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: error.message, data: null, error });
@@ -762,7 +851,11 @@ const postArchivo = async (req, res) => {
     const file = req.file;
 
     if (!file || !nombre || !id_proveedor) {
-      return res.status(400).json({ message: "file, nombre e id_proveedor son requeridos", data: null, error: null });
+      return res.status(400).json({
+        message: "file, nombre e id_proveedor son requeridos",
+        data: null,
+        error: null,
+      });
     }
 
     const key = `comprobantes/${Date.now()}_${file.originalname}`;
@@ -778,7 +871,9 @@ const postArchivo = async (req, res) => {
       [id_proveedor],
     );
 
-    return res.status(200).json({ message: "Archivo subido correctamente", data, error: null });
+    return res
+      .status(200)
+      .json({ message: "Archivo subido correctamente", data, error: null });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: error.message, data: null, error });
@@ -790,7 +885,9 @@ const deleteArchivo = async (req, res) => {
     const { id } = req.query;
 
     if (!id) {
-      return res.status(400).json({ message: "id es requerido", data: null, error: null });
+      return res
+        .status(400)
+        .json({ message: "id es requerido", data: null, error: null });
     }
 
     const [archivo] = await executeQuery(
@@ -799,7 +896,9 @@ const deleteArchivo = async (req, res) => {
     );
 
     if (!archivo) {
-      return res.status(404).json({ message: "Archivo no encontrado", data: null, error: null });
+      return res
+        .status(404)
+        .json({ message: "Archivo no encontrado", data: null, error: null });
     }
 
     await executeQuery(`DELETE FROM proveedor_archivos WHERE id = ?`, [id]);
@@ -809,7 +908,9 @@ const deleteArchivo = async (req, res) => {
       [archivo.id_proveedor],
     );
 
-    return res.status(200).json({ message: "Archivo eliminado correctamente", data, error: null });
+    return res
+      .status(200)
+      .json({ message: "Archivo eliminado correctamente", data, error: null });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: error.message, data: null, error });
@@ -829,6 +930,7 @@ module.exports = {
   getCuentas,
   updateProveedorCuenta,
   createProveedorCuenta,
+  deleteProveedorCuenta,
   deleteDatosFiscales,
   //Proveedor Type
   getProveedorType,

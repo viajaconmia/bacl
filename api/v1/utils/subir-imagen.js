@@ -1,4 +1,4 @@
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const s3Client = new S3Client({
@@ -36,4 +36,12 @@ async function subirBufferAS3(buffer, key, contentType) {
   return `https://${process.env.S3_BUCKET}.s3.amazonaws.com/${key}`;
 }
 
-module.exports = { generatePresignedUploadUrl, subirBufferAS3 };
+async function eliminarDeS3(url) {
+  const key = String(url).split(".amazonaws.com/")[1];
+  if (!key) return;
+  await s3Client.send(
+    new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }),
+  );
+}
+
+module.exports = { generatePresignedUploadUrl, subirBufferAS3, eliminarDeS3 };
