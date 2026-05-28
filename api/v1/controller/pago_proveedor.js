@@ -823,7 +823,6 @@ const createSolicitud = async (req, res) => {
       estado_solicitud_db, // p_estado_solicitud
       estatus_pagos_db, // p_estatus_pagos
       documentoId,
-      bookingId, // p_id_booking
     ];
 
     const spResp = await executeSP(
