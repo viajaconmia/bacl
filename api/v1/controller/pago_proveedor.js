@@ -1260,6 +1260,25 @@ const createDispersion = async (req, res) => {
     );
     const nombreProveedor = (reservasRows || [])[0]?.proveedor_nombre ?? null;
 
+    // 10) Obtener datos de cuentas seleccionadas por solicitud
+    const idsCuentas = [
+      ...new Set(
+        ids
+          .map((id) => solicitudMap.get(id)?.id_proveedor_cuenta)
+          .filter((id) => id != null && Number.isInteger(Number(id))),
+      ),
+    ].map(Number);
+
+    let cuentasMap = new Map();
+    if (idsCuentas.length > 0) {
+      const cuentasPlaceholders = idsCuentas.map(() => "?").join(", ");
+      const cuentasRows = await executeQuery(
+        `SELECT id, banco, titular, cuenta as cta, tipo_cta, ultimo_cambio_at FROM proveedores_cuentas WHERE id IN (${cuentasPlaceholders})`,
+        idsCuentas,
+      );
+      cuentasMap = new Map((cuentasRows || []).map((c) => [Number(c.id), c]));
+    }
+
     const fmtDate = (d) => {
       if (!d) return "—";
       const dt = new Date(d);
@@ -1301,6 +1320,10 @@ const createDispersion = async (req, res) => {
         const markupPct =
           costo > 0 ? (((venta - costo) / venta) * 100).toFixed(2) + "%" : "—";
         const bg = i % 2 === 0 ? "#f9fafb" : "#fff";
+        const idCuenta = Number(
+          solicitudMap.get(idSol)?.id_proveedor_cuenta ?? 0,
+        );
+        const cuenta = cuentasMap.get(idCuenta);
         return `
         <tr style="background: ${bg};">
           <td style="padding: 8px 10px; color: #111827;">${r.cliente ?? "—"}</td>
@@ -1311,6 +1334,10 @@ const createDispersion = async (req, res) => {
           <td style="padding: 8px 10px; color: #111827;">$${fmtMoney(costo)}</td>
           <td style="padding: 8px 10px; color: #111827;">$${fmtMoney(venta)}</td>
           <td style="padding: 8px 10px; color: #111827;">${markupPct}</td>
+          <td style="padding: 8px 10px; color: #111827;">${cuenta?.banco ?? "—"}</td>
+          <td style="padding: 8px 10px; color: #111827;">${cuenta?.titular ?? "—"}</td>
+          <td style="padding: 8px 10px; color: #111827; min-width: 200px; white-space: nowrap;">${cuenta?.cta ?? "—"}</td>
+          <td style="padding: 8px 10px; color: #111827;">${fmtDate(cuenta?.ultimo_cambio_at)}</td>
         </tr>
       `;
       })
@@ -1327,12 +1354,14 @@ const createDispersion = async (req, res) => {
         <td style="padding: 8px 10px; color: #0b5fa5;">$${fmtMoney(totalCosto)}</td>
         <td style="padding: 8px 10px; color: #0b5fa5;">$${fmtMoney(totalVenta)}</td>
         <td style="padding: 8px 10px; color: #0b5fa5;">${totalMarkupPct}</td>
+        <td colspan="4" style="padding: 8px 10px;"></td>
       </tr>
     `;
 
-    const emailDestinatario = process.env.NODE_ENV === "production"
-      ? "fin-cxp@noktos.com"
-      : "luis.castaneda@noktos.com";
+    const emailDestinatario =
+      process.env.NODE_ENV === "production"
+        ? "fin-cxp@noktos.com"
+        : "luis.castaneda@noktos.com";
 
     let correo_enviado = false;
     try {
@@ -1373,10 +1402,14 @@ const createDispersion = async (req, res) => {
                     <th style="padding: 8px 10px; text-align: left;">Costo</th>
                     <th style="padding: 8px 10px; text-align: left;">Venta</th>
                     <th style="padding: 8px 10px; text-align: left;">Markup</th>
+                    <th style="padding: 8px 10px; text-align: left;">Banco</th>
+                    <th style="padding: 8px 10px; text-align: left;">Titular</th>
+                    <th style="padding: 8px 10px; text-align: left; min-width: 200px;">Cuenta</th>
+                    <th style="padding: 8px 10px; text-align: left;">Últ. cambio</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${reservasHtml || '<tr><td colspan="8" style="padding: 12px; color: #6b7280;">Sin reservas encontradas</td></tr>'}
+                  ${reservasHtml || '<tr><td colspan="12" style="padding: 12px; color: #6b7280;">Sin reservas encontradas</td></tr>'}
                   ${reservasHtml ? totalesHtml : ""}
                 </tbody>
               </table>
@@ -3862,17 +3895,18 @@ const getSolicitudes = async (req, res) => {
         filters.comentario_CXP,
         filters.estatus_pagos, // p_estatus_pagos (pos 24)
 
-        filters.uuid_factura,          // p_uuid_factura
-        filters.tipo_reserva_pago,     // p_tipo_reserva_pago
-        filters.pagos_parciales,       // p_pagos_parciales
-        filters.facturas_parciales,    // p_facturas_parciales
-        pagina,                        // p_pagina
-        limite,                        // p_limite
+        filters.uuid_factura, // p_uuid_factura
+        filters.tipo_reserva_pago, // p_tipo_reserva_pago
+        filters.pagos_parciales, // p_pagos_parciales
+        filters.facturas_parciales, // p_facturas_parciales
+        pagina, // p_pagina
+        limite, // p_limite
       ]),
     ]);
 
     const totalFiltrado = Number(spRows?.[0]?.total_filtrado ?? 0);
-    const totalPages = totalFiltrado > 0 ? Math.ceil(totalFiltrado / limite) : 1;
+    const totalPages =
+      totalFiltrado > 0 ? Math.ceil(totalFiltrado / limite) : 1;
 
     const ids = (spRows || [])
       .map((r) => r.id_solicitud_proveedor)
@@ -5118,7 +5152,8 @@ const cargarFactura = async (req, res) => {
               );
               return {
                 id_solicitud: id,
-                monto_solicitado: d?.solicitud_proveedor?.monto_solicitado ?? null,
+                monto_solicitado:
+                  d?.solicitud_proveedor?.monto_solicitado ?? null,
                 mensaje: "No procede por costos distintos",
               };
             });
@@ -8849,5 +8884,5 @@ module.exports = {
   generar_saldo_a_favor,
   reasignarPago,
   cuentas,
-  solicitudes_lu
+  solicitudes_lu,
 };

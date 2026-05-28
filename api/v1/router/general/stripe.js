@@ -1,8 +1,7 @@
-const { API_STRIPE } = require("../../../../config/auth");
-const { API_STRIPE_TEST } = require("../../../../config/auth");
 const express = require("express");
-const stripe = require("stripe")(API_STRIPE);
-const stripeTest = require("stripe")(API_STRIPE_TEST);
+let _stripe, _stripeTest;
+const getStripe = () => _stripe || (_stripe = require("stripe")(process.env.API_STRIPE));
+const getStripeTest = () => _stripeTest || (_stripeTest = require("stripe")(process.env.API_STRIPE_TEST));
 const router = require("express").Router();
 const { v4: uuidv4 } = require("uuid");
 const {
@@ -20,7 +19,7 @@ const { isSignToken } = require("../../../../middleware/auth");
 router.post("/create-checkout-session", async (req, res) => {
   try {
     const { payment_data } = req.body;
-    const session = await stripeTest.checkout.sessions.create(payment_data);
+    const session = await getStripeTest().checkout.sessions.create(payment_data);
     res.json(session);
   } catch (error) {
     console.log(error);
@@ -36,7 +35,7 @@ router.get("/trypi", async (req, res) => {
     }
 
     // 1️⃣ Obtener PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.retrieve(id);
+    const paymentIntent = await getStripe().paymentIntents.retrieve(id);
 
     if (!paymentIntent.payment_method) {
       return res.json({
@@ -46,7 +45,7 @@ router.get("/trypi", async (req, res) => {
     }
 
     // 2️⃣ Obtener PaymentMethod real
-    const paymentMethod = await stripe.paymentMethods.retrieve(
+    const paymentMethod = await getStripe().paymentMethods.retrieve(
       paymentIntent.payment_method,
     );
 
@@ -86,7 +85,7 @@ router.post("/save-payment-method", async (req, res) => {
     const customerId = rows[0].id_cliente_stripe;
 
     //Guardar metodo de pago en el cliente
-    await stripeTest.paymentMethods.attach(paymentMethodId, {
+    await getStripeTest().paymentMethods.attach(paymentMethodId, {
       customer: customerId,
     });
 
@@ -123,7 +122,7 @@ router.post("/delete-payment-method", async (req, res) => {
     const customerId = rows.id_cliente_stripe;
 
     //Guardar metodo de pago en el cliente
-    await stripeTest.paymentMethods.detach(paymentMethodId);
+    await getStripeTest().paymentMethods.detach(paymentMethodId);
 
     res.json({ success: true, message: "Se elimino el metodo de pago" });
   } catch (error) {
@@ -184,7 +183,7 @@ router.post("/make-payment", async (req, res) => {
       try {
         /* INICIA PAGO Y GUARDADO DE LOG */
 
-        const paymentIntent = await stripeTest.paymentIntents.create({
+        const paymentIntent = await getStripeTest().paymentIntents.create({
           amount: Number(amount.toFixed(0)),
           currency: "mxn",
           customer: customerId,
@@ -313,7 +312,7 @@ router.post("/make-payment", async (req, res) => {
 // router.post("/create-user-stripe", async (req, res) => {
 //   try {
 //     const { email, id_agente } = req.body;
-//     const customer = await stripeTest.customers.create({ email });
+//     const customer = await getStripeTest().customers.create({ email });
 //     const { error } = await executeQuery(
 //       "INSERT INTO clientes_stripe (id_agente, id_cliente_stripe) VALUES (?, ?)",
 //       [id_agente, customer.id]
@@ -356,7 +355,7 @@ router.get("/get-payment-methods", async (req, res) => {
     const customerId = rows[0].id_cliente_stripe;
 
     //Consultar métodos de pago en Stripe
-    const paymentMethods = await stripeTest.paymentMethods.list({
+    const paymentMethods = await getStripeTest().paymentMethods.list({
       customer: customerId,
       type: "card", // Puedes cambiarlo según el tipo de método que necesites
     });
@@ -398,7 +397,7 @@ router.post("/create-setup-intent", async (req, res) => {
     console.log(rows);
     const customerId = rows.id_cliente_stripe;
 
-    const setupIntent = await stripeTest.setupIntents.create({
+    const setupIntent = await getStripeTest().setupIntents.create({
       customer: customerId,
       payment_method_types: ["card"],
     });
@@ -412,7 +411,7 @@ router.post("/create-setup-intent", async (req, res) => {
 router.get("/get-checkout-session", async (req, res) => {
   try {
     const { id_checkout } = req.query;
-    const checkout = await stripeTest.checkout.sessions.retrieve(id_checkout);
+    const checkout = await getStripeTest().checkout.sessions.retrieve(id_checkout);
     console.log(checkout);
     res.json(checkout);
   } catch (error) {
@@ -424,7 +423,7 @@ router.post("/create-payment-intent-card", async (req, res) => {
     const { amount, currency, id_viajero } = req.body;
     console.log(amount);
     console.log(currency);
-    const paymentIntent = await stripeTest.paymentIntents.create({
+    const paymentIntent = await getStripeTest().paymentIntents.create({
       amount,
       currency,
       payment_method_types: ["card"], // Tarjetas de crédito/débito
@@ -476,7 +475,7 @@ router.post("/create-payment-link", async (req, res) => {
     const { amount, currency, metadata, description } = req.body;
 
     // Primero crea un precio
-    const price = await stripe.prices.create({
+    const price = await getStripe().prices.create({
       unit_amount: amount,
       currency: currency,
       product_data: {
@@ -485,7 +484,7 @@ router.post("/create-payment-link", async (req, res) => {
     });
 
     // Luego crea el payment link con el price ID
-    const paymentLink = await stripe.paymentLinks.create({
+    const paymentLink = await getStripe().paymentLinks.create({
       line_items: [
         {
           price: price.id, // Usa el ID del precio creado
@@ -515,7 +514,7 @@ router.post(
     let event;
 
     try {
-      event = stripe.webhooks.constructEvent(
+      event = getStripe().webhooks.constructEvent(
         req.body,
         sig,
         "whsec_nau4uGg351SWXP1PJAqhPUdRMqznaWZ9",
