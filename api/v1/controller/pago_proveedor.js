@@ -219,7 +219,7 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
     action = "DISPERSION_UPDATE_AND_MARK_AJUSTE";
   } else {
     const qUp = `
-      UPDATE solicitudes_pago_proveedor-
+      UPDATE solicitudes_pago_proveedor
       SET
         monto_solicitado = ?,
         saldo = COALESCE(saldo, 0) + ?,
