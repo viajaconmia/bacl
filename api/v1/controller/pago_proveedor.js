@@ -607,6 +607,7 @@ const createSolicitud = async (req, res) => {
       paymentSchedule = [],
       moneda,
       documento,
+      id_booking,
     } = solicitud;
 
     // ✅ Determina forma_pago_solicitada para el SP
@@ -806,6 +807,8 @@ const createSolicitud = async (req, res) => {
 
     const documentoId = String(documento ?? "").trim() || null;
 
+    const bookingId = String(id_booking ?? "").trim() || null;
+
     const parametrosSP = [
       Number(monto_a_pagar), // p_monto_solicitado
       formaPagoDB, // p_forma_pago_solicitada (credit/transfer/card/link)
@@ -820,6 +823,7 @@ const createSolicitud = async (req, res) => {
       estado_solicitud_db, // p_estado_solicitud
       estatus_pagos_db, // p_estatus_pagos
       documentoId,
+      bookingId, // p_id_booking
     ];
 
     const spResp = await executeSP(
