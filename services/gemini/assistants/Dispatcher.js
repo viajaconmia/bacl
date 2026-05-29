@@ -3,6 +3,7 @@ const { DBHotel } = require("./DBHotel");
 const { GeneralAssistant } = require("./General");
 const { OrquestadorAssistant } = require("./Orquestador");
 const { SearchHotel } = require("./SearchHotel");
+const { SearchHotelStructured } = require("./SearchHotelStructured");
 const { SearchRentaAuto } = require("./SearchRentaAutos");
 const { SearchVuelo } = require("./SearchVuelo");
 
@@ -13,6 +14,7 @@ const { SearchVuelo } = require("./SearchVuelo");
 const agentes = {
   general: new GeneralAssistant(),
   search_hotel: new SearchHotel(),
+  search_hotel_structured: new SearchHotelStructured(),
   orquestador: new OrquestadorAssistant(),
   db_hotel: new DBHotel(),
   search_vuelo: new SearchVuelo(),
