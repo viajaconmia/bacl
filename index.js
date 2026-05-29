@@ -308,6 +308,21 @@ app.post("/search-hotel-desactivado", async (req, res) => {
   }
 });
 
+function parseHotelXML(xml) {
+  const get = (str, tag) => str.match(new RegExp(`<${tag}>(.*?)</${tag}>`, "s"))?.[1]?.trim() ?? "";
+  const hotelBlocks = [...xml.matchAll(/<hotel>([\s\S]*?)<\/hotel>/g)];
+  return {
+    checkin: get(xml, "checkin"),
+    checkout: get(xml, "checkout"),
+    hoteles: hotelBlocks.map((m) => ({
+      nombre: get(m[1], "nombre"),
+      precio_por_noche: get(m[1], "precio_por_noche"),
+      moneda: get(m[1], "moneda"),
+      fuente: get(m[1], "fuente"),
+    })),
+  };
+}
+
 app.post("/search-hotel", async (req, res) => {
   const { hoteles, checkin, checkout } = req.body;
 
@@ -322,7 +337,9 @@ app.post("/search-hotel", async (req, res) => {
     const lista = hoteles.map((h, i) => `${i + 1}. ${h}`).join("\n");
     const mensaje = `Busca el precio de los siguientes hoteles para check-in ${checkin} y check-out ${checkout}:\n${lista}`;
 
-    const data = await executer("search_hotel_structured", mensaje);
+    const parts = await executer("search_hotel", mensaje);
+    const texto = parts.find((p) => p.text)?.text || "";
+    const data = parseHotelXML(texto);
 
     return res.json({ message: "Búsqueda completada", data });
   } catch (error) {
