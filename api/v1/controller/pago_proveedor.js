@@ -219,7 +219,7 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
     action = "DISPERSION_UPDATE_AND_MARK_AJUSTE";
   } else {
     const qUp = `
-      UPDATE solicitudes_pago_proveedor-
+      UPDATE solicitudes_pago_proveedor
       SET
         monto_solicitado = ?,
         saldo = COALESCE(saldo, 0) + ?,
@@ -823,7 +823,6 @@ const createSolicitud = async (req, res) => {
       estado_solicitud_db, // p_estado_solicitud
       estatus_pagos_db, // p_estatus_pagos
       documentoId,
-      bookingId, // p_id_booking
     ];
 
     const spResp = await executeSP(
