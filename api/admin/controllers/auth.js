@@ -225,6 +225,10 @@ const logOut = async (req, res) => {
 const verifySession = async (req, res) => {
   try {
     const { user } = req.session;
+    if (!user) {
+      res.clearCookie("access-token").status(204).json({ message: "session" });
+      return;
+    }
     const usuario = await getUser(user.email);
     if (!usuario) {
       res.clearCookie("access-token").status(204).json({ message: "session" });
