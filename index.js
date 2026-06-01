@@ -200,10 +200,14 @@ app.get("/probando", async (req, res) => {
         });
       }
 
-      const precio_venta = parseFloat(hotelObj.precio_venta) || parseFloat(dbResult[0].total) || 0;
-      const desayuno = hotelObj.tiene_desayuno !== undefined
-        ? hotelObj.tiene_desayuno === true || hotelObj.tiene_desayuno === "true" || hotelObj.tiene_desayuno === 1
-        : dbResult[0].desayuno;
+      const precio_venta =
+        parseFloat(hotelObj.precio_venta) || parseFloat(dbResult[0].total) || 0;
+      const desayuno =
+        hotelObj.tiene_desayuno !== undefined
+          ? hotelObj.tiene_desayuno === true ||
+            hotelObj.tiene_desayuno === "true" ||
+            hotelObj.tiene_desayuno === 1
+          : dbResult[0].desayuno;
 
       const buffer = await generarPDFHotel({
         hotel: hotelObj.nombre,
@@ -273,7 +277,7 @@ app.get("/", (req, res) =>
 
 app.post("/message", handleChat);
 
-app.post("/search-hotel", async (req, res) => {
+app.post("/search-hotel-desactivado", async (req, res) => {
   const { hoteles, checkin, checkout } = req.body;
 
   if (!hoteles?.length || !checkin || !checkout) {
@@ -301,6 +305,47 @@ app.post("/search-hotel", async (req, res) => {
       data: null,
       error,
     });
+  }
+});
+
+function parseHotelXML(xml) {
+  const get = (str, tag) => str.match(new RegExp(`<${tag}>(.*?)</${tag}>`, "s"))?.[1]?.trim() ?? "";
+  const hotelBlocks = [...xml.matchAll(/<hotel>([\s\S]*?)<\/hotel>/g)];
+  return {
+    checkin: get(xml, "checkin"),
+    checkout: get(xml, "checkout"),
+    hoteles: hotelBlocks.map((m) => ({
+      nombre: get(m[1], "nombre"),
+      precio_por_noche: get(m[1], "precio_por_noche"),
+      moneda: get(m[1], "moneda"),
+      fuente: get(m[1], "fuente"),
+    })),
+  };
+}
+
+app.post("/search-hotel", async (req, res) => {
+  const { hoteles, checkin, checkout } = req.body;
+
+  if (!hoteles?.length || !checkin || !checkout) {
+    return res.status(400).json({
+      message: "Los campos hoteles (array), checkin y checkout son requeridos",
+      data: null,
+    });
+  }
+
+  try {
+    const lista = hoteles.map((h, i) => `${i + 1}. ${h}`).join("\n");
+    const mensaje = `Busca el precio de los siguientes hoteles para check-in ${checkin} y check-out ${checkout}:\n${lista}`;
+
+    const parts = await executer("search_hotel", mensaje);
+    const texto = parts.find((p) => p.text)?.text || "";
+    const data = parseHotelXML(texto);
+
+    return res.json({ message: "Búsqueda completada", data });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: "Error al buscar precios", data: null, error });
   }
 });
 
