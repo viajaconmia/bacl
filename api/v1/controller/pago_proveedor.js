@@ -108,6 +108,20 @@ async function finalizarSiSaldoCero({
   };
 }
 
+async function actualizarPagoProveedoresSiLinkOCard({
+  executeQuery,
+  id_solicitud_proveedor,
+  forma_pago_solicitada,
+  nuevoMonto,
+}) {
+  const fp = String(forma_pago_solicitada ?? "").trim().toLowerCase();
+  if (fp !== "link" && fp !== "card") return;
+  await executeQuery(
+    `UPDATE pago_proveedores SET monto = ?, monto_pagado = ? WHERE id_solicitud_proveedor = ?`,
+    [money2(nuevoMonto), money2(nuevoMonto), id_solicitud_proveedor],
+  );
+}
+
 //========cambio para controlar aumento o disminucion
 async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
   executeQuery,
@@ -230,6 +244,13 @@ async function ajustarSolicitudPorAumentoMontoSolicitudDirecto({
     await executeQuery(qUp, [money2(total_new), money2(delta), id]);
     action = "UPDATE_MONTO_SALDO_AND_MARK_AJUSTE";
   }
+
+  await actualizarPagoProveedoresSiLinkOCard({
+    executeQuery,
+    id_solicitud_proveedor: id,
+    forma_pago_solicitada,
+    nuevoMonto: total_new,
+  });
 
   // ✅ NUEVO: si saldo queda 0, marcar PAGADO según forma_pago_solicitada (excepto credit)
   const saldo_new = money2(saldo_old + delta);
@@ -393,6 +414,13 @@ async function ajustarSolicitudPorDisminucionMontoSolicitudDirecto({
     WHERE id_solicitud_proveedor = ?
   `;
   await executeQuery(qUpBase, [money2(total_new), money2(delta), id]);
+
+  await actualizarPagoProveedoresSiLinkOCard({
+    executeQuery,
+    id_solicitud_proveedor: id,
+    forma_pago_solicitada,
+    nuevoMonto: total_new,
+  });
 
   // 4) Calcular saldo_new (puedes releer o derivar)
   const saldo_new = money2(saldo_old + delta);
