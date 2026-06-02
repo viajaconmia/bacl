@@ -8175,6 +8175,42 @@ const buscaruuid = async (req, res) => {
       });
     }
 
+    // 1. Primero validar si existe la solicitud y si está cancelada
+    const qValidarEstado = `
+      SELECT
+        v.id_solicitud,
+        spp.id_solicitud AS id_solicitud_booking,
+        spp.estado_solicitud
+      FROM vw_pagos_facturas_proveedores_detalle v
+      INNER JOIN solicitudes_pago_proveedor spp
+        ON spp.id_solicitud_proveedor = v.id_solicitud
+      WHERE v.uuid_factura LIKE TRIM(?)
+      ORDER BY v.id_relacion_pago_factura DESC;
+    `;
+
+    const rowsEstado = getRows(await executeQuery(qValidarEstado, [uuid]));
+
+    if (!rowsEstado.length) {
+      return res.status(404).json({
+        ok: false,
+        message: "No se encontraron registros para ese uuid_factura",
+      });
+    }
+
+    const tieneCancelada = rowsEstado.some(
+      (row) =>
+        safeString(row.estado_solicitud).toUpperCase() === "CANCELADA"
+    );
+
+    if (tieneCancelada) {
+      return res.status(404).json({
+        ok: false,
+        message:
+          "La solicitud está cancelada, no se buscará en booking_solicitud",
+      });
+    }
+
+    // 2. Si NO está cancelada, ahora sí buscar con booking_solicitud
     const qBuscar = `
       SELECT
         v.id_relacion_pago_factura,
@@ -8204,10 +8240,12 @@ const buscaruuid = async (req, res) => {
       FROM vw_pagos_facturas_proveedores_detalle v
       INNER JOIN solicitudes_pago_proveedor spp
         ON spp.id_solicitud_proveedor = v.id_solicitud
-      WHERE v.uuid_factura LIKE trim(?)
+      INNER JOIN booking_solicitud bs
+        ON bs.id_solicitud = spp.id_solicitud
+      WHERE v.uuid_factura LIKE TRIM(?)
+        AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
       ORDER BY v.id_relacion_pago_factura DESC;
-      `;
-    // -- AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
+    `;
 
     const rows = getRows(await executeQuery(qBuscar, [uuid]));
 
@@ -8215,7 +8253,7 @@ const buscaruuid = async (req, res) => {
       return res.status(404).json({
         ok: false,
         message:
-          "No se encontraron registros para ese uuid_factura o la solicitud está cancelada",
+          "No se encontraron registros en booking_solicitud para ese uuid_factura",
       });
     }
 
