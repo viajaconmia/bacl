@@ -1147,6 +1147,12 @@ const getResumenFacturasCxC = async () => {
   }
 };
 
+const UUIDS_SIEMPRE_VISIBLES = [
+  "4f9d200b-d5a5-41ad-832f-178dc3539903",
+  "a6bd1ad7-b25f-4c56-8ca2-9f67c8691a45",
+  "bbf98e6f-8942-4186-bca8-dd46c8e6c159",
+];
+
 const getDetalleFacturasCxC = async ({
   bucket = "all",
   id_agente = null,
@@ -1165,6 +1171,9 @@ const getDetalleFacturasCxC = async ({
     };
 
     const bucketWhere = allowedBuckets[bucket] || allowedBuckets.all;
+
+    // Placeholders para los UUIDs fijos
+    const uuidsPlaceholders = UUIDS_SIEMPRE_VISIBLES.map(() => "?").join(", ");
 
     const query = `
       WITH facturas_pendientes AS (
@@ -1219,7 +1228,7 @@ const getDetalleFacturasCxC = async ({
             ELSE f.total
           END AS monto_pendiente
         FROM facturas f
-        INNER JOIN facturas_pendientes fp
+        LEFT JOIN facturas_pendientes fp
           ON fp.id_factura = f.id_factura
         LEFT JOIN agentes a_id
           ON a_id.id_agente = NULLIF(TRIM(f.id_agente), '')
@@ -1232,8 +1241,17 @@ const getDetalleFacturasCxC = async ({
           END,
           0
         ) > 0
-          AND (? IS NULL OR DATE(f.fecha_vencimiento) >= ?)
-          AND (? IS NULL OR DATE(f.fecha_vencimiento) <= ?)
+          AND (
+            -- Lógica normal: facturas sin pago aplicado + filtros de fecha
+            (
+              fp.id_factura IS NOT NULL
+              AND (? IS NULL OR DATE(f.fecha_vencimiento) >= ?)
+              AND (? IS NULL OR DATE(f.fecha_vencimiento) <= ?)
+            )
+            OR
+            -- Siempre incluir estos UUIDs si saldo != 0 (ya cubierto por el COALESCE > 0 de arriba)
+            f.uuid_factura IN (${uuidsPlaceholders})
+          )
       )
       SELECT
         fb.id_factura,
@@ -1259,8 +1277,11 @@ const getDetalleFacturasCxC = async ({
         fb.dias_atraso,
         fb.monto_pendiente
       FROM facturas_base fb
-      WHERE ${bucketWhere}
+      WHERE (
+        ${bucketWhere}
         AND (? IS NULL OR fb.id_agente = ?)
+      )
+      OR fb.uuid_factura IN (${uuidsPlaceholders})
       ORDER BY
         fb.nombre_agente ASC,
         fb.fecha_vencimiento ASC,
@@ -1272,8 +1293,10 @@ const getDetalleFacturasCxC = async ({
       fecha_vencimiento_inicio,
       fecha_vencimiento_fin,
       fecha_vencimiento_fin,
+      ...UUIDS_SIEMPRE_VISIBLES, // IN del CTE
       id_agente,
       id_agente,
+      ...UUIDS_SIEMPRE_VISIBLES, // IN del WHERE final
     ];
 
     const response = await executeQuery(query, params);
