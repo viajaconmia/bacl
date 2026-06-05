@@ -39,6 +39,13 @@ function hasNochesChange(noches) {
   return current !== before;
 }
 
+function hasCostoProveedorChange(proveedor) {
+  const before = toNumber(proveedor?.before?.total);
+  const current = toNumber(proveedor?.current?.total);
+  if (!Number.isFinite(before) || !Number.isFinite(current)) return false;
+  return Math.abs(current - before) > 0.009;
+}
+
 function makeInPlaceholders(n) {
   return Array.from({ length: n }, () => "?").join(",");
 }
@@ -1181,6 +1188,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
   metadata,
   usuario = "system",
   origen = "edicion_reserva",
+  debeProcesar = true,
 }) {
   if (!connection) {
     throw new Error(
@@ -1191,6 +1199,19 @@ async function procesarSolicitudProveedorAlEditarReserva({
   const id_booking = String(metadata?.id_booking || "").trim();
   if (!id_booking) {
     throw new Error("Falta metadata.id_booking.");
+  }
+
+  if (!debeProcesar) {
+    console.log(
+      `⏭️  [SOLICITUD_PROVEEDOR] Sin cambio en costo_total/proveedor — se omite procesamiento para id_booking=${id_booking}`,
+    );
+    return {
+      ok: true,
+      action: "SKIPPED_NO_PROVEEDOR_CHANGE",
+      id_booking,
+      total_solicitudes: 0,
+      resultados: [],
+    };
   }
 
   const id_hospedaje =
@@ -1233,6 +1254,19 @@ async function procesarSolicitudProveedorAlEditarReserva({
   const resultados = [];
 
   for (const id_solicitud_proveedor of idsSolicitud) {
+    // ── trazabilidad por solicitud ────────────────────────────────────────────
+    const pasos = [];
+    const paso = (desc, data = {}) => {
+      const entry = { paso: pasos.length + 1, desc, ...data };
+      pasos.push(entry);
+      console.log(
+        `🔍 [SOLICITUD_PROVEEDOR][SOL:${id_solicitud_proveedor}] P${entry.paso} ${desc}`,
+        Object.keys(data).length ? data : "",
+      );
+    };
+
+    paso("Iniciando procesamiento", { id_solicitud_proveedor, origen });
+
     const [rowsSolicitud] = await connection.execute(
       `
           SELECT
@@ -1260,18 +1294,80 @@ async function procesarSolicitudProveedorAlEditarReserva({
 
     const solicitud = rowsSolicitud[0];
     const estadoAnterior = String(solicitud.estado_solicitud || "").trim();
+    const estatusPagos   = String(solicitud.estatus_pagos   || "").trim().toUpperCase();
 
-    if (estadoAnterior === "CANCELADA") {
+    // ── Clasificar caso ───────────────────────────────────────────────────────
+    const ESTADO_UPPER = estadoAnterior.toUpperCase();
+    let caso;
+    if (ESTADO_UPPER === "CANCELADA") {
+      caso = "CANCELADA";
+    } else if (ESTADO_UPPER === "DISPERSION" || ESTADO_UPPER === "DISPERSADO") {
+      caso = "DISPERSION";
+    } else if (
+      ESTADO_UPPER === "PAGADO TRANSFERENCIA"
+    ) {
+      caso = "PAGADO";
+    } else if (
+      ESTADO_UPPER === "CUPON ENVIADO" ||
+      ESTADO_UPPER === "TRANSFERENCIA_SOLICITADA" ||
+      ESTADO_UPPER === "CARTA_ENVIADA" ||
+      ESTADO_UPPER === "SOLICITADA"
+    ) {
+      caso = "PENDIENTE";
+    } else {
+      caso = "OTRO";
+    }
+
+    paso("Solicitud leída — caso detectado", {
+      estado_anterior: estadoAnterior,
+      estatus_pagos: estatusPagos,
+      forma_pago: solicitud.forma_pago_solicitada,
+      monto_solicitado: solicitud.monto_solicitado,
+      caso,
+    });
+
+    // ── CASO: ya cancelada ────────────────────────────────────────────────────
+    if (caso === "CANCELADA") {
+      paso("Solicitud ya estaba CANCELADA — sin acción");
       resultados.push({
         ok: true,
         action: "ALREADY_CANCELLED",
+        caso,
         id_booking,
         id_solicitud_proveedor,
         estado_anterior: estadoAnterior,
+        pasos,
       });
       continue;
     }
 
+    // ── CASO: DISPERSION — solo marcar is_ajuste, NO cancelar ─────────────────
+    if (caso === "DISPERSION") {
+      paso("Solicitud en DISPERSION — marcando is_ajuste=1 sin cancelar");
+      await connection.execute(
+        `UPDATE solicitudes_pago_proveedor
+            SET is_ajuste = 1,
+                comentario_ajuste = ?
+          WHERE id_solicitud_proveedor = ?`,
+        [
+          `Reserva editada/cancelada mientras solicitud estaba en DISPERSION. Origen: ${origen}. Usuario: ${usuario}. Validar estatus manualmente.`,
+          id_solicitud_proveedor,
+        ],
+      );
+      paso("is_ajuste marcado — solicitud NO cancelada, requiere revisión manual");
+      resultados.push({
+        ok: true,
+        action: "DISPERSION_FLAGGED_FOR_REVIEW",
+        caso,
+        id_booking,
+        id_solicitud_proveedor,
+        estado_anterior: estadoAnterior,
+        pasos,
+      });
+      continue;
+    }
+
+    // ── Consultar pagos existentes ────────────────────────────────────────────
     const [rowsPagos] = await connection.execute(
       `
           SELECT
@@ -1301,6 +1397,8 @@ async function procesarSolicitudProveedorAlEditarReserva({
       [id_solicitud_proveedor],
     );
 
+    paso("Pagos consultados", { pagos_encontrados: rowsPagos.length });
+
     let id_saldo = null;
     let transaction_id = null;
     let monto_pagado_total = 0;
@@ -1312,11 +1410,17 @@ async function procesarSolicitudProveedorAlEditarReserva({
         }, 0),
       );
 
+      paso("Suma de pagos calculada", { monto_pagado_total });
+
       const aptoParaSaldo =
-        estadoAnterior === "PAGADO TRANSFERENCIA" ||
-        String(solicitud.estatus_pagos || "")
-          .trim()
-          .toUpperCase() === "PAGADA";
+        caso === "PAGADO" || estatusPagos === "PAGADA";
+
+      paso("Evaluación: ¿apto para crear saldo a favor?", {
+        caso,
+        estatus_pagos: estatusPagos,
+        monto_pagado_total,
+        aptoParaSaldo,
+      });
 
       if (monto_pagado_total > 0 && aptoParaSaldo) {
         const pagoBase = rowsPagos[0];
@@ -1363,6 +1467,13 @@ async function procesarSolicitudProveedorAlEditarReserva({
           .filter(Boolean)
           .join(" ");
 
+        paso("Creando saldo a favor en tabla saldos", {
+          id_saldo,
+          id_proveedor: solicitud.id_proveedor,
+          monto_pagado_total,
+          forma_pago_saldo,
+        });
+
         await connection.execute(
           `
               INSERT INTO saldos (
@@ -1401,10 +1512,20 @@ async function procesarSolicitudProveedorAlEditarReserva({
             id_booking,
           ],
         );
+
+        paso("Saldo a favor creado", { id_saldo, transaction_id });
+      } else {
+        paso("Sin saldo a favor — no apto o monto cero", {
+          aptoParaSaldo,
+          monto_pagado_total,
+        });
       }
+    } else {
+      paso("Sin pagos registrados — no se crea saldo a favor");
     }
 
-    // 4) Regresar saldo a la(s) factura(s) ligadas a la solicitud
+    // ── Paso 4: devolver monto facturado a facturas ───────────────────────────
+    paso("Devolviendo monto facturado a facturas de la solicitud");
     const devolucionFacturas =
       await controller.devolverMontoFacturadoAFacturasPorCancelacion({
         id_solicitud_proveedor,
@@ -1413,12 +1534,17 @@ async function procesarSolicitudProveedorAlEditarReserva({
           return rows;
         },
       });
+    paso("Devolución a facturas completada", { devolucionFacturas });
 
-    // 5) Cancelar SIEMPRE la solicitud
+    // ── Paso 5: cancelar la solicitud ─────────────────────────────────────────
     const motivoCancelacion =
       origen === "cancelacion_reserva"
         ? `Se canceló solicitud — origen: cancelación de reserva. Estado anterior: ${estadoAnterior}. Usuario: ${usuario}.`
         : `Se canceló solicitud — origen: edición de reserva. Estado anterior: ${estadoAnterior}. Usuario: ${usuario}.`;
+
+    paso("Cancelando solicitud (UPDATE estado_solicitud = CANCELADA)", {
+      motivoCancelacion,
+    });
 
     await connection.execute(
       `
@@ -1432,12 +1558,29 @@ async function procesarSolicitudProveedorAlEditarReserva({
       [motivoCancelacion, id_solicitud_proveedor],
     );
 
+    paso("Solicitud cancelada");
+
+    const action =
+      monto_pagado_total > 0
+        ? "REQUEST_CANCELLED_AND_SALDO_CREATED"
+        : "REQUEST_CANCELLED_WITHOUT_PAYMENTS";
+
+    console.log(
+      `✅ [SOLICITUD_PROVEEDOR][SOL:${id_solicitud_proveedor}] Procesamiento finalizado`,
+      {
+        action,
+        caso,
+        estado_anterior: estadoAnterior,
+        monto_pagado_total,
+        id_saldo,
+        pasos: pasos.map((p) => `P${p.paso}: ${p.desc}`),
+      },
+    );
+
     resultados.push({
       ok: true,
-      action:
-        monto_pagado_total > 0
-          ? "REQUEST_CANCELLED_AND_SALDO_CREATED"
-          : "REQUEST_CANCELLED_WITHOUT_PAYMENTS",
+      action,
+      caso,
       id_booking,
       id_solicitud_proveedor,
       estado_anterior: estadoAnterior,
@@ -1446,6 +1589,7 @@ async function procesarSolicitudProveedorAlEditarReserva({
       id_saldo,
       transaction_id,
       devolucion_facturas: devolucionFacturas,
+      pasos,
     });
   }
 
@@ -1455,6 +1599,9 @@ async function procesarSolicitudProveedorAlEditarReserva({
     id_booking,
     total_solicitudes: idsSolicitud.length,
     saldos_creados: resultados.filter((r) => r.id_saldo).length,
+    dispersiones_pendientes: resultados.filter(
+      (r) => r.action === "DISPERSION_FLAGGED_FOR_REVIEW",
+    ).length,
     resultados,
   };
 }
@@ -1513,18 +1660,48 @@ const editar_reserva_definitivo = async (req, res) => {
       }).catch((err) =>
         console.error("[notificado] error background:", err?.message ?? err),
       );
+      const hayCambioProveedor = hasCostoProveedorChange(proveedor);
+      console.log("🔎 [EDITAR_RESERVA] hayCambioProveedor:", hayCambioProveedor, {
+        before: proveedor?.before?.total,
+        current: proveedor?.current?.total,
+      });
+
       const resultadoSolicitud =
         await procesarSolicitudProveedorAlEditarReserva({
           connection,
           metadata,
           usuario: req?.user?.id || req?.user?.email || "system",
           origen: "edicion_reserva",
+          debeProcesar: hayCambioProveedor,
         });
 
       console.log(
         "🧾 [EDITAR_RESERVA][SOLICITUD_PROVEEDOR]:",
         resultadoSolicitud,
       );
+
+      // Si cambió el código de confirmación, registrarlo en comentario_sistema de la solicitud
+      const codigoAntes = String(codigo_reservacion_hotel?.before ?? "").trim();
+      const codigoDespues = String(codigo_reservacion_hotel?.current ?? "").trim();
+      if (codigoAntes && codigoDespues && codigoAntes !== codigoDespues) {
+        const msgCodigoCambiado = `Código de confirmación actualizado de "${codigoAntes}" a "${codigoDespues}". Usuario: ${id_user}.`;
+        await connection.execute(
+          `UPDATE solicitudes_pago_proveedor spp
+           JOIN booking_solicitud bs ON bs.id_solicitud = spp.id_solicitud_proveedor
+           SET spp.is_ajuste = 1,
+               spp.comentario_ajuste = CONCAT(
+                 COALESCE(spp.comentario_ajuste, ''),
+                 IF(COALESCE(spp.comentario_ajuste, '') != '', ' | ', ''),
+                 ?
+               )
+           WHERE bs.id_booking = ?`,
+          [msgCodigoCambiado, metadata.id_booking],
+        );
+        console.log(
+          "🔑 [EDITAR_RESERVA] comentario_ajuste actualizado por cambio de código de confirmación:",
+          msgCodigoCambiado,
+        );
+      }
 
       const hayCambioPrecio = hasPrecioChange(venta);
       const hayCambioNoches = hasNochesChange(noches);
