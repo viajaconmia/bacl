@@ -114,7 +114,9 @@ async function actualizarPagoProveedoresSiLinkOCard({
   forma_pago_solicitada,
   nuevoMonto,
 }) {
-  const fp = String(forma_pago_solicitada ?? "").trim().toLowerCase();
+  const fp = String(forma_pago_solicitada ?? "")
+    .trim()
+    .toLowerCase();
   if (fp !== "link" && fp !== "card") return;
   await executeQuery(
     `UPDATE pago_proveedores SET monto = ?, monto_pagado = ? WHERE id_solicitud_proveedor = ?`,
@@ -7978,8 +7980,7 @@ const buscaruuid = async (req, res) => {
     }
 
     const tieneCancelada = rowsEstado.some(
-      (row) =>
-        safeString(row.estado_solicitud).toUpperCase() === "CANCELADA"
+      (row) => safeString(row.estado_solicitud).toUpperCase() === "CANCELADA",
     );
 
     if (tieneCancelada) {
@@ -8102,7 +8103,7 @@ const cuentas = async (req, res) => {
     const qBuscar = `
       SELECT *
       FROM proveedores_cuentas
-      WHERE id_proveedor IN (${placeholders})
+      WHERE id_proveedor IN (${placeholders}) and active = 1
     `;
 
     const rows = getRows(await executeQuery(qBuscar, ids));
