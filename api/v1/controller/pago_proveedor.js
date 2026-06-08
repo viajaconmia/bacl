@@ -8352,8 +8352,7 @@ const cuentas = async (req, res) => {
     const qBuscar = `
       SELECT *
       FROM proveedores_cuentas
-      WHERE id_proveedor IN (${placeholders}) and active = 1
-    `;
+      WHERE id_proveedor IN (${placeholders}) and active = 1`;
 
     const rows = getRows(await executeQuery(qBuscar, ids));
 

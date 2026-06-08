@@ -378,6 +378,39 @@ const getPermissionByRole = async (req, res) => {
   }
 };
 
+const resetPassword = async (req, res) => {
+  try {
+    const { user } = req.session;
+    if (!user) throw new ShortError("Se requiere sesión activa", 401);
+
+    const { id, nueva_password } = req.body;
+    if (!id || !nueva_password)
+      throw new ShortError("id y nueva_password son requeridos", 400);
+
+    Validation.password(nueva_password);
+
+    const [target] = await executeQuery(
+      `SELECT id FROM users_admin WHERE id = ? AND active = 1`,
+      [id],
+    );
+    if (!target) throw new ShortError("Usuario no encontrado", 404);
+
+    const hashed = await bcrypt.hash(nueva_password, Number(SALT_ROUNDS));
+    await executeQuery(`UPDATE users_admin SET password = ? WHERE id = ?`, [
+      hashed,
+      id,
+    ]);
+
+    res.status(200).json({ message: "Contraseña actualizada con éxito", data: null });
+  } catch (error) {
+    res.status(error.statusCode || error.status || 500).json({
+      message: error.message || "Error al restablecer la contraseña",
+      data: null,
+      error,
+    });
+  }
+};
+
 module.exports = {
   getPermissionByRole,
   updatePermissionRole,
@@ -388,4 +421,5 @@ module.exports = {
   getUsuariosAdmin,
   getPermisos,
   createRole,
+  resetPassword,
 };

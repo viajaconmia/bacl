@@ -66,4 +66,6 @@ router.post(
 router.patch("/role", controller.updatePermissionRole);
 router.get("/role", controller.getPermissionByRole);
 
+router.patch("/password", controller.resetPassword);
+
 module.exports = router;
