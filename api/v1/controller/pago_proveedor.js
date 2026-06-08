@@ -4365,10 +4365,12 @@ const getSolicitudes2 = async (req, res) => {
           tipo_tarjeta: r.tipo_tarjeta,
         },
 
-        // ── Proveedor fiscal (desde proveedores_datos_fiscales) ─────────────
+        // ── Proveedor fiscal (desde proveedores_datos_fiscales, con fallback
+        //    a los datos del emisor de la factura cuando el proveedor no tiene
+        //    relación fiscal activa) ──────────────────────────────────────────
         proveedor: {
-          rfc:          r.rfc_proveedor,
-          razon_social: r.razon_social_proveedor,
+          rfc:          r.rfc_proveedor          ?? facturaPrincipal?.rfc_emisor          ?? null,
+          razon_social: r.razon_social_proveedor ?? facturaPrincipal?.razon_social_emisor ?? null,
         },
 
         // ── Facturas agrupadas (para helpers del front) ─────────────────────

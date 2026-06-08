@@ -121,18 +121,21 @@ BEGIN
       WHERE pp.id_solicitud_proveedor = spp.id_solicitud_proveedor
     ) AS pagos_json,
 
-    -- ── facturas (una por solicitud, agregado como JSON) ────────────────────
+    -- ── facturas (vínculo real: vw_pagos_facturas_proveedores_detalle.id_solicitud;
+    --    facturas_pago_proveedor.id_solicitud_proveedor está siempre NULL, por eso
+    --    se usa la vista como fuente de verdad y se reenlaza a la tabla solo para
+    --    recuperar columnas que no expone la vista) ───────────────────────────
     (
       SELECT JSON_ARRAYAGG(
         JSON_OBJECT(
           'id_factura_proveedor',  fp.id_factura_proveedor,
-          'uuid_cfdi',             fp.uuid_cfdi,
-          'rfc_emisor',            fp.rfc_emisor,
-          'razon_social_emisor',   fp.razon_social_emisor,
-          'monto_facturado',       fp.monto_facturado,
-          'total',                 fp.total,
-          'subtotal',              fp.subtotal,
-          'impuestos',             fp.impuestos,
+          'uuid_cfdi',             v.uuid_factura,
+          'rfc_emisor',            v.rfc_emisor,
+          'razon_social_emisor',   v.razon_social_fiscal,
+          'monto_facturado',       v.monto_facturado,
+          'total',                 v.total,
+          'subtotal',              v.subtotal,
+          'impuestos',             v.impuestos,
           'fecha_factura',         fp.fecha_factura,
           'estado_factura',        fp.estado_factura,
           'estado',                fp.estado,
@@ -140,16 +143,54 @@ BEGIN
           'forma_pago',            fp.forma_pago,
           'metodo_pago',           fp.metodo_pago,
           'moneda',                fp.moneda,
-          'url_pdf',               fp.url_pdf,
-          'url_xml',               fp.url_xml,
+          'url_pdf',               v.url_pdf,
+          'url_xml',               v.url_xml,
           'total_moneda_O',        fp.total_moneda_O,
           'propina',               fp.propina,
           'created_at',            fp.created_at
         )
       )
-      FROM facturas_pago_proveedor fp
-      WHERE fp.id_solicitud_proveedor = spp.id_solicitud_proveedor
-    ) AS facturas_json
+      FROM vw_pagos_facturas_proveedores_detalle v
+      LEFT JOIN facturas_pago_proveedor fp
+        ON CONVERT(fp.id_factura_proveedor USING utf8mb4) COLLATE utf8mb4_unicode_ci
+         = CONVERT(v.id_factura            USING utf8mb4) COLLATE utf8mb4_unicode_ci
+      WHERE v.id_solicitud = spp.id_solicitud_proveedor
+    ) AS facturas_json,
+
+    -- ── razones sociales ────────────────────────────────────────────────────
+    (
+      SELECT JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'razon_social', rs,
+          'rfc',          rfc,
+          'origen',       origen
+        )
+      )
+      FROM (
+        SELECT DISTINCT
+          UPPER(TRIM(CONVERT(v.razon_social_fiscal USING utf8mb4) COLLATE utf8mb4_unicode_ci)) AS rs,
+          CONVERT(v.rfc_emisor USING utf8mb4) COLLATE utf8mb4_unicode_ci                       AS rfc,
+          _utf8mb4'factura' COLLATE utf8mb4_unicode_ci                                         AS origen
+        FROM vw_pagos_facturas_proveedores_detalle v
+        WHERE v.id_solicitud = spp.id_solicitud_proveedor
+          AND v.razon_social_fiscal IS NOT NULL
+          AND TRIM(v.razon_social_fiscal) <> ''
+
+        UNION
+
+        SELECT DISTINCT
+          UPPER(TRIM(CONVERT(pdf2.razon_social USING utf8mb4) COLLATE utf8mb4_unicode_ci)) AS rs,
+          CONVERT(pdf2.rfc USING utf8mb4) COLLATE utf8mb4_unicode_ci                       AS rfc,
+          _utf8mb4'proveedor' COLLATE utf8mb4_unicode_ci                                   AS origen
+        FROM proveedores_datos_fiscales_relacion pdfr2
+        JOIN proveedores_datos_fiscales pdf2
+          ON pdfr2.id_datos_fiscales = pdf2.id
+        WHERE pdfr2.id_proveedor = spp.id_proveedor
+          AND pdfr2.active       = 1
+          AND pdf2.razon_social  IS NOT NULL
+          AND TRIM(pdf2.razon_social) <> ''
+      ) AS _rs
+    ) AS razones_sociales_json
 
   FROM solicitudes_pago_proveedor spp
 
@@ -238,14 +279,15 @@ BEGIN
         AND (p_fecha_reserva_end   IS NULL OR spp.created_at <= p_fecha_reserva_end))
   )
 
-  -- ── Filtro UUID factura (correlacionado) ────────────────────────────────────
+  -- ── Filtro UUID factura (mismo vínculo real que facturas_json: la vista, no la
+  --    tabla, porque facturas_pago_proveedor.id_solicitud_proveedor es siempre NULL) ──
   AND (
     p_uuid_factura IS NULL
     OR EXISTS (
       SELECT 1
-      FROM facturas_pago_proveedor fp2
-      WHERE fp2.id_solicitud_proveedor = spp.id_solicitud_proveedor
-        AND CONVERT(fp2.uuid_cfdi USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', p_uuid_factura, '%')
+      FROM vw_pagos_facturas_proveedores_detalle v2
+      WHERE v2.id_solicitud = spp.id_solicitud_proveedor
+        AND CONVERT(v2.uuid_factura USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT('%', p_uuid_factura, '%')
     )
   )
 

@@ -1201,22 +1201,12 @@ async function procesarSolicitudProveedorAlEditarReserva({
     throw new Error("Falta metadata.id_booking.");
   }
 
-  if (!debeProcesar) {
-    console.log(
-      `⏭️  [SOLICITUD_PROVEEDOR] Sin cambio en costo_total/proveedor — se omite procesamiento para id_booking=${id_booking}`,
-    );
-    return {
-      ok: true,
-      action: "SKIPPED_NO_PROVEEDOR_CHANGE",
-      id_booking,
-      total_solicitudes: 0,
-      resultados: [],
-    };
-  }
-
   const id_hospedaje =
     metadata?.id_relacion != null ? String(metadata.id_hospedaje).trim() : null;
 
+  // ── Leer y desvincular booking_solicitud SIEMPRE al editar, sin importar si
+  //    hubo cambio de proveedor/costo (debeProcesar) — la relación se elimina
+  //    de una vez para no dejar vínculos obsoletos entre booking y solicitud ──
   const [rowsBooking] = await connection.execute(
     `
         SELECT DISTINCT id_solicitud
@@ -1226,16 +1216,6 @@ async function procesarSolicitudProveedorAlEditarReserva({
       `,
     [id_booking],
   );
-
-  if (!rowsBooking.length) {
-    return {
-      ok: true,
-      action: "NO_BOOKING_SOLICITUD",
-      id_booking,
-      total_solicitudes: 0,
-      resultados: [],
-    };
-  }
 
   const idsSolicitud = [
     ...new Set(
@@ -1250,6 +1230,39 @@ async function procesarSolicitudProveedorAlEditarReserva({
       }),
     ),
   ];
+
+  if (idsSolicitud.length > 0) {
+    await connection.execute(
+      `DELETE FROM booking_solicitud WHERE id_booking = ?`,
+      [id_booking],
+    );
+    console.log(
+      `🔗❌ [SOLICITUD_PROVEEDOR] Relación booking_solicitud eliminada para id_booking=${id_booking} (solicitudes: ${idsSolicitud.join(", ")})`,
+    );
+  }
+
+  if (!debeProcesar) {
+    console.log(
+      `⏭️  [SOLICITUD_PROVEEDOR] Sin cambio en costo_total/proveedor — se omite procesamiento para id_booking=${id_booking}`,
+    );
+    return {
+      ok: true,
+      action: "SKIPPED_NO_PROVEEDOR_CHANGE",
+      id_booking,
+      total_solicitudes: 0,
+      resultados: [],
+    };
+  }
+
+  if (!idsSolicitud.length) {
+    return {
+      ok: true,
+      action: "NO_BOOKING_SOLICITUD",
+      id_booking,
+      total_solicitudes: 0,
+      resultados: [],
+    };
+  }
 
   const resultados = [];
 
