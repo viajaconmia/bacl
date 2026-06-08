@@ -1148,9 +1148,9 @@ const getResumenFacturasCxC = async () => {
 };
 
 const UUIDS_SIEMPRE_VISIBLES = [
-  "4f9d200b-d5a5-41ad-832f-178dc3539903",
-  "a6bd1ad7-b25f-4c56-8ca2-9f67c8691a45",
-  "bbf98e6f-8942-4186-bca8-dd46c8e6c159",
+  '4f9d200b-d5a5-41ad-832f-178dc3539903',
+  'a6bd1ad7-b25f-4c56-8ca2-9f67c8691a45',
+  'bbf98e6f-8942-4186-bca8-dd46c8e6c159',
 ];
 
 const getDetalleFacturasCxC = async ({
@@ -1293,10 +1293,10 @@ const getDetalleFacturasCxC = async ({
       fecha_vencimiento_inicio,
       fecha_vencimiento_fin,
       fecha_vencimiento_fin,
-      ...UUIDS_SIEMPRE_VISIBLES, // IN del CTE
+      ...UUIDS_SIEMPRE_VISIBLES,  // IN del CTE
       id_agente,
       id_agente,
-      ...UUIDS_SIEMPRE_VISIBLES, // IN del WHERE final
+      ...UUIDS_SIEMPRE_VISIBLES,  // IN del WHERE final
     ];
 
     const response = await executeQuery(query, params);

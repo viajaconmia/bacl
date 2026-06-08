@@ -638,6 +638,7 @@ const createSolicitud = async (req, res) => {
       moneda,
       documento,
       id_booking,
+      id_confirmacion,
     } = solicitud;
 
     // ✅ Determina forma_pago_solicitada para el SP
@@ -700,7 +701,6 @@ const createSolicitud = async (req, res) => {
     const insertPagoProveedorLinkSql = `
   INSERT INTO pago_proveedores (
     id_pago_dispersion,
-    
     id_solicitud_proveedor,
     codigo_dispersion,
     monto_pagado,
@@ -839,6 +839,16 @@ const createSolicitud = async (req, res) => {
 
     const bookingId = String(id_booking ?? "").trim() || null;
 
+    // Resuelve id_confirmacion: usa el del request o lo busca en vw_details_booking
+    let idConfirmacion = String(id_confirmacion ?? "").trim() || null;
+    if (!idConfirmacion && bookingId) {
+      const confRows = await executeQuery(
+        "SELECT id_confirmacion FROM vw_details_booking WHERE id_booking = ? LIMIT 1",
+        [bookingId],
+      );
+      idConfirmacion = confRows?.[0]?.id_confirmacion ?? null;
+    }
+
     const parametrosSP = [
       Number(monto_a_pagar), // p_monto_solicitado
       formaPagoDB, // p_forma_pago_solicitada (credit/transfer/card/link)
@@ -939,7 +949,8 @@ const createSolicitud = async (req, res) => {
           domicilio_beneficiario: null,
           descripcion: descripcionBase,
           iva: null,
-          total: monto, // si prefieres NULL, cámbialo aquí
+          total: monto,
+          id_confirmacion: idConfirmacion,
         };
 
         if (formaPagoDB === "link") {
@@ -4118,22 +4129,17 @@ const getSolicitudes = async (req, res) => {
 
 const getSolicitudes2 = async (req, res) => {
   try {
-    const norm = (v) =>
-      String(v ?? "")
-        .trim()
-        .toLowerCase();
+    const norm = (v) => String(v ?? "").trim().toLowerCase();
 
     const clean = (v) => {
       const raw = String(v ?? "");
       if (!raw.trim()) return null;
-
       try {
-        const decoded = decodeURIComponent(raw.replace(/\+/g, " "));
-        const s = decoded.trim();
-        return s === "" ? null : s;
+        const s = decodeURIComponent(raw.replace(/\+/g, " ")).trim();
+        return s || null;
       } catch {
         const s = raw.replace(/\+/g, " ").trim();
-        return s === "" ? null : s;
+        return s || null;
       }
     };
 
@@ -4152,264 +4158,94 @@ const getSolicitudes2 = async (req, res) => {
       return s ? `${s} 23:59:59` : null;
     };
 
-    const safeJsonParse = (v) => {
-      if (v == null) return null;
-      if (Array.isArray(v) || typeof v === "object") return v;
-      if (typeof v !== "string") return null;
-
-      const s = v.trim();
-      if (!s) return null;
-      if (!(s.startsWith("{") || s.startsWith("["))) return null;
-
-      try {
-        return JSON.parse(s);
-      } catch {
-        return null;
-      }
-    };
-
     const toArray = (v) => {
-      const parsed = safeJsonParse(v);
-      if (Array.isArray(parsed)) return parsed;
-      if (parsed && typeof parsed === "object") return [parsed];
-      return [];
-    };
-
-    const unique = (arr) => {
-      return [...new Set((arr || []).filter(Boolean))];
-    };
-
-    const flattenPagosArr = (v) => {
-      const arr = Array.isArray(v) ? v : toArray(v);
-      const lvl1 = arr.flatMap((x) => (Array.isArray(x) ? x : [x]));
-      const lvl2 = lvl1.flatMap((x) => (Array.isArray(x) ? x : [x]));
-      return lvl2.filter(Boolean);
-    };
-
-    const getPagoStats = (pagos) => {
-      const p = flattenPagosArr(pagos);
-
-      let solicitado = 0;
-      let pagado = 0;
-      let conFecha = 0;
-
-      for (const x of p) {
-        solicitado += num(x?.monto_solicitado ?? 0);
-        pagado += num(x?.monto_pagado ?? 0);
-        if (x?.fecha_pago) conFecha += 1;
+      if (v == null) return [];
+      if (Array.isArray(v)) return v;
+      if (typeof v === "object") return [v];
+      if (typeof v !== "string") return [];
+      const s = v.trim();
+      if (!s || !(s.startsWith("{") || s.startsWith("["))) return [];
+      try {
+        const parsed = JSON.parse(s);
+        return Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        return [];
       }
-
-      const anyPagadoEstado =
-        p.some(
-          (x) =>
-            norm(x?.pago_estado_pago) === "pagado" ||
-            norm(x?.estado_pago) === "pagado",
-        ) || false;
-
-      return {
-        count: p.length,
-        solicitado,
-        pagado,
-        conFecha,
-        anyPagadoEstado,
-      };
-    };
-
-    const getFacturaNums = (row) => {
-      const solicitado = num(row?.monto_solicitado);
-
-      const facturado = num(
-        row?.monto_facturado ??
-          row?.total_facturado ??
-          row?.total_facturado_en_pfp ??
-          row?.facturado ??
-          row?.monto_facturas ??
-          0,
-      );
-
-      const porFacturarRaw =
-        row?.monto_por_facturar ?? row?.por_facturar ?? row?.saldo_por_facturar;
-
-      const porFacturar =
-        porFacturarRaw != null
-          ? num(porFacturarRaw)
-          : Math.max(0, +(solicitado - facturado).toFixed(2));
-
-      return { solicitado, facturado, porFacturar };
     };
 
     // Acepta parámetros de body (POST) o query (GET)
     const p = (key) => req.body?.[key] ?? req.query?.[key];
-
     const debug = Number(p("debug") ?? 0) === 1;
 
-    // ── Modo conteo rápido ────────────────────────────────────────────────────
-    // ?tipo=<valor> → devuelve solo los conteos por bucket desde
-    // solicitudes_pago_proveedor sin invocar el SP ni hacer joins pesados.
-    const tipoVista = clean(p("tipo"));
-
-    if (tipoVista) {
+    // ── Modo conteo rápido (?tipo=conteos) ───────────────────────────────────
+    if (clean(p("tipo"))) {
       const [conteosRows] = await executeQuery(`
-    SELECT
-      COUNT(CASE
-        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('TRANSFERENCIA_SOLICITADA','DISPERSION')
-        THEN 1 END) AS spei,
-
-      COUNT(CASE
-        WHEN LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'card'
-         AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
-        THEN 1 END) AS pago_tdc,
-
-      COUNT(CASE
-        WHEN LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'link'
-         AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
-        THEN 1 END) AS pago_link,
-
-      COUNT(CASE
-        WHEN (
-          LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'transfer'
-          AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
-          AND (
-            COALESCE(saldo, 0) = 0
-            OR LOWER(TRIM(COALESCE(estatus_pagos,''))) = 'pagado'
-          )
-        )
-        OR UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'PAGADO TRANSFERENCIA'
-        THEN 1 END) AS pagada,
-
-      COUNT(CASE
-  WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
-   AND COALESCE(is_ajuste, 0) = 1
-   AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) IN ('transfer', 'card')
-  THEN 1 END) AS notificados,
-
-      COUNT(CASE
-        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CANCELADA'
-         AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'transfer'
-         AND COALESCE(is_ajuste, 0) = 1
-         AND comentario_ajuste IS NOT NULL
-         AND TRIM(comentario_ajuste) <> ''
-        THEN 1 END) AS canceladas,
-
-      COUNT(CASE
-        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'SOLICITADA'
-        THEN 1 END) AS ap_credito,
-
-      COUNT(CASE
-        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('CUPON ENVIADO','CARTA_ENVIADA')
-        THEN 1 END) AS pendiente_credito,
-
-      COUNT(CASE
-        WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
-          OR (
-            UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CANCELADA'
-            AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'transfer'
-            AND COALESCE(is_ajuste, 0) = 1
-            AND comentario_ajuste IS NOT NULL
-            AND TRIM(comentario_ajuste) <> ''
-          )
-        THEN 1 END) AS todos
-
-    FROM solicitudes_pago_proveedor
-  `);
-
-      res.set({
-        "Cache-Control": "no-store",
-        Pragma: "no-cache",
-        Expires: "0",
-      });
-
-      return res.status(200).json({
-        ok: true,
-        message: "Conteos obtenidos con éxito",
-        data: conteosRows,
-        meta: { tipo: tipoVista },
-      });
+        SELECT
+          COUNT(CASE WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('TRANSFERENCIA_SOLICITADA','DISPERSION')
+            THEN 1 END) AS spei,
+          COUNT(CASE WHEN LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'card'
+            AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA' THEN 1 END) AS pago_tdc,
+          COUNT(CASE WHEN LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) = 'link'
+            AND UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA' THEN 1 END) AS pago_link,
+          COUNT(CASE WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('PAGADO TARJETA','PAGADO TRANSFERENCIA','PAGADO LINK')
+            THEN 1 END) AS pagada,
+          COUNT(CASE WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) <> 'CANCELADA'
+            AND COALESCE(is_ajuste,0) = 1
+            AND LOWER(TRIM(COALESCE(forma_pago_solicitada,''))) IN ('transfer','card') THEN 1 END) AS notificados,
+          COUNT(CASE WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'CANCELADA' THEN 1 END) AS canceladas,
+          COUNT(CASE WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) = 'SOLICITADA' THEN 1 END) AS ap_credito,
+          COUNT(CASE WHEN UPPER(TRIM(COALESCE(estado_solicitud,''))) IN ('CUPON ENVIADO','CARTA_ENVIADA')
+            THEN 1 END) AS pendiente_credito,
+          COUNT(*) AS todos
+        FROM solicitudes_pago_proveedor
+      `);
+      res.set({ "Cache-Control": "no-store", Pragma: "no-cache", Expires: "0" });
+      return res.status(200).json({ ok: true, message: "Conteos obtenidos con éxito", data: conteosRows });
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-
-    const allowedFechaReserva = new Set([
-      "created_at",
-      "check_in",
-      "check_out",
-    ]);
-
-    const rawFiltrarFechaPorReserva = clean(
-      req.query.filtrar_fecha_por_reserva,
-    );
-
-    const filtrarFechaPorReserva =
-      rawFiltrarFechaPorReserva &&
-      allowedFechaReserva.has(String(rawFiltrarFechaPorReserva).toLowerCase())
-        ? String(rawFiltrarFechaPorReserva).toLowerCase()
-        : null;
-
-    const BUCKET_TO_ESTADO = {
-      ap_credito: "SOLICITADA",
-      spei: "TRANSFERENCIA_SOLICITADA",
-      pago_tdc: "CARTA_ENVIADA",
-      pago_link: "PAGADO LINK",
-      pendiente_credito: "CUPON ENVIADO",
-      pagada: null,
-      notificados: null,
-      canceladas: "CANCELADA",
-      pagado_transferencia: "PAGADO TRANSFERENCIA",
-    };
-
-    console.log(BUCKET_TO_ESTADO, req.body);
-
-    const rawEstado = clean(req.query.estado_solicitud);
-
-    const estadoFiltro = rawEstado
-      ? Object.prototype.hasOwnProperty.call(
-          BUCKET_TO_ESTADO,
-          rawEstado.toLowerCase(),
-        )
-        ? BUCKET_TO_ESTADO[rawEstado.toLowerCase()]
-        : rawEstado
+    // ── Parseo de filtros ────────────────────────────────────────────────────
+    const allowedFechaReserva = new Set(["created_at", "check_in", "check_out"]);
+    const rawFiltrarFecha = clean(req.query.filtrar_fecha_por_reserva);
+    const filtrarFechaPor = rawFiltrarFecha && allowedFechaReserva.has(rawFiltrarFecha)
+      ? rawFiltrarFecha
       : null;
 
+    const rawEstado = clean(req.query.estado_solicitud);
     const filters = {
-      folio: clean(req.query.folio),
-      cliente: clean(req.query.cliente),
-      viajero: clean(req.query.viajero),
-      hotel: clean(req.query.hotel),
-      estado_solicitud: estadoFiltro,
-      estado_facturacion: clean(req.query.estado_facturacion),
-      forma_pago: clean(req.query.forma_pago),
-
-      created_start: toDateStart(req.query.created_start),
-      created_end: toDateEnd(req.query.created_end),
-      check_in_start: clean(req.query.check_in_start),
-      check_in_end: clean(req.query.check_in_end),
-      check_out_start: clean(req.query.check_out_start),
-      check_out_end: clean(req.query.check_out_end),
-
-      id_cliente: clean(req.query.id_cliente),
-      estado_reserva: clean(req.query.estado_reserva),
-      etapa_reservacion: clean(req.query.etapa_reservacion),
-      reservante: clean(req.query.reservante),
+      folio:               clean(req.query.folio),
+      cliente:             clean(req.query.cliente),
+      viajero:             clean(req.query.viajero),
+      hotel:               clean(req.query.hotel),
+      estado_solicitud:    rawEstado,
+      estado_facturacion:  clean(req.query.estado_facturacion),
+      forma_pago:          clean(req.query.forma_pago),
+      created_start:       toDateStart(req.query.created_start),
+      created_end:         toDateEnd(req.query.created_end),
+      check_in_start:      clean(req.query.check_in_start),
+      check_in_end:        clean(req.query.check_in_end),
+      check_out_start:     clean(req.query.check_out_start),
+      check_out_end:       clean(req.query.check_out_end),
+      id_cliente:          clean(req.query.id_cliente),
+      estado_reserva:      clean(req.query.estado_reserva),
+      etapa_reservacion:   clean(req.query.etapa_reservacion),
+      reservante:          clean(req.query.reservante),
       metodo_pago_reserva: clean(req.query.metodo_pago_reserva),
-
       fecha_reserva_start: toDateStart(req.query.fecha_reserva_start),
-      fecha_reserva_end: toDateEnd(req.query.fecha_reserva_end),
-      filtrar_fecha_por_reserva: filtrarFechaPorReserva,
-
-      comentarios: clean(req.query.comentarios),
-      comentario_CXP: clean(req.query.comentario_CXP),
-      estatus_pagos: clean(req.query.estatus_pagos),
-
-      uuid_factura: clean(req.query.uuid_factura),
-      pag: Number(req.query.pag ?? 1) || 1,
-      limite: Number(req.query.limite ?? 50) || 50,
+      fecha_reserva_end:   toDateEnd(req.query.fecha_reserva_end),
+      filtrar_fecha_por:   filtrarFechaPor,
+      comentarios:         clean(req.query.comentarios),
+      comentario_CXP:      clean(req.query.comentario_CXP),
+      estatus_pagos:       clean(req.query.estatus_pagos),
+      uuid_factura:        clean(req.query.uuid_factura),
+      pag:                 Math.max(1, Number(req.query.pag ?? 1) || 1),
+      limite:              Math.max(1, Number(req.query.limite ?? 50) || 50),
     };
 
-    // ?bucket=<nombre> → el SP filtra internamente; aquí solo pasamos el parámetro
     const bucketFiltro = clean(req.query.bucket);
 
+    // ── Llamada al nuevo SP (una sola query) ─────────────────────────────────
     const spRows = await executeSP(
-      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_FILTRADAS,
+      STORED_PROCEDURE.GET.SOLICITUD_PAGO_PROVEEDOR_V2,
       [
         filters.folio,
         filters.cliente,
@@ -4424,7 +4260,6 @@ const getSolicitudes2 = async (req, res) => {
         filters.check_in_end,
         filters.check_out_start,
         filters.check_out_end,
-
         filters.id_cliente,
         filters.estado_reserva,
         filters.etapa_reservacion,
@@ -4432,262 +4267,180 @@ const getSolicitudes2 = async (req, res) => {
         filters.metodo_pago_reserva,
         filters.fecha_reserva_start,
         filters.fecha_reserva_end,
-        filters.filtrar_fecha_por_reserva,
-
+        filters.filtrar_fecha_por,
         filters.comentarios,
         filters.comentario_CXP,
         filters.estatus_pagos,
-
         filters.uuid_factura,
         filters.pag,
         filters.limite,
-        bucketFiltro ?? null, // p_bucket — el SP aplica el filtro de bucket
+        bucketFiltro ?? null,
       ],
     );
 
-    const ids = (spRows || [])
-      .map((r) => r.id_solicitud_proveedor)
-      .filter((id) => id !== null && id !== undefined);
-
-    // facturas_json viene del SP filtrado (uuid_factura, url_pdf, url_xml, etc.)
-    const facturasBySolicitud = {};
-    for (const row of spRows || []) {
-      const key = String(row.id_solicitud_proveedor);
-      const facturas = toArray(row.facturas_json);
-      if (facturas.length > 0) facturasBySolicitud[key] = facturas;
-    }
-
-    let pagosRaw = [];
-    if (ids.length > 0) {
-      pagosRaw = await executeSP(STORED_PROCEDURE.GET.OBTENR_PAGOS_PROVEEDOR);
-    }
-
-    const idsSet = new Set(ids.map(String));
-    const pagosBySolicitud = {};
-
-    for (const row of pagosRaw || []) {
-      const key = String(row.id_solicitud_proveedor);
-      if (!idsSet.has(key)) continue;
-      const dispersiones = toArray(row.dispersiones_json);
-      const pagos = toArray(row.pagos_json);
-      if (!pagosBySolicitud[key]) pagosBySolicitud[key] = [];
-      pagosBySolicitud[key].push(...dispersiones, ...pagos);
-    }
-
+    // ── Mapeo de filas ───────────────────────────────────────────────────────
     const data = (spRows || []).map((r) => {
-      const {
-        id_solicitud_proveedor,
-        fecha_solicitud,
-        monto_solicitado,
-        saldo,
-        forma_pago_solicitada,
-        id_tarjeta_solicitada,
-        usuario_solicitante,
-        usuario_generador,
-        comentarios,
-        estado_solicitud,
-        estado_facturacion,
-        ultimos_4,
-        banco_emisor,
-        tipo_tarjeta,
-        estatus_pagos,
-        is_ajuste,
-        comentario_ajuste,
+      const pagos    = toArray(r.pagos_json);
+      const facturas = toArray(r.facturas_json);
 
-        pagos_facturas_proveedores_json,
-        // facturas_json queda en ...rest → raw.facturas_json para extractFacturas del front
-        ...rest
-      } = r;
+      const forma     = norm(r.forma_pago_solicitada);
+      const saldoNum  = num(r.saldo);
+      const solicitado = num(r.monto_solicitado);
 
-      const pagos = pagosBySolicitud[String(id_solicitud_proveedor)] ?? [];
-      const facturasExtra =
-        facturasBySolicitud[String(id_solicitud_proveedor)] ?? [];
-
-      const forma = norm(forma_pago_solicitada);
-
-      const pagoStats = getPagoStats(pagos);
-      const saldoNum = num(saldo);
-      const factNums = getFacturaNums({ ...r, ...rest });
-
-      const facturasPfp = toArray(pagos_facturas_proveedores_json);
-
-      const uuidsFacturasExtra = facturasExtra
-        .map((f) => f?.uuid_factura)
-        .filter(Boolean);
-
-      const rfcsFacturasExtra = facturasExtra
-        .map((f) => f?.rfc_emisor ?? f?.rfc ?? null)
-        .filter(Boolean);
-
-      const razonesSocialesFacturasExtra = facturasExtra
-        .map((f) => f?.razon_social_fiscal)
-        .filter(Boolean);
-
-      const facturasProveedor = [...facturasPfp, ...facturasExtra];
-
-      const uuidsFacturas = unique([...uuidsFacturasExtra]);
-      const rfcsFacturas = unique([...rfcsFacturasExtra]);
-      const razonesSocialesFacturas = unique([...razonesSocialesFacturasExtra]);
-
-      const facturaPrincipal = facturasExtra[0] ?? null;
-      const uuidFacturaPrincipal = facturaPrincipal?.uuid_factura ?? null;
-      const rfcFacturaPrincipal =
-        facturaPrincipal?.rfc_emisor ?? facturaPrincipal?.rfc ?? null;
-      const razonSocialFacturaPrincipal =
-        facturaPrincipal?.razon_social_fiscal ?? null;
-
-      const estaPagada =
-        norm(estatus_pagos) === "pagado" ||
+      const totalPagado = pagos.reduce((acc, x) => acc + num(x?.monto_pagado ?? 0), 0);
+      const estaPagada  =
+        norm(r.estatus_pagos) === "pagado" ||
         saldoNum === 0 ||
-        pagoStats.anyPagadoEstado ||
-        pagoStats.pagado >= num(monto_solicitado);
+        (solicitado > 0 && totalPagado >= solicitado);
+
+      const facturaPrincipal = facturas[0] ?? null;
+
+      // uuid(s) y datos fiscales de las facturas
+      const uuidsFacturas = [...new Set(facturas.map((f) => f?.uuid_cfdi).filter(Boolean))];
+      const rfcsFacturas  = [...new Set(facturas.map((f) => f?.rfc_emisor).filter(Boolean))];
+      const razonesSociales = [...new Set(facturas.map((f) => f?.razon_social_emisor).filter(Boolean))];
 
       return {
-        ...rest,
-        id_solicitud_proveedor,
-        fecha_solicitud,
-        monto_solicitado,
-        saldo,
-        forma_pago_solicitada,
-        estatus_pagos,
+        // ── Campos planos del booking (usados por el front directamente) ──
+        hotel:                  r.hotel,
+        nombre_viajero:         r.nombre_viajero,
+        nombre_viajero_completo: r.nombre_viajero,
+        agente:                 r.agente,
+        check_in:               r.check_in,
+        check_out:              r.check_out,
+        room:                   r.room,
+        costo_total:            r.costo_total,
+        total:                  r.total,
+        metodo_pago:            r.metodo_pago,
+        status:                 r.status,
+        estado_reserva:         r.status,
+        id_agente:              r.id_agente,
+        id_viajero:             r.id_viajero,
+        tipo_reserva:           r.tipo_reserva,
+        prefacturado:           r.prefacturado,
+        id_confirmacion:        r.id_confirmacion,
+        id_booking:             r.id_booking,
+        id_proveedor:           r.id_proveedor,
+        created_at:             r.created_at,
 
+        // ── Campos solicitud al nivel raíz (compatibilidad front) ──────────
+        id_solicitud_proveedor: r.id_solicitud_proveedor,
+        fecha_solicitud:        r.fecha_solicitud,
+        monto_solicitado:       r.monto_solicitado,
+        saldo:                  r.saldo,
+        forma_pago_solicitada:  r.forma_pago_solicitada,
+        estatus_pagos:          r.estatus_pagos,
+        codigo_confirmacion:    r.codigo_confirmacion,
+        consolidado:            r.consolidado,
+        is_ajuste:              r.is_ajuste,
+        comentario_ajuste:      r.comentario_ajuste,
+
+        // ── Objeto solicitud_proveedor (esperado por el front) ──────────────
         solicitud_proveedor: {
-          id_solicitud_proveedor,
-          fecha_solicitud,
-          monto_solicitado,
-          saldo,
-          forma_pago_solicitada,
-          id_tarjeta_solicitada,
-          usuario_solicitante,
-          usuario_generador,
-          comentarios,
-          estado_solicitud,
-          estado_facturacion,
-          is_ajuste,
-          comentario_ajuste,
+          id_solicitud_proveedor: r.id_solicitud_proveedor,
+          fecha_solicitud:        r.fecha_solicitud,
+          monto_solicitado:       r.monto_solicitado,
+          saldo:                  r.saldo,
+          forma_pago_solicitada:  r.forma_pago_solicitada,
+          id_tarjeta_solicitada:  r.id_tarjeta_solicitada,
+          usuario_solicitante:    r.usuario_solicitante,
+          usuario_generador:      r.usuario_generador,
+          comentarios:            r.comentarios,
+          notas_internas:         r.notas_internas,
+          comentario_AP:          r.comentario_AP,
+          estado_solicitud:       r.estado_solicitud,
+          estado_facturacion:     r.estado_facturacion,
+          estatus_pagos:          r.estatus_pagos,
+          comentario_CXP:         r.comentario_CXP,
+          monto_por_facturar:     r.monto_por_facturar,
+          monto_facturado:        r.monto_facturado,
+          is_ajuste:              r.is_ajuste,
+          comentario_ajuste:      r.comentario_ajuste,
         },
 
+        // ── Tarjeta (desde tabla tarjetas) ──────────────────────────────────
         tarjeta: {
-          ultimos_4,
-          banco_emisor,
-          tipo_tarjeta,
+          ultimos_4:   r.ultimos_4,
+          banco_emisor: r.banco_emisor,
+          tipo_tarjeta: r.tipo_tarjeta,
         },
 
+        // ── Proveedor fiscal (desde proveedores_datos_fiscales, con fallback
+        //    a los datos del emisor de la factura cuando el proveedor no tiene
+        //    relación fiscal activa) ──────────────────────────────────────────
         proveedor: {
-          rfc: rfcFacturaPrincipal,
-          razon_social: razonSocialFacturaPrincipal,
+          rfc:          r.rfc_proveedor          ?? facturaPrincipal?.rfc_emisor          ?? null,
+          razon_social: r.razon_social_proveedor ?? facturaPrincipal?.razon_social_emisor ?? null,
         },
 
+        // ── Facturas agrupadas (para helpers del front) ─────────────────────
         facturas_proveedor: {
-          uuid_factura_principal: uuidFacturaPrincipal,
-          rfc_factura_principal: rfcFacturaPrincipal,
-          razon_social_factura_principal: razonSocialFacturaPrincipal,
-          uuids_facturas: uuidsFacturas,
-          rfcs_facturas: rfcsFacturas,
-          razones_sociales_facturas: razonesSocialesFacturas,
-          facturas: facturasProveedor,
+          uuid_factura_principal:         facturaPrincipal?.uuid_cfdi ?? null,
+          rfc_factura_principal:          facturaPrincipal?.rfc_emisor ?? null,
+          razon_social_factura_principal: facturaPrincipal?.razon_social_emisor ?? null,
+          uuids_facturas:                 uuidsFacturas,
+          rfcs_facturas:                  rfcsFacturas,
+          razones_sociales_facturas:      razonesSociales,
+          facturas,
         },
 
+        // ── Facturas y pagos en bruto (para extractFacturas / extractPagos) ─
+        facturas,
         pagos,
 
+        // ── Precómputos (usados por assignBucket y helpers del front) ───────
         __computed: {
           forma,
-          estado_solicitud_norm: norm(estado_solicitud),
+          estado_solicitud_norm: norm(r.estado_solicitud),
           estaPagada,
-          pagos_count: pagoStats.count,
-          pagos_total_pagado: pagoStats.pagado,
-          pagos_total_solicitado_sum: pagoStats.solicitado,
-          facturado: factNums.facturado,
-          por_facturar: factNums.porFacturar,
-          solicitado: factNums.solicitado,
+          pagos_count:                pagos.length,
+          pagos_total_pagado:         totalPagado,
+          pagos_total_solicitado_sum: pagos.reduce((a, x) => a + num(x?.monto_solicitado ?? 0), 0),
+          facturado:    num(r.monto_facturado),
+          por_facturar: num(r.monto_por_facturar),
+          solicitado,
         },
       };
     });
 
+    // ── Clasificación en buckets ─────────────────────────────────────────────
     const assignBucket = (row) => {
-      const estado = String(
-        row?.solicitud_proveedor?.estado_solicitud ??
-          row?.estado_solicitud ??
-          "",
-      )
-        .toUpperCase()
-        .trim();
-
-      const formaAjuste = row.__computed?.forma ?? "";
-
+      const estado = String(row.solicitud_proveedor?.estado_solicitud ?? "").toUpperCase().trim();
+      const forma  = row.__computed.forma;
       const isAjuste =
-        Number(row?.solicitud_proveedor?.is_ajuste ?? row?.is_ajuste ?? 0) ===
-          1 &&
+        Number(row.is_ajuste ?? 0) === 1 &&
         estado !== "SOLICITA" &&
-        (formaAjuste === "transfer" || formaAjuste === "card");
+        (forma === "transfer" || forma === "card");
 
-      if (estado === "SOLICITADA") return "ap_credito";
-
-      if (estado === "CANCELADA") return "canceladas";
-
-      if (isAjuste) return "notificados";
-      if (estado === "PAGADO TARJETA" || estado === "PAGADO TRANSFERENCIA")
-        return "pagada";
-      if (estado === "PAGADO LINK") return "pago_link";
-      if (estado === "TRANSFERENCIA_SOLICITADA" || estado === "DISPERSION")
-        return "spei";
-      if (estado === "CARTA_ENVIADA") return "pago_tdc";
-      if (estado === "CUPON ENVIADO") return "pendiente_credito";
-
+      if (estado === "SOLICITADA")                                          return "ap_credito";
+      if (estado === "CANCELADA")                                           return "canceladas";
+      if (isAjuste)                                                         return "notificados";
+      if (estado === "PAGADO TARJETA" || estado === "PAGADO TRANSFERENCIA") return "pagada";
+      if (estado === "PAGADO LINK")                                         return "pago_link";
+      if (estado === "TRANSFERENCIA_SOLICITADA" || estado === "DISPERSION") return "spei";
+      if (estado === "CARTA_ENVIADA")                                       return "pago_tdc";
+      if (estado === "CUPON ENVIADO")                                       return "pendiente_credito";
       return "ap_credito";
     };
 
-    const buckets = {
-      spei: [],
-      pago_tdc: [],
-      pago_link: [],
-      pendiente_credito: [],
-      ap_credito: [],
-      pagada: [],
-      notificados: [],
-      canceladas: [],
-    };
+    const buckets = { spei: [], pago_tdc: [], pago_link: [], pendiente_credito: [], ap_credito: [], pagada: [], notificados: [], canceladas: [] };
 
-    if (
-      bucketFiltro &&
-      bucketFiltro !== "all" &&
-      buckets[bucketFiltro] !== undefined
-    ) {
-      // El SP ya filtró por bucket: meter todos los rows directamente sin re-clasificar
+    if (bucketFiltro && bucketFiltro !== "all" && buckets[bucketFiltro] !== undefined) {
       buckets[bucketFiltro] = data;
     } else {
-      for (const row of data) {
-        buckets[assignBucket(row)].push(row);
-      }
+      for (const row of data) buckets[assignBucket(row)].push(row);
     }
 
-    res.set({
-      "Cache-Control": "no-store",
-      Pragma: "no-cache",
-      Expires: "0",
-    });
+    res.set({ "Cache-Control": "no-store", Pragma: "no-cache", Expires: "0" });
 
-    const meta = {
-      pag: filters.pag,
-      limite: filters.limite,
-      count: spRows.length,
-    };
+    const meta = { pag: filters.pag, limite: filters.limite, count: spRows.length };
 
     if (debug) {
       return res.status(200).json({
         ok: true,
         message: "Registros obtenidos con exito",
         data: buckets,
-        meta: {
-          ...meta,
-          filters,
-          counts: {
-            spRows_len: spRows.length,
-            mapped_len: data.length,
-            pagosRaw_len: pagosRaw.length,
-            solicitudes_con_facturas: Object.keys(facturasBySolicitud).length,
-          },
-        },
+        meta: { ...meta, filters, counts: { spRows_len: spRows.length, mapped_len: data.length } },
       });
     }
 
@@ -4696,19 +4449,10 @@ const getSolicitudes2 = async (req, res) => {
         ? { [bucketFiltro]: buckets[bucketFiltro] ?? [] }
         : buckets;
 
-    return res.status(200).json({
-      ok: true,
-      message: "Registros obtenidos con exito",
-      data: responseData,
-      meta,
-    });
+    return res.status(200).json({ ok: true, message: "Registros obtenidos con exito", data: responseData, meta });
   } catch (error) {
-    console.error("this error is vucfkjtgxrfcjygvkugvkuj", error);
-    return res.status(500).json({
-      ok: false,
-      error: "Internal Server Error",
-      details: error?.message || error,
-    });
+    console.error("getSolicitudes2 error:", error);
+    return res.status(500).json({ ok: false, error: "Internal Server Error", details: error?.message || error });
   }
 };
 
@@ -5667,6 +5411,7 @@ const EditCampos = async (req, res) => {
       "comentario_ajuste",
       "pagado",
       "notas_internas",
+      "codigo_confirmacion",
     ]);
 
     const NUMERIC_FIELDS = new Set([
@@ -7658,7 +7403,12 @@ const eliminarFactura = async (req, res) => {
 
 const asignar_factura_previa = async (req, res) => {
   try {
-    const { uuid_cfdi, proveedoresData } = req.body;
+    const { uuid_cfdi, proveedoresData, propina_data } = req.body;
+
+    const propinaMonto =
+      propina_data?.tiene_propina === true
+        ? Math.max(0, Number(propina_data?.monto_propina ?? 0))
+        : 0;
 
     const EPS = 0.01;
 
@@ -8107,7 +7857,8 @@ const asignar_factura_previa = async (req, res) => {
         SET
           monto_facturado = ?,
           monto_por_facturar = ?,
-          estado_facturacion = ?
+          estado_facturacion = ?,
+          propina = ?
         WHERE id_solicitud_proveedor = ?
         LIMIT 1;
         `,
@@ -8115,6 +7866,7 @@ const asignar_factura_previa = async (req, res) => {
           toMoneyString(nuevoMontoFacturado),
           toMoneyString(nuevoMontoPorFacturar),
           nuevoEstadoFacturacion,
+          propinaMonto > 0 ? toMoneyString(propinaMonto) : null,
           idSolicitud,
         ],
       );
@@ -8160,11 +7912,13 @@ const asignar_factura_previa = async (req, res) => {
     await executeQuery(
       `
       UPDATE facturas_pago_proveedor
-      SET saldo_x_aplicar_items = ?
+      SET
+        saldo_x_aplicar_items = ?,
+        propina = ?
       WHERE id_factura_proveedor = ?
       LIMIT 1;
       `,
-      [toMoneyString(nuevoSaldoFactura), idFactura],
+      [toMoneyString(nuevoSaldoFactura), propinaMonto > 0 ? toMoneyString(propinaMonto) : null, idFactura],
     );
 
     return res.status(200).json({
@@ -8209,7 +7963,7 @@ const buscaruuid = async (req, res) => {
     const qValidarEstado = `
       SELECT
         v.id_solicitud,
-        spp.id_solicitud AS id_solicitud_booking,
+        spp.id_solicitud_proveedor AS id_solicitud_booking,
         spp.estado_solicitud
       FROM vw_pagos_facturas_proveedores_detalle v
       INNER JOIN solicitudes_pago_proveedor spp
@@ -8234,8 +7988,7 @@ const buscaruuid = async (req, res) => {
     if (tieneCancelada) {
       return res.status(404).json({
         ok: false,
-        message:
-          "La solicitud está cancelada, no se buscará en booking_solicitud",
+        message: "No se encontró relación de esa factura",
       });
     }
 
@@ -8270,7 +8023,7 @@ const buscaruuid = async (req, res) => {
       INNER JOIN solicitudes_pago_proveedor spp
         ON spp.id_solicitud_proveedor = v.id_solicitud
       INNER JOIN booking_solicitud bs
-        ON bs.id_solicitud = spp.id_solicitud
+        ON bs.id_solicitud = spp.id_solicitud_proveedor
       WHERE v.uuid_factura LIKE TRIM(?)
         AND UPPER(TRIM(COALESCE(spp.estado_solicitud, ''))) <> 'CANCELADA'
       ORDER BY v.id_relacion_pago_factura DESC;
