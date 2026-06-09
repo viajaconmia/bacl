@@ -4143,6 +4143,21 @@ const getSolicitudes2 = async (req, res) => {
       }
     };
 
+    // Lee un param del query string crudo sin convertir '+' a espacio,
+    // para campos cuyo valor en BD usa '+' como separador literal.
+    const rawQs = (req.originalUrl || req.url || "").split("?")[1] || "";
+    const cleanLiteral = (name) => {
+      const match = rawQs.match(new RegExp(`(?:^|&)${name}=([^&]*)`));
+      if (!match) return null;
+      const raw = match[1].trim();
+      if (!raw) return null;
+      try {
+        return decodeURIComponent(raw) || null;
+      } catch {
+        return raw || null;
+      }
+    };
+
     const num = (v) => {
       const n = Number(v);
       return Number.isFinite(n) ? n : 0;
@@ -4233,12 +4248,19 @@ const getSolicitudes2 = async (req, res) => {
       fecha_reserva_start: toDateStart(req.query.fecha_reserva_start),
       fecha_reserva_end:   toDateEnd(req.query.fecha_reserva_end),
       filtrar_fecha_por:   filtrarFechaPor,
-      comentarios:         clean(req.query.comentarios),
-      comentario_CXP:      clean(req.query.comentario_CXP),
-      estatus_pagos:       clean(req.query.estatus_pagos),
-      uuid_factura:        clean(req.query.uuid_factura),
-      pag:                 Math.max(1, Number(req.query.pag ?? 1) || 1),
-      limite:              Math.max(1, Number(req.query.limite ?? 50) || 50),
+      comentarios:                clean(req.query.comentarios),
+      comentario_CXP:             clean(req.query.comentario_CXP),
+      estatus_pagos:              clean(req.query.estatus_pagos),
+      uuid_factura:               clean(req.query.uuid_factura),
+      tipo_negociacion:           cleanLiteral("tipo_negociacion"),
+      fecha_solicitud_start:      toDateStart(req.query.fecha_solicitud_start),
+      fecha_solicitud_end:        toDateEnd(req.query.fecha_solicitud_end),
+      servicio:                   clean(req.query.servicio),
+      rfc:                        clean(req.query.rfc),
+      fecha_emision_factura_start: clean(req.query.fecha_emision_factura_start),
+      fecha_emision_factura_end:   clean(req.query.fecha_emision_factura_end),
+      pag:                        Math.max(1, Number(req.query.pag ?? 1) || 1),
+      limite:                     Math.max(1, Number(req.query.limite ?? 50) || 50),
     };
 
     const bucketFiltro = clean(req.query.bucket);
@@ -4272,6 +4294,13 @@ const getSolicitudes2 = async (req, res) => {
         filters.comentario_CXP,
         filters.estatus_pagos,
         filters.uuid_factura,
+        filters.tipo_negociacion,
+        filters.fecha_solicitud_start,
+        filters.fecha_solicitud_end,
+        filters.servicio,
+        filters.rfc,
+        filters.fecha_emision_factura_start,
+        filters.fecha_emision_factura_end,
         filters.pag,
         filters.limite,
         bucketFiltro ?? null,

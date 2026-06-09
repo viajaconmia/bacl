@@ -70,7 +70,10 @@ BEGIN
     spp.monto_original,
 
     -- ── vw_details_booking ──────────────────────────────────────────────────
-    db.proveedor             AS hotel,
+    -- COALESCE: vw_details_booking.proveedor viene de hospedajes.id_hotel (UUID)
+    -- vs proveedores.id (INT) — join siempre falla, por eso se usa directamente
+    -- spp.id_proveedor → proveedores.proveedor como fuente principal del hotel.
+    COALESCE(db.proveedor, prov_hotel.proveedor) AS hotel,
     db.nombre_viajero,
     db.nombre_agente         AS agente,
     db.check_in,
@@ -196,6 +199,9 @@ BEGIN
 
   LEFT JOIN vw_details_booking db
     ON spp.id_booking = db.id_booking
+
+  LEFT JOIN proveedores prov_hotel
+    ON spp.id_proveedor = prov_hotel.id
 
   LEFT JOIN tarjetas t
     ON spp.id_tarjeta_solicitada = t.id
