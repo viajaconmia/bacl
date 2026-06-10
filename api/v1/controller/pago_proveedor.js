@@ -639,7 +639,20 @@ const createSolicitud = async (req, res) => {
       documento,
       id_booking,
       id_confirmacion,
+      hora,
     } = solicitud;
+
+    // ✅ Normaliza "hora" a formato HH:MM:SS (acepta HH:MM o HH:MM:SS)
+    const normalizeHora = (value) => {
+      const h = String(value ?? "").trim();
+      if (!h) return null;
+      const match = h.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+      if (!match) return null;
+      const hh = match[1].padStart(2, "0");
+      const mm = match[2];
+      const ss = match[3] ?? "00";
+      return `${hh}:${mm}:${ss}`;
+    };
 
     // ✅ Determina forma_pago_solicitada para el SP
     const formaPagoDB =
@@ -829,6 +842,11 @@ const createSolicitud = async (req, res) => {
         ? schedule?.[0]?.fecha_pago || date
         : date;
 
+    const horaSolicitud =
+      formaPagoDB === "card" || formaPagoDB === "link"
+        ? normalizeHora(schedule?.[0]?.hora) || normalizeHora(hora)
+        : normalizeHora(hora);
+
     // ✅ tarjeta SOLO card/link; transfer/credit => NULL
     const cardId =
       formaPagoDB === "card" || formaPagoDB === "link"
@@ -860,6 +878,7 @@ const createSolicitud = async (req, res) => {
       userId, // p_id_creador (UUID)  <-- evita NULL
       id_hospedaje, // p_id_hospedaje
       fechaSolicitud, // p_fecha
+      horaSolicitud, // p_hora
       estado_solicitud_db, // p_estado_solicitud
       estatus_pagos_db, // p_estatus_pagos
       documentoId,
@@ -892,10 +911,18 @@ const createSolicitud = async (req, res) => {
     if (formaPagoDB === "link" || formaPagoDB === "card") {
       // normaliza schedule (ya lo traes como `schedule`)
       const rows = (Array.isArray(schedule) ? schedule : [])
-        .map((it) => ({
-          fecha_pago: it?.fecha_pago || date,
-          monto: Number(it?.monto || 0),
-        }))
+        .map((it) => {
+          const fechaPago = it?.fecha_pago || date;
+          const horaPago =
+            normalizeHora(it?.hora) || normalizeHora(hora) || "00:00:00";
+          return {
+            fecha_pago:
+              fechaPago && !String(fechaPago).includes(" ")
+                ? `${fechaPago} ${horaPago}`
+                : fechaPago,
+            monto: Number(it?.monto || 0),
+          };
+        })
         .filter(
           (it) => it.fecha_pago && Number.isFinite(it.monto) && it.monto > 0,
         );
