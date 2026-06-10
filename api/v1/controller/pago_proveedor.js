@@ -6044,6 +6044,83 @@ const EditCampos = async (req, res) => {
   }
 };
 
+// Mapeo de tipo de reserva -> tabla/columna donde vive el código de confirmación
+const TABLA_CODIGO_CONFIRMACION = {
+  hotel: { table: "hospedajes", column: "codigo_reservacion_hotel" },
+  car_rental: { table: "renta_autos", column: "codigo_renta_carro" },
+  flyght: { table: "viajes_aereos", column: "codigo_confirmacion" },
+};
+
+const editCodigoConfirmacion = async (req, res) => {
+  try {
+    const { id_booking, tipo_reserva, codigo_confirmacion } = req.body || {};
+
+    if (!id_booking) {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: "id_booking es requerido",
+      });
+    }
+
+    const config = TABLA_CODIGO_CONFIRMACION[tipo_reserva];
+    if (!config) {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: `tipo_reserva inválido. Debe ser uno de: ${Object.keys(
+          TABLA_CODIGO_CONFIRMACION,
+        ).join(", ")}`,
+      });
+    }
+
+    const codigo = typeof codigo_confirmacion === "string"
+      ? codigo_confirmacion.trim()
+      : codigo_confirmacion;
+
+    if (!codigo) {
+      return res.status(400).json({
+        error: "Bad Request",
+        details: "codigo_confirmacion es requerido",
+      });
+    }
+
+    const { table, column } = config;
+
+    const result = await executeQuery(
+      `UPDATE ${table} SET ${column} = ? WHERE id_booking = ?`,
+      [codigo, id_booking],
+    );
+
+    if (!result || result.affectedRows === 0) {
+      return res.status(404).json({
+        error: "Not Found",
+        details: "No se encontró la reserva para este id_booking",
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: "Código de confirmación actualizado correctamente",
+      id_booking,
+      tipo_reserva,
+      codigo_confirmacion: codigo,
+    });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        error: "Conflict",
+        details: "Ya existe una reserva con ese código de confirmación",
+        field: error.message.match(/for key '(.+)'/)?.[1],
+      });
+    }
+
+    console.error("Error en editCodigoConfirmacion:", error);
+    return res.status(500).json({
+      error: "Error en el servidor",
+      details: error?.message ?? error,
+    });
+  }
+};
+
 const monto_factura = async (req, res) => {
   try {
     const {
@@ -8760,4 +8837,5 @@ module.exports = {
   reasignarPago,
   cuentas,
   solicitudes_lu,
+  editCodigoConfirmacion,
 };
