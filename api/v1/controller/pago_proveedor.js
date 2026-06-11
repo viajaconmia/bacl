@@ -8267,13 +8267,14 @@ const cuentas = async (req, res) => {
   }
 };
 
-const reasignarPago = async (req, res) => {
+const   reasignarPago = async (req, res) => {
   try {
     const {
       monto,
       id_pago_proveedores,
       id_solicitud_nueva,
       id_solicitud_antigua,
+      id_saldo_antigua,
     } = req.body || {};
 
     if (!id_pago_proveedores || !id_solicitud_nueva || !id_solicitud_antigua) {
@@ -8290,19 +8291,8 @@ const reasignarPago = async (req, res) => {
       id_pago_proveedores,
       id_solicitud_nueva,
       id_solicitud_antigua,
+      id_saldo_antigua,
     );
-
-    const montoReasignado =
-      monto === undefined || monto === null || monto === ""
-        ? null
-        : Number(monto);
-
-    if (montoReasignado !== null && Number.isNaN(montoReasignado)) {
-      return res.status(400).json({
-        ok: false,
-        error: "El monto no es válido",
-      });
-    }
 
     /**
      * Helper por si executeQuery devuelve:
@@ -8317,10 +8307,11 @@ const reasignarPago = async (req, res) => {
     // 1) Validar solicitud nueva
     const rowsNuevaResult = await executeQuery(
       `
-      SELECT 
+      SELECT
         id_solicitud_proveedor,
         estatus_pagos,
-        forma_pago_solicitada
+        forma_pago_solicitada,
+        monto_solicitado
       FROM solicitudes_pago_proveedor
       WHERE id_solicitud_proveedor = ?
       LIMIT 1
@@ -8411,7 +8402,52 @@ const reasignarPago = async (req, res) => {
     const formaPagoNueva = solicitudNueva.forma_pago_solicitada;
     const userId = req.session?.user?.id || null;
 
-    // 4) Insertar nuevo pago copiando el pago original
+    // 4) El monto a reasignar sale del monto pagado en la solicitud anterior
+    //    (o del override "monto" si se envía explícitamente)
+    const montoBase =
+      monto === undefined || monto === null || monto === ""
+        ? money2(Number(pagoOriginal.monto_pagado ?? pagoOriginal.monto ?? 0))
+        : money2(Number(monto));
+
+    if (Number.isNaN(montoBase) || montoBase <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "El monto a reasignar no es válido",
+      });
+    }
+
+    // 5) Calcular cuánto falta por cubrir en la solicitud nueva
+    const rowsTotalPagadoResult = await executeQuery(
+      `
+      SELECT COALESCE(SUM(monto_pagado), 0) AS total_pagado
+      FROM pago_proveedores
+      WHERE id_solicitud_proveedor = ?
+      `,
+      [id_solicitud_nueva],
+    );
+
+    const totalPagadoNueva = money2(
+      Number(getFirstRow(rowsTotalPagadoResult)?.total_pagado ?? 0),
+    );
+    const montoSolicitadoNueva = money2(
+      Number(solicitudNueva.monto_solicitado ?? 0),
+    );
+    const faltanteNueva = money2(montoSolicitadoNueva - totalPagadoNueva);
+
+    if (faltanteNueva <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "La solicitud nueva ya no tiene saldo pendiente por cubrir",
+      });
+    }
+
+    // 6) Si lo reasignado es mayor a lo que falta, solo se cubre el faltante
+    //    y la diferencia se regresa a la tabla saldos (saldo de la solicitud antigua)
+    const sobrepasa = montoBase > faltanteNueva;
+    const montoReasignado = sobrepasa ? faltanteNueva : montoBase;
+    const diferenciaSaldo = sobrepasa ? money2(montoBase - faltanteNueva) : 0;
+
+    // 7) Insertar nuevo pago copiando el pago original
     // IMPORTANTE:
     // No hacer JOIN con solicitudes_pago_proveedor aquí,
     // porque el trigger actualiza esa misma tabla y MySQL marca error 1442.
@@ -8507,6 +8543,50 @@ const reasignarPago = async (req, res) => {
       });
     }
 
+    // 8) Si hubo sobrante (se reasignó más de lo que la solicitud nueva
+    //    necesitaba), se regresa la diferencia al saldo de la solicitud antigua
+    let saldoActualizado = null;
+
+    if (diferenciaSaldo > 0) {
+      const rowsSaldoResult = await executeQuery(
+        `
+        SELECT id_saldo, restante
+        FROM saldos
+        WHERE id_solicitud = ?
+          ${id_saldo_antigua ? "AND id_saldo = ?" : ""}
+        ORDER BY fecha_generado DESC
+        LIMIT 1
+        `,
+        id_saldo_antigua
+          ? [id_solicitud_antigua, id_saldo_antigua]
+          : [id_solicitud_antigua],
+      );
+
+      const saldoRow = getFirstRow(rowsSaldoResult);
+
+      if (saldoRow) {
+        await executeQuery(
+          `
+          UPDATE saldos
+          SET restante = ?, update_at = NOW()
+          WHERE id_saldo = ?
+          `,
+          [diferenciaSaldo, saldoRow.id_saldo],
+        );
+
+        saldoActualizado = {
+          id_saldo: saldoRow.id_saldo,
+          restante_anterior: money2(Number(saldoRow.restante ?? 0)),
+          restante_nuevo: diferenciaSaldo,
+        };
+      } else {
+        console.warn(
+          "reasignarPago: no se encontró saldo para id_solicitud_antigua",
+          id_solicitud_antigua,
+        );
+      }
+    }
+
     const updateAjusteResult = await executeQuery(
       `
   UPDATE solicitudes_pago_proveedor
@@ -8528,7 +8608,10 @@ const reasignarPago = async (req, res) => {
       id_solicitud_antigua,
       id_solicitud_nueva,
       forma_pago_nueva: formaPagoNueva,
+      monto_base: montoBase,
       monto_reasignado: montoReasignado,
+      diferencia_saldo: diferenciaSaldo,
+      saldo_actualizado: saldoActualizado,
     });
   } catch (error) {
     console.error("Error en reasignarPago:", error);
