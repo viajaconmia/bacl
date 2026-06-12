@@ -6097,12 +6097,50 @@ const editCodigoConfirmacion = async (req, res) => {
       });
     }
 
+    // Sincroniza el código de confirmación en solicitudes_pago_proveedor y
+    // marca la solicitud como ajuste para que quede rastro en comentario_ajuste
+    let solicitudSyncInfo = null;
+
+    const rBookingSolicitud = await executeQuery(
+      `SELECT id_solicitud FROM booking_solicitud WHERE id_booking = ? LIMIT 1`,
+      [id_booking],
+    );
+
+    if (rBookingSolicitud?.length) {
+      const id_solicitud_proveedor = rBookingSolicitud[0].id_solicitud;
+      const comentario = `Se cambió el código de confirmación a ${codigo}`;
+
+      const rUpdateSolicitud = await executeQuery(
+        `UPDATE solicitudes_pago_proveedor
+         SET
+           codigo_confirmacion = ?,
+           is_ajuste = 1,
+           comentario_ajuste = CONCAT(
+             COALESCE(comentario_ajuste, ''),
+             CASE
+               WHEN comentario_ajuste IS NULL OR comentario_ajuste = '' THEN ''
+               ELSE ' | '
+             END,
+             ?
+           )
+         WHERE id_solicitud_proveedor = ?
+         LIMIT 1`,
+        [codigo, comentario, id_solicitud_proveedor],
+      );
+
+      solicitudSyncInfo = {
+        ok: (rUpdateSolicitud?.affectedRows ?? 0) > 0,
+        id_solicitud_proveedor,
+      };
+    }
+
     return res.status(200).json({
       ok: true,
       message: "Código de confirmación actualizado correctamente",
       id_booking,
       tipo_reserva,
       codigo_confirmacion: codigo,
+      solicitudSyncInfo,
     });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
