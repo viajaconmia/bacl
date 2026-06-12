@@ -5975,7 +5975,7 @@ const EditCampos = async (req, res) => {
     let bookingCodigoSyncInfo = null;
     if (nuevoCodigoConfirmacion !== null && nuevoCodigoConfirmacion !== "") {
       const rBooking = await executeQuery(
-        `SELECT bs.id_booking, vw.tipo_reserva
+        `SELECT bs.id_booking, vw.type AS tipo_reserva
          FROM booking_solicitud bs
          JOIN vw_details_booking vw ON vw.id_booking = bs.id_booking
          WHERE bs.id_solicitud = ?
