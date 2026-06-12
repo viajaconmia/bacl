@@ -5917,6 +5917,10 @@ const EditCampos = async (req, res) => {
       updatesMap.delete("monto_solicitado");
     }
 
+    const nuevoCodigoConfirmacion = updatesMap.has("codigo_confirmacion")
+      ? updatesMap.get("codigo_confirmacion")
+      : null;
+
     if (updatesMap.size > 0) {
       // SIEMPRE registrar usuario_edit cuando haya update normal
       updatesMap.set("usuario_edit", userIdDB);
@@ -5964,6 +5968,64 @@ const EditCampos = async (req, res) => {
         `,
         [userIdDB, id_solicitud_proveedor],
       );
+    }
+
+    // Si se editó codigo_confirmacion, sincroniza también la tabla de la
+    // reserva (hospedajes/renta_autos/viajes_aereos) según tipo_reserva
+    let bookingCodigoSyncInfo = null;
+    if (nuevoCodigoConfirmacion !== null && nuevoCodigoConfirmacion !== "") {
+      const rBooking = await executeQuery(
+        `SELECT bs.id_booking, vw.tipo_reserva
+         FROM booking_solicitud bs
+         JOIN vw_details_booking vw ON vw.id_booking = bs.id_booking
+         WHERE bs.id_solicitud = ?
+         LIMIT 1`,
+        [id_solicitud_proveedor],
+      );
+
+      if (rBooking?.length) {
+        const { id_booking, tipo_reserva } = rBooking[0];
+        const config = TABLA_CODIGO_CONFIRMACION[tipo_reserva];
+
+        if (config) {
+          const { table, column } = config;
+          try {
+            const rUpdateBookingCodigo = await executeQuery(
+              `UPDATE ${table} SET ${column} = ? WHERE id_booking = ?`,
+              [nuevoCodigoConfirmacion, id_booking],
+            );
+            bookingCodigoSyncInfo = {
+              ok: (rUpdateBookingCodigo?.affectedRows ?? 0) > 0,
+              id_booking,
+              tipo_reserva,
+              table,
+              column,
+            };
+          } catch (error) {
+            if (error.code === "ER_DUP_ENTRY") {
+              bookingCodigoSyncInfo = {
+                ok: false,
+                error: "ER_DUP_ENTRY",
+                details:
+                  "Ya existe una reserva con ese código de confirmación",
+              };
+            } else {
+              throw error;
+            }
+          }
+        } else {
+          bookingCodigoSyncInfo = {
+            ok: false,
+            action: "TIPO_RESERVA_NO_MAPEADO",
+            tipo_reserva,
+          };
+        }
+      } else {
+        bookingCodigoSyncInfo = {
+          ok: false,
+          action: "BOOKING_RELATION_NOT_FOUND",
+        };
+      }
     }
 
     if (debeDevolverFacturasPorCancelacion) {
@@ -6032,6 +6094,7 @@ const EditCampos = async (req, res) => {
       estadoEspecialInfo: estadoEspecialInfo || null,
       ajusteInfo: ajusteInfo || null,
       devolucionFacturasInfo: devolucionFacturasInfo || null,
+      bookingCodigoSyncInfo: bookingCodigoSyncInfo || null,
       updated_fields: keys,
       data: updated || null,
     });
