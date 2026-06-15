@@ -4377,6 +4377,7 @@ const getSolicitudes2 = async (req, res) => {
         id_confirmacion:        r.id_confirmacion,
         id_booking:             r.id_booking,
         id_proveedor:           r.id_proveedor,
+        tipo_negociacion:       r.tipo_negociacion,
         created_at:             r.created_at,
 
         // ── Campos solicitud al nivel raíz (compatibilidad front) ──────────
