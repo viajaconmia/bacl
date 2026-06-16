@@ -552,11 +552,11 @@ const updateProveedorCuenta = async (req, res) => {
     if (!cuenta || !cuenta.trim()) throw new Error("La cuenta es obligatoria");
 
     // Validación de duplicado: lectura simple, no necesita auditoría
-    const [existente] = await executeQuery(
-      `SELECT id FROM proveedores_cuentas WHERE id_proveedor = ? AND cuenta = ? AND id <> ?`,
-      [id_proveedor, cuenta.trim(), id],
-    );
-    if (existente) throw new Error("Ya existe otra cuenta con ese número");
+    // const [existente] = await executeQuery(
+    //   `SELECT id FROM proveedores_cuentas WHERE id_proveedor = ? AND cuenta = ? AND id <> ?`,
+    //   [id_proveedor, cuenta.trim(), id],
+    // );
+    // if (existente) throw new Error("Ya existe otra cuenta con ese número");
 
     // S3 fuera de la transacción
     let url_caratula = null;
