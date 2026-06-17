@@ -19,10 +19,11 @@ const getProveedores = async (req, res) => {
       rfc = null,
       intermediario = null,
       id_hotel = null,
+      negociacion = null,
     } = req.query;
 
     const [[{ total }], data] = await executeQuery(
-      "call sp_filtro_proveedores(?,?,?,?,?,?,?,?)",
+      "call sp_filtro_proveedores(?,?,?,?,?,?,?,?,?)",
       [
         type,
         id,
@@ -32,6 +33,7 @@ const getProveedores = async (req, res) => {
         id_hotel,
         page,
         size,
+        negociacion || null,
       ],
     );
 
