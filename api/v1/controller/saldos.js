@@ -179,35 +179,49 @@ const readSaldoByAgente = async (req, res) => {
   try {
     const saldo = await executeQuery(
       `SELECT
-  sf.id_agente,
-  a.nombre,
-  sf.id_saldos,
-  sf.fecha_creacion,
-  sf.saldo,
-  sf.monto,
-  sf.metodo_pago,
-  sf.fecha_pago,
-  sf.concepto,
-  sf.referencia,
-  sf.currency,
-  sf.tipo_tarjeta,
-  sf.ult_digits,
-  sf.comentario,
-  sf.link_stripe,
-  sf.is_facturable,
-  sf.is_wallet_credito,
-  sf.comprobante,
-  sf.activo,
-  sf.numero_autorizacion,
-  sf.banco_tarjeta,
-  COALESCE(v.monto_facturado, 0)     AS monto_facturado,
-  COALESCE(v.monto_por_facturar, 0)  AS monto_por_facturar
-FROM saldos_a_favor AS sf
-INNER JOIN agente_details AS a
-  ON a.id_agente = sf.id_agente
-LEFT JOIN vw_pagos_prepago_facturables AS v
-  ON v.raw_id = sf.id_saldos
-  where sf.id_agente = ? and sf.is_cancelado =0
+    sf.id_agente,
+    a.nombre,
+    sf.id_saldos,
+    sf.fecha_creacion,
+    sf.saldo,
+    sf.monto,
+    sf.metodo_pago,
+    sf.fecha_pago,
+    sf.concepto,
+    sf.referencia,
+    sf.currency,
+    sf.tipo_tarjeta,
+    sf.ult_digits,
+    sf.comentario,
+    sf.link_stripe,
+    sf.is_facturable,
+    sf.is_wallet_credito,
+    sf.comprobante,
+    sf.activo,
+    sf.numero_autorizacion,
+    sf.banco_tarjeta,
+    UPPER(ua.name) as usuario_creador,
+
+    COALESCE(v.monto_facturado,0) AS monto_facturado,
+    (sf.monto - COALESCE(v.monto_facturado,0)) AS monto_por_facturar
+
+FROM saldos_a_favor sf
+
+INNER JOIN agente_details a
+    ON a.id_agente = sf.id_agente
+LEFT JOIN users_admin ua
+	ON ua.id = sf.usuario_creador
+LEFT JOIN (
+    SELECT
+        id_saldo_a_favor,
+        SUM(monto) AS monto_facturado
+    FROM facturas_pagos_y_saldos
+    GROUP BY id_saldo_a_favor
+) v
+    ON v.id_saldo_a_favor = sf.id_saldos
+
+WHERE sf.id_agente = ?
+  AND sf.is_cancelado = 0;
   ;`,
       [id],
     );
