@@ -20,7 +20,7 @@ const pool = mysql.createPool({
   // multipleStatements: true,
   typeCast: function (field, next) {
     if (field.type === "JSON") {
-      return JSON.parse(field.string());
+      return JSON.parse(field.string("utf8"));
     }
     return next();
   },

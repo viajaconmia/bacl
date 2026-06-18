@@ -4156,7 +4156,10 @@ const getSolicitudes = async (req, res) => {
 
 const getSolicitudes2 = async (req, res) => {
   try {
-    const norm = (v) => String(v ?? "").trim().toLowerCase();
+    const norm = (v) =>
+      String(v ?? "")
+        .trim()
+        .toLowerCase();
 
     const clean = (v) => {
       const raw = String(v ?? "");
@@ -4241,53 +4244,66 @@ const getSolicitudes2 = async (req, res) => {
           COUNT(*) AS todos
         FROM solicitudes_pago_proveedor
       `);
-      res.set({ "Cache-Control": "no-store", Pragma: "no-cache", Expires: "0" });
-      return res.status(200).json({ ok: true, message: "Conteos obtenidos con éxito", data: conteosRows });
+      res.set({
+        "Cache-Control": "no-store",
+        Pragma: "no-cache",
+        Expires: "0",
+      });
+      return res.status(200).json({
+        ok: true,
+        message: "Conteos obtenidos con éxito",
+        data: conteosRows,
+      });
     }
 
     // ── Parseo de filtros ────────────────────────────────────────────────────
-    const allowedFechaReserva = new Set(["created_at", "check_in", "check_out"]);
+    const allowedFechaReserva = new Set([
+      "created_at",
+      "check_in",
+      "check_out",
+    ]);
     const rawFiltrarFecha = clean(req.query.filtrar_fecha_por_reserva);
-    const filtrarFechaPor = rawFiltrarFecha && allowedFechaReserva.has(rawFiltrarFecha)
-      ? rawFiltrarFecha
-      : null;
+    const filtrarFechaPor =
+      rawFiltrarFecha && allowedFechaReserva.has(rawFiltrarFecha)
+        ? rawFiltrarFecha
+        : null;
 
     const rawEstado = clean(req.query.estado_solicitud);
     const filters = {
-      folio:               clean(req.query.folio),
-      cliente:             clean(req.query.cliente),
-      viajero:             clean(req.query.viajero),
-      hotel:               clean(req.query.hotel),
-      estado_solicitud:    rawEstado,
-      estado_facturacion:  clean(req.query.estado_facturacion),
-      forma_pago:          clean(req.query.forma_pago),
-      created_start:       toDateStart(req.query.created_start),
-      created_end:         toDateEnd(req.query.created_end),
-      check_in_start:      clean(req.query.check_in_start),
-      check_in_end:        clean(req.query.check_in_end),
-      check_out_start:     clean(req.query.check_out_start),
-      check_out_end:       clean(req.query.check_out_end),
-      id_cliente:          clean(req.query.id_cliente),
-      estado_reserva:      clean(req.query.estado_reserva),
-      etapa_reservacion:   clean(req.query.etapa_reservacion),
-      reservante:          clean(req.query.reservante),
+      folio: clean(req.query.folio),
+      cliente: clean(req.query.cliente),
+      viajero: clean(req.query.viajero),
+      hotel: clean(req.query.hotel),
+      estado_solicitud: rawEstado,
+      estado_facturacion: clean(req.query.estado_facturacion),
+      forma_pago: clean(req.query.forma_pago),
+      created_start: toDateStart(req.query.created_start),
+      created_end: toDateEnd(req.query.created_end),
+      check_in_start: clean(req.query.check_in_start),
+      check_in_end: clean(req.query.check_in_end),
+      check_out_start: clean(req.query.check_out_start),
+      check_out_end: clean(req.query.check_out_end),
+      id_cliente: clean(req.query.id_cliente),
+      estado_reserva: clean(req.query.estado_reserva),
+      etapa_reservacion: clean(req.query.etapa_reservacion),
+      reservante: clean(req.query.reservante),
       metodo_pago_reserva: clean(req.query.metodo_pago_reserva),
       fecha_reserva_start: toDateStart(req.query.fecha_reserva_start),
-      fecha_reserva_end:   toDateEnd(req.query.fecha_reserva_end),
-      filtrar_fecha_por:   filtrarFechaPor,
-      comentarios:                clean(req.query.comentarios),
-      comentario_CXP:             clean(req.query.comentario_CXP),
-      estatus_pagos:              clean(req.query.estatus_pagos),
-      uuid_factura:               clean(req.query.uuid_factura),
-      tipo_negociacion:           cleanLiteral("tipo_negociacion"),
-      fecha_solicitud_start:      toDateStart(req.query.fecha_solicitud_start),
-      fecha_solicitud_end:        toDateEnd(req.query.fecha_solicitud_end),
-      servicio:                   clean(req.query.servicio),
-      rfc:                        clean(req.query.rfc),
+      fecha_reserva_end: toDateEnd(req.query.fecha_reserva_end),
+      filtrar_fecha_por: filtrarFechaPor,
+      comentarios: clean(req.query.comentarios),
+      comentario_CXP: clean(req.query.comentario_CXP),
+      estatus_pagos: clean(req.query.estatus_pagos),
+      uuid_factura: clean(req.query.uuid_factura),
+      tipo_negociacion: cleanLiteral("tipo_negociacion"),
+      fecha_solicitud_start: toDateStart(req.query.fecha_solicitud_start),
+      fecha_solicitud_end: toDateEnd(req.query.fecha_solicitud_end),
+      servicio: clean(req.query.servicio),
+      rfc: clean(req.query.rfc),
       fecha_emision_factura_start: clean(req.query.fecha_emision_factura_start),
-      fecha_emision_factura_end:   clean(req.query.fecha_emision_factura_end),
-      pag:                        Math.max(1, Number(req.query.pag ?? 1) || 1),
-      limite:                     Math.max(1, Number(req.query.limite ?? 50) || 50),
+      fecha_emision_factura_end: clean(req.query.fecha_emision_factura_end),
+      pag: Math.max(1, Number(req.query.pag ?? 1) || 1),
+      limite: Math.max(1, Number(req.query.limite ?? 50) || 50),
     };
 
     const bucketFiltro = clean(req.query.bucket);
@@ -4336,15 +4352,18 @@ const getSolicitudes2 = async (req, res) => {
 
     // ── Mapeo de filas ───────────────────────────────────────────────────────
     const data = (spRows || []).map((r) => {
-      const pagos    = toArray(r.pagos_json);
+      const pagos = toArray(r.pagos_json);
       const facturas = toArray(r.facturas_json);
 
-      const forma     = norm(r.forma_pago_solicitada);
-      const saldoNum  = num(r.saldo);
+      const forma = norm(r.forma_pago_solicitada);
+      const saldoNum = num(r.saldo);
       const solicitado = num(r.monto_solicitado);
 
-      const totalPagado = pagos.reduce((acc, x) => acc + num(x?.monto_pagado ?? 0), 0);
-      const estaPagada  =
+      const totalPagado = pagos.reduce(
+        (acc, x) => acc + num(x?.monto_pagado ?? 0),
+        0,
+      );
+      const estaPagada =
         norm(r.estatus_pagos) === "pagado" ||
         saldoNum === 0 ||
         (solicitado > 0 && totalPagado >= solicitado);
@@ -4352,72 +4371,78 @@ const getSolicitudes2 = async (req, res) => {
       const facturaPrincipal = facturas[0] ?? null;
 
       // uuid(s) y datos fiscales de las facturas
-      const uuidsFacturas = [...new Set(facturas.map((f) => f?.uuid_cfdi).filter(Boolean))];
-      const rfcsFacturas  = [...new Set(facturas.map((f) => f?.rfc_emisor).filter(Boolean))];
-      const razonesSociales = [...new Set(facturas.map((f) => f?.razon_social_emisor).filter(Boolean))];
+      const uuidsFacturas = [
+        ...new Set(facturas.map((f) => f?.uuid_cfdi).filter(Boolean)),
+      ];
+      const rfcsFacturas = [
+        ...new Set(facturas.map((f) => f?.rfc_emisor).filter(Boolean)),
+      ];
+      const razonesSociales = [
+        ...new Set(facturas.map((f) => f?.razon_social_emisor).filter(Boolean)),
+      ];
 
       return {
         // ── Campos planos del booking (usados por el front directamente) ──
-        hotel:                  r.hotel,
-        nombre_viajero:         r.nombre_viajero,
+        hotel: r.hotel,
+        nombre_viajero: r.nombre_viajero,
         nombre_viajero_completo: r.nombre_viajero,
-        agente:                 r.agente,
-        check_in:               r.check_in,
-        check_out:              r.check_out,
-        room:                   r.room,
-        costo_total:            r.costo_total,
-        total:                  r.total,
-        metodo_pago:            r.metodo_pago,
-        status:                 r.status,
-        estado_reserva:         r.status,
-        id_agente:              r.id_agente,
-        id_viajero:             r.id_viajero,
-        tipo_reserva:           r.tipo_reserva,
-        prefacturado:           r.prefacturado,
-        id_confirmacion:        r.id_confirmacion,
-        id_booking:             r.id_booking,
-        id_proveedor:           r.id_proveedor,
-        tipo_negociacion:       r.tipo_negociacion,
-        created_at:             r.created_at,
+        agente: r.agente,
+        check_in: r.check_in,
+        check_out: r.check_out,
+        room: r.room,
+        costo_total: r.costo_total,
+        total: r.total,
+        metodo_pago: r.metodo_pago,
+        status: r.status,
+        estado_reserva: r.status,
+        id_agente: r.id_agente,
+        id_viajero: r.id_viajero,
+        tipo_reserva: r.tipo_reserva,
+        prefacturado: r.prefacturado,
+        id_confirmacion: r.id_confirmacion,
+        id_booking: r.id_booking,
+        id_proveedor: r.id_proveedor,
+        tipo_negociacion: r.tipo_negociacion,
+        created_at: r.created_at,
 
         // ── Campos solicitud al nivel raíz (compatibilidad front) ──────────
         id_solicitud_proveedor: r.id_solicitud_proveedor,
-        fecha_solicitud:        r.fecha_solicitud,
-        monto_solicitado:       r.monto_solicitado,
-        saldo:                  r.saldo,
-        forma_pago_solicitada:  r.forma_pago_solicitada,
-        estatus_pagos:          r.estatus_pagos,
-        codigo_confirmacion:    r.codigo_confirmacion,
-        consolidado:            r.consolidado,
-        is_ajuste:              r.is_ajuste,
-        comentario_ajuste:      r.comentario_ajuste,
+        fecha_solicitud: r.fecha_solicitud,
+        monto_solicitado: r.monto_solicitado,
+        saldo: r.saldo,
+        forma_pago_solicitada: r.forma_pago_solicitada,
+        estatus_pagos: r.estatus_pagos,
+        codigo_confirmacion: r.codigo_confirmacion,
+        consolidado: r.consolidado,
+        is_ajuste: r.is_ajuste,
+        comentario_ajuste: r.comentario_ajuste,
 
         // ── Objeto solicitud_proveedor (esperado por el front) ──────────────
         solicitud_proveedor: {
           id_solicitud_proveedor: r.id_solicitud_proveedor,
-          fecha_solicitud:        r.fecha_solicitud,
-          monto_solicitado:       r.monto_solicitado,
-          saldo:                  r.saldo,
-          forma_pago_solicitada:  r.forma_pago_solicitada,
-          id_tarjeta_solicitada:  r.id_tarjeta_solicitada,
-          usuario_solicitante:    r.usuario_solicitante,
-          usuario_generador:      r.usuario_generador,
-          comentarios:            r.comentarios,
-          notas_internas:         r.notas_internas,
-          comentario_AP:          r.comentario_AP,
-          estado_solicitud:       r.estado_solicitud,
-          estado_facturacion:     r.estado_facturacion,
-          estatus_pagos:          r.estatus_pagos,
-          comentario_CXP:         r.comentario_CXP,
-          monto_por_facturar:     r.monto_por_facturar,
-          monto_facturado:        r.monto_facturado,
-          is_ajuste:              r.is_ajuste,
-          comentario_ajuste:      r.comentario_ajuste,
+          fecha_solicitud: r.fecha_solicitud,
+          monto_solicitado: r.monto_solicitado,
+          saldo: r.saldo,
+          forma_pago_solicitada: r.forma_pago_solicitada,
+          id_tarjeta_solicitada: r.id_tarjeta_solicitada,
+          usuario_solicitante: r.usuario_solicitante,
+          usuario_generador: r.usuario_generador,
+          comentarios: r.comentarios,
+          notas_internas: r.notas_internas,
+          comentario_AP: r.comentario_AP,
+          estado_solicitud: r.estado_solicitud,
+          estado_facturacion: r.estado_facturacion,
+          estatus_pagos: r.estatus_pagos,
+          comentario_CXP: r.comentario_CXP,
+          monto_por_facturar: r.monto_por_facturar,
+          monto_facturado: r.monto_facturado,
+          is_ajuste: r.is_ajuste,
+          comentario_ajuste: r.comentario_ajuste,
         },
 
         // ── Tarjeta (desde tabla tarjetas) ──────────────────────────────────
         tarjeta: {
-          ultimos_4:   r.ultimos_4,
+          ultimos_4: r.ultimos_4,
           banco_emisor: r.banco_emisor,
           tipo_tarjeta: r.tipo_tarjeta,
         },
@@ -4426,18 +4451,22 @@ const getSolicitudes2 = async (req, res) => {
         //    a los datos del emisor de la factura cuando el proveedor no tiene
         //    relación fiscal activa) ──────────────────────────────────────────
         proveedor: {
-          rfc:          r.rfc_proveedor          ?? facturaPrincipal?.rfc_emisor          ?? null,
-          razon_social: r.razon_social_proveedor ?? facturaPrincipal?.razon_social_emisor ?? null,
+          rfc: r.rfc_proveedor ?? facturaPrincipal?.rfc_emisor ?? null,
+          razon_social:
+            r.razon_social_proveedor ??
+            facturaPrincipal?.razon_social_emisor ??
+            null,
         },
 
         // ── Facturas agrupadas (para helpers del front) ─────────────────────
         facturas_proveedor: {
-          uuid_factura_principal:         facturaPrincipal?.uuid_cfdi ?? null,
-          rfc_factura_principal:          facturaPrincipal?.rfc_emisor ?? null,
-          razon_social_factura_principal: facturaPrincipal?.razon_social_emisor ?? null,
-          uuids_facturas:                 uuidsFacturas,
-          rfcs_facturas:                  rfcsFacturas,
-          razones_sociales_facturas:      razonesSociales,
+          uuid_factura_principal: facturaPrincipal?.uuid_cfdi ?? null,
+          rfc_factura_principal: facturaPrincipal?.rfc_emisor ?? null,
+          razon_social_factura_principal:
+            facturaPrincipal?.razon_social_emisor ?? null,
+          uuids_facturas: uuidsFacturas,
+          rfcs_facturas: rfcsFacturas,
+          razones_sociales_facturas: razonesSociales,
           facturas,
         },
 
@@ -4450,10 +4479,13 @@ const getSolicitudes2 = async (req, res) => {
           forma,
           estado_solicitud_norm: norm(r.estado_solicitud),
           estaPagada,
-          pagos_count:                pagos.length,
-          pagos_total_pagado:         totalPagado,
-          pagos_total_solicitado_sum: pagos.reduce((a, x) => a + num(x?.monto_solicitado ?? 0), 0),
-          facturado:    num(r.monto_facturado),
+          pagos_count: pagos.length,
+          pagos_total_pagado: totalPagado,
+          pagos_total_solicitado_sum: pagos.reduce(
+            (a, x) => a + num(x?.monto_solicitado ?? 0),
+            0,
+          ),
+          facturado: num(r.monto_facturado),
           por_facturar: num(r.monto_por_facturar),
           solicitado,
         },
@@ -4462,27 +4494,44 @@ const getSolicitudes2 = async (req, res) => {
 
     // ── Clasificación en buckets ─────────────────────────────────────────────
     const assignBucket = (row) => {
-      const estado = String(row.solicitud_proveedor?.estado_solicitud ?? "").toUpperCase().trim();
-      const forma  = row.__computed.forma;
+      const estado = String(row.solicitud_proveedor?.estado_solicitud ?? "")
+        .toUpperCase()
+        .trim();
+      const forma = row.__computed.forma;
       const isAjuste =
         Number(row.is_ajuste ?? 0) === 1 &&
         estado !== "SOLICITA" &&
         (forma === "transfer" || forma === "card");
 
-      if (estado === "SOLICITADA")                                          return "ap_credito";
-      if (estado === "CANCELADA")                                           return "canceladas";
-      if (isAjuste)                                                         return "notificados";
-      if (estado === "PAGADO TARJETA" || estado === "PAGADO TRANSFERENCIA") return "pagada";
-      if (estado === "PAGADO LINK")                                         return "pago_link";
-      if (estado === "TRANSFERENCIA_SOLICITADA" || estado === "DISPERSION") return "spei";
-      if (estado === "CARTA_ENVIADA")                                       return "pago_tdc";
-      if (estado === "CUPON ENVIADO")                                       return "pendiente_credito";
+      if (estado === "SOLICITADA") return "ap_credito";
+      if (estado === "CANCELADA") return "canceladas";
+      if (isAjuste) return "notificados";
+      if (estado === "PAGADO TARJETA" || estado === "PAGADO TRANSFERENCIA")
+        return "pagada";
+      if (estado === "PAGADO LINK") return "pago_link";
+      if (estado === "TRANSFERENCIA_SOLICITADA" || estado === "DISPERSION")
+        return "spei";
+      if (estado === "CARTA_ENVIADA") return "pago_tdc";
+      if (estado === "CUPON ENVIADO") return "pendiente_credito";
       return "ap_credito";
     };
 
-    const buckets = { spei: [], pago_tdc: [], pago_link: [], pendiente_credito: [], ap_credito: [], pagada: [], notificados: [], canceladas: [] };
+    const buckets = {
+      spei: [],
+      pago_tdc: [],
+      pago_link: [],
+      pendiente_credito: [],
+      ap_credito: [],
+      pagada: [],
+      notificados: [],
+      canceladas: [],
+    };
 
-    if (bucketFiltro && bucketFiltro !== "all" && buckets[bucketFiltro] !== undefined) {
+    if (
+      bucketFiltro &&
+      bucketFiltro !== "all" &&
+      buckets[bucketFiltro] !== undefined
+    ) {
       buckets[bucketFiltro] = data;
     } else {
       for (const row of data) buckets[assignBucket(row)].push(row);
@@ -4490,14 +4539,22 @@ const getSolicitudes2 = async (req, res) => {
 
     res.set({ "Cache-Control": "no-store", Pragma: "no-cache", Expires: "0" });
 
-    const meta = { pag: filters.pag, limite: filters.limite, count: spRows.length };
+    const meta = {
+      pag: filters.pag,
+      limite: filters.limite,
+      count: spRows.length,
+    };
 
     if (debug) {
       return res.status(200).json({
         ok: true,
         message: "Registros obtenidos con exito",
         data: buckets,
-        meta: { ...meta, filters, counts: { spRows_len: spRows.length, mapped_len: data.length } },
+        meta: {
+          ...meta,
+          filters,
+          counts: { spRows_len: spRows.length, mapped_len: data.length },
+        },
       });
     }
 
@@ -4506,10 +4563,19 @@ const getSolicitudes2 = async (req, res) => {
         ? { [bucketFiltro]: buckets[bucketFiltro] ?? [] }
         : buckets;
 
-    return res.status(200).json({ ok: true, message: "Registros obtenidos con exito", data: responseData, meta });
+    return res.status(200).json({
+      ok: true,
+      message: "Registros obtenidos con exito",
+      data: responseData,
+      meta,
+    });
   } catch (error) {
     console.error("getSolicitudes2 error:", error);
-    return res.status(500).json({ ok: false, error: "Internal Server Error", details: error?.message || error });
+    return res.status(500).json({
+      ok: false,
+      error: "Internal Server Error",
+      details: error?.message || error,
+    });
   }
 };
 
@@ -4706,6 +4772,10 @@ const cargarFactura = async (req, res) => {
   };
 
   try {
+    if (!usuario_creador)
+      throw new Error(
+        "Se ha terminado tu sesión o no se encuentra el usuario. Por favor, inicia sesión de nuevo.",
+      );
     const propinaMonto = toNumber(propina_data?.monto_propina ?? 0);
     const hasPropina = !!(propina_data?.tiene_propina && propinaMonto > 0);
 
@@ -6007,8 +6077,7 @@ const EditCampos = async (req, res) => {
               bookingCodigoSyncInfo = {
                 ok: false,
                 error: "ER_DUP_ENTRY",
-                details:
-                  "Ya existe una reserva con ese código de confirmación",
+                details: "Ya existe una reserva con ese código de confirmación",
               };
             } else {
               throw error;
@@ -6136,9 +6205,10 @@ const editCodigoConfirmacion = async (req, res) => {
       });
     }
 
-    const codigo = typeof codigo_confirmacion === "string"
-      ? codigo_confirmacion.trim()
-      : codigo_confirmacion;
+    const codigo =
+      typeof codigo_confirmacion === "string"
+        ? codigo_confirmacion.trim()
+        : codigo_confirmacion;
 
     if (!codigo) {
       return res.status(400).json({
@@ -6808,29 +6878,11 @@ const Detalles = async (req, res) => {
           ON fpp.id_creador IS NOT NULL
          AND ua.id COLLATE utf8mb4_unicode_ci = fpp.id_creador COLLATE utf8mb4_unicode_ci
         WHERE fpp.id_factura_proveedor IN (${placeholders})
-           OR fpp.id_solicitud_proveedor = ?
         ORDER BY COALESCE(fpp.fecha_factura, fpp.fecha_emision) DESC, fpp.created_at DESC;
       `;
 
       facturas = getRows(
-        await executeQuery(facturasSql, [
-          ...facturaIdsFinales,
-          Number(id_solicitud_proveedor),
-        ]),
-      );
-    } else {
-      const facturasSql = `
-        SELECT fpp.*, COALESCE(ua.name, fpp.id_creador) AS nombre_creador
-        FROM facturas_pago_proveedor fpp
-        LEFT JOIN users_admin ua
-          ON fpp.id_creador IS NOT NULL
-         AND ua.id COLLATE utf8mb4_unicode_ci = fpp.id_creador COLLATE utf8mb4_unicode_ci
-        WHERE fpp.id_solicitud_proveedor = ?
-        ORDER BY COALESCE(fpp.fecha_factura, fpp.fecha_emision) DESC, fpp.created_at DESC;
-      `;
-
-      facturas = getRows(
-        await executeQuery(facturasSql, [Number(id_solicitud_proveedor)]),
+        await executeQuery(facturasSql, [...facturaIdsFinales]),
       );
     }
 
@@ -8153,7 +8205,11 @@ const asignar_factura_previa = async (req, res) => {
       WHERE id_factura_proveedor = ?
       LIMIT 1;
       `,
-      [toMoneyString(nuevoSaldoFactura), propinaMonto > 0 ? toMoneyString(propinaMonto) : null, idFactura],
+      [
+        toMoneyString(nuevoSaldoFactura),
+        propinaMonto > 0 ? toMoneyString(propinaMonto) : null,
+        idFactura,
+      ],
     );
 
     return res.status(200).json({
@@ -8216,17 +8272,6 @@ const buscaruuid = async (req, res) => {
       });
     }
 
-    const tieneCancelada = rowsEstado.some(
-      (row) => safeString(row.estado_solicitud).toUpperCase() === "CANCELADA",
-    );
-
-    if (tieneCancelada) {
-      return res.status(404).json({
-        ok: false,
-        message: "No se encontró relación de esa factura",
-      });
-    }
-
     // 2. Si NO está cancelada, ahora sí buscar con booking_solicitud
     const qBuscar = `
       SELECT
@@ -8253,7 +8298,8 @@ const buscaruuid = async (req, res) => {
         v.impuestos_moneda_O,
         v.razon_social_fiscal,
         v.id_booking,
-        v.codigo_confirmacion
+        v.codigo_confirmacion,
+        spp.estado_solicitud as estado
       FROM vw_pagos_facturas_proveedores_detalle v
       INNER JOIN solicitudes_pago_proveedor spp
         ON spp.id_solicitud_proveedor = v.id_solicitud
@@ -8369,7 +8415,7 @@ const cuentas = async (req, res) => {
   }
 };
 
-const   reasignarPago = async (req, res) => {
+const reasignarPago = async (req, res) => {
   try {
     const {
       monto,
@@ -8993,6 +9039,7 @@ const cancelar_dispersion = async (req, res) => {
     });
   }
 };
+
 module.exports = {
   devolverMontoFacturadoAFacturasPorCancelacion,
   createSolicitud,
