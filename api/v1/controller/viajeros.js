@@ -61,7 +61,7 @@ const updateNombreViajero = async (req, res) => {
       `
       UPDATE viajeros
       SET 
-        primer_nombre = 'PRUEBA',
+        primer_nombre = '${"PRUEBA" + Math.floor(Math.random() * 1000)}',
         segundo_nombre = 'PRUEBA',
         apellido_paterno = 'PRUEBA',
         apellido_materno = 'PRUEBA'
