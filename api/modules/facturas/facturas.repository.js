@@ -78,25 +78,21 @@ class FacturasRepository {
     const safeLength = Math.trunc(lengthNum) || 20;
     const offset = (safePage - 1) * safeLength;
 
-    const rows = await run(
-      `SELECT f.*
-       FROM ${this.#table} f
-       ${whereSql}
-       ORDER BY f.created_at DESC, f.id_factura DESC
-       ${hasPagination ? `LIMIT ${safeLength} OFFSET ${offset}` : ""}`,
-      params,
-    );
-
-    let total = null;
-    if (hasPagination) {
-      const countRows = await run(
-        `SELECT COUNT(*) AS total FROM ${this.#table} f ${whereSql}`,
+    const [rows, countRows] = await Promise.all([
+      run(
+        `SELECT f.*
+         FROM ${this.#table} f
+         ${whereSql}
+         ORDER BY f.created_at DESC, f.id_factura DESC
+         ${hasPagination ? `LIMIT ${safeLength} OFFSET ${offset}` : ""}`,
         params,
-      );
-      total = countRows[0]?.total ?? 0;
-    }
+      ),
+      hasPagination
+        ? run(`SELECT COUNT(*) AS total FROM ${this.#table} f ${whereSql}`, params)
+        : Promise.resolve(null),
+    ]);
 
-    return { rows, total, hasPagination };
+    return { rows, total: countRows ? (countRows[0]?.total ?? 0) : null, hasPagination };
   }
 }
 

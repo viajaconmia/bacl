@@ -1,14 +1,19 @@
 const facturasReservasService = require("./facturasReservas.service");
 
 const getReservasPendientes = async (req, res) => {
-  const { id_agente } = req.query;
+  const { id_agente, page, length } = req.query;
 
   try {
-    const data = await facturasReservasService.getPendientes(id_agente);
+    const { rows, total, hasPagination } = await facturasReservasService.getPendientes({
+      id_agente,
+      page,
+      length,
+    });
 
     return res.status(200).json({
       message: "Reservas pendientes de facturar obtenidas correctamente",
-      data,
+      data: rows,
+      metadata: hasPagination ? { total } : null,
     });
   } catch (error) {
     console.error("Error en getReservasPendientes:", error);

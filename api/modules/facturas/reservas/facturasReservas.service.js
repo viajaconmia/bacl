@@ -15,12 +15,12 @@ class FacturasReservasService {
     return repository.findByFactura(id_factura, conn);
   }
 
-  async getPendientes(id_agente, conn = null) {
+  async getPendientes({ id_agente, page = null, length = null } = {}, conn = null) {
     if (!id_agente) {
       throw new CustomError("id_agente es requerido", 400, "VALIDATION_ERROR");
     }
 
-    return repository.findPendientes(id_agente, conn);
+    return repository.findPendientes({ id_agente, page, length }, conn);
   }
 }
 

@@ -1,4 +1,4 @@
-const pagoProveedoresReservasService = require("./reservas/pagoProveedoresReservas.service");
+const pagoProveedoresReservasService = require("./pagoProveedoresReservas.service");
 
 const getReservas = async (req, res) => {
   const {
@@ -24,7 +24,7 @@ const getReservas = async (req, res) => {
   } = req.query;
 
   try {
-    const data = await pagoProveedoresReservasService.getAll({
+    const { rows, total, hasPagination } = await pagoProveedoresReservasService.getAll({
       notas_internas,
       codigo_confirmacion,
       fecha_inicio_creacion,
@@ -48,7 +48,8 @@ const getReservas = async (req, res) => {
 
     return res.status(200).json({
       message: "Reservas de pago a proveedor obtenidas correctamente",
-      data,
+      data: rows,
+      metadata: hasPagination ? { total } : null,
     });
   } catch (error) {
     console.error("Error en getReservas:", error);
