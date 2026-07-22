@@ -14,6 +14,14 @@ class FacturasReservasService {
 
     return repository.findByFactura(id_factura, conn);
   }
+
+  async getPendientes(id_agente, conn = null) {
+    if (!id_agente) {
+      throw new CustomError("id_agente es requerido", 400, "VALIDATION_ERROR");
+    }
+
+    return repository.findPendientes(id_agente, conn);
+  }
 }
 
 module.exports = new FacturasReservasService();

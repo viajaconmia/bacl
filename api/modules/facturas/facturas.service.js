@@ -25,7 +25,9 @@ class FacturasService {
     return factura;
   }
 
-
+  async getAll(filters = {}, conn = null) {
+    return repository.findAll(filters, conn);
+  }
 }
 
 module.exports = new FacturasService();
