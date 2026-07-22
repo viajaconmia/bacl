@@ -1,4 +1,4 @@
-const pagoProveedoresReservasService = require("../../api/modules/pagoProveedores/reservas/pagoProveedoresReservas.service");
+const pagoProveedoresReservasService = require("./reservas/pagoProveedoresReservas.service");
 
 const getReservas = async (req, res) => {
   const {

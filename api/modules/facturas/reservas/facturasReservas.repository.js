@@ -28,6 +28,31 @@ class FacturasReservasRepository {
       [id_factura],
     );
   }
+
+  async findPendientes(id_agente, conn = null) {
+    const run = getExecutor(conn);
+    return run(
+      `SELECT
+        vw.id_relacion,
+        vw.id_confirmacion AS codigo_confirmacion,
+        vw.proveedor,
+        vw.type,
+        vw.nombre_agente,
+        vw.metodo_pago,
+        vw.total,
+        vw.check_in,
+        vw.check_out,
+        vw.created_at,
+        COALESCE(SUM(fi.monto), 0) AS total_facturado,
+        (vw.total - COALESCE(SUM(fi.monto), 0)) AS pendiente_facturar
+      FROM vw_details_booking vw
+        LEFT JOIN items_facturas fi ON fi.id_relacion = vw.id_relacion
+      WHERE vw.id_agente = ? AND vw.estado <> "Cancelada"
+      GROUP BY vw.id_relacion
+      HAVING (vw.total - COALESCE(SUM(fi.monto), 0)) > 0`,
+      [id_agente],
+    );
+  }
 }
 
 module.exports = new FacturasReservasRepository();

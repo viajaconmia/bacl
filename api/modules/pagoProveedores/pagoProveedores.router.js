@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const { getReservas } = require("../../controller/pagoProveedor.controller");
+const { getReservas } = require("./pagoProveedores.controller");
 
 router.get("/reservas", getReservas);
 
