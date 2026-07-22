@@ -136,42 +136,7 @@ class PagoProveedoresReservasRepository {
       ? `LIMIT ${safeLength} OFFSET ${offset}`
       : "";
 
-    const query = `
-      SELECT
-        vw.type,
-        spp.id_solicitud_proveedor,
-        spp.created_at,
-        spp.monto_solicitado,
-        spp.saldo,
-        spp.saldo_dispersion,
-        spp.fecha_solicitud,
-        spp.estado_solicitud,
-        spp.estado_facturacion,
-        CASE
-          WHEN spp.forma_pago_solicitada = 'credit' THEN 'credit'
-          ELSE 'contado'
-        END AS forma_pago,
-        vw.nombre_agente          AS cliente,
-        vw.codigo_confirmacion,
-        vw.id_proveedor,
-        vw.proveedor,
-        vw.check_in,
-        vw.check_out,
-        GREATEST(DATEDIFF(vw.check_out, vw.check_in), 1) AS noches,
-        vw.costo_total,
-        ((vw.total - vw.costo_total) / vw.total) * 100   AS markup,
-        vw.total,
-        vw.negociacion_proveedor,
-        inter.id                  AS id_intermediario,
-        inter.proveedor           AS intermediario,
-        inter.negociacion         AS negociacion_intermediario,
-        spp.comentario_CXP,
-        spp.comentario_AP,
-        spp.comentario_ajuste,
-        spp.notas_internas,
-        fpp.rfc_emisor            AS rfc,
-        fpp.uuid_cfdi             AS uuid,
-        pfp.monto_facturado       AS asignado_a_factura
+    const fromSql = `
       FROM solicitudes_pago_proveedor spp
         LEFT JOIN vw_new_details_booking vw
           ON spp.id_booking = vw.id_booking
@@ -183,11 +148,55 @@ class PagoProveedoresReservasRepository {
           ON inter.id = vw.id_intermediario
       ${whereSql}
       GROUP BY spp.id_solicitud_proveedor, pfp.id
-      ORDER BY spp.id_solicitud_proveedor DESC
-      ${paginationSql}
-    `;
+      ORDER BY spp.id_solicitud_proveedor DESC`;
 
-    return run(query, params);
+    const [rows, countRows] = await Promise.all([
+      run(
+        `SELECT
+          vw.type,
+          spp.id_solicitud_proveedor,
+          spp.created_at,
+          spp.monto_solicitado,
+          spp.saldo,
+          spp.saldo_dispersion,
+          spp.fecha_solicitud,
+          spp.estado_solicitud,
+          spp.estado_facturacion,
+          CASE
+            WHEN spp.forma_pago_solicitada = 'credit' THEN 'credit'
+            ELSE 'contado'
+          END AS forma_pago,
+          vw.nombre_agente          AS cliente,
+          vw.codigo_confirmacion,
+          vw.id_proveedor,
+          vw.proveedor,
+          vw.check_in,
+          vw.check_out,
+          GREATEST(DATEDIFF(vw.check_out, vw.check_in), 1) AS noches,
+          vw.costo_total,
+          ((vw.total - vw.costo_total) / vw.total) * 100   AS markup,
+          vw.total,
+          vw.negociacion_proveedor,
+          inter.id                  AS id_intermediario,
+          inter.proveedor           AS intermediario,
+          inter.negociacion         AS negociacion_intermediario,
+          spp.comentario_CXP,
+          spp.comentario_AP,
+          spp.comentario_ajuste,
+          spp.notas_internas,
+          fpp.rfc_emisor            AS rfc,
+          fpp.uuid_cfdi             AS uuid,
+          pfp.monto_facturado       AS asignado_a_factura
+        ${fromSql}
+        ${paginationSql}`,
+        params,
+      ),
+      hasPagination
+        ? run(`SELECT COUNT(*) AS total FROM (SELECT spp.id_solicitud_proveedor ${fromSql}) AS sub`, params)
+        : Promise.resolve(null),
+    ]);
+
+    return { rows, total: countRows ? (countRows[0]?.total ?? 0) : null, hasPagination };
   }
 }
 
