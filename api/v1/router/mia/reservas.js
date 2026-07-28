@@ -336,4 +336,10 @@ router.get("/cupon/auto", async (req, res) => {
   }
 });
 
+// Router solo hace te envia a la ruta del controller
+
+router.get("/ejecutarSP", controller.ejecutarSpGenerarReservas);
+router.get("/headerReservas", controller.getHeaderReservas);
+router.get("/detallesReservas", controller.getHeaderDetallesReservas);
+
 module.exports = router;

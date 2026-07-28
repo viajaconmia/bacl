@@ -8,6 +8,8 @@ const {
 const { v4: uuidv4 } = require("uuid");
 const { CustomError } = require("../../../middleware/errorHandler");
 const { buscarTraslapes } = require("../../../lib/utils/traslapes");
+const { error, query } = require("winston");
+const { json } = require("express");
 
 const create = async (req, res) => {
   //revisemos el body
@@ -2003,6 +2005,214 @@ const verificarEmpalmeHotel2 = async (req, res) => {
   }
 };
 
+// El controller solo tendria que hacer la peticion, sin embargo, no estan separadas las responsabilidades
+
+const ejecutarSpGenerarReservas = async (req, res) => {
+  try {
+    const { meses = null } = req.query;
+
+    if (meses != null) {
+      if (isNaN(meses) || Number(meses) < 1 || Number(meses) > 20) {
+        return res.status(400).json({
+          message: "El parametro meses debe ser entre 1 y 20",
+        });
+      }
+    }
+
+    await executeQuery("CALL sp_generar_snapshot_reservas(?)", [meses]);
+
+    res.json({
+      message: "Se ha ejecutado la sp generar reservas correctamente",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "ocurrio un error",
+    });
+  }
+};
+
+const getHeaderReservas = async (req, res) => {
+  const { fecha_inicio, fecha_fin } = req.query;
+
+  if (!fecha_inicio || !fecha_fin) {
+    return res.status(400).json({
+      message: "Debe proporcionar fecha_inicio y fecha_fin.",
+    });
+  }
+
+  const regexFecha = /^\d{4}-\d{2}-\d{2}$/;
+
+  if (!regexFecha.test(fecha_inicio) || !regexFecha.test(fecha_fin)) {
+    return res.status(400).json({
+      message: "Las fechas deben tener el formato YYYY-MM-DD",
+    });
+  }
+
+  if (fecha_fin < fecha_inicio) {
+    return res.status(400).json({
+      message: "No se puede tener una fecha final menor que una fecha inicio",
+    });
+  }
+
+  try {
+    const subQuery = `
+      SELECT
+        periodo,
+        MAX(id_snapshot) AS id_snapshot,
+        id_snapshot_reserva
+      from snapshot_reservas
+      group by
+      periodo
+    `;
+
+    const query = `
+      SELECT * from snapshot_reservas R
+      INNER JOIN (
+        ${subQuery}
+      ) AS M
+        ON R.id_snapshot_reserva = M.id_snapshot_reserva
+      WHERE R.periodo BETWEEN ? AND ?;
+    `;
+
+    const resultado = await executeQuery(query, [fecha_inicio, fecha_fin]);
+
+    if (resultado.length === 0) {
+      return res.status(404).json({
+        message: "No se encontraron snapshots en ese rango.",
+        data: [],
+      });
+    }
+
+    res.status(200).json({
+      message: "concentrado snapshot_header obtenido",
+      data: resultado,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      message: error.message,
+      error: error.message,
+      data: null,
+    });
+  }
+};
+
+const getHeaderDetallesReservas = async (req, res) => {
+  const { id_snapshot_reserva, abrirDetalles } = req.query;
+
+  if (!id_snapshot_reserva) {
+    return res.status(400).json({
+      message: "Debe proporcionar id_snapshot_reserva.",
+    });
+  }
+
+  if (isNaN(id_snapshot_reserva)) {
+    return res.status(400).json({
+      message: "El id_snapshot_reserva debe ser un número.",
+    });
+  }
+
+  let query = `
+      SELECT * 
+      FROM snapshot_detalles
+      WHERE id_snapshot_reserva = ?
+  `;
+
+  let compuesta_query = "";
+
+  const opciones = [
+    "reservasCanceladas",
+    "reservasPorFacturar",
+    "reservasCanceladasFacturadas",
+    "reservasNoFacturables",
+    "facturasCanceladas",
+    "reservasSinPagar",
+    "reservasCanceladasPagadas",
+  ];
+
+  if (abrirDetalles && !opciones.includes(abrirDetalles)) {
+    return res.status(400).json({
+      message: "Esa opción no está disponible.",
+    });
+  }
+
+  switch (abrirDetalles) {
+    // reservas canceladas
+    case "reservasCanceladas":
+      compuesta_query = `
+        AND estado_reserva = "Cancelada"
+      `;
+      break;
+
+    // reservas por facturar
+
+    case "reservasPorFacturar":
+      compuesta_query = `
+        AND estado_factura = "Sin factura"
+      `;
+      break;
+
+    // reservas Canceladas Facturadas
+    case "reservasCanceladasFacturadas":
+      compuesta_query = `
+        AND estado_reserva = "Cancelada"
+        AND monto_facturado <> 0
+      `;
+      break;
+
+    case "reservasNoFacturables":
+      compuesta_query = `
+        AND metodo_pago = "tarjeta, wallet"
+      `;
+      break;
+
+    // facturas canceladas
+    case "facturasCanceladas":
+      compuesta_query = `
+        AND (
+            estado_factura = "Factura cancelada"
+            OR estado_factura = "Con facturas activas y canceladas"
+        )
+      `;
+      break;
+
+    // reservas sin pagar
+
+    case "reservasSinPagar":
+      compuesta_query = `
+        AND estado_pago = "Sin pago"
+      `;
+      break;
+
+    // reservas Canceladas Pagadas;
+
+    case "reservasCanceladasPagadas":
+      compuesta_query = `
+        AND estado_reserva = "Cancelada"
+        AND estado_pago = "Pagada"
+      `;
+      break;
+  }
+
+  try {
+    query += compuesta_query;
+
+    const resultado = await executeQuery(query, [id_snapshot_reserva]);
+
+    return res.status(200).json({
+      message: "Detalles obtenidos correctamente",
+      data: resultado,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      message: error.message,
+      data: null,
+    });
+  }
+};
+
 module.exports = {
   create,
   read,
@@ -2023,4 +2233,7 @@ module.exports = {
   verificarEmpalmeHotel,
   verificarEmpalmeHotel2,
   checkTraslapes,
+  ejecutarSpGenerarReservas,
+  getHeaderReservas,
+  getHeaderDetallesReservas,
 };
