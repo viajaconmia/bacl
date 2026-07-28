@@ -2025,8 +2025,11 @@ const ejecutarSpGenerarReservas = async (req, res) => {
       message: "Se ha ejecutado la sp generar reservas correctamente",
     });
   } catch (error) {
+    console.error("Error en ejecutarSpGenerarReservas:", error);
     return res.status(500).json({
-      message: "ocurrio un error",
+      message: "Error al ejecutar el snapshot",
+      error: error.message,
+      details: error.sqlMessage || error.toString()
     });
   }
 };
