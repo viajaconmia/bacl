@@ -35,7 +35,7 @@ const getCupon = async (id) => {
     COALESCE(vdb.id_solicitud_client, s.id_solicitud) AS id_solicitud,
     COALESCE(vdb.tipo_cuarto_vuelo, s.room) AS room,
     ho.nombre AS hotel,
-    COALESCE(s.is_con_desayuno, hp.is_con_desayuno) AS incluye_desayuno,
+    COALESCE(hp.nuevo_incluye_desayuno, hp.is_con_desayuno, s.is_con_desayuno) AS incluye_desayuno,
     COALESCE(vdb.costo_total, s.total) AS total_solicitud,
     COALESCE(vdb.created_at, s.created_at) AS created_at_solicitud,
 
