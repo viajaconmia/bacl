@@ -3,8 +3,11 @@ const dispersionService = require("./dispersion.service");
 
 const create = async (req, res) => {
   try {
-    const result = await runTransaction((conn) => dispersionService.createDispersion(req.body, conn));
-    const correo_enviado = await dispersionService.notifyDispersionCreated(result);
+    const result = await runTransaction((conn) =>
+      dispersionService.createDispersion(req.body, conn),
+    );
+    const correo_enviado =
+      await dispersionService.notifyDispersionCreated(result);
 
     return res.status(200).json({
       data: { ...result, correo_enviado },
@@ -20,4 +23,48 @@ const create = async (req, res) => {
   }
 };
 
-module.exports = { create };
+const getAll = async (req, res) => {
+  const {
+    codigo_dispersion,
+    fecha_pago_inicio,
+    fecha_pago_fin,
+    id_proveedor_cuenta,
+    id_solicitud_proveedor,
+    saldo_cero = true,
+    page,
+    length,
+  } = req.query;
+
+  try {
+    const ids = id_solicitud_proveedor
+      ? String(id_solicitud_proveedor)
+          .split(",")
+          .map((id) => Number(id.trim()))
+      : undefined;
+
+    const { rows, total, hasPagination } = await dispersionService.getAll({
+      codigo_dispersion,
+      fecha_pago_inicio,
+      fecha_pago_fin,
+      id_proveedor_cuenta,
+      saldo_cero,
+      ids,
+      page,
+      length,
+    });
+
+    return res.status(200).json({
+      message: "Dispersiones obtenidas correctamente",
+      data: rows,
+      metadata: hasPagination ? { total } : null,
+    });
+  } catch (error) {
+    console.error("Error en dispersion.getAll:", error);
+    return res.status(error.statusCode ?? 500).json({
+      error: error.message,
+      details: error.details,
+    });
+  }
+};
+
+module.exports = { create, getAll };

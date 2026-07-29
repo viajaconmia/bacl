@@ -1,4 +1,4 @@
-const { validate } = require("../../../v4/utils/validate");
+const { validate, validateArrayIds } = require("../../../v4/utils/validate");
 const { generateDispersionId } = require("../../../v4/utils/id");
 const { CustomError } = require("../../../middleware/errorHandler");
 const { sendEmail } = require("../../../services/email");
@@ -101,6 +101,75 @@ class DispersionService {
       id_pagos: idPagos,
       solicitudes_procesadas: solicitudesProcesadas,
     };
+  }
+
+  /**
+   * Lista dispersiones y agrega, por cada id_solicitud_proveedor, la info de
+   * la solicitud correspondiente (sin facturas). Merge plano por fila: en
+   * colisión de nombres (monto_solicitado, saldo) gana el valor de dispersión.
+   * @param {object} [filters={}] - ver dispersion.repository.js#findAll
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<{ rows: object[], total: number|null, hasPagination: boolean }>}
+   */
+  async getAll(filters = {}, conn = null) {
+    const page = filters.page !== undefined ? Number(filters.page) : undefined;
+    const length = filters.length !== undefined ? Number(filters.length) : undefined;
+
+    if (page !== undefined && (!Number.isFinite(page) || page < 1)) {
+      throw new CustomError("page debe ser un número mayor a 0", 400, "VALIDATION_ERROR");
+    }
+    if (length !== undefined && (!Number.isFinite(length) || length < 1)) {
+      throw new CustomError("length debe ser un número mayor a 0", 400, "VALIDATION_ERROR");
+    }
+
+    const { rows, total, hasPagination } = await repository.findAll(filters, conn);
+    if (rows.length === 0) {
+      return { rows: [], total, hasPagination };
+    }
+
+    const ids = [...new Set(rows.map((r) => r.id_solicitud_proveedor))];
+    const idsCuentas = [...new Set(rows.map((r) => r.id_proveedor_cuenta).filter(Boolean))];
+
+    const [{ rows: solicitudes }, cuentas] = await Promise.all([
+      reservasService.getAll({ ids }, conn),
+      idsCuentas.length > 0 ? cuentasService.getByIds(idsCuentas, conn) : Promise.resolve([]),
+    ]);
+
+    const solicitudPorId = new Map(solicitudes.map((s) => [s.id_solicitud_proveedor, s]));
+    const cuentaPorId = new Map(cuentas.map((c) => [Number(c.id), c]));
+
+    const merged = rows.map((row) => ({
+      ...solicitudPorId.get(row.id_solicitud_proveedor),
+      ...row,
+      cuenta: cuentaPorId.get(Number(row.id_proveedor_cuenta)) ?? null,
+    }));
+
+    return { rows: merged, total, hasPagination };
+  }
+
+  /**
+   * Trae filas de dispersion_pagos_proveedor por su propio PK. Lanza si falta alguna.
+   * @param {number[]} ids - id_dispersion_pagos_proveedor
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<Map<number, object>>}
+   */
+  async getByIds(ids, conn = null) {
+    validateArrayIds(ids);
+
+    const rows = await repository.findByIds(ids, conn);
+    const dispersionPorId = new Map(rows.map((r) => [Number(r.id_dispersion_pagos_proveedor), r]));
+
+    const faltantes = ids.filter((id) => !dispersionPorId.has(id));
+    if (faltantes.length > 0) {
+      throw new CustomError(
+        "No se encontró una o más dispersiones en dispersion_pagos_proveedor",
+        400,
+        "DISPERSION_NOT_FOUND",
+        { faltantes },
+      );
+    }
+
+    return dispersionPorId;
   }
 
   /**
