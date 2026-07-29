@@ -99,7 +99,9 @@ GROUP BY s.id_solicitud;`,
 
       return {
         ...rest,
-        acompañantes: Array.isArray(acompanantes) ? acompanantes.join(",") : (acompanantes ?? ""),
+        acompañantes: Array.isArray(acompanantes)
+          ? acompanantes.join(",")
+          : (acompanantes ?? ""),
         huesped: [
           primer_nombre,
           segundo_nombre,
