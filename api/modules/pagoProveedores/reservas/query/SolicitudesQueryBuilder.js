@@ -1,4 +1,5 @@
 const { applyLike, applyExact, applyDateRange, applyBucket } = require("./filters");
+const { sqlIn } = require("../../../../../v4/utils/sql");
 
 class SolicitudesQueryBuilder {
   #select;
@@ -34,7 +35,8 @@ class SolicitudesQueryBuilder {
 
   #applyBaseFilters(f) {
     if (Array.isArray(f.ids) && f.ids.length > 0) {
-      this.addWhere("spp.id_solicitud_proveedor IN (?)", [f.ids]);
+      const { placeholders, params } = sqlIn(f.ids);
+      this.addWhere(`spp.id_solicitud_proveedor IN (${placeholders})`, ...params);
     }
 
     applyLike(this, "spp.notas_internas",     f.notas_internas);

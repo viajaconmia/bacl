@@ -1,7 +1,9 @@
 const { validateArrayIds } = require("../../../../v4/utils/validate");
+const { CustomError } = require("../../../../middleware/errorHandler");
 const reservasService = require("../reservas/pagoProveedoresReservas.service");
 const cuentasService = require("../../proveedores/cuentas/proveedoresCuentas.service");
 const dispersionService = require("./dispersion/pagoProveedoresDispersion.service");
+const repository = require("./pagoProveedoresSolicitudes.repository");
 
 class PagoProveedoresSolicitudesService {
   /**
@@ -17,7 +19,9 @@ class PagoProveedoresSolicitudesService {
 
     const proveedorIdsUnicos = [
       ...new Set(
-        solicitudes.map((s) => s.id_intermediario ?? s.id_proveedor).filter(Boolean),
+        solicitudes
+          .map((s) => s.id_intermediario ?? s.id_proveedor)
+          .filter(Boolean),
       ),
     ];
 
@@ -48,6 +52,49 @@ class PagoProveedoresSolicitudesService {
         facturas: facturasPorSolicitud[s.id_solicitud_proveedor] ?? [],
       };
     });
+  }
+
+  /**
+   * Saldo de dispersión y estado actual de las solicitudes indicadas.
+   * Lanza si alguna no existe.
+   * @param {number[]} ids - Array de id_solicitud_proveedor
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<Map<number, { saldo_dispersion: number, estado_solicitud: string }>>}
+   */
+  async getSaldosDispersion(ids, conn = null) {
+    validateArrayIds(ids);
+
+    const rows = await repository.findSaldosDispersionByIds(ids, conn);
+    const saldosMap = new Map(
+      rows.map((r) => [
+        Number(r.id_solicitud_proveedor),
+        {
+          saldo_dispersion: Number(r.saldo_dispersion ?? 0),
+          estado_solicitud: String(r.estado_solicitud ?? "").trim(),
+        },
+      ]),
+    );
+
+    const faltantes = ids.filter((id) => !saldosMap.has(id));
+    if (faltantes.length > 0) {
+      throw new CustomError(
+        "No se encontró saldo para una o más solicitudes en solicitudes_pago_proveedor",
+        400,
+        "SOLICITUDES_NOT_FOUND",
+        { faltantes },
+      );
+    }
+
+    return saldosMap;
+  }
+
+  /**
+   * @param {number[]} ids - Array de id_solicitud_proveedor
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   */
+  async marcarEnDispersion(ids, conn = null) {
+    validateArrayIds(ids);
+    return repository.updateEstado(ids, "DISPERSION", conn);
   }
 }
 

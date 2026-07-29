@@ -1,4 +1,5 @@
 const { getExecutor } = require("../../../../config/db");
+const { sqlIn } = require("../../../../v4/utils/sql");
 
 const BASE_SELECT = `
   SELECT
@@ -34,8 +35,19 @@ class ProveedoresCuentasRepository {
    */
   async findByProveedor(ids, conn = null) {
     const run = getExecutor(conn);
-    const idList = Array.isArray(ids) ? ids : [ids];
-    return run(`${BASE_SELECT} WHERE pc.id_proveedor IN (?) AND pc.active = 1`, [idList]);
+    const { placeholders, params } = sqlIn(ids);
+    return run(`${BASE_SELECT} WHERE pc.id_proveedor IN (${placeholders}) AND pc.active = 1`, params);
+  }
+
+  /**
+   * @param {number[]} ids - ids de cuenta (proveedores_cuentas.id)
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<object[]>}
+   */
+  async findByIds(ids, conn = null) {
+    const run = getExecutor(conn);
+    const { placeholders, params } = sqlIn(ids);
+    return run(`${BASE_SELECT} WHERE pc.id IN (${placeholders})`, params);
   }
 
   /**

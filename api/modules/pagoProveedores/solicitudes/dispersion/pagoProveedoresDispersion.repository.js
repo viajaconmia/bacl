@@ -1,4 +1,5 @@
 const { getExecutor } = require("../../../../../config/db");
+const { sqlIn } = require("../../../../../v4/utils/sql");
 
 class PagoProveedoresDispersionRepository {
   /**
@@ -8,6 +9,7 @@ class PagoProveedoresDispersionRepository {
    */
   async findFacturasByIds(ids, conn = null) {
     const run = getExecutor(conn);
+    const { placeholders, params } = sqlIn(ids);
     return run(
       `SELECT
         pfp.id_solicitud,
@@ -16,14 +18,13 @@ class PagoProveedoresDispersionRepository {
         fpp.uuid_cfdi            AS uuid,
         fpp.fecha_emision,
         fpp.subtotal,
-        fpp.iva,
         fpp.total                AS total_factura,
         pfp.monto_facturado      AS asignado
       FROM pagos_facturas_proveedores pfp
       INNER JOIN facturas_pago_proveedor fpp
         ON fpp.id_factura_proveedor = pfp.id_factura
-      WHERE pfp.id_solicitud IN (?)`,
-      [ids],
+      WHERE pfp.id_solicitud IN (${placeholders})`,
+      params,
     );
   }
 }

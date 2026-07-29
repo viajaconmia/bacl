@@ -14,6 +14,17 @@ class ProveedoresCuentasService {
   }
 
   /**
+   * Cuentas por su propio id (proveedores_cuentas.id).
+   * @param {number[]} ids
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   */
+  async getByIds(ids, conn = null) {
+    const idList = Array.isArray(ids) ? ids : [ids];
+    if (idList.length === 0) return [];
+    return repository.findByIds(idList, conn);
+  }
+
+  /**
    * Cuenta por id. Lanza 404 si no existe.
    * @param {number} id
    * @param {import('mysql2/promise').PoolConnection} [conn]
