@@ -4,6 +4,7 @@ const mia = require("./general/mia");
 const admin = require("../../admin/router");
 const otp = require("./general/otp");
 const sepoMex = require("./general/sepoMex");
+const reservasController = require("../controller/reservas");
 const { SECRET_KEY } = require("../../../lib/constant");
 const { v4: uuidv4 } = require("uuid");
 const { executeQuery } = require("../../../config/db");
@@ -16,6 +17,7 @@ router.use("/mia", mia);
 router.use("/admin", admin);
 router.use("/otp", otp);
 router.use("/sepoMex", sepoMex);
+router.get("/getPeriodosReservas", reservasController.getPeriodosReservas);
 router.get("/:id", async (req, res) => {
   try {
     const jti = uuidv4();
