@@ -2011,25 +2011,32 @@ const ejecutarSpGenerarReservas = async (req, res) => {
   try {
     const { meses = null } = req.query;
 
-    if (meses != null) {
-      if (isNaN(meses) || Number(meses) < 1 || Number(meses) > 20) {
+    const mesesParam =
+      meses === null || meses === undefined || meses === ""
+        ? null
+        : Number(meses);
+
+    if (mesesParam !== null) {
+      if (Number.isNaN(mesesParam) || mesesParam < 1 || mesesParam > 20) {
         return res.status(400).json({
           message: "El parametro meses debe ser entre 1 y 20",
         });
       }
     }
 
-    await executeQuery("CALL sp_generar_snapshot_reservas(?)", [meses]);
+    await executeQuery("CALL sp_generar_snapshot_reservas(?)", [mesesParam]);
 
-    res.json({
+    return res.status(200).json({
       message: "Se ha ejecutado la sp generar reservas correctamente",
+      data: null,
     });
   } catch (error) {
     console.error("Error en ejecutarSpGenerarReservas:", error);
+
     return res.status(500).json({
       message: "Error al ejecutar el snapshot",
       error: error.message,
-      details: error.sqlMessage || error.toString()
+      details: error.sqlMessage || error.toString(),
     });
   }
 };
@@ -2058,23 +2065,20 @@ const getHeaderReservas = async (req, res) => {
   }
 
   try {
-    const subQuery = `
-      SELECT
-        periodo,
-        MAX(id_snapshot) AS id_snapshot,
-        id_snapshot_reserva
-      from snapshot_reservas
-      group by
-      periodo
-    `;
-
     const query = `
-      SELECT * from snapshot_reservas R
+      SELECT R.*
+      FROM snapshot_reservas R
       INNER JOIN (
-        ${subQuery}
+        SELECT
+          periodo,
+          MAX(id_snapshot) AS id_snapshot
+        FROM snapshot_reservas
+        WHERE periodo BETWEEN ? AND ?
+        GROUP BY periodo
       ) AS M
-        ON R.id_snapshot_reserva = M.id_snapshot_reserva
-      WHERE R.periodo BETWEEN ? AND ?;
+        ON R.periodo = M.periodo
+       AND R.id_snapshot = M.id_snapshot
+      ORDER BY R.periodo;
     `;
 
     const resultado = await executeQuery(query, [fecha_inicio, fecha_fin]);
@@ -2086,13 +2090,14 @@ const getHeaderReservas = async (req, res) => {
       });
     }
 
-    res.status(200).json({
-      message: "concentrado snapshot_header obtenido",
+    return res.status(200).json({
+      message: "Concentrado snapshot_header obtenido",
       data: resultado,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
+    console.error("Error en getHeaderReservas:", error);
+
+    return res.status(500).json({
       message: error.message,
       error: error.message,
       data: null,
@@ -2100,8 +2105,35 @@ const getHeaderReservas = async (req, res) => {
   }
 };
 
+const getPeriodosReservas = async (req, res) => {
+  try {
+    const resultado = await executeQuery(`
+      SELECT DISTINCT
+        DATE_FORMAT(periodo, '%Y-%m-%d') AS periodo
+      FROM snapshot_reservas
+      ORDER BY periodo DESC;
+    `);
+
+    return res.status(200).json({
+      message: "Periodos obtenidos correctamente",
+      data: resultado,
+    });
+  } catch (error) {
+    console.error("Error en getPeriodosReservas:", error);
+
+    return res.status(500).json({
+      message: "Error al obtener periodos",
+      data: null,
+      error: error.message,
+    });
+  }
+};
+
 const getHeaderDetallesReservas = async (req, res) => {
-  const { id_snapshot_reserva, abrirDetalles } = req.query;
+  const { id_snapshot_reserva } = req.query;
+
+  // Soporta cualquiera de los dos nombres por si el front manda abrirDetalles.
+  const filtroDetalles = req.query.filtroDetalles || req.query.abrirDetalles;
 
   if (!id_snapshot_reserva) {
     return res.status(400).json({
@@ -2109,19 +2141,11 @@ const getHeaderDetallesReservas = async (req, res) => {
     });
   }
 
-  if (isNaN(id_snapshot_reserva)) {
+  if (Number.isNaN(Number(id_snapshot_reserva))) {
     return res.status(400).json({
-      message: "El id_snapshot_reserva debe ser un número.",
+      message: "El id_snapshot_reserva debe ser un numero.",
     });
   }
-
-  let query = `
-      SELECT * 
-      FROM snapshot_detalles
-      WHERE id_snapshot_reserva = ?
-  `;
-
-  let compuesta_query = "";
 
   const opciones = [
     "reservasCanceladas",
@@ -2133,72 +2157,84 @@ const getHeaderDetallesReservas = async (req, res) => {
     "reservasCanceladasPagadas",
   ];
 
-  if (abrirDetalles && !opciones.includes(abrirDetalles)) {
+  if (filtroDetalles && !opciones.includes(filtroDetalles)) {
     return res.status(400).json({
-      message: "Esa opción no está disponible.",
+      message: "Esa opcion no esta disponible.",
     });
   }
 
-  switch (abrirDetalles) {
-    // reservas canceladas
+  let query = `
+    SELECT
+          sd.*,
+          vw.nombre_agente,
+          nombre_viajero,
+          codigo_confirmacion,
+          type,
+          tipo_cuarto_vuelo,
+          check_in,
+          check_out
+      FROM snapshot_detalles sd
+      inner join vw_new_details_booking as vw
+      on vw.id_booking = sd.id_booking
+      WHERE id_snapshot_reserva = ?
+    `;
+
+  let filtroQuery = "";
+
+  switch (filtroDetalles) {
     case "reservasCanceladas":
-      compuesta_query = `
+      filtroQuery = `
         AND estado_reserva = "Cancelada"
       `;
       break;
-
-    // reservas por facturar
 
     case "reservasPorFacturar":
-      compuesta_query = `
-        AND estado_factura = "Sin factura"
+      filtroQuery = `
+        AND monto_por_facturar > 0
       `;
       break;
 
-    // reservas Canceladas Facturadas
     case "reservasCanceladasFacturadas":
-      compuesta_query = `
+      filtroQuery = `
         AND estado_reserva = "Cancelada"
-        AND monto_facturado <> 0
+        AND monto_facturado > 0
       `;
       break;
 
     case "reservasNoFacturables":
-      compuesta_query = `
-        AND metodo_pago = "tarjeta, wallet"
+      filtroQuery = `
+        AND monto_no_facturable > 0
       `;
       break;
 
-    // facturas canceladas
     case "facturasCanceladas":
-      compuesta_query = `
+      filtroQuery = `
         AND (
-            estado_factura = "Factura cancelada"
-            OR estado_factura = "Con facturas activas y canceladas"
+          estado_factura = "Factura cancelada"
+          OR estado_factura = "Con facturas activas y canceladas"
         )
       `;
       break;
 
-    // reservas sin pagar
-
     case "reservasSinPagar":
-      compuesta_query = `
+      filtroQuery = `
         AND estado_pago = "Sin pago"
       `;
       break;
 
-    // reservas Canceladas Pagadas;
-
     case "reservasCanceladasPagadas":
-      compuesta_query = `
+      filtroQuery = `
         AND estado_reserva = "Cancelada"
-        AND estado_pago = "Pagada"
+        AND monto_pagado > 0
       `;
       break;
   }
 
   try {
-    query += compuesta_query;
+    query += filtroQuery;
+    query += `
+      ORDER BY periodo, id_snapshot_detalles;
+    `;
 
     const resultado = await executeQuery(query, [id_snapshot_reserva]);
 
@@ -2207,7 +2243,7 @@ const getHeaderDetallesReservas = async (req, res) => {
       data: resultado,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Error en getHeaderDetallesReservas:", error);
 
     return res.status(500).json({
       message: error.message,
@@ -2238,5 +2274,6 @@ module.exports = {
   checkTraslapes,
   ejecutarSpGenerarReservas,
   getHeaderReservas,
+  getPeriodosReservas,
   getHeaderDetallesReservas,
 };
