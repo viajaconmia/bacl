@@ -341,5 +341,5 @@ router.get("/cupon/auto", async (req, res) => {
 router.get("/ejecutarSP", controller.ejecutarSpGenerarReservas);
 router.get("/headerReservas", controller.getHeaderReservas);
 router.get("/detallesReservas", controller.getHeaderDetallesReservas);
-
+router.get("/historicoPeriodo", controller.getHistoricoPeriodo);
 module.exports = router;

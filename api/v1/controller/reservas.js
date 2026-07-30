@@ -2049,7 +2049,6 @@ const getHeaderReservas = async (req, res) => {
       message: "Debe proporcionar fecha_inicio y fecha_fin.",
     });
   }
-
   const regexFecha = /^\d{4}-\d{2}-\d{2}$/;
 
   if (!regexFecha.test(fecha_inicio) || !regexFecha.test(fecha_fin)) {
@@ -2252,6 +2251,39 @@ const getHeaderDetallesReservas = async (req, res) => {
   }
 };
 
+const getHistoricoPeriodo = async (req, res) => {
+  try {
+    const { periodo } = req.query;
+    const regexFecha = /^\d{4}-\d{2}-\d{2}$/;
+    if (!periodo) {
+      throw new CustomError("No hay periodo.", 400);
+    }
+
+    if (!regexFecha.test(periodo)) {
+      throw new CustomError("El periodo no tiene el formato correcto.", 400);
+    }
+    const resultado = await executeQuery(
+      `SELECT * FROM snapshot_reservas WHERE periodo = ? ORDER BY id_snapshot DESC;`,
+      [periodo],
+    );
+
+    return res
+      .status(200)
+      .json({ message: "historico obtenido", data: resultado });
+  } catch (error) {
+    console.log(
+      "*************************************************************************",
+    );
+    console.log("errror en getHistoricoPeriodo:", error);
+    console.log(resultado);
+    console.log(periodo);
+    throw new CustomError(
+      "Error al obtener el historico del periodo",
+      500,
+      error.error,
+    );
+  }
+};
 module.exports = {
   create,
   read,
@@ -2276,4 +2308,5 @@ module.exports = {
   getHeaderReservas,
   getPeriodosReservas,
   getHeaderDetallesReservas,
+  getHistoricoPeriodo,
 };
