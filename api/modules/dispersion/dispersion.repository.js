@@ -159,6 +159,31 @@ class DispersionRepository {
       params,
     );
   }
+
+  /**
+   * @param {string} codigo - codigo_dispersion
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<object[]>} todas las filas de esa dispersión
+   */
+  async findByCodigo(codigo, conn = null) {
+    const run = getExecutor(conn);
+    return run(`SELECT * FROM dispersion_pagos_proveedor WHERE codigo_dispersion = ?`, [codigo]);
+  }
+
+  /**
+   * @param {number[]} ids - id_dispersion_pagos_proveedor (PK propio de la tabla)
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<{ affectedRows: number }>}
+   */
+  async deleteByIds(ids, conn = null) {
+    const run = getExecutor(conn);
+    const { placeholders, params } = sqlIn(ids);
+    const result = await run(
+      `DELETE FROM dispersion_pagos_proveedor WHERE id_dispersion_pagos_proveedor IN (${placeholders})`,
+      params,
+    );
+    return { affectedRows: result.affectedRows };
+  }
 }
 
 module.exports = new DispersionRepository();
