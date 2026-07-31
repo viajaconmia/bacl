@@ -2172,7 +2172,7 @@ const getHeaderDetallesReservas = async (req, res) => {
           tipo_cuarto_vuelo,
           check_in,
           check_out,
-          GROUP_CONCAT(DISTINCT f.uuid_cfdi SEPARATOR ', ') AS facturas_asociadas
+          GROUP_CONCAT(DISTINCT f.uuid_factura SEPARATOR ', ') AS facturas_asociadas
       FROM snapshot_detalles sd
       inner join vw_new_details_booking as vw
       on vw.id_booking = sd.id_booking
