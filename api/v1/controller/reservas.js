@@ -2189,7 +2189,7 @@ const getHeaderDetallesReservas = async (req, res) => {
 
     case "reservasPorFacturar":
       filtroQuery = `
-        AND monto_por_facturar > 0 AND estado_reserva = "Confirmada"
+        AND estado_factura = "Pendiente" AND estado_reserva = "Confirmada"
       `;
       break;
 
@@ -2217,7 +2217,7 @@ const getHeaderDetallesReservas = async (req, res) => {
 
     case "reservasSinPagar":
       filtroQuery = `
-        AND estado_pago = "Sin pago" AND estado_reserva = "Confirmada"
+        AND estado_pago = "Pendiente" AND estado_reserva = "Confirmada"
       `;
       break;
 
