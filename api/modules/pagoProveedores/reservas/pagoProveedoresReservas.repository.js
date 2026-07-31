@@ -11,6 +11,7 @@ class PagoProveedoresReservasRepository {
    * @param {string}  [filters.notas_internas]       - LIKE en spp.notas_internas
    * @param {string}  [filters.estado_solicitud]      - Exacto en spp.estado_solicitud
    * @param {string}  [filters.estado_facturacion]    - Exacto en spp.estado_facturacion
+   * @param {'pagado'|'enviado_a_pago'} [filters.estatus_pagos] - Exacto en spp.estatus_pagos
    * @param {string}  [filters.comentarios_ops]       - LIKE en spp.comentario_AP
    * @param {string}  [filters.comentarios_cxp]       - LIKE en spp.comentario_CXP
    * @param {string}  [filters.fecha_inicio_creacion] - DATE(spp.created_at) >=
@@ -26,6 +27,8 @@ class PagoProveedoresReservasRepository {
    * @param {string}  [filters.proveedor]             - LIKE en vw.proveedor
    * @param {string}  [filters.tipo_negociacion]      - LIKE en vw.negociacion_proveedor
    * @param {string}  [filters.servicio]              - Exacto en vw.type
+   * @param {string}  [filters.checkin_inicio]        - DATE(vw.check_in) >=
+   * @param {string}  [filters.checkin_fin]           - DATE(vw.check_in) <=
    *
    * Filtros de facturas (tabla `pfp`/`fpp`, solo cuando includeFacturas !== false):
    * @param {boolean} [filters.includeFacturas=true]  - Si false, omite JOINs de facturas
