@@ -134,13 +134,11 @@ const obtenerHotelesPrioridad = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error obtenerHotelesPrioridad:", error);
-    res
-      .status(error.statusCode || 500)
-      .json({
-        error,
-        message: error.message || "Error al obtener hoteles con prioridad",
-        data: null,
-      });
+    res.status(error.statusCode || 500).json({
+      error,
+      message: error.message || "Error al obtener hoteles con prioridad",
+      data: null,
+    });
   }
 };
 
@@ -1063,7 +1061,8 @@ const actualizarPrioridadHotel = async (req, res) => {
   } catch (error) {
     if (error.code === "NO_FIELDS") {
       return res.status(400).json({
-        message: "Debes enviar al menos un campo a actualizar: zona, priority o is_allowed",
+        message:
+          "Debes enviar al menos un campo a actualizar: zona, priority o is_allowed",
         data: null,
         error: null,
       });
@@ -1079,7 +1078,8 @@ const actualizarPrioridadHotel = async (req, res) => {
 
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
-        message: "Ya existe un registro con esa combinación de agente, zona y hotel",
+        message:
+          "Ya existe un registro con esa combinación de agente, zona y hotel",
         data: null,
         error: null,
       });
@@ -1098,7 +1098,8 @@ const agregarPrioridadHotel = async (req, res) => {
 
   if (!id_agente || !id_hotel || !zona || priority === undefined) {
     return res.status(400).json({
-      message: "Faltan campos obligatorios: id_agente, id_hotel, zona, priority",
+      message:
+        "Faltan campos obligatorios: id_agente, id_hotel, zona, priority",
       data: null,
       error: null,
     });
@@ -1137,9 +1138,27 @@ const agregarPrioridadHotel = async (req, res) => {
 
 const buscarHotelesParaCotizacion = async (req, res) => {
   try {
-    const { ciudad, hotel, cp, lat, lng, checkin, checkout, id_hotel, id_cliente } = req.query;
+    const {
+      ciudad,
+      hotel,
+      cp,
+      lat,
+      lng,
+      checkin,
+      checkout,
+      id_hotel,
+      id_cliente,
+    } = req.query;
 
-    const hoteles = await model.buscarHotelesConFiltros({ ciudad, hotel, cp, lat, lng, id_hotel, id_cliente });
+    const hoteles = await model.buscarHotelesConFiltros({
+      ciudad,
+      hotel,
+      cp,
+      lat,
+      lng,
+      id_hotel,
+      id_cliente,
+    });
 
     if (!hoteles.length) {
       return res.status(404).json({
@@ -1161,6 +1180,202 @@ const buscarHotelesParaCotizacion = async (req, res) => {
       data: null,
       error,
     });
+  }
+};
+
+/**
+ * Obtiene un reporte de reservaciones agrupadas por estado.
+ *
+ * Devuelve:
+ * - Estado.
+ * - Cantidad de reservaciones confirmadas.
+ * - Monto total confirmado.
+ * - Promedio por reservación confirmada.
+ *
+ * Método: GET
+ * Query Params: Ninguno.
+ *
+ * Respuesta:
+ * 200 OK
+ */
+
+const reportePorEstado = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+          h.estado,
+          SUM(
+              CASE 
+                  WHEN b.estado <> 'Cancelada' THEN 1
+                  ELSE 0
+              END
+          ) AS cantidad_reservas_confirmadas,
+          SUM(
+              CASE 
+                  WHEN b.estado <> 'Cancelada' THEN b.total
+                  ELSE 0
+              END
+          ) AS monto_reservas_confirmadas,
+          AVG(
+              CASE
+                  WHEN b.estado <> 'Cancelada' THEN b.total
+                  ELSE NULL
+              END
+          ) AS promedio_por_reserva
+      FROM hoteles h
+      INNER JOIN hospedajes hp
+          ON hp.id_hotel = h.id_hotel
+      INNER JOIN bookings b
+          ON b.id_booking = hp.id_booking
+      GROUP BY h.estado
+      ORDER BY cantidad_reservas_confirmadas DESC;
+      `;
+
+    const result = await executeQuery(query);
+    return res.status(200).json({
+      message: "Reporte por estado generado exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    throw customError(
+      500,
+      "Error desconocido al generar reporte por estado",
+      error.error,
+    );
+  }
+};
+
+/**
+ * Obtiene el ranking de clientes para un estado.
+ *
+ * Parámetros:
+ * - estado (query): Estado del cual se desea obtener el ranking.
+ *
+ * Devuelve:
+ * - Id del agente.
+ * - Nombre.
+ * - Cantidad de reservaciones.
+ * - Monto total reservado.
+ *
+ * Método: GET
+ *
+ * Ejemplo:
+ * /top-clientes?estado=Jalisco
+ */
+
+const topClientes = async (req, res) => {
+  try {
+    const { estado } = req.query;
+
+    if (!estado) {
+      throw customError(400, "Falta el parámetro 'estado' en la consulta");
+    }
+
+    const query = `
+      SELECT
+          h.estado,
+          a.id_agente,
+          a.nombre,
+          count(a.id_agente) as cantidad_de_reservas,
+          SUM(b.total) AS total_por_reservas
+      FROM hoteles h
+      INNER JOIN hospedajes hp
+        ON hp.id_hotel = h.id_hotel
+      INNER JOIN bookings b
+        ON hp.id_booking = b.id_booking
+      INNER JOIN servicios s
+        ON b.id_servicio = s.id_servicio
+      INNER JOIN agentes a
+          ON a.id_agente = s.id_agente
+      WHERE b.estado <> 'Cancelada' AND h.estado = ?
+      GROUP BY
+          h.estado,
+          a.id_agente
+      order by total_por_reservas desc
+          
+      `;
+
+    const result = await executeQuery(query, [estado]);
+
+    return res.status(200).json({
+      message: "Top clientes por estado generado exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    throw customError(
+      500,
+      "Error desconocido al generar top clientes por estado",
+    );
+  }
+};
+
+/**
+ * Obtiene el ranking de proveedores para un estado.
+ *
+ * Parámetros:
+ * - estado (query): Estado del cual se desea obtener el ranking.
+ *
+ * Devuelve:
+ * - Id del agente.
+ * - Nombre.
+ * - Cantidad de reservaciones.
+ * - Monto total reservado.
+ *
+ * Método: GET
+ *
+ * Ejemplo:
+ * /top-proveedores?estado=Jalisco
+ */
+
+const topProveedores = async (req, res) => {
+  try {
+    const { estado } = req.query;
+
+    if (!estado) {
+      throw customError(400, "Falta el parámetro 'estado' en la consulta");
+    }
+
+    const query = `
+    SELECT 
+        h.estado,
+        SUM(
+            CASE 
+                WHEN b.estado <> 'Cancelada' THEN 1
+                ELSE 0
+            END
+        ) AS cantidad_reservas_confirmadas,
+        SUM(
+            CASE 
+                WHEN b.estado <> 'Cancelada' THEN b.total
+                ELSE 0
+            END
+        ) AS monto_reservas_confirmadas,
+        AVG(
+            CASE
+                WHEN b.estado <> 'Cancelada' THEN b.total
+                ELSE NULL
+            END
+        ) AS promedio_por_reserva
+    FROM hoteles h
+    INNER JOIN hospedajes hp
+        ON hp.id_hotel = h.id_hotel
+    INNER JOIN bookings b
+        ON b.id_booking = hp.id_booking
+    where h.estado = ?
+    GROUP BY h.estado
+    ORDER BY cantidad_reservas_confirmadas DESC;
+    `;
+    const result = await executeQuery(query, [estado]);
+
+    return res.status(200).json({
+      message: "Top proveedores por estado generado exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    throw customError(
+      500,
+      "Error desconocido al generar top proveedores por estado",
+    );
   }
 };
 
@@ -1188,4 +1403,7 @@ module.exports = {
   agregarPrioridadHotel,
   actualizarPrioridadHotel,
   buscarHotelesParaCotizacion,
+  reportePorEstado,
+  topClientes,
+  topProveedores,
 };
