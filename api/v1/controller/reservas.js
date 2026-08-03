@@ -2171,11 +2171,15 @@ const getHeaderDetallesReservas = async (req, res) => {
           type,
           tipo_cuarto_vuelo,
           check_in,
-          check_out
+          check_out,
+          GROUP_CONCAT(DISTINCT f.uuid_factura SEPARATOR ', ') AS facturas_asociadas
       FROM snapshot_detalles sd
       inner join vw_new_details_booking as vw
       on vw.id_booking = sd.id_booking
+      left join items_facturas fi on fi.id_relacion = vw.id_relacion
+      left join facturas f on f.id_factura = fi.id_factura
       WHERE id_snapshot_reserva = ?
+      group by vw.id_booking
     `;
 
   let filtroQuery = "";
@@ -2189,7 +2193,7 @@ const getHeaderDetallesReservas = async (req, res) => {
 
     case "reservasPorFacturar":
       filtroQuery = `
-        AND monto_por_facturar > 0
+        AND estado_factura = "Pendiente" AND estado_reserva = "Confirmada"
       `;
       break;
 
@@ -2217,7 +2221,7 @@ const getHeaderDetallesReservas = async (req, res) => {
 
     case "reservasSinPagar":
       filtroQuery = `
-        AND estado_pago = "Sin pago"
+        AND estado_pago = "Pendiente" AND estado_reserva = "Confirmada"
       `;
       break;
 

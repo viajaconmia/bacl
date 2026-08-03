@@ -10,6 +10,7 @@ const repository = require("./dispersion.repository");
 const solicitudesService = require("../pagoProveedores/solicitudes/pagoProveedoresSolicitudes.service");
 const reservasService = require("../pagoProveedores/reservas/pagoProveedoresReservas.service");
 const cuentasService = require("../proveedores/cuentas/proveedoresCuentas.service");
+const dispersionPagosRepository = require("./pagos/dispersionPagos.repository");
 
 const MAX_INTENTOS_CODIGO = 5;
 
@@ -170,6 +171,42 @@ class DispersionService {
     }
 
     return dispersionPorId;
+  }
+
+  /**
+   * Elimina todas las filas de dispersion_pagos_proveedor asociadas a un
+   * codigo_dispersion. No toca solicitudes_pago_proveedor.estado_solicitud
+   * (queda como 'DISPERSION', se acepta la inconsistencia). Bloquea el
+   * borrado si alguna fila ya tiene un pago creado. Pensado para correr
+   * dentro de runTransaction.
+   * @param {string} codigo - codigo_dispersion
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   */
+  async eliminarPorCodigo(codigo, conn = null) {
+    if (!codigo || typeof codigo !== "string" || !codigo.trim()) {
+      throw new CustomError("codigo_dispersion es obligatorio", 400, "VALIDATION_ERROR");
+    }
+
+    const rows = await repository.findByCodigo(codigo, conn);
+    if (rows.length === 0) {
+      throw new CustomError("No se encontró ninguna dispersión con ese código", 404, "DISPERSION_NOT_FOUND");
+    }
+
+    const ids = rows.map((r) => r.id_dispersion_pagos_proveedor);
+
+    const existentes = await dispersionPagosRepository.findExistingByDispersionIds(ids, conn);
+    if (existentes.length > 0) {
+      throw new CustomError(
+        "No se puede eliminar: ya existen pagos creados para esta dispersión",
+        409,
+        "PAGO_YA_EXISTE",
+        { ids_con_pago: existentes },
+      );
+    }
+
+    const result = await repository.deleteByIds(ids, conn);
+
+    return { codigo_dispersion: codigo, ids_eliminados: ids, eliminados: result.affectedRows };
   }
 
   /**

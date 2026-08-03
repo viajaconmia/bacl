@@ -1,9 +1,10 @@
-const { applyLike, applyExact } = require("./filters");
+const { applyLike, applyExact, applyDateRange } = require("./filters");
 
 class BookingInclude {
   apply(builder, filters) {
     builder.addSelect(
       "vw.type",
+      "vw.created_at as created_at_booking",
       "vw.nombre_agente AS cliente",
       "vw.codigo_confirmacion",
       "vw.id_proveedor",
@@ -31,6 +32,7 @@ class BookingInclude {
     applyLike(builder, "vw.proveedor", filters.proveedor);
     applyLike(builder, "vw.negociacion_proveedor", filters.tipo_negociacion);
     applyExact(builder, "vw.type", filters.servicio);
+    applyDateRange(builder, "vw.check_in", filters.checkin_inicio, filters.checkin_fin);
   }
 }
 

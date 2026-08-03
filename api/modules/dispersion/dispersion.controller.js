@@ -67,4 +67,26 @@ const getAll = async (req, res) => {
   }
 };
 
-module.exports = { create, getAll };
+const eliminar = async (req, res) => {
+  const { codigo_dispersion } = req.params;
+
+  try {
+    const result = await runTransaction((conn) =>
+      dispersionService.eliminarPorCodigo(codigo_dispersion, conn),
+    );
+
+    return res.status(200).json({
+      data: result,
+      metadata: null,
+      message: "Dispersión eliminada correctamente",
+    });
+  } catch (error) {
+    console.error("Error en dispersion.eliminar:", error);
+    return res.status(error.statusCode ?? 500).json({
+      error: error.message,
+      details: error.details,
+    });
+  }
+};
+
+module.exports = { create, getAll, eliminar };
