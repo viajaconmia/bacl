@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const model = require("../model/hoteles");
 const { generatePresignedUploadUrl } = require("../utils/subir-imagen");
 const { ShortError } = require("../../../middleware/errorHandler");
+const { CustomError } = require("../../../middleware/errorHandler");
 
 const obtenerHotelesPrioridad = async (req, res) => {
   let { page, length } = req.query;
@@ -1228,20 +1229,23 @@ const reportePorEstado = async (req, res) => {
       INNER JOIN bookings b
           ON b.id_booking = hp.id_booking
       GROUP BY h.estado
-      ORDER BY cantidad_reservas_confirmadas DESC;
+      order by h.estado;
       `;
 
     const result = await executeQuery(query);
+
+    console.log("Resultado de la consulta:", result);
+
     return res.status(200).json({
       message: "Reporte por estado generado exitosamente",
       data: result,
     });
   } catch (error) {
-    throw customError(
-      500,
-      "Error desconocido al generar reporte por estado",
-      error.error,
-    );
+    console.log(error);
+    res.status(error.statusCode || 500).json({
+      message:
+        error.message || "Error desconocido al generar reporte por estado",
+    });
   }
 };
 
@@ -1267,8 +1271,8 @@ const topClientes = async (req, res) => {
   try {
     const { estado } = req.query;
 
-    if (!estado) {
-      throw customError(400, "Falta el parámetro 'estado' en la consulta");
+    if (estado == null || estado === undefined) {
+      throw new customError(400, "Falta el parámetro 'estado' en la consulta");
     }
 
     const query = `
@@ -1296,16 +1300,22 @@ const topClientes = async (req, res) => {
       `;
 
     const result = await executeQuery(query, [estado]);
+    const data = result.map((row) => ({
+      ...row,
+      cantidad_de_reservas: String(row.cantidad_de_reservas),
+    }));
 
     return res.status(200).json({
       message: "Top clientes por estado generado exitosamente",
-      data: result,
+      data: data,
     });
   } catch (error) {
-    throw customError(
-      500,
-      "Error desconocido al generar top clientes por estado",
-    );
+    console.log(error);
+    return res.status(res.statusCode || 500).json({
+      message:
+        error.message || "Error desconocido al generar top clientes por estado",
+      data: null,
+    });
   }
 };
 
@@ -1331,39 +1341,19 @@ const topProveedores = async (req, res) => {
   try {
     const { estado } = req.query;
 
-    if (!estado) {
+    if (estado == null || estado === undefined) {
       throw customError(400, "Falta el parámetro 'estado' en la consulta");
     }
 
     const query = `
-    SELECT 
-        h.estado,
-        SUM(
-            CASE 
-                WHEN b.estado <> 'Cancelada' THEN 1
-                ELSE 0
-            END
-        ) AS cantidad_reservas_confirmadas,
-        SUM(
-            CASE 
-                WHEN b.estado <> 'Cancelada' THEN b.total
-                ELSE 0
-            END
-        ) AS monto_reservas_confirmadas,
-        AVG(
-            CASE
-                WHEN b.estado <> 'Cancelada' THEN b.total
-                ELSE NULL
-            END
-        ) AS promedio_por_reserva
-    FROM hoteles h
-    INNER JOIN hospedajes hp
-        ON hp.id_hotel = h.id_hotel
-    INNER JOIN bookings b
-        ON b.id_booking = hp.id_booking
-    where h.estado = ?
-    GROUP BY h.estado
-    ORDER BY cantidad_reservas_confirmadas DESC;
+      SELECT h.estado, h.id_hotel,h.nombre, count(b.id_booking) as cantidad_de_reservas, SUM(b.total) as monto_reservas_confirmadas from hoteles h
+      INNER JOIN hospedajes hp
+      ON h.id_hotel = hp.id_hotel
+      INNER JOIN bookings b
+      ON b.id_booking = hp.id_booking 
+      WHERE b.estado <> "Cancelada" AND h.estado = ?
+      group by h.estado,h.id_hotel
+      order by monto_reservas_confirmadas desc;
     `;
     const result = await executeQuery(query, [estado]);
 
@@ -1372,10 +1362,13 @@ const topProveedores = async (req, res) => {
       data: result,
     });
   } catch (error) {
-    throw customError(
-      500,
-      "Error desconocido al generar top proveedores por estado",
-    );
+    console.log(error);
+    return res.status(res.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error desconocido al generar top proveedores por estado",
+      data: null,
+    });
   }
 };
 
