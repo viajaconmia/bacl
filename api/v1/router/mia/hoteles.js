@@ -34,4 +34,7 @@ router.get("/carga-imagen", controller.cargaImagen);
 router.post("/prioridad", controller.agregarPrioridadHotel);
 router.patch("/prioridad/:id", controller.actualizarPrioridadHotel);
 router.get("/cotizacion", controller.buscarHotelesParaCotizacion);
+router.get("/getReportePorEstado", controller.reportePorEstado);
+router.get("/getTopClientes", controller.topClientes);
+router.get("/getTopProveedores", controller.topProveedores);
 module.exports = router;
