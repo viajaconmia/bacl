@@ -2179,7 +2179,7 @@ const getHeaderDetallesReservas = async (req, res) => {
       left join items_facturas fi on fi.id_relacion = vw.id_relacion
       left join facturas f on f.id_factura = fi.id_factura
       WHERE id_snapshot_reserva = ?
-      group by vw.id_booking
+      
     `;
 
   let filtroQuery = "";
@@ -2193,7 +2193,7 @@ const getHeaderDetallesReservas = async (req, res) => {
 
     case "reservasPorFacturar":
       filtroQuery = `
-        AND estado_factura = "Pendiente" AND estado_reserva = "Confirmada"
+        AND estado_factura in ('Pendiente', 'Sin factura') AND estado_reserva = "Confirmada"
       `;
       break;
 
@@ -2236,6 +2236,7 @@ const getHeaderDetallesReservas = async (req, res) => {
   try {
     query += filtroQuery;
     query += `
+      group by vw.id_booking
       ORDER BY periodo, id_snapshot_detalles;
     `;
 
