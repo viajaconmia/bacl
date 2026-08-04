@@ -2193,7 +2193,7 @@ const getHeaderDetallesReservas = async (req, res) => {
 
     case "reservasPorFacturar":
       filtroQuery = `
-        AND estado_factura = "Pendiente" AND estado_reserva = "Confirmada"
+        AND estado_factura in ('Pendiente', 'Sin factura') AND estado_reserva = "Confirmada"
       `;
       break;
 
