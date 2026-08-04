@@ -1296,6 +1296,7 @@ const topClientes = async (req, res) => {
           h.estado,
           a.id_agente
       order by total_por_reservas desc
+      limit 10;
           
       `;
 
@@ -1353,7 +1354,8 @@ const topProveedores = async (req, res) => {
       ON b.id_booking = hp.id_booking 
       WHERE b.estado <> "Cancelada" AND h.estado = ?
       group by h.estado,h.id_hotel
-      order by monto_reservas_confirmadas desc;
+      order by monto_reservas_confirmadas desc
+      limit 10;
     `;
     const result = await executeQuery(query, [estado]);
 
