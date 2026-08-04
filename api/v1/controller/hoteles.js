@@ -1374,6 +1374,194 @@ const topProveedores = async (req, res) => {
   }
 };
 
+/**
+ * Obtiene un reporte de reservaciones agrupadas por estado.
+ *
+ * Devuelve:
+ * - Estado.
+ * - Cantidad de reservaciones confirmadas.
+ * - Monto total confirmado.
+ * - Promedio por reservación confirmada.
+ *
+ * Método: GET
+ * Query Params: Ninguno.
+ *
+ * Respuesta:
+ * 200 OK
+ */
+
+const reportePorEstado = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+          h.estado,
+          SUM(
+              CASE 
+                  WHEN b.estado <> 'Cancelada' THEN 1
+                  ELSE 0
+              END
+          ) AS cantidad_reservas_confirmadas,
+          SUM(
+              CASE 
+                  WHEN b.estado <> 'Cancelada' THEN b.total
+                  ELSE 0
+              END
+          ) AS monto_reservas_confirmadas,
+          AVG(
+              CASE
+                  WHEN b.estado <> 'Cancelada' THEN b.total
+                  ELSE NULL
+              END
+          ) AS promedio_por_reserva
+      FROM hoteles h
+      INNER JOIN hospedajes hp
+          ON hp.id_hotel = h.id_hotel
+      INNER JOIN bookings b
+          ON b.id_booking = hp.id_booking
+      GROUP BY h.estado
+      order by h.estado;
+      `;
+
+    const result = await executeQuery(query);
+
+    console.log("Resultado de la consulta:", result);
+
+    return res.status(200).json({
+      message: "Reporte por estado generado exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(error.statusCode || 500).json({
+      message:
+        error.message || "Error desconocido al generar reporte por estado",
+    });
+  }
+};
+
+/**
+ * Obtiene el ranking de clientes para un estado.
+ *
+ * Parámetros:
+ * - estado (query): Estado del cual se desea obtener el ranking.
+ *
+ * Devuelve:
+ * - Id del agente.
+ * - Nombre.
+ * - Cantidad de reservaciones.
+ * - Monto total reservado.
+ *
+ * Método: GET
+ *
+ * Ejemplo:
+ * /top-clientes?estado=Jalisco
+ */
+
+const topClientes = async (req, res) => {
+  try {
+    const { estado } = req.query;
+
+    if (estado == null || estado === undefined) {
+      throw new customError(400, "Falta el parámetro 'estado' en la consulta");
+    }
+
+    const query = `
+      SELECT
+          h.estado,
+          a.id_agente,
+          a.nombre,
+          count(a.id_agente) as cantidad_de_reservas,
+          SUM(b.total) AS total_por_reservas
+      FROM hoteles h
+      INNER JOIN hospedajes hp
+        ON hp.id_hotel = h.id_hotel
+      INNER JOIN bookings b
+        ON hp.id_booking = b.id_booking
+      INNER JOIN servicios s
+        ON b.id_servicio = s.id_servicio
+      INNER JOIN agentes a
+          ON a.id_agente = s.id_agente
+      WHERE b.estado <> 'Cancelada' AND h.estado = ?
+      GROUP BY
+          h.estado,
+          a.id_agente
+      order by total_por_reservas desc limit 10;
+          
+      `;
+
+    const result = await executeQuery(query, [estado]);
+    const data = result.map((row) => ({
+      ...row,
+      cantidad_de_reservas: String(row.cantidad_de_reservas),
+    }));
+
+    return res.status(200).json({
+      message: "Top clientes por estado generado exitosamente",
+      data: data,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(res.statusCode || 500).json({
+      message:
+        error.message || "Error desconocido al generar top clientes por estado",
+      data: null,
+    });
+  }
+};
+
+/**
+ * Obtiene el ranking de proveedores para un estado.
+ *
+ * Parámetros:
+ * - estado (query): Estado del cual se desea obtener el ranking.
+ *
+ * Devuelve:
+ * - Id del agente.
+ * - Nombre.
+ * - Cantidad de reservaciones.
+ * - Monto total reservado.
+ *
+ * Método: GET
+ *
+ * Ejemplo:
+ * /top-proveedores?estado=Jalisco
+ */
+
+const topProveedores = async (req, res) => {
+  try {
+    const { estado } = req.query;
+
+    if (estado == null || estado === undefined) {
+      throw customError(400, "Falta el parámetro 'estado' en la consulta");
+    }
+
+    const query = `
+      SELECT h.estado, h.id_hotel,h.nombre, count(b.id_booking) as cantidad_de_reservas, SUM(b.total) as monto_reservas_confirmadas from hoteles h
+      INNER JOIN hospedajes hp
+      ON h.id_hotel = hp.id_hotel
+      INNER JOIN bookings b
+      ON b.id_booking = hp.id_booking 
+      WHERE b.estado <> "Cancelada" AND h.estado = ?
+      group by h.estado,h.id_hotel
+      order by monto_reservas_confirmadas desc limit 10;
+    `;
+    const result = await executeQuery(query, [estado]);
+
+    return res.status(200).json({
+      message: "Top proveedores por estado generado exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(res.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error desconocido al generar top proveedores por estado",
+      data: null,
+    });
+  }
+};
+
 module.exports = {
   readGroupByHotel,
   AgregarHotel,
