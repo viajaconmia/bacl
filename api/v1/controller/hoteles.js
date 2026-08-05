@@ -1202,39 +1202,36 @@ const buscarHotelesParaCotizacion = async (req, res) => {
 
 const reportePorEstado = async (req, res) => {
   try {
+    const { cadena = "" } = req.query;
+
+    const where = [`b.estado <> 'Cancelada'`];
+    const params = [];
+
+    if (String(cadena).trim() !== "") {
+      where.push(`p.negociacion LIKE CONCAT('%', ?, '%')`);
+      params.push(String(cadena).trim());
+    }
+
     const query = `
       SELECT 
-          h.estado,
-          SUM(
-              CASE 
-                  WHEN b.estado <> 'Cancelada' THEN 1
-                  ELSE 0
-              END
-          ) AS cantidad_reservas_confirmadas,
-          SUM(
-              CASE 
-                  WHEN b.estado <> 'Cancelada' THEN b.total
-                  ELSE 0
-              END
-          ) AS monto_reservas_confirmadas,
-          AVG(
-              CASE
-                  WHEN b.estado <> 'Cancelada' THEN b.total
-                  ELSE NULL
-              END
-          ) AS promedio_por_reserva
+          COALESCE(h.estado, '') AS estado,
+          GROUP_CONCAT(DISTINCT p.negociacion ORDER BY p.negociacion SEPARATOR ', ') AS cadenas,
+          COUNT(b.id_booking) AS cantidad_reservas_confirmadas,
+          SUM(b.total) AS monto_reservas_confirmadas,
+          AVG(b.total) AS promedio_por_reserva
       FROM hoteles h
       INNER JOIN hospedajes hp
           ON hp.id_hotel = h.id_hotel
       INNER JOIN bookings b
           ON b.id_booking = hp.id_booking
-      GROUP BY h.estado
-      order by h.estado;
-      `;
+      INNER JOIN proveedores p
+          ON b.id_proveedor = p.id
+      WHERE ${where.join(" AND ")}
+      GROUP BY COALESCE(h.estado, '')
+      ORDER BY COALESCE(h.estado, '');
+    `;
 
-    const result = await executeQuery(query);
-
-    console.log("Resultado de la consulta:", result);
+    const result = await executeQuery(query, params);
 
     return res.status(200).json({
       message: "Reporte por estado generado exitosamente",
@@ -1242,9 +1239,11 @@ const reportePorEstado = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    res.status(error.statusCode || 500).json({
+
+    return res.status(error.statusCode || 500).json({
       message:
         error.message || "Error desconocido al generar reporte por estado",
+      data: [],
     });
   }
 };
@@ -1269,18 +1268,18 @@ const reportePorEstado = async (req, res) => {
 
 const topClientes = async (req, res) => {
   try {
-    const { estado } = req.query;
+    const { estado, cadena = "", mostrarTodos = false } = req.query;
 
-    if (estado == null || estado === undefined) {
-      throw new customError(400, "Falta el parámetro 'estado' en la consulta");
-    }
+    const estadoParam = String(estado);
+    const cadenaParam = String(cadena).trim();
 
-    const query = `
+    let query = `
       SELECT
-          h.estado,
+          COALESCE(h.estado, '') AS estado,
+          p.negociacion AS cadena,
           a.id_agente,
           a.nombre,
-          count(a.id_agente) as cantidad_de_reservas,
+          COUNT(b.id_booking) AS cantidad_de_reservas,
           SUM(b.total) AS total_por_reservas
       FROM hoteles h
       INNER JOIN hospedajes hp
@@ -1290,32 +1289,55 @@ const topClientes = async (req, res) => {
       INNER JOIN servicios s
         ON b.id_servicio = s.id_servicio
       INNER JOIN agentes a
-          ON a.id_agente = s.id_agente
-      WHERE b.estado <> 'Cancelada' AND h.estado = ?
-      GROUP BY
-          h.estado,
-          a.id_agente
-      order by total_por_reservas desc
-      limit 10;
-          
-      `;
+        ON a.id_agente = s.id_agente
+      INNER JOIN proveedores p
+        ON p.id = b.id_proveedor
+      WHERE b.estado <> 'Cancelada'
+        
+    `;
 
-    const result = await executeQuery(query, [estado]);
-    const data = result.map((row) => ({
-      ...row,
-      cantidad_de_reservas: String(row.cantidad_de_reservas),
-    }));
+    const params = [];
+
+    if (estado !== "null" && estado !== undefined) {
+      query += ` AND COALESCE(h.estado, '') = ?`;
+      params.push(estadoParam);
+    }
+
+    if (cadenaParam !== "") {
+      query += `
+        AND p.negociacion LIKE CONCAT('%', ?, '%')
+      `;
+      params.push(cadenaParam);
+    }
+
+    query += `
+      GROUP BY
+          COALESCE(h.estado, ''),
+          p.negociacion,
+          a.id_agente,
+          a.nombre
+      ORDER BY total_por_reservas DESC
+    `;
+
+    if (!mostrarTodos) {
+      query += `
+        LIMIT 10
+      `;
+    }
+
+    const result = await executeQuery(query, params);
 
     return res.status(200).json({
       message: "Top clientes por estado generado exitosamente",
-      data: data,
+      data: result,
     });
   } catch (error) {
     console.log(error);
-    return res.status(res.statusCode || 500).json({
+
+    return res.status(error.statusCode || 500).json({
       message:
         error.message || "Error desconocido al generar top clientes por estado",
-      data: null,
+      data: [],
     });
   }
 };
@@ -1340,24 +1362,60 @@ const topClientes = async (req, res) => {
 
 const topProveedores = async (req, res) => {
   try {
-    const { estado } = req.query;
+    const { estado, cadena = "", mostrarTodos = false } = req.query;
 
-    if (estado == null || estado === undefined) {
-      throw customError(400, "Falta el parámetro 'estado' en la consulta");
+    const estadoParam = String(estado);
+    const cadenaParam = String(cadena).trim();
+
+    let query = `
+      SELECT 
+          COALESCE(h.estado, '') AS estado,
+          p.negociacion AS cadena,
+          h.id_hotel,
+          h.nombre,
+          COUNT(b.id_booking) AS cantidad_de_reservas,
+          SUM(b.total) AS monto_reservas_confirmadas
+      FROM hoteles h
+      INNER JOIN hospedajes hp
+          ON h.id_hotel = hp.id_hotel
+      INNER JOIN bookings b
+          ON b.id_booking = hp.id_booking
+      INNER JOIN proveedores p
+          ON p.id = b.id_proveedor
+      WHERE b.estado <> 'Cancelada'
+        
+    `;
+
+    const params = [];
+
+    if (estado !== "null" && estado !== undefined) {
+      query += ` AND COALESCE(h.estado, '') = ?`;
+      params.push(estado);
     }
 
-    const query = `
-      SELECT h.estado, h.id_hotel,h.nombre, count(b.id_booking) as cantidad_de_reservas, SUM(b.total) as monto_reservas_confirmadas from hoteles h
-      INNER JOIN hospedajes hp
-      ON h.id_hotel = hp.id_hotel
-      INNER JOIN bookings b
-      ON b.id_booking = hp.id_booking 
-      WHERE b.estado <> "Cancelada" AND h.estado = ?
-      group by h.estado,h.id_hotel
-      order by monto_reservas_confirmadas desc
-      limit 10;
+    if (cadenaParam !== "") {
+      query += `
+        AND p.negociacion LIKE CONCAT('%', ?, '%')
+      `;
+      params.push(cadenaParam);
+    }
+
+    query += `
+      GROUP BY 
+          COALESCE(h.estado, ''),
+          p.negociacion,
+          h.id_hotel,
+          h.nombre
+      ORDER BY monto_reservas_confirmadas DESC
     `;
-    const result = await executeQuery(query, [estado]);
+
+    if (!mostrarTodos) {
+      query += `
+        LIMIT 10
+      `;
+    }
+
+    const result = await executeQuery(query, params);
 
     return res.status(200).json({
       message: "Top proveedores por estado generado exitosamente",
@@ -1365,11 +1423,12 @@ const topProveedores = async (req, res) => {
     });
   } catch (error) {
     console.log(error);
-    return res.status(res.statusCode || 500).json({
+
+    return res.status(error.statusCode || 500).json({
       message:
         error.message ||
         "Error desconocido al generar top proveedores por estado",
-      data: null,
+      data: [],
     });
   }
 };
