@@ -2161,6 +2161,26 @@ const getHeaderDetallesReservas = async (req, res) => {
     });
   }
 
+  let query = `
+    SELECT
+          sd.*,
+          vw.nombre_agente,
+          nombre_viajero,
+          codigo_confirmacion,
+          type,
+          tipo_cuarto_vuelo,
+          check_in,
+          check_out,
+          GROUP_CONCAT(DISTINCT f.uuid_factura SEPARATOR ', ') AS facturas_asociadas
+      FROM snapshot_detalles sd
+      inner join vw_new_details_booking as vw
+      on vw.id_booking = sd.id_booking
+      left join items_facturas fi on fi.id_relacion = vw.id_relacion
+      left join facturas f on f.id_factura = fi.id_factura
+      WHERE id_snapshot_reserva = ?
+      
+    `;
+
   let filtroQuery = "";
 
   switch (filtroDetalles) {
@@ -2172,8 +2192,7 @@ const getHeaderDetallesReservas = async (req, res) => {
 
     case "reservasPorFacturar":
       filtroQuery = `
-        AND sd.estado_factura = 'Pendiente'
-        AND sd.estado_reserva = 'Confirmada'
+        AND estado_factura in ('Pendiente', 'Sin factura') AND estado_reserva = "Confirmada"
       `;
       break;
 
@@ -2215,28 +2234,10 @@ const getHeaderDetallesReservas = async (req, res) => {
   }
 
   try {
-    const query = `
-      SELECT
-        sd.*,
-        vw.nombre_agente,
-        vw.nombre_viajero,
-        vw.codigo_confirmacion,
-        vw.type,
-        vw.tipo_cuarto_vuelo,
-        vw.check_in,
-        vw.check_out,
-        GROUP_CONCAT(DISTINCT f.uuid_factura SEPARATOR ', ') AS facturas_asociadas
-      FROM snapshot_detalles sd
-      INNER JOIN vw_new_details_booking AS vw
-        ON vw.id_booking = sd.id_booking
-      LEFT JOIN items_facturas fi
-        ON fi.id_relacion = vw.id_relacion
-      LEFT JOIN facturas f
-        ON f.id_factura = fi.id_factura
-      WHERE sd.id_snapshot_reserva = ?
-      ${filtroQuery}
-      GROUP BY sd.id_snapshot_detalles
-      ORDER BY sd.periodo, sd.id_snapshot_detalles;
+    query += filtroQuery;
+    query += `
+      group by vw.id_booking
+      ORDER BY periodo, id_snapshot_detalles;
     `;
     const resultado = await executeQuery(query, [id_snapshot_reserva]);
 

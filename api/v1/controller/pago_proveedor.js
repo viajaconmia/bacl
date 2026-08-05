@@ -8958,6 +8958,7 @@ const asignar_factura_previa = async (req, res) => {
   }
 };
 
+// [v2] Ya existe copia: GET /v2/mia/pago_proveedor/facturas/solicitudes — api/modules/pagoProveedores/facturas/
 const buscaruuid = async (req, res) => {
   try {
     const { uuid_factura } = req.body;
@@ -9737,6 +9738,7 @@ const cancelar_dispersion = async (req, res) => {
   }
 };
 
+// [v2] Ya existe copia: DELETE /v2/mia/pago_proveedor/facturas/solicitudes — api/modules/pagoProveedores/facturas/
 const eliminarPagoFacturaProveedor = async (req, res) => {
   try {
     const { id_factura, id_solicitud } = req.body;
