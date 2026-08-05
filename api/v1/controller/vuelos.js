@@ -752,8 +752,11 @@ const editarVuelo = async (req, res) => {
           [data_meta.id_agente],
         );
         if (!agente) throw new Error("No existe agente");
-        if (Number(agente.saldo) < diferencia_ajuste)
-          throw new Error("El agente no tiene el crédito suficiente");
+        if (Number(agente.saldo) < diferencia_ajuste) {
+          throw new Error(
+            `El agente no tiene el crédito suficiente, tiene: ${agente.saldo} y quieres agregar: ${diferencia_ajuste} al precio del vuelo`,
+          );
+        }
         precio_ajuste = calcularPrecios(diferencia_ajuste);
         precio_nuevo = calcularPrecios(cambios.logs.precio.current);
       } else if (diferencia_ajuste < 0) {
