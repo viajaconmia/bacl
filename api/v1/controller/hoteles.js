@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const model = require("../model/hoteles");
 const { generatePresignedUploadUrl } = require("../utils/subir-imagen");
 const { ShortError } = require("../../../middleware/errorHandler");
+const { CustomError } = require("../../../middleware/errorHandler");
 
 const obtenerHotelesPrioridad = async (req, res) => {
   let { page, length } = req.query;
@@ -134,13 +135,11 @@ const obtenerHotelesPrioridad = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error obtenerHotelesPrioridad:", error);
-    res
-      .status(error.statusCode || 500)
-      .json({
-        error,
-        message: error.message || "Error al obtener hoteles con prioridad",
-        data: null,
-      });
+    res.status(error.statusCode || 500).json({
+      error,
+      message: error.message || "Error al obtener hoteles con prioridad",
+      data: null,
+    });
   }
 };
 
@@ -1063,7 +1062,8 @@ const actualizarPrioridadHotel = async (req, res) => {
   } catch (error) {
     if (error.code === "NO_FIELDS") {
       return res.status(400).json({
-        message: "Debes enviar al menos un campo a actualizar: zona, priority o is_allowed",
+        message:
+          "Debes enviar al menos un campo a actualizar: zona, priority o is_allowed",
         data: null,
         error: null,
       });
@@ -1079,7 +1079,8 @@ const actualizarPrioridadHotel = async (req, res) => {
 
     if (error.code === "ER_DUP_ENTRY") {
       return res.status(409).json({
-        message: "Ya existe un registro con esa combinación de agente, zona y hotel",
+        message:
+          "Ya existe un registro con esa combinación de agente, zona y hotel",
         data: null,
         error: null,
       });
@@ -1098,7 +1099,8 @@ const agregarPrioridadHotel = async (req, res) => {
 
   if (!id_agente || !id_hotel || !zona || priority === undefined) {
     return res.status(400).json({
-      message: "Faltan campos obligatorios: id_agente, id_hotel, zona, priority",
+      message:
+        "Faltan campos obligatorios: id_agente, id_hotel, zona, priority",
       data: null,
       error: null,
     });
@@ -1137,9 +1139,27 @@ const agregarPrioridadHotel = async (req, res) => {
 
 const buscarHotelesParaCotizacion = async (req, res) => {
   try {
-    const { ciudad, hotel, cp, lat, lng, checkin, checkout, id_hotel, id_cliente } = req.query;
+    const {
+      ciudad,
+      hotel,
+      cp,
+      lat,
+      lng,
+      checkin,
+      checkout,
+      id_hotel,
+      id_cliente,
+    } = req.query;
 
-    const hoteles = await model.buscarHotelesConFiltros({ ciudad, hotel, cp, lat, lng, id_hotel, id_cliente });
+    const hoteles = await model.buscarHotelesConFiltros({
+      ciudad,
+      hotel,
+      cp,
+      lat,
+      lng,
+      id_hotel,
+      id_cliente,
+    });
 
     if (!hoteles.length) {
       return res.status(404).json({
@@ -1160,6 +1180,261 @@ const buscarHotelesParaCotizacion = async (req, res) => {
       message: "Error al buscar hoteles",
       data: null,
       error,
+    });
+  }
+};
+
+/**
+ * Obtiene un reporte de reservaciones agrupadas por estado.
+ *
+ * Devuelve:
+ * - Estado.
+ * - Cantidad de reservaciones confirmadas.
+ * - Monto total confirmado.
+ * - Promedio por reservación confirmada.
+ *
+ * Método: GET
+ * Query Params: Ninguno.
+ *
+ * Respuesta:
+ * 200 OK
+ */
+
+const reportePorEstado = async (req, res) => {
+  try {
+    const { cadena = "" } = req.query;
+
+    const where = [`b.estado <> 'Cancelada'`];
+    const params = [];
+
+    if (String(cadena).trim() !== "") {
+      where.push(`p.negociacion LIKE CONCAT('%', ?, '%')`);
+      params.push(String(cadena).trim());
+    }
+
+    const query = `
+      SELECT 
+          COALESCE(h.estado, '') AS estado,
+          GROUP_CONCAT(DISTINCT p.negociacion ORDER BY p.negociacion SEPARATOR ', ') AS cadenas,
+          COUNT(b.id_booking) AS cantidad_reservas_confirmadas,
+          SUM(b.total) AS monto_reservas_confirmadas,
+          AVG(b.total) AS promedio_por_reserva
+      FROM hoteles h
+      INNER JOIN hospedajes hp
+          ON hp.id_hotel = h.id_hotel
+      INNER JOIN bookings b
+          ON b.id_booking = hp.id_booking
+      INNER JOIN proveedores p
+          ON b.id_proveedor = p.id
+      WHERE ${where.join(" AND ")}
+      GROUP BY COALESCE(h.estado, '')
+      ORDER BY COALESCE(h.estado, '');
+    `;
+
+    const result = await executeQuery(query, params);
+
+    return res.status(200).json({
+      message: "Reporte por estado generado exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message || "Error desconocido al generar reporte por estado",
+      data: [],
+    });
+  }
+};
+
+/**
+ * Obtiene el ranking de clientes para un estado.
+ *
+ * Parámetros:
+ * - estado (query): Estado del cual se desea obtener el ranking.
+ *
+ * Devuelve:
+ * - Id del agente.
+ * - Nombre.
+ * - Cantidad de reservaciones.
+ * - Monto total reservado.
+ *
+ * Método: GET
+ *
+ * Ejemplo:
+ * /top-clientes?estado=Jalisco
+ */
+
+const topClientes = async (req, res) => {
+  try {
+    const { estado, cadena = "", mostrarTodos = "false" } = req.query;
+
+    if (estado === undefined) {
+      return res.status(400).json({
+        message: "Falta el parámetro 'estado' en la consulta",
+        data: [],
+      });
+    }
+
+    const estadoParam = String(estado);
+    const cadenaParam = String(cadena).trim();
+    const mostrarTodosBool = String(mostrarTodos).toLowerCase() === "true";
+
+    let query = `
+      SELECT
+          COALESCE(h.estado, '') AS estado,
+          p.negociacion AS cadena,
+          a.id_agente,
+          a.nombre,
+          COUNT(b.id_booking) AS cantidad_de_reservas,
+          SUM(b.total) AS total_por_reservas
+      FROM hoteles h
+      INNER JOIN hospedajes hp
+        ON hp.id_hotel = h.id_hotel
+      INNER JOIN bookings b
+        ON hp.id_booking = b.id_booking
+      INNER JOIN servicios s
+        ON b.id_servicio = s.id_servicio
+      INNER JOIN agentes a
+        ON a.id_agente = s.id_agente
+      INNER JOIN proveedores p
+        ON p.id = b.id_proveedor
+      WHERE b.estado <> 'Cancelada'
+        AND COALESCE(h.estado, '') = ?
+    `;
+
+    const params = [estadoParam];
+
+    if (cadenaParam !== "") {
+      query += `
+        AND p.negociacion LIKE CONCAT('%', ?, '%')
+      `;
+      params.push(cadenaParam);
+    }
+
+    query += `
+      GROUP BY
+          COALESCE(h.estado, ''),
+          p.negociacion,
+          a.id_agente,
+          a.nombre
+      ORDER BY total_por_reservas DESC
+    `;
+
+    if (!mostrarTodosBool) {
+      query += `
+        LIMIT 10
+      `;
+    }
+
+    const result = await executeQuery(query, params);
+
+    return res.status(200).json({
+      message: "Top clientes por estado generado exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message || "Error desconocido al generar top clientes por estado",
+      data: [],
+    });
+  }
+};
+
+/**
+ * Obtiene el ranking de proveedores para un estado.
+ *
+ * Parámetros:
+ * - estado (query): Estado del cual se desea obtener el ranking.
+ *
+ * Devuelve:
+ * - Id del agente.
+ * - Nombre.
+ * - Cantidad de reservaciones.
+ * - Monto total reservado.
+ *
+ * Método: GET
+ *
+ * Ejemplo:
+ * /top-proveedores?estado=Jalisco
+ */
+
+const topProveedores = async (req, res) => {
+  try {
+    const { estado, cadena = "", mostrarTodos = "false" } = req.query;
+
+    if (estado === undefined) {
+      return res.status(400).json({
+        message: "Falta el parámetro 'estado' en la consulta",
+        data: [],
+      });
+    }
+
+    const estadoParam = String(estado);
+    const cadenaParam = String(cadena).trim();
+    const mostrarTodosBool = String(mostrarTodos).toLowerCase() === "true";
+
+    let query = `
+      SELECT 
+          COALESCE(h.estado, '') AS estado,
+          p.negociacion AS cadena,
+          h.id_hotel,
+          h.nombre,
+          COUNT(b.id_booking) AS cantidad_de_reservas,
+          SUM(b.total) AS monto_reservas_confirmadas
+      FROM hoteles h
+      INNER JOIN hospedajes hp
+          ON h.id_hotel = hp.id_hotel
+      INNER JOIN bookings b
+          ON b.id_booking = hp.id_booking
+      INNER JOIN proveedores p
+          ON p.id = b.id_proveedor
+      WHERE b.estado <> 'Cancelada'
+        AND COALESCE(h.estado, '') = ?
+    `;
+
+    const params = [estadoParam];
+
+    if (cadenaParam !== "") {
+      query += `
+        AND p.negociacion LIKE CONCAT('%', ?, '%')
+      `;
+      params.push(cadenaParam);
+    }
+
+    query += `
+      GROUP BY 
+          COALESCE(h.estado, ''),
+          p.negociacion,
+          h.id_hotel,
+          h.nombre
+      ORDER BY monto_reservas_confirmadas DESC
+    `;
+
+    if (!mostrarTodosBool) {
+      query += `
+        LIMIT 10
+      `;
+    }
+
+    const result = await executeQuery(query, params);
+
+    return res.status(200).json({
+      message: "Top proveedores por estado generado exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error desconocido al generar top proveedores por estado",
+      data: [],
     });
   }
 };
@@ -1188,4 +1463,7 @@ module.exports = {
   agregarPrioridadHotel,
   actualizarPrioridadHotel,
   buscarHotelesParaCotizacion,
+  reportePorEstado,
+  topClientes,
+  topProveedores,
 };
