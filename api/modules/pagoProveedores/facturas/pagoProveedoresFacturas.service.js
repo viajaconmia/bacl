@@ -26,6 +26,30 @@ class PagoProveedoresFacturasService {
   }
 
   /**
+   * Trae el detalle completo (saldos incluidos) de una factura por su uuid.
+   * @param {string} uuidFactura
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<object>}
+   */
+  async buscarFacturaPorUuid(uuidFactura, conn = null) {
+    const uuid = String(uuidFactura ?? "").trim().toUpperCase();
+    if (!uuid) {
+      throw new CustomError("uuid_factura es requerido", 400, "VALIDATION_ERROR");
+    }
+
+    const rows = await repository.findFacturaByUuid(uuid, conn);
+    if (!rows.length) {
+      throw new CustomError(
+        "No se encontró ninguna factura con ese uuid",
+        404,
+        "FACTURA_NOT_FOUND",
+      );
+    }
+
+    return rows[0];
+  }
+
+  /**
    * Elimina la asignación factura↔solicitud y devuelve el registro eliminado.
    * @param {string} idFactura
    * @param {number|string} idSolicitud

@@ -1,6 +1,11 @@
 const router = require("express").Router();
-const { buscarSolicitudes, eliminarPagoFactura } = require("./pagoProveedoresFacturas.controller");
+const {
+  buscarFactura,
+  buscarSolicitudes,
+  eliminarPagoFactura,
+} = require("./pagoProveedoresFacturas.controller");
 
+router.get("/", buscarFactura);
 router.get("/solicitudes", buscarSolicitudes);
 router.delete("/solicitudes", eliminarPagoFactura);
 

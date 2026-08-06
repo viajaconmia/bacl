@@ -1,6 +1,24 @@
 const { runTransaction } = require("../../../../config/db");
 const service = require("./pagoProveedoresFacturas.service");
 
+const buscarFactura = async (req, res) => {
+  const { uuid_factura } = req.query;
+  try {
+    const data = await service.buscarFacturaPorUuid(uuid_factura);
+    return res.status(200).json({
+      message: "Factura obtenida correctamente",
+      data,
+      metadata: null,
+    });
+  } catch (error) {
+    console.error("Error en buscarFactura:", error);
+    return res.status(error.statusCode ?? 500).json({
+      error: error.message || "Error al buscar la factura por uuid",
+      details: error.details ?? error.message ?? error,
+    });
+  }
+};
+
 const buscarSolicitudes = async (req, res) => {
   const { uuid_factura } = req.query;
   try {
@@ -39,4 +57,4 @@ const eliminarPagoFactura = async (req, res) => {
   }
 };
 
-module.exports = { buscarSolicitudes, eliminarPagoFactura };
+module.exports = { buscarFactura, buscarSolicitudes, eliminarPagoFactura };

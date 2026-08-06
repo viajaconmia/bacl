@@ -23,6 +23,23 @@ class PagoProveedoresFacturasRepository {
   }
 
   /**
+   * Trae el detalle completo (saldos incluidos) de una factura de proveedor por su uuid.
+   * @param {string} uuid - uuid_factura, ya normalizado por el service
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<object[]>}
+   */
+  async findFacturaByUuid(uuid, conn = null) {
+    const run = getExecutor(conn);
+    return run(
+      `SELECT *
+       FROM vw_saldos_facturas_proveedores
+       WHERE uuid_factura = ?
+       LIMIT 1`,
+      [uuid],
+    );
+  }
+
+  /**
    * Busca el registro de asignación factura↔solicitud en pagos_facturas_proveedores.
    * @param {string} idFactura
    * @param {number} idSolicitud
