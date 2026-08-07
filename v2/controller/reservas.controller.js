@@ -831,6 +831,8 @@ async function actualizar_credito_existente(
         pago_por_credito =  ?
       WHERE id_credito = ?`;
 
+  obtener;
+
   const [updateResult] = await connection.execute(updateQuery, [
     delta_total,
     delta_total,
