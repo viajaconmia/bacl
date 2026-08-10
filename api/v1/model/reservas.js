@@ -533,6 +533,13 @@ const asignarFacturasItems = async (req, res) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
+  const {
+    is_comisionable,
+    monto_comisionable,
+    porcentaje_comisionable,
+    comentarios_comisionables,
+  } = reserva;
+
   const { ejemplo_saldos = [], usuarioCreador, user, intermediario } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
 
@@ -543,6 +550,29 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
 
   if (!agentes || agentes.length === 0) {
     throw new Error("Agente no encontrado");
+  }
+  // Validaciones para comisionables
+  // Investigar esto
+
+  if (is_comisionable) {
+    if (monto_comisionable == null) {
+      throw new Error("El monto comisionable es requerido");
+    }
+
+    if (Number(monto_comisionable) < 0) {
+      throw new Error("El monto comisionable no puede ser negativo");
+    }
+
+    if (porcentaje_comisionable == null) {
+      throw new Error("El porcentaje comisionable es requerido");
+    }
+
+    if (
+      Number(porcentaje_comisionable) < 0 ||
+      Number(porcentaje_comisionable) > 100
+    ) {
+      throw new Error("El porcentaje debe estar entre 0 y 100");
+    }
   }
 
   const agente = agentes[0];
@@ -753,8 +783,10 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               id_booking, id_servicio, check_in, check_out, 
               total, subtotal, impuestos, estado, 
               costo_total, costo_subtotal, costo_impuestos, 
-              fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud, usuario_creador, comentarios_internos
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?);
+              fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud, usuario_creador, comentarios_internos,is_comisionable, monto_comisionable, porcentaje_comisionable, comentarios_comisionables
+            )
+              VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                );
           `;
           const params_bookings = [
             id_booking,
@@ -773,7 +805,12 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             id_solicitud,
             user.id,
             reserva.comentarios_internos || null,
+            is_comisionable,
+            monto_comisionable === 0 ? null : monto_comisionable,
+            porcentaje_comisionable === 0 ? null : porcentaje_comisionable,
+            comentarios_comisionables,
           ];
+          console.log(query_bookings, params_bookings);
           await connection.execute(query_bookings, params_bookings);
 
           // Hospedaje (desayuno por tipo)
@@ -2150,7 +2187,43 @@ const insertarReserva = async ({ reserva }) => {
 
   try {
     const id_booking = `boo-${uuidv4()}`;
-    const { solicitud, venta, proveedor, hotel, items, viajero } = reserva;
+    const {
+      solicitud,
+      venta,
+      proveedor,
+      hotel,
+      items,
+      viajero,
+      is_comisionable,
+      monto_comisionable,
+      porcentaje_comisionable,
+      comentarios_comisionables,
+    } = reserva;
+
+    // Validaciones comisionables:
+
+    // Validaciones para comisionables
+    // Investigar esto
+
+    if (monto_comisionable === null) {
+      throw new Error("El monto comisionable es requerido");
+    }
+
+    if (monto_comisionable < 0) {
+      throw new Error("El monto debe ser mayor que cero");
+    }
+
+    if (porcentaje_comisionable < 0 || porcentaje_comisionable > 100) {
+      throw new Error("El porcentaje debe estar entre 0 y 100");
+    }
+
+    if (
+      porcentaje_comisionable === 0 ||
+      porcentaje_comisionable < 0 ||
+      porcentaje_comisionable > 100
+    ) {
+      throw new Error("El porcentaje no es valido");
+    }
 
     // Verificar si ya existe la solicitud
     // const existingSolicitud = await executeQuery(
@@ -2176,8 +2249,9 @@ const insertarReserva = async ({ reserva }) => {
     const query_bookings = `
       INSERT INTO bookings (id_booking, id_servicio, check_in, check_out, 
       total, subtotal, impuestos, estado, costo_total, costo_subtotal, 
-      costo_impuestos, fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      costo_impuestos, fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud, is_comisionable,monto_comisionable,porcentaje_comisionable,
+      comentarios_comisionables)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? , ?, ?);
     `;
 
     const params_bookings = [
@@ -2195,6 +2269,10 @@ const insertarReserva = async ({ reserva }) => {
       null,
       null,
       solicitud.id_solicitud,
+      is_comisionable ?? 0,
+      monto_comisionable ?? 0,
+      porcentaje_comisionable ?? null,
+      comentarios_comisionables ?? null,
     ];
 
     // Ejecutar transacción
