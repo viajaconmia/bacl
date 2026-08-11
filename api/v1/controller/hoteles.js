@@ -1273,10 +1273,6 @@ const topClientes = async (req, res) => {
     const estadoParam = String(estado ?? "");
     const cadenaParam = String(cadena).trim();
 
-    const mostrarTodosBool =
-      String(mostrarTodos).toLowerCase() === "true" ||
-      String(mostrarTodos) === "1";
-
     let query = `
       SELECT
           COALESCE(h.estado, '') AS estado,
@@ -1366,14 +1362,10 @@ const topClientes = async (req, res) => {
 
 const topProveedores = async (req, res) => {
   try {
-    const { estado, cadena = "", mostrarTodos = false } = req.query;
+    const { estado, cadena = "", mostrarTodos } = req.query;
 
     const estadoParam = String(estado ?? "");
     const cadenaParam = String(cadena).trim();
-
-    const mostrarTodosBool =
-      String(mostrarTodos).toLowerCase() === "true" ||
-      String(mostrarTodos) === "1";
 
     let query = `
       SELECT 
@@ -1417,7 +1409,7 @@ const topProveedores = async (req, res) => {
       ORDER BY monto_reservas_confirmadas DESC
     `;
 
-    if (!mostrarTodos) {
+    if (!(mostrarTodos == "true")) {
       query += `
         LIMIT 10
       `;

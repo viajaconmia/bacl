@@ -831,6 +831,8 @@ async function actualizar_credito_existente(
         pago_por_credito =  ?
       WHERE id_credito = ?`;
 
+  obtener;
+
   const [updateResult] = await connection.execute(updateQuery, [
     delta_total,
     delta_total,
@@ -937,6 +939,11 @@ async function caso_base_tolerante({
   habitacion,
   nuevo_incluye_desayuno,
   intermediario,
+
+  comisionable,
+  monto_final,
+  porcentaje_final,
+  comentarios_comisionables,
 }) {
   return await runTransaction(async (connection) => {
     console.log("🧱 [CASO_BASE] Iniciando caso_base_tolerante...");
@@ -963,6 +970,17 @@ async function caso_base_tolerante({
       ...(check_in?.current ? { check_in: check_in.current } : {}),
       ...(check_out?.current ? { check_out: check_out.current } : {}),
       costo_total,
+      ...(comisionable !== undefined ? { is_comisionable: comisionable } : {}),
+
+      ...(monto_final !== undefined ? { monto_comisionable: monto_final } : {}),
+
+      ...(porcentaje_final !== undefined
+        ? { porcentaje_comisionable: porcentaje_final }
+        : {}),
+
+      ...(comentarios_comisionables?.current !== undefined
+        ? { comentarios_comisionables: comentarios_comisionables.current }
+        : {}),
     });
 
     if (Number.isFinite(total)) {
@@ -1128,6 +1146,7 @@ function mapFormaPagoSolicitudToSaldo(formaPagoSolicitada) {
 
 const { randomUUID, randomBytes } = require("crypto");
 const { Session } = require("inspector/promises");
+const { error } = require("console");
 
 function money2(value) {
   const n = Number(value || 0);
@@ -1653,7 +1672,117 @@ const editar_reserva_definitivo = async (req, res) => {
         saldos,
         restante,
         intermediario,
+
+        is_comisionable,
+        monto_comisionable,
+        porcentaje_comisionable,
+        comentarios_comisionables,
       } = req.body;
+
+      // Validaciones comisionables
+
+      // =====================================================
+      // VALIDACIONES COMISIONABLES - EDICIÓN DINÁMICA
+      // =====================================================
+
+      const vieneIsComisionable =
+        is_comisionable?.current !== undefined &&
+        is_comisionable?.current !== null;
+
+      const vieneMontoComisionable =
+        monto_comisionable?.current !== undefined &&
+        monto_comisionable?.current !== null;
+
+      const vienePorcentajeComisionable =
+        porcentaje_comisionable?.current !== undefined &&
+        porcentaje_comisionable?.current !== null;
+
+      const vieneComentariosComisionables =
+        comentarios_comisionables?.current !== undefined;
+
+      // Valores finales
+      let comisionable;
+      let monto_final;
+      let porcentaje_final;
+
+      // Si NO viene ningún campo comisionable:
+      // no validamos ni modificamos nada.
+      const vieneAlgunCampoComisionable =
+        vieneIsComisionable ||
+        vieneMontoComisionable ||
+        vienePorcentajeComisionable ||
+        vieneComentariosComisionables;
+
+      if (vieneAlgunCampoComisionable) {
+        console.log("🟡 Se recibieron datos comisionables");
+
+        // Validar is_comisionable
+        if (vieneIsComisionable) {
+          comisionable = Number(is_comisionable.current);
+
+          if (![0, 1].includes(comisionable)) {
+            return res.status(400).json({
+              error: "is_comisionable debe ser 0 o 1.",
+            });
+          }
+        }
+
+        // Obtener valores solamente si fueron enviados
+        const monto = vieneMontoComisionable
+          ? Number(monto_comisionable.current)
+          : undefined;
+
+        console.log("\n\n\n\n\n");
+        console.log(monto);
+        console.log(monto_comisionable);
+
+        const porcentaje = vienePorcentajeComisionable
+          ? Number(porcentaje_comisionable.current)
+          : undefined;
+
+        // Validar monto
+        if (vieneMontoComisionable && (!Number.isFinite(monto) || monto < 0)) {
+          return res.status(400).json({
+            error: "El monto comisionable debe ser mayor o igual a cero.",
+          });
+        }
+
+        // Validar porcentaje
+        if (
+          vienePorcentajeComisionable &&
+          (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100)
+        ) {
+          return res.status(400).json({
+            error: "El porcentaje comisionable debe estar entre 0 y 100.",
+          });
+        }
+
+        // Si ambos vienen y ambos son > 0 => error
+        if (
+          vieneMontoComisionable &&
+          vienePorcentajeComisionable &&
+          monto > 0 &&
+          porcentaje > 0
+        ) {
+          return res.status(400).json({
+            error:
+              "El monto comisionable y el porcentaje comisionable no pueden ser mayores que cero simultáneamente.",
+          });
+        }
+
+        monto_final = vieneMontoComisionable && monto > 0 ? monto : null;
+
+        porcentaje_final = vienePorcentajeComisionable
+          ? porcentaje > 0 && porcentaje
+          : null;
+
+        console.log("🟡 COMISIONABLES VALIDADOS:", {
+          comisionable,
+          monto_final,
+          porcentaje_final,
+          comentarios_comisionables: comentarios_comisionables?.current,
+        });
+      }
 
       // Validation and initial checks
       if (
@@ -1780,6 +1909,11 @@ const editar_reserva_definitivo = async (req, res) => {
           habitacion,
           nuevo_incluye_desayuno,
           intermediario,
+
+          comisionable,
+          monto_final,
+          porcentaje_final,
+          comentarios_comisionables,
         });
 
         console.log(
@@ -1901,6 +2035,11 @@ const editar_reserva_definitivo = async (req, res) => {
         habitacion,
         nuevo_incluye_desayuno,
         intermediario,
+
+        comisionable,
+        monto_final,
+        porcentaje_final,
+        comentarios_comisionables,
       });
 
       console.log(

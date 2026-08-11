@@ -6,6 +6,7 @@ const {
 const { v4: uuidv4 } = require("uuid");
 const { sumarDias } = require("../../../lib/utils/calculates");
 const { buscarTraslapes } = require("../../../lib/utils/traslapes");
+const { error } = require("winston");
 
 const editarReserva = async (edicionData, id_booking_a_editar) => {
   try {
@@ -533,6 +534,13 @@ const asignarFacturasItems = async (req, res) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
+  const {
+    is_comisionable,
+    monto_comisionable,
+    porcentaje_comisionable,
+    comentarios_comisionables,
+  } = reserva;
+
   const { ejemplo_saldos = [], usuarioCreador, user, intermediario } = reserva;
   console.log("Ejemplo de saldos recibidos:", reserva);
 
@@ -543,6 +551,57 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
 
   if (!agentes || agentes.length === 0) {
     throw new Error("Agente no encontrado");
+  }
+  // Validaciones para comisionables
+  // Investigar esto
+
+  // =====================================================
+  // VALIDACIONES COMISIONABLES - CREACIÓN
+  // =====================================================
+
+  const comisionable = Number(is_comisionable ?? 0);
+
+  // Validar is_comisionable
+  if (![0, 1].includes(comisionable)) {
+    throw new Error("is_comisionable debe ser 0 o 1.");
+  }
+
+  // Convertir valores a número solamente si vienen
+  const monto = monto_comisionable != null ? Number(monto_comisionable) : null;
+
+  const porcentaje =
+    porcentaje_comisionable != null ? Number(porcentaje_comisionable) : null;
+
+  // Validar monto
+  if (monto !== null) {
+    if (!Number.isFinite(monto) || monto < 0) {
+      throw new Error("El monto comisionable debe ser mayor o igual a cero.");
+    }
+  }
+
+  // Validar porcentaje
+  if (porcentaje !== null) {
+    if (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100) {
+      throw new Error("El porcentaje comisionable debe estar entre 0 y 100.");
+    }
+  }
+
+  // No pueden existir monto y porcentaje mayores que cero simultáneamente
+  if (monto !== null && porcentaje !== null) {
+    if (monto > 0 && porcentaje > 0) {
+      throw new Error(
+        "El monto comisionable y el porcentaje comisionable no pueden ser mayores que cero simultáneamente.",
+      );
+    }
+  }
+
+  // Si NO es comisionable, no debe guardar monto ni porcentaje
+  let monto_final = null;
+  let porcentaje_final = null;
+
+  if (comisionable === 1) {
+    monto_final = monto;
+    porcentaje_final = porcentaje;
   }
 
   const agente = agentes[0];
@@ -753,8 +812,10 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
               id_booking, id_servicio, check_in, check_out, 
               total, subtotal, impuestos, estado, 
               costo_total, costo_subtotal, costo_impuestos, 
-              fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud, usuario_creador, comentarios_internos
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?);
+              fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud, usuario_creador, comentarios_internos,is_comisionable, monto_comisionable, porcentaje_comisionable, comentarios_comisionables
+            )
+              VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                );
           `;
           const params_bookings = [
             id_booking,
@@ -773,7 +834,12 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             id_solicitud,
             user.id,
             reserva.comentarios_internos || null,
+            comisionable,
+            monto_final,
+            porcentaje_final,
+            comentarios_comisionables || null,
           ];
+          console.log(query_bookings, params_bookings);
           await connection.execute(query_bookings, params_bookings);
 
           // Hospedaje (desayuno por tipo)
@@ -2150,7 +2216,71 @@ const insertarReserva = async ({ reserva }) => {
 
   try {
     const id_booking = `boo-${uuidv4()}`;
-    const { solicitud, venta, proveedor, hotel, items, viajero } = reserva;
+    const {
+      solicitud,
+      venta,
+      proveedor,
+      hotel,
+      items,
+      viajero,
+      is_comisionable,
+      monto_comisionable,
+      porcentaje_comisionable,
+      comentarios_comisionables,
+    } = reserva;
+
+    // Validaciones comisionables:
+
+    // Validaciones para comisionables
+    // Investigar esto
+
+    // =====================================================
+    // VALIDACIONES COMISIONABLES - CREACIÓN
+    // =====================================================
+
+    const comisionable = Number(is_comisionable ?? 0);
+
+    // Validar is_comisionable
+    if (![0, 1].includes(comisionable)) {
+      throw new Error("is_comisionable debe ser 0 o 1.");
+    }
+
+    // Convertir valores a número solamente si vienen
+    const monto =
+      monto_comisionable != null ? Number(monto_comisionable) : null;
+
+    const porcentaje =
+      porcentaje_comisionable != null ? Number(porcentaje_comisionable) : null;
+
+    // Validar monto
+    if (monto !== null) {
+      if (!Number.isFinite(monto) || monto < 0) {
+        throw new Error("El monto comisionable debe ser mayor o igual a cero.");
+      }
+    }
+
+    // Validar porcentaje
+    if (porcentaje !== null) {
+      if (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100) {
+        throw new Error("El porcentaje comisionable debe estar entre 0 y 100.");
+      }
+    }
+
+    // No pueden existir monto y porcentaje mayores que cero simultáneamente
+    if (monto !== null && porcentaje !== null && monto > 0 && porcentaje > 0) {
+      throw new Error(
+        "El monto comisionable y el porcentaje comisionable no pueden ser mayores que cero simultáneamente.",
+      );
+    }
+
+    // Valores finales que realmente se guardarán
+    let monto_final = null;
+    let porcentaje_final = null;
+
+    if (comisionable === 1) {
+      monto_final = monto;
+      porcentaje_final = porcentaje;
+    }
 
     // Verificar si ya existe la solicitud
     // const existingSolicitud = await executeQuery(
@@ -2176,8 +2306,9 @@ const insertarReserva = async ({ reserva }) => {
     const query_bookings = `
       INSERT INTO bookings (id_booking, id_servicio, check_in, check_out, 
       total, subtotal, impuestos, estado, costo_total, costo_subtotal, 
-      costo_impuestos, fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      costo_impuestos, fecha_pago_proveedor, fecha_limite_cancelacion, id_solicitud, is_comisionable,monto_comisionable,porcentaje_comisionable,
+      comentarios_comisionables)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? , ?, ?);
     `;
 
     const params_bookings = [
@@ -2195,6 +2326,10 @@ const insertarReserva = async ({ reserva }) => {
       null,
       null,
       solicitud.id_solicitud,
+      comisionable,
+      monto_final,
+      porcentaje_final,
+      comentarios_comisionables ?? null,
     ];
 
     // Ejecutar transacción
