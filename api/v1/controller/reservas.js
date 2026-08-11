@@ -2131,7 +2131,6 @@ const getPeriodosReservas = async (req, res) => {
 const getHeaderDetallesReservas = async (req, res) => {
   const { id_snapshot_reserva } = req.query;
 
-  // Soporta cualquiera de los dos nombres por si el front manda abrirDetalles.
   const filtroDetalles = req.query.filtroDetalles || req.query.abrirDetalles;
 
   if (!id_snapshot_reserva) {
@@ -2187,7 +2186,7 @@ const getHeaderDetallesReservas = async (req, res) => {
   switch (filtroDetalles) {
     case "reservasCanceladas":
       filtroQuery = `
-        AND estado_reserva = "Cancelada"
+        AND sd.estado_reserva = 'Cancelada'
       `;
       break;
 
@@ -2199,36 +2198,37 @@ const getHeaderDetallesReservas = async (req, res) => {
 
     case "reservasCanceladasFacturadas":
       filtroQuery = `
-        AND estado_reserva = "Cancelada"
-        AND monto_facturado > 0
+        AND sd.estado_reserva = 'Cancelada'
+        AND sd.monto_facturado > 0
       `;
       break;
 
     case "reservasNoFacturables":
       filtroQuery = `
-        AND monto_no_facturable > 0
+        AND sd.monto_no_facturable > 0
       `;
       break;
 
     case "facturasCanceladas":
       filtroQuery = `
         AND (
-          estado_factura = "Factura cancelada"
-          OR estado_factura = "Con facturas activas y canceladas"
+          sd.estado_factura = 'Factura cancelada'
+          OR sd.estado_factura = 'Con facturas activas y canceladas'
         )
       `;
       break;
 
     case "reservasSinPagar":
       filtroQuery = `
-        AND estado_pago = "Pendiente" AND estado_reserva = "Confirmada"
+        AND sd.estado_pago = 'Pendiente'
+        AND sd.estado_reserva = 'Confirmada'
       `;
       break;
 
     case "reservasCanceladasPagadas":
       filtroQuery = `
-        AND estado_reserva = "Cancelada"
-        AND monto_pagado > 0
+        AND sd.estado_reserva = 'Cancelada'
+        AND sd.monto_pagado > 0
       `;
       break;
   }
@@ -2239,7 +2239,6 @@ const getHeaderDetallesReservas = async (req, res) => {
       group by vw.id_booking
       ORDER BY periodo, id_snapshot_detalles;
     `;
-
     const resultado = await executeQuery(query, [id_snapshot_reserva]);
 
     return res.status(200).json({
