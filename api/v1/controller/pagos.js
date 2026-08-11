@@ -1189,6 +1189,7 @@ const getMetodosPago = async (req, res) => {
         id_agente = ?
         and metodo_pago not in("tarjeta_de_credito","tarjeta_de_debito","")
         and activo = 1
+        and is_wallet_credito <> 1
       group by id_agente;`,
       [id],
     );

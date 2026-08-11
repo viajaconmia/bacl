@@ -8037,6 +8037,7 @@ const consultar_facturado = async (req, res) => {
   }
 };
 
+// [v2] Ya existe copia: GET /v2/mia/pago_proveedor/facturas — api/modules/pagoProveedores/facturas/
 const Uuid = async (req, res) => {
   try {
     const { uuid } = req.query || {};
