@@ -1750,7 +1750,7 @@ const editar_reserva_definitivo = async (req, res) => {
         // Validar porcentaje
         if (
           vienePorcentajeComisionable &&
-          (!Number.isFinite(porcentaje) || porcentaje <= 0 || porcentaje > 100)
+          (!Number.isFinite(porcentaje) || porcentaje < 0 || porcentaje > 100)
         ) {
           return res.status(400).json({
             error: "El porcentaje comisionable debe estar entre 0 y 100.",
@@ -1770,19 +1770,11 @@ const editar_reserva_definitivo = async (req, res) => {
           });
         }
 
-        // Si is_comisionable = 0, limpiamos monto y porcentaje
-        if (comisionable === 0) {
-          monto_final = null;
-          porcentaje_final = null;
-        }
-        // Si is_comisionable = 1
-        else if (comisionable === 1) {
-          monto_final = vieneMontoComisionable && monto > 0 ? monto : null;
+        monto_final = vieneMontoComisionable && monto > 0 ? monto : null;
 
-          porcentaje_final = vienePorcentajeComisionable
-            ? porcentaje > 0 && porcentaje
-            : null;
-        }
+        porcentaje_final = vienePorcentajeComisionable
+          ? porcentaje > 0 && porcentaje
+          : null;
 
         console.log("🟡 COMISIONABLES VALIDADOS:", {
           comisionable,
