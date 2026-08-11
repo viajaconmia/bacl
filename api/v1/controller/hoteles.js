@@ -1298,7 +1298,7 @@ const topClientes = async (req, res) => {
 
     const params = [];
 
-    if (estado !== "null" && estado !== undefined) {
+    if (estado !== null && estado !== undefined) {
       query += ` AND COALESCE(h.estado, '') = ?`;
       params.push(estadoParam);
     }
@@ -1388,7 +1388,7 @@ const topProveedores = async (req, res) => {
 
     const params = [];
 
-    if (estado !== "null" && estado !== undefined) {
+    if (estado !== null && estado !== undefined) {
       query += ` AND COALESCE(h.estado, '') = ?`;
       params.push(estado);
     }
