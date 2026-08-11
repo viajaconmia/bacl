@@ -1268,18 +1268,10 @@ const reportePorEstado = async (req, res) => {
 
 const topClientes = async (req, res) => {
   try {
-    const { estado, cadena = "", mostrarTodos = "false" } = req.query;
-
-    if (estado === undefined) {
-      return res.status(400).json({
-        message: "Falta el parámetro 'estado' en la consulta",
-        data: [],
-      });
-    }
+    const { estado, cadena = "", mostrarTodos = false } = req.query;
 
     const estadoParam = String(estado);
     const cadenaParam = String(cadena).trim();
-    const mostrarTodosBool = String(mostrarTodos).toLowerCase() === "true";
 
     let query = `
       SELECT
@@ -1301,10 +1293,15 @@ const topClientes = async (req, res) => {
       INNER JOIN proveedores p
         ON p.id = b.id_proveedor
       WHERE b.estado <> 'Cancelada'
-        AND COALESCE(h.estado, '') = ?
+        
     `;
 
-    const params = [estadoParam];
+    const params = [];
+
+    if (estado !== "null" && estado !== undefined) {
+      query += ` AND COALESCE(h.estado, '') = ?`;
+      params.push(estadoParam);
+    }
 
     if (cadenaParam !== "") {
       query += `
@@ -1322,7 +1319,7 @@ const topClientes = async (req, res) => {
       ORDER BY total_por_reservas DESC
     `;
 
-    if (!mostrarTodosBool) {
+    if (!mostrarTodos) {
       query += `
         LIMIT 10
       `;
@@ -1365,18 +1362,10 @@ const topClientes = async (req, res) => {
 
 const topProveedores = async (req, res) => {
   try {
-    const { estado, cadena = "", mostrarTodos = "false" } = req.query;
-
-    if (estado === undefined) {
-      return res.status(400).json({
-        message: "Falta el parámetro 'estado' en la consulta",
-        data: [],
-      });
-    }
+    const { estado, cadena = "", mostrarTodos } = req.query;
 
     const estadoParam = String(estado);
     const cadenaParam = String(cadena).trim();
-    const mostrarTodosBool = String(mostrarTodos).toLowerCase() === "true";
 
     let query = `
       SELECT 
@@ -1394,10 +1383,15 @@ const topProveedores = async (req, res) => {
       INNER JOIN proveedores p
           ON p.id = b.id_proveedor
       WHERE b.estado <> 'Cancelada'
-        AND COALESCE(h.estado, '') = ?
+        
     `;
 
-    const params = [estadoParam];
+    const params = [];
+
+    if (estado !== "null" && estado !== undefined) {
+      query += ` AND COALESCE(h.estado, '') = ?`;
+      params.push(estado);
+    }
 
     if (cadenaParam !== "") {
       query += `
@@ -1415,7 +1409,7 @@ const topProveedores = async (req, res) => {
       ORDER BY monto_reservas_confirmadas DESC
     `;
 
-    if (!mostrarTodosBool) {
+    if (!(mostrarTodos == "true")) {
       query += `
         LIMIT 10
       `;

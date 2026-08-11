@@ -168,6 +168,11 @@ const BOOKINGS = {
     "costo_subtotal",
     "costo_impuestos",
     "fecha_limite_cancelacion",
+
+    "is_comisionable",
+    "monto_comisionable",
+    "porcentaje_comisionable",
+    "comentarios_comisionables",
   ],
 };
 const VUELOS = {

@@ -7443,6 +7443,7 @@ const monto_factura = async (req, res) => {
 };
 
 // controllers/pago_proveedor.js (o donde lo tengas)
+// Esta mete los datos en el modal detalles
 const Detalles = async (req, res) => {
   try {
     const { id_solicitud_proveedor, id_proveedor, id_facturas, id_pagos } =
@@ -7501,9 +7502,16 @@ const Detalles = async (req, res) => {
     // 3) Traer info base de solicitud
     // -----------------------------
     const solicitudSql = `
-      SELECT *
-      FROM solicitudes_pago_proveedor
-      WHERE id_solicitud_proveedor = ?;
+      SELECT
+          spp.*,
+          b.is_comisionable,
+          b.monto_comisionable,
+          b.porcentaje_comisionable,
+          b.comentarios_comisionables
+      FROM solicitudes_pago_proveedor spp
+      LEFT JOIN bookings b
+          ON b.id_booking = spp.id_booking
+      WHERE spp.id_solicitud_proveedor = ?;
     `;
 
     const solicitudRows = getRows(
@@ -7511,6 +7519,13 @@ const Detalles = async (req, res) => {
     );
 
     const solicitud = solicitudRows?.[0] || null;
+
+    const booking = {
+      is_comisionable: solicitud.is_comisionable,
+      monto_comisionable: solicitud.monto_comisionable,
+      porcentaje_comisionable: solicitud.porcentaje_comisionable,
+      comentarios_comisionables: solicitud.comentarios_comisionables,
+    };
 
     if (!solicitud) {
       return res.status(404).json({

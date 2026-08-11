@@ -299,7 +299,12 @@ const get_hotel_edicion = async (req, res) => {
         b.comentarios_internos,
         b.tipo_pago AS metodo_pago_dinamico,
         b.id_solicitud,
-        b.usuario_creador
+        b.usuario_creador,
+        b.is_comisionable,
+        b.monto_comisionable,
+        b.porcentaje_comisionable,
+        b.comentarios_comisionables
+
       FROM bookings b
       WHERE b.id_booking =
         CAST(? AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_0900_ai_ci
