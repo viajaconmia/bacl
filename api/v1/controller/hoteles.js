@@ -1270,6 +1270,7 @@ const topClientes = async (req, res) => {
   try {
     const { estado, cadena = "", mostrarTodos = "false" } = req.query;
 
+    // estado es requerido, pero puede venir vacío: estado=
     if (estado === undefined) {
       return res.status(400).json({
         message: "Falta el parámetro 'estado' en la consulta",
@@ -1277,9 +1278,12 @@ const topClientes = async (req, res) => {
       });
     }
 
-    const estadoParam = String(estado);
+    const estadoParam = String(estado ?? "");
     const cadenaParam = String(cadena).trim();
-    const mostrarTodosBool = String(mostrarTodos).toLowerCase() === "true";
+
+    const mostrarTodosBool =
+      String(mostrarTodos).toLowerCase() === "true" ||
+      String(mostrarTodos) === "1";
 
     let query = `
       SELECT
@@ -1367,6 +1371,7 @@ const topProveedores = async (req, res) => {
   try {
     const { estado, cadena = "", mostrarTodos = "false" } = req.query;
 
+    // estado es requerido, pero puede venir vacío: estado=
     if (estado === undefined) {
       return res.status(400).json({
         message: "Falta el parámetro 'estado' en la consulta",
@@ -1374,9 +1379,12 @@ const topProveedores = async (req, res) => {
       });
     }
 
-    const estadoParam = String(estado);
+    const estadoParam = String(estado ?? "");
     const cadenaParam = String(cadena).trim();
-    const mostrarTodosBool = String(mostrarTodos).toLowerCase() === "true";
+
+    const mostrarTodosBool =
+      String(mostrarTodos).toLowerCase() === "true" ||
+      String(mostrarTodos) === "1";
 
     let query = `
       SELECT 
@@ -1388,11 +1396,11 @@ const topProveedores = async (req, res) => {
           SUM(b.total) AS monto_reservas_confirmadas
       FROM hoteles h
       INNER JOIN hospedajes hp
-          ON h.id_hotel = hp.id_hotel
+        ON h.id_hotel = hp.id_hotel
       INNER JOIN bookings b
-          ON b.id_booking = hp.id_booking
+        ON b.id_booking = hp.id_booking
       INNER JOIN proveedores p
-          ON p.id = b.id_proveedor
+        ON p.id = b.id_proveedor
       WHERE b.estado <> 'Cancelada'
         AND COALESCE(h.estado, '') = ?
     `;
