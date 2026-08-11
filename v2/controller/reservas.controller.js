@@ -979,9 +979,7 @@ async function caso_base_tolerante({
         : {}),
 
       ...(comentarios_comisionables?.current !== undefined
-        ? {
-            comentarios_comisionables: comentarios_comisionables.current,
-          }
+        ? { comentarios_comisionables: comentarios_comisionables.current }
         : {}),
     });
 
@@ -1683,85 +1681,67 @@ const editar_reserva_definitivo = async (req, res) => {
 
       // Validaciones comisionables
 
-      // Validar que is_comisionable exista
-      if (is_comisionable === null || is_comisionable === undefined) {
-        return res.status(400).json({
-          error: "is_comisionable no puede venir null ni undefined.",
-        });
-      }
+      // =====================================================
+      // VALIDACIONES COMISIONABLES - EDICIÓN DINÁMICA
+      // =====================================================
 
-      // Obtener valores actuales
-      const comisionable = Number(is_comisionable?.current);
-      const monto = monto_comisionable?.current;
-      const porcentaje = porcentaje_comisionable?.current;
+      const vieneIsComisionable =
+        is_comisionable?.current !== undefined &&
+        is_comisionable?.current !== null;
 
-      let monto_final = null;
-      let porcentaje_final = null;
+      const vieneMontoComisionable =
+        monto_comisionable?.current !== undefined &&
+        monto_comisionable?.current !== null;
 
-      // Validar que is_comisionable solo sea 0 o 1
-      if (![0, 1].includes(comisionable)) {
-        return res.status(400).json({
-          error: "is_comisionable debe ser 0 o 1.",
-        });
-      }
+      const vienePorcentajeComisionable =
+        porcentaje_comisionable?.current !== undefined &&
+        porcentaje_comisionable?.current !== null;
 
-      // Cuando NO es comisionable
-      if (comisionable === 0) {
-        monto_final = null;
-        porcentaje_final = null;
-      }
+      const vieneComentariosComisionables =
+        comentarios_comisionables?.current !== undefined;
 
-      // Cuando SÍ es comisionable
-      if (comisionable === 1) {
-        // Ambos null → permitido
-        if (monto === null && porcentaje === null) {
-          monto_final = null;
-          porcentaje_final = null;
+      // Valores finales
+      let comisionable;
+      let monto_final;
+      let porcentaje_final;
+
+      // Si NO viene ningún campo comisionable:
+      // no validamos ni modificamos nada.
+      const vieneAlgunCampoComisionable =
+        vieneIsComisionable ||
+        vieneMontoComisionable ||
+        vienePorcentajeComisionable ||
+        vieneComentariosComisionables;
+
+      if (vieneAlgunCampoComisionable) {
+        console.log("🟡 Se recibieron datos comisionables");
+
+        // Validar is_comisionable
+        if (vieneIsComisionable) {
+          comisionable = Number(is_comisionable.current);
+
+          if (![0, 1].includes(comisionable)) {
+            return res.status(400).json({
+              error: "is_comisionable debe ser 0 o 1.",
+            });
+          }
         }
 
-        // Ambos 0 → null/null
-        else if (monto === 0 && porcentaje === 0) {
-          monto_final = null;
-          porcentaje_final = null;
-        }
+        // Obtener valores solamente si fueron enviados
+        const monto = vieneMontoComisionable
+          ? Number(monto_comisionable.current)
+          : undefined;
 
-        // Monto null + porcentaje > 0
-        else if (monto === null && porcentaje > 0) {
-          monto_final = null;
-          porcentaje_final = porcentaje;
-        }
+        console.log("\n\n\n\n\n");
+        console.log(monto);
+        console.log(monto_comisionable);
 
-        // Monto > 0 + porcentaje null
-        else if (monto > 0 && porcentaje === null) {
-          monto_final = monto;
-          porcentaje_final = null;
-        }
-
-        // Monto 0 + porcentaje > 0
-        else if (monto === 0 && porcentaje > 0) {
-          monto_final = null;
-          porcentaje_final = porcentaje;
-        }
-
-        // Monto > 0 + porcentaje 0
-        else if (monto > 0 && porcentaje === 0) {
-          monto_final = monto;
-          porcentaje_final = null;
-        }
-
-        // Ambos > 0 → ERROR
-        else if (monto > 0 && porcentaje > 0) {
-          return res.status(400).json({
-            error:
-              "El monto comisionable y el porcentaje comisionable no pueden ser mayores que cero simultáneamente.",
-          });
-        }
+        const porcentaje = vienePorcentajeComisionable
+          ? Number(porcentaje_comisionable.current)
+          : undefined;
 
         // Validar monto
-        if (
-          monto_final !== null &&
-          (!Number.isFinite(Number(monto_final)) || Number(monto_final) < 0)
-        ) {
+        if (vieneMontoComisionable && (!Number.isFinite(monto) || monto < 0)) {
           return res.status(400).json({
             error: "El monto comisionable debe ser mayor o igual a cero.",
           });
@@ -1769,23 +1749,48 @@ const editar_reserva_definitivo = async (req, res) => {
 
         // Validar porcentaje
         if (
-          porcentaje_final !== null &&
-          (!Number.isFinite(Number(porcentaje_final)) ||
-            Number(porcentaje_final) < 0 ||
-            Number(porcentaje_final) > 100)
+          vienePorcentajeComisionable &&
+          (!Number.isFinite(porcentaje) || porcentaje <= 0 || porcentaje > 100)
         ) {
           return res.status(400).json({
             error: "El porcentaje comisionable debe estar entre 0 y 100.",
           });
         }
-      }
 
-      console.log("🟡 COMISIONABLES RECIBIDOS:", {
-        comisionable,
-        monto_final,
-        porcentaje_final,
-        comentarios_comisionables,
-      });
+        // Si ambos vienen y ambos son > 0 => error
+        if (
+          vieneMontoComisionable &&
+          vienePorcentajeComisionable &&
+          monto > 0 &&
+          porcentaje > 0
+        ) {
+          return res.status(400).json({
+            error:
+              "El monto comisionable y el porcentaje comisionable no pueden ser mayores que cero simultáneamente.",
+          });
+        }
+
+        // Si is_comisionable = 0, limpiamos monto y porcentaje
+        if (comisionable === 0) {
+          monto_final = null;
+          porcentaje_final = null;
+        }
+        // Si is_comisionable = 1
+        else if (comisionable === 1) {
+          monto_final = vieneMontoComisionable && monto > 0 ? monto : null;
+
+          porcentaje_final = vienePorcentajeComisionable
+            ? porcentaje > 0 && porcentaje
+            : null;
+        }
+
+        console.log("🟡 COMISIONABLES VALIDADOS:", {
+          comisionable,
+          monto_final,
+          porcentaje_final,
+          comentarios_comisionables: comentarios_comisionables?.current,
+        });
+      }
 
       // Validation and initial checks
       if (
