@@ -83,7 +83,8 @@ class ReservasSolicitudesRepository {
       LEFT JOIN bookings         b   ON b.id_solicitud  = s.id_solicitud
       LEFT JOIN pagos            p   ON p.id_servicio   = s.id_servicio
       LEFT JOIN pagos_credito    pc  ON pc.id_servicio  = s.id_servicio
-      ${whereSql}`,
+      ${whereSql}
+      group by s.id_solicitud`,
     );
   }
 }
