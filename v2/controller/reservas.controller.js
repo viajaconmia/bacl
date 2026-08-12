@@ -3,6 +3,7 @@ const {
   executeSP2,
   executeSP,
   runTransaction,
+  setAuditUser,
 } = require("../../config/db");
 const { v4: uuidv4 } = require("uuid");
 const { CustomError } = require("../../middleware/errorHandler");
@@ -1652,6 +1653,8 @@ const editar_reserva_definitivo = async (req, res) => {
 
     return await runTransaction(async (connection) => {
       console.log("🚀 [EDITAR_RESERVA] Iniciando editar_reserva_definitivo");
+
+      await setAuditUser(connection, user);
 
       const {
         metadata,
