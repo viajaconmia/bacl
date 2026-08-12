@@ -7503,14 +7503,8 @@ const Detalles = async (req, res) => {
     // -----------------------------
     const solicitudSql = `
       SELECT
-          spp.*,
-          b.is_comisionable,
-          b.monto_comisionable,
-          b.porcentaje_comisionable,
-          b.comentarios_comisionables
+          spp.*
       FROM solicitudes_pago_proveedor spp
-      LEFT JOIN bookings b
-          ON b.id_booking = spp.id_booking
       WHERE spp.id_solicitud_proveedor = ?;
     `;
 
@@ -7848,6 +7842,38 @@ const Detalles = async (req, res) => {
       ok: false,
       error: "Error en el servidor",
       details: error?.message ?? error,
+    });
+  }
+};
+
+const getDetallesComisionables = async (req, res) => {
+  try {
+    const { id_booking } = req.query;
+
+    if (!id_booking) {
+      return res.status(400).json({ message: "id_booking es obligatorio" });
+    }
+
+    const sql = `
+      SELECT
+        is_comisionable,
+        monto_comisionable,
+        porcentaje_comisionable,
+        comentarios_comisionables
+      FROM bookings
+      WHERE id_booking = ?;
+    `;
+
+    const [detalle] = await executeQuery(sql, [id_booking]);
+
+    return res.status(200).json({
+      message: "Se ha obtenido el detalle correctamente",
+      data: detalle,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "No se han podido obtener los detalles",
+      error: error.message,
     });
   }
 };
@@ -10017,6 +10043,7 @@ module.exports = {
   devolverMontoFacturadoAFacturasPorCancelacion,
   createSolicitud,
   Detalles,
+  getDetallesComisionables,
   getSolicitudes,
   createDispersion,
   createPago,
