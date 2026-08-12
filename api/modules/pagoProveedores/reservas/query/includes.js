@@ -32,7 +32,12 @@ class BookingInclude {
     applyLike(builder, "vw.proveedor", filters.proveedor);
     applyLike(builder, "vw.negociacion_proveedor", filters.tipo_negociacion);
     applyExact(builder, "vw.type", filters.servicio);
-    applyDateRange(builder, "vw.check_in", filters.checkin_inicio, filters.checkin_fin);
+    applyDateRange(
+      builder,
+      "vw.check_in",
+      filters.checkin_inicio,
+      filters.checkin_fin,
+    );
   }
 }
 
@@ -42,7 +47,9 @@ class FacturasInclude {
       "fpp.rfc_emisor AS rfc",
       "fpp.uuid_cfdi AS uuid",
       "fpp.id_factura_proveedor AS id_factura",
-      "pfp.monto_facturado AS asignado_a_factura",
+      "pfp.monto_facturado_final AS asignado_a_factura",
+      "pfp.monto_propina",
+      "pfp.monto_impsan",
       `ROW_NUMBER() OVER (
         PARTITION BY spp.id_solicitud_proveedor
         ORDER BY pfp.id
