@@ -19,7 +19,7 @@ class PagoProveedoresDispersionRepository {
         fpp.fecha_emision,
         fpp.subtotal,
         fpp.total                AS total_factura,
-        pfp.monto_facturado      AS asignado
+        pfp.monto_facturado_final      AS asignado
       FROM pagos_facturas_proveedores pfp
       INNER JOIN facturas_pago_proveedor fpp
         ON fpp.id_factura_proveedor = pfp.id_factura
