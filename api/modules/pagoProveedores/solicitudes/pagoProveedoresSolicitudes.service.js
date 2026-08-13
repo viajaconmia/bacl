@@ -5,6 +5,9 @@ const cuentasService = require("../../proveedores/cuentas/proveedoresCuentas.ser
 const dispersionService = require("./dispersion/pagoProveedoresDispersion.service");
 const repository = require("./pagoProveedoresSolicitudes.repository");
 
+// Campos editables vía PATCH /solicitudes. Agregar aquí para habilitar más.
+const ALLOWED_FIELDS = new Set(["notas_internas"]);
+
 class PagoProveedoresSolicitudesService {
   /**
    * Devuelve las solicitudes indicadas, cada una con sus cuentas bancarias y facturas.
@@ -95,6 +98,61 @@ class PagoProveedoresSolicitudesService {
   async marcarEnDispersion(ids, conn = null) {
     validateArrayIds(ids);
     return repository.updateEstado(ids, "DISPERSION", conn);
+  }
+
+  /**
+   * Update genérico y acotado por ALLOWED_FIELDS. Por ahora solo permite
+   * `notas_internas`; agregar más campos a ALLOWED_FIELDS para habilitarlos.
+   * @param {number} id_solicitud_proveedor
+   * @param {Record<string, unknown>} fields
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   */
+  async editar(id_solicitud_proveedor, fields = {}, conn = null) {
+    if (!id_solicitud_proveedor) {
+      throw new CustomError(
+        "id_solicitud_proveedor es requerido",
+        400,
+        "VALIDATION_ERROR",
+      );
+    }
+
+    const keys = Object.keys(fields).filter((k) => fields[k] !== undefined);
+
+    if (keys.length === 0) {
+      throw new CustomError(
+        "No se enviaron campos para actualizar",
+        400,
+        "VALIDATION_ERROR",
+      );
+    }
+
+    const camposInvalidos = keys.filter((k) => !ALLOWED_FIELDS.has(k));
+    if (camposInvalidos.length > 0) {
+      throw new CustomError(
+        `Campo(s) no permitido(s) para actualizar: ${camposInvalidos.join(", ")}`,
+        400,
+        "VALIDATION_ERROR",
+        { permitido: Array.from(ALLOWED_FIELDS) },
+      );
+    }
+
+    const fieldsToUpdate = Object.fromEntries(keys.map((k) => [k, fields[k]]));
+
+    const affectedRows = await repository.updateFields(
+      id_solicitud_proveedor,
+      fieldsToUpdate,
+      conn,
+    );
+
+    if (affectedRows === 0) {
+      throw new CustomError(
+        "No se encontró la solicitud",
+        404,
+        "SOLICITUD_NOT_FOUND",
+      );
+    }
+
+    return { id_solicitud_proveedor, ...fieldsToUpdate };
   }
 }
 

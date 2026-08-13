@@ -1,6 +1,10 @@
 const router = require("express").Router();
-const { getDispersion } = require("./pagoProveedoresSolicitudes.controller");
+const {
+  getDispersion,
+  editar,
+} = require("./pagoProveedoresSolicitudes.controller");
 
 router.post("/dispersion", getDispersion);
+router.patch("/", editar);
 
 module.exports = router;

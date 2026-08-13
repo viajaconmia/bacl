@@ -10,4 +10,18 @@ const getDispersion = async (req, res) => {
   }
 };
 
-module.exports = { getDispersion };
+const editar = async (req, res) => {
+  const { id_solicitud_proveedor } = req.query;
+  try {
+    const data = await service.editar(id_solicitud_proveedor, req.body);
+    return res.status(200).json({
+      data,
+      metadata: null,
+      message: "Solicitud actualizada correctamente",
+    });
+  } catch (error) {
+    return res.status(error.statusCode ?? 500).json({ error: error.message });
+  }
+};
+
+module.exports = { getDispersion, editar };
