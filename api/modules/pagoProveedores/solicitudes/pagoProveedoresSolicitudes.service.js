@@ -103,11 +103,16 @@ class PagoProveedoresSolicitudesService {
   /**
    * Update genérico y acotado por ALLOWED_FIELDS. Por ahora solo permite
    * `notas_internas`; agregar más campos a ALLOWED_FIELDS para habilitarlos.
+   *
+   * `usuario_edit` siempre se sobreescribe con el usuario de la sesión (no es
+   * controlable por el cliente) para dejar rastro de quién hizo el cambio,
+   * igual que el `EditCampos` legacy de v1 para esta misma tabla.
    * @param {number} id_solicitud_proveedor
    * @param {Record<string, unknown>} fields
+   * @param {{ id?: string } | null} [user] - req.session.user
    * @param {import('mysql2/promise').PoolConnection} [conn]
    */
-  async editar(id_solicitud_proveedor, fields = {}, conn = null) {
+  async editar(id_solicitud_proveedor, fields = {}, user = null, conn = null) {
     if (!id_solicitud_proveedor) {
       throw new CustomError(
         "id_solicitud_proveedor es requerido",
@@ -137,6 +142,7 @@ class PagoProveedoresSolicitudesService {
     }
 
     const fieldsToUpdate = Object.fromEntries(keys.map((k) => [k, fields[k]]));
+    fieldsToUpdate.usuario_edit = user?.id ?? null;
 
     const affectedRows = await repository.updateFields(
       id_solicitud_proveedor,

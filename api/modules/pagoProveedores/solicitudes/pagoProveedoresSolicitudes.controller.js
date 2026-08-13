@@ -1,3 +1,4 @@
+const { runTransaction, setAuditUser } = require("../../../../config/db");
 const service = require("./pagoProveedoresSolicitudes.service");
 
 const getDispersion = async (req, res) => {
@@ -12,8 +13,12 @@ const getDispersion = async (req, res) => {
 
 const editar = async (req, res) => {
   const { id_solicitud_proveedor } = req.query;
+  const { user } = req.session;
   try {
-    const data = await service.editar(id_solicitud_proveedor, req.body);
+    const data = await runTransaction(async (conn) => {
+      await setAuditUser(conn, user);
+      return service.editar(id_solicitud_proveedor, req.body, user, conn);
+    });
     return res.status(200).json({
       data,
       metadata: null,
