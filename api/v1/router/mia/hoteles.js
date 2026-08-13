@@ -36,5 +36,4 @@ router.patch("/prioridad/:id", controller.actualizarPrioridadHotel);
 router.get("/cotizacion", controller.buscarHotelesParaCotizacion);
 router.get("/reporteGeneralConciliacion", controller.getReporteGeneralReservas); // Este es el endpoint para obtener el reporte general ubicado en conciliacion, trae todos los proveedores
 router.get("/detallesClientesReporte", controller.getDetallesClientesReporte); // Endpoint que trae detalles del reporte General de reservas, trae los clientes y los filtra de acuerdo a los parametros (ej. estado, pais, tipo_pago etc).
-router.get("/detallesClientesReporte", controller.getDetallesClientesReporte);
 module.exports = router;
