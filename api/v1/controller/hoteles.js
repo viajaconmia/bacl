@@ -1237,9 +1237,6 @@ const getReporteGeneralReservas = async (req, res) => {
           LEFT JOIN bookings b
               ON b.id_booking = hp.id_booking
               AND b.estado <> 'Cancelada'
-
-          LEFT JOIN proveedores p
-              ON b.id_proveedor = p.id
           WHERE ${where.join(" AND ")}
 
           GROUP BY
@@ -1297,7 +1294,7 @@ const getReporteGeneralReservas = async (req, res) => {
  * /detalles-clientes-reporte?pais=Mexico&estado=Jalisco&nombre=Marriott&tipo_negociacion=Directa&tipo_pago=Credito
  */
 
-const getDetallesClientesReporte = async (req, res) => {
+const getDetalleReservasPorAgente = async (req, res) => {
   try {
     const {
       pais = "",
@@ -1310,21 +1307,14 @@ const getDetallesClientesReporte = async (req, res) => {
     const where = [`b.estado <> 'Cancelada'`];
     const params = [];
 
-    const agregarFiltroLike = (value, column) => {
+    const agregarFiltroExacto = (value, column) => {
       const cleanValue = String(value).trim();
 
       if (cleanValue !== "") {
-        where.push(`${column} LIKE CONCAT('%', ?, '%')`);
+        where.push(`${column} = ?`);
         params.push(cleanValue);
       }
     }; // Este agrega un filtro like para cada uno de los parametros que utilizaremos
-
-    // La funcion de arriba evita que tengamos que hacer esto para cada una (porque siguen un patron):
-
-    // if (String(tipo_pago).trim() !== "") {
-    //   where.push(`h.tipo_pago LIKE CONCAT('%', ?, '%')`);
-    //   params.push(String(tipo_pago).trim());
-    // }
 
     const filtros = [
       [pais, "h.pais"],
@@ -1335,15 +1325,17 @@ const getDetallesClientesReporte = async (req, res) => {
     ];
 
     for (const [valor, columna] of filtros) {
-      agregarFiltroLike(valor, columna); // se agrega filtro por cada parametro
+      agregarFiltroExacto(valor, columna); // se agrega filtro por cada parametro
     }
 
-    let query = `
+    // El group by podria estar mal, revisar mañana
+    const query = `
       SELECT
+          a.id_agente,
           a.nombre,
           COALESCE(h.estado, '') AS estado,
           COUNT(b.id_booking) AS cantidad_de_reservas,
-          SUM(b.total) AS total_por_reservas
+          COALESCE(SUM(b.total),0 ) AS monto_total_reservas
       FROM hoteles h
       INNER JOIN hospedajes hp
           ON hp.id_hotel = h.id_hotel
@@ -1354,7 +1346,11 @@ const getDetallesClientesReporte = async (req, res) => {
       INNER JOIN agentes a
           ON a.id_agente = s.id_agente
       WHERE ${where.join(" AND ")}
-      GROUP BY a.nombre
+      GROUP BY 
+        a.id_agente,
+      ORDER BY
+          cantidad_de_reservas DESC,
+          a.nombre ASC
   `;
 
     const result = await executeQuery(query, params);
@@ -1364,8 +1360,10 @@ const getDetallesClientesReporte = async (req, res) => {
       data: result,
     });
   } catch (error) {
-    return res.status(res.statusCode || 500).json({
-      message: error.message || "Error desconocido al generar detalle clientes",
+    console.error("Error en getDetallesClientesReporte:", error);
+
+    return res.status(500).json({
+      message: "Error al generar el reporte",
       data: [],
     });
   }
@@ -1563,6 +1561,6 @@ module.exports = {
   actualizarPrioridadHotel,
   buscarHotelesParaCotizacion,
   getReporteGeneralReservas,
-  getDetallesClientesReporte,
+  getDetalleReservasPorAgente,
   topProveedores,
 };
