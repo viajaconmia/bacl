@@ -1334,7 +1334,7 @@ const getDetallesClientesReporte = async (req, res) => {
       [tipo_pago, "h.tipo_pago"],
     ];
 
-    for (const [valor, columna] in filtros) {
+    for (const [valor, columna] of filtros) {
       agregarFiltroLike(valor, columna); // se agrega filtro por cada parametro
     }
 
