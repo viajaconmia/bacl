@@ -1296,24 +1296,19 @@ const getReporteGeneralReservas = async (req, res) => {
 
 const getDetalleReservasPorAgente = async (req, res) => {
   try {
-    const {
-      pais = "",
-      estado = "",
-      nombre = "",
-      tipo_negociacion = "",
-      tipo_pago = "",
-    } = req.query;
+    const { pais, estado, nombre, tipo_negociacion, tipo_pago } = req.query;
 
     const where = [`b.estado <> 'Cancelada'`];
     const params = [];
 
     const agregarFiltroExacto = (value, column) => {
+      if (value === undefined) {
+        return;
+      }
       const cleanValue = String(value).trim();
 
-      if (cleanValue !== "") {
-        where.push(`${column} = ?`);
-        params.push(cleanValue);
-      }
+      where.push(`${column} = ?`);
+      params.push(cleanValue);
     }; // Este agrega un filtro like para cada uno de los parametros que utilizaremos
 
     const filtros = [
