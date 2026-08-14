@@ -1302,13 +1302,12 @@ const getDetalleReservasPorAgente = async (req, res) => {
     const params = [];
 
     const agregarFiltroExacto = (value, column) => {
-      if (value === undefined) {
-        return;
-      }
       const cleanValue = String(value).trim();
 
-      where.push(`${column} = ?`);
-      params.push(cleanValue);
+      if (value !== "") {
+        where.push(`${column} = ?`);
+        params.push(cleanValue);
+      }
     }; // Este agrega un filtro like para cada uno de los parametros que utilizaremos
 
     const filtros = [
@@ -1349,6 +1348,11 @@ const getDetalleReservasPorAgente = async (req, res) => {
   `;
 
     const result = await executeQuery(query, params);
+
+    console.log("REQ QUERY:", req.query);
+    console.log("WHERE:", where);
+    console.log("PARAMS:", params);
+    console.log("QUERY:", query);
 
     return res.status(200).json({
       message: "detalles clientes generado exitosamente",
