@@ -2,11 +2,26 @@ const { runTransaction, setAuditUser } = require("../../../../config/db");
 const service = require("./reservasComisionables.service");
 
 const listar = async (req, res) => {
-  const { page, length } = req.query;
+  const {
+    page,
+    length,
+    proveedor,
+    id_intermediario,
+    comision_cobrada,
+    comentarios_comisionables,
+    estado,
+    codigo_confirmacion,
+  } = req.query;
   try {
     const { rows, total, hasPagination } = await service.getAll({
       page,
       length,
+      proveedor,
+      id_intermediario,
+      comision_cobrada,
+      comentarios_comisionables,
+      estado,
+      codigo_confirmacion,
     });
     return res.status(200).json({
       message: "Comisionables obtenidos correctamente",
