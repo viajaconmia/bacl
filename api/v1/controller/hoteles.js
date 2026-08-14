@@ -1304,6 +1304,11 @@ const getDetalleReservasPorAgente = async (req, res) => {
     const agregarFiltroExacto = (value, column) => {
       const cleanValue = String(value).trim();
 
+      if (cleanValue === "SIN ESTADO") {
+        where.push(`${column} IS NULL OR TRIM(${column}) = ''`);
+        return;
+      }
+
       if (value !== "") {
         where.push(`${column} = ?`);
         params.push(cleanValue);
@@ -1327,7 +1332,8 @@ const getDetalleReservasPorAgente = async (req, res) => {
       SELECT
           a.id_agente,
           a.nombre,
-          COALESCE(h.estado, '') AS estado,
+          h.nombre as hotel,
+          COALESCE(COALESCE(h.estado, ''), "SIN ESTADO") AS estado,
           COUNT(b.id_booking) AS cantidad_de_reservas,
           COALESCE(SUM(b.total),0 ) AS monto_total_reservas
       FROM hoteles h
