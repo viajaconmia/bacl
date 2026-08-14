@@ -1342,7 +1342,7 @@ const getDetalleReservasPorAgente = async (req, res) => {
           ON a.id_agente = s.id_agente
       WHERE ${where.join(" AND ")}
       GROUP BY 
-        a.id_agente,
+        a.id_agente
       ORDER BY
           cantidad_de_reservas DESC,
           a.nombre ASC
