@@ -1,36 +1,30 @@
 const { getExecutor } = require("../../../../config/db");
+const ComisionablesQueryBuilder = require("./query/ComisionablesQueryBuilder");
 
+// Usado solo por count() — el badge de notificaciones es siempre "pendientes de cobro".
 const WHERE_COMISIONABLES =
   "WHERE is_comisionable = 1 AND comision_cobrada = 0";
 
 class ReservasComisionablesRepository {
   /**
-   * Detalle completo de bookings comisionables pendientes de cobro.
-   * @param {{page?: number, length?: number}} filters
+   * Detalle de bookings comisionables (is_comisionable = 1), con filtros
+   * opcionales — incluye tanto pendientes como ya cobrados salvo que se
+   * filtre explícitamente por comision_cobrada.
+   * @param {{page?: number, length?: number, proveedor?: string, id_intermediario?: number,
+   *   comision_cobrada?: 0|1, comentarios_comisionables?: string, estado?: string,
+   *   codigo_confirmacion?: string}} filters
    * @param {import('mysql2/promise').PoolConnection} [conn]
    */
   async findAll(filters = {}, conn = null) {
     const run = getExecutor(conn);
-    const { page, length } = filters;
 
-    const hasPagination = Boolean(page && length);
-    const safeLength = Math.max(Number(length) || 0, 0);
-    const offset = hasPagination
-      ? (Math.max(Number(page), 1) - 1) * safeLength
-      : 0;
+    const builder = new ComisionablesQueryBuilder(filters);
+    const { sql, params, countSql, countParams, hasPagination } =
+      builder.build({ page: filters.page, length: filters.length });
 
     const [rows, countRows] = await Promise.all([
-      run(
-        `SELECT *
-         FROM vw_new_details_booking
-         ${WHERE_COMISIONABLES}
-         ${hasPagination ? `LIMIT ${safeLength} OFFSET ${offset}` : ""}`,
-      ),
-      hasPagination
-        ? run(
-            `SELECT COUNT(*) AS total FROM vw_new_details_booking ${WHERE_COMISIONABLES}`,
-          )
-        : Promise.resolve(null),
+      run(sql, params),
+      countSql ? run(countSql, countParams) : Promise.resolve(null),
     ]);
 
     return {
