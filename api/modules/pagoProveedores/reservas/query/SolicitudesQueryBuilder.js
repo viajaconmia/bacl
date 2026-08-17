@@ -6,6 +6,25 @@ const {
 } = require("./filters");
 const { sqlIn } = require("../../../../../v4/utils/sql");
 
+// Allowlist de columnas ordenables — nunca interpolar order_by del cliente
+// directo al SQL (inyección). vw.* es seguro porque BookingInclude siempre
+// se aplica en el repository, así que el alias vw existe en toda query.
+const ORDER_BY_MAP = {
+  id_solicitud_proveedor: "spp.id_solicitud_proveedor",
+  created_at: "spp.created_at",
+  fecha_solicitud: "spp.fecha_solicitud",
+  monto_solicitado: "spp.monto_solicitado",
+  saldo: "spp.saldo",
+  estado_solicitud: "spp.estado_solicitud",
+  check_in: "vw.check_in",
+  check_out: "vw.check_out",
+  total: "vw.total",
+  costo_total: "vw.costo_total",
+  // Requiere includePagos=true (alias pp solo existe si PagosInclude se
+  // aplicó) — la validación de ese requisito vive en el service, no aquí.
+  pago_created_at: "pp.created_at",
+};
+
 class SolicitudesQueryBuilder {
   #select;
   #joins = [];
@@ -38,6 +57,15 @@ class SolicitudesQueryBuilder {
     this.#groupByFields = ["spp.id_solicitud_proveedor"];
 
     this.#applyBaseFilters(filters);
+    this.#applyOrderBy(filters);
+  }
+
+  #applyOrderBy(f) {
+    const column = ORDER_BY_MAP[f.order_by];
+    if (!column) return; // valor no soportado o ausente → se queda el default
+
+    const dir = String(f.order_dir).toUpperCase() === "ASC" ? "ASC" : "DESC";
+    this.#orderBy = `${column} ${dir}`;
   }
 
   #applyBaseFilters(f) {

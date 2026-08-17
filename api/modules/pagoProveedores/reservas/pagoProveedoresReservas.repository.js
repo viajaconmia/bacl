@@ -1,6 +1,10 @@
 const { getExecutor } = require("../../../../config/db");
 const SolicitudesQueryBuilder = require("./query/SolicitudesQueryBuilder");
-const { BookingInclude, FacturasInclude } = require("./query/includes");
+const {
+  BookingInclude,
+  FacturasInclude,
+  PagosInclude,
+} = require("./query/includes");
 
 class PagoProveedoresReservasRepository {
   /**
@@ -35,6 +39,24 @@ class PagoProveedoresReservasRepository {
    * @param {string}  [filters.rfc]                   - LIKE en fpp.rfc_emisor (subquery)
    * @param {string}  [filters.uuid]                  - LIKE en fpp.uuid_cfdi (subquery)
    *
+   * Filtros de pagos (tabla `pp`, solo cuando includePagos = true):
+   * @param {boolean} [filters.includePagos=false]    - Si true, agrega JOIN de pago_proveedores
+   *   (codigo_dispersion, url_pdf, monto). Una solicitud puede tener varios registros de pago;
+   *   igual que includeFacturas, cada uno repite la fila de la solicitud (indice_pago/total_pagos
+   *   indican el grupo). Combinar includeFacturas + includePagos multiplica filas (producto
+   *   cruzado factura × pago) — evitar activar ambos a la vez salvo que se necesite explícitamente.
+   * @param {boolean} [filters.con_dispersion]        - Solo solicitudes con pago_proveedores.id_pago_dispersion
+   *   NOT NULL. Requiere includePagos=true — si no viene ese flag, este filtro no tiene efecto
+   *   (PagosInclude, donde vive la condición, no se instancia sin includePagos).
+   *
+   * Orden:
+   * @param {'id_solicitud_proveedor'|'created_at'|'fecha_solicitud'|'monto_solicitado'|'saldo'|
+   *   'estado_solicitud'|'check_in'|'check_out'|'total'|'costo_total'|'pago_created_at'} [filters.order_by] -
+   *   Columna a ordenar (allowlist, ver ORDER_BY_MAP en SolicitudesQueryBuilder). Valor no
+   *   reconocido u omitido → default spp.id_solicitud_proveedor DESC. 'pago_created_at' requiere
+   *   includePagos=true (el service valida esto y tira 400 si no viene — ver ORDER_BY_REQUIRES).
+   * @param {'asc'|'desc'} [filters.order_dir='desc'] - Dirección; cualquier valor que no sea 'asc' → DESC.
+   *
    * Paginación:
    * @param {number}  [filters.page]   - Página (1-based); omitir para sin paginación
    * @param {number}  [filters.length] - Registros por página
@@ -51,6 +73,10 @@ class PagoProveedoresReservasRepository {
 
     if (filters.includeFacturas) {
       builder.use(new FacturasInclude());
+    }
+
+    if (filters.includePagos) {
+      builder.use(new PagosInclude());
     }
 
     const { sql, params, countSql, countParams, hasPagination } = builder.build(

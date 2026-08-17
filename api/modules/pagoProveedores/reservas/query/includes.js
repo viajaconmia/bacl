@@ -89,4 +89,36 @@ class FacturasInclude {
   }
 }
 
-module.exports = { BookingInclude, FacturasInclude };
+class PagosInclude {
+  apply(builder, filters) {
+    builder.addSelect(
+      "pp.codigo_dispersion",
+      "pp.url_pdf",
+      "pp.monto",
+      `ROW_NUMBER() OVER (
+        PARTITION BY spp.id_solicitud_proveedor
+        ORDER BY pp.id_pago_proveedores
+      ) AS indice_pago`,
+      `COUNT(pp.id_pago_proveedores) OVER (
+        PARTITION BY spp.id_solicitud_proveedor
+      ) AS total_pagos`,
+    );
+    builder.addJoin(
+      "LEFT JOIN pago_proveedores pp ON pp.id_solicitud_proveedor = spp.id_solicitud_proveedor",
+    );
+    builder.addGroupBy("pp.id_pago_proveedores");
+
+    // Requiere includePagos=true (PagosInclude solo se instancia con ese
+    // flag) — mismo comportamiento que rfc/uuid en FacturasInclude.
+    if (filters.con_dispersion) {
+      builder.addWhere(
+        `spp.id_solicitud_proveedor IN (
+          SELECT pp2.id_solicitud_proveedor FROM pago_proveedores pp2
+          WHERE pp2.id_pago_dispersion IS NOT NULL
+        )`,
+      );
+    }
+  }
+}
+
+module.exports = { BookingInclude, FacturasInclude, PagosInclude };
