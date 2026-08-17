@@ -1333,6 +1333,10 @@ const getDetalleReservasPorAgente = async (req, res) => {
           a.id_agente,
           a.nombre,
           h.nombre as hotel,
+          h.pais,
+          h.estado,
+          h.tipo_negociacion,
+          h.tipo_pago,
           COALESCE(COALESCE(h.estado, ''), "SIN ESTADO") AS estado,
           COUNT(b.id_booking) AS cantidad_de_reservas,
           COALESCE(SUM(b.total),0 ) AS monto_total_reservas
@@ -1359,6 +1363,7 @@ const getDetalleReservasPorAgente = async (req, res) => {
     console.log("WHERE:", where);
     console.log("PARAMS:", params);
     console.log("QUERY:", query);
+    console.log("Result: ", result);
 
     return res.status(200).json({
       message: "detalles clientes generado exitosamente",
