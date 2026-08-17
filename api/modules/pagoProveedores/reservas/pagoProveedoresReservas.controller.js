@@ -23,7 +23,11 @@ const getReservas = async (req, res) => {
     includeFacturas,
     rfc,
     uuid,
+    includePagos,
+    con_dispersion,
     bucket,
+    order_by,
+    order_dir,
     page,
     length,
   } = req.query;
@@ -53,6 +57,10 @@ const getReservas = async (req, res) => {
         rfc,
         bucket,
         uuid,
+        includePagos,
+        con_dispersion,
+        order_by,
+        order_dir,
         page,
         length,
       });
