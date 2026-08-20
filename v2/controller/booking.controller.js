@@ -153,15 +153,15 @@ GROUP BY s.id_solicitud;`,
     if (reserva.type == "car_rental") {
       const [resultQuery] = await executeQuery(
         `select v.primer_nombre, v.segundo_nombre, v.apellido_paterno, v.apellido_materno, ra.nombre_proveedor, ra.codigo_renta_carro as codigo_confirmation, ra.id_conductor_principal, ra.conductor_principal, ra.conductores_adicionales, ra.descripcion_auto as tipo_auto, ra.transmission, ra.lugar_recoger_auto,
-ra.hora_recoger_auto, ra.id_sucursal_recoger_auto, ra.hora_dejar_auto, ra.lugar_dejar_auto, ra.id_sucursal_dejar_auto, ra.dias, ra.seguro_incluido, ra.additional_driver,
-b.check_in, b.check_out,
-sr.nombre as nombre_sucursal_recoger, concat(sr.direccion, " ", sr.codigo_postal, ", ", sr.ciudad, ", ", sr.pais) as direccion_recoger,
-sd.nombre as nombre_sucursal_dejar, concat(sd.direccion, " ", sd.codigo_postal, ", ", sd.ciudad, ", ", sd.pais) as direccion_dejar
-from renta_autos ra 
-left join viajeros v on v.id_viajero = ra.id_conductor_principal
-left join sucursales sr on ra.id_sucursal_recoger_auto = sr.id_sucursal
-left join sucursales sd on ra.id_sucursal_dejar_auto = sd.id_sucursal
-left join bookings b on b.id_booking = ra.id_booking where ra.id_renta_autos = ?`,
+        ra.hora_recoger_auto, ra.id_sucursal_recoger_auto, ra.hora_dejar_auto, ra.lugar_dejar_auto, ra.id_sucursal_dejar_auto, ra.dias, ra.seguro_incluido, ra.additional_driver,
+        b.check_in, b.check_out,
+        sr.nombre as nombre_sucursal_recoger, concat(sr.direccion, " ", sr.codigo_postal, ", ", sr.ciudad, ", ", sr.pais) as direccion_recoger,
+        sd.nombre as nombre_sucursal_dejar, concat(sd.direccion, " ", sd.codigo_postal, ", ", sd.ciudad, ", ", sd.pais) as direccion_dejar
+        from renta_autos ra 
+        left join viajeros v on v.id_viajero = ra.id_conductor_principal
+        left join sucursales sr on ra.id_sucursal_recoger_auto = sr.id_sucursal
+        left join sucursales sd on ra.id_sucursal_dejar_auto = sd.id_sucursal
+        left join bookings b on b.id_booking = ra.id_booking where ra.id_renta_autos = ?`,
         [reserva.id_relacion],
       );
       const {

@@ -1200,35 +1200,53 @@ const buscarHotelesParaCotizacion = async (req, res) => {
  * 200 OK
  */
 
-const reportePorEstado = async (req, res) => {
+const getReporteGeneralReservas = async (req, res) => {
   try {
     const { cadena = "" } = req.query;
 
+    // Aqui se ponen todas las condiciones que van en el WHERE De la query
     const where = [`b.estado <> 'Cancelada'`];
     const params = [];
 
-    if (String(cadena).trim() !== "") {
-      where.push(`p.negociacion LIKE CONCAT('%', ?, '%')`);
-      params.push(String(cadena).trim());
-    }
+    // Este codigo agregaba una condicion para filtrar por el tipo de negociacion
+    // if (String(cadena).trim() !== "") {
+    //   where.push(`h.tipo_negociacion LIKE CONCAT('%', ?, '%')`);
+    //   params.push(String(cadena).trim());
+    // }
 
+    // Trae todos los hoteles agrupados por pais, estado, tipo de negociacion,
+    // tipo de pago y nombre
     const query = `
+
       SELECT 
+          COALESCE(h.pais, '') AS pais,
           COALESCE(h.estado, '') AS estado,
-          GROUP_CONCAT(DISTINCT p.negociacion ORDER BY p.negociacion SEPARATOR ', ') AS cadenas,
+          COALESCE(h.nombre, '') AS nombre,
+          COALESCE(h.tipo_negociacion, '') AS tipo_negociacion,
+          COALESCE(h.tipo_pago, '') AS tipo_pago,
+
           COUNT(b.id_booking) AS cantidad_reservas_confirmadas,
-          SUM(b.total) AS monto_reservas_confirmadas,
-          AVG(b.total) AS promedio_por_reserva
-      FROM hoteles h
-      INNER JOIN hospedajes hp
-          ON hp.id_hotel = h.id_hotel
-      INNER JOIN bookings b
-          ON b.id_booking = hp.id_booking
-      INNER JOIN proveedores p
-          ON b.id_proveedor = p.id
-      WHERE ${where.join(" AND ")}
-      GROUP BY COALESCE(h.estado, '')
-      ORDER BY COALESCE(h.estado, '');
+          COALESCE(SUM(b.total), 0) AS monto_reservas_confirmadas,
+          COALESCE(AVG(b.total), 0) AS promedio_por_reserva
+
+          FROM hoteles h
+
+          LEFT JOIN hospedajes hp
+              ON hp.id_hotel = h.id_hotel
+
+          LEFT JOIN bookings b
+              ON b.id_booking = hp.id_booking
+              AND b.estado <> 'Cancelada'
+          WHERE ${where.join(" AND ")}
+
+          GROUP BY
+              h.pais,
+              h.estado,
+              h.tipo_negociacion,
+              h.tipo_pago,
+              h.nombre
+
+          ORDER BY h.estado
     `;
 
     const result = await executeQuery(query, params);
@@ -1249,98 +1267,193 @@ const reportePorEstado = async (req, res) => {
 };
 
 /**
- * Obtiene el ranking de clientes para un estado.
+ * Obtiene el reporte detallado de clientes y sus reservaciones.
  *
  * Parámetros:
- * - estado (query): Estado del cual se desea obtener el ranking.
+ * - pais (query, opcional): País por el cual se desea filtrar.
+ * - estado (query, opcional): Estado por el cual se desea filtrar.
+ * - nombre (query, opcional): Nombre del hotel por el cual se desea filtrar.
+ * - tipo_negociacion (query, opcional): Tipo de negociación por el cual se desea filtrar.
+ * - tipo_pago (query, opcional): Tipo de pago por el cual se desea filtrar.
+ *
+ * Los filtros son opcionales y utilizan coincidencia parcial (LIKE).
+ * Las reservaciones con estado "Cancelada" son excluidas del reporte.
  *
  * Devuelve:
- * - Id del agente.
- * - Nombre.
+ * - Nombre del cliente/agente.
+ * - Estado.
  * - Cantidad de reservaciones.
- * - Monto total reservado.
+ * - Monto total de las reservaciones.
  *
  * Método: GET
  *
  * Ejemplo:
- * /top-clientes?estado=Jalisco
+ * /detalles-clientes-reporte?estado=Jalisco&tipo_pago=Credito
+ *
+ * Ejemplo con múltiples filtros:
+ * /detalles-clientes-reporte?pais=Mexico&estado=Jalisco&nombre=Marriott&tipo_negociacion=Directa&tipo_pago=Credito
  */
 
-const topClientes = async (req, res) => {
+const getDetalleReservasPorAgente = async (req, res) => {
   try {
-    const { estado, cadena = "", mostrarTodos = false } = req.query;
+    const { pais, estado, nombre, tipo_negociacion, tipo_pago } = req.query;
 
-    const estadoParam = String(estado ?? "");
-    const cadenaParam = String(cadena).trim();
-
-    let query = `
-      SELECT
-          COALESCE(h.estado, '') AS estado,
-          p.negociacion AS cadena,
-          a.id_agente,
-          a.nombre,
-          COUNT(b.id_booking) AS cantidad_de_reservas,
-          SUM(b.total) AS total_por_reservas
-      FROM hoteles h
-      INNER JOIN hospedajes hp
-        ON hp.id_hotel = h.id_hotel
-      INNER JOIN bookings b
-        ON hp.id_booking = b.id_booking
-      INNER JOIN servicios s
-        ON b.id_servicio = s.id_servicio
-      INNER JOIN agentes a
-        ON a.id_agente = s.id_agente
-      INNER JOIN proveedores p
-        ON p.id = b.id_proveedor
-      WHERE b.estado <> 'Cancelada'
-        
-    `;
-
+    const where = [`b.estado <> 'Cancelada'`];
     const params = [];
 
-    if (estado !== null && estado !== undefined) {
-      query += ` AND COALESCE(h.estado, '') = ?`;
-      params.push(estadoParam);
+    const agregarFiltroExacto = (value, column) => {
+      const cleanValue = String(value).trim();
+
+      if (cleanValue === "SIN ESTADO") {
+        where.push(`${column} IS NULL OR TRIM(${column}) = ''`);
+        return;
+      }
+
+      if (value !== "") {
+        where.push(`${column} = ?`);
+        params.push(cleanValue);
+      }
+    }; // Este agrega un filtro like para cada uno de los parametros que utilizaremos
+
+    const filtros = [
+      [pais, "h.pais"],
+      [estado, "h.estado"],
+      [nombre, "h.nombre"],
+      [tipo_negociacion, "h.tipo_negociacion"],
+      [tipo_pago, "h.tipo_pago"],
+    ];
+
+    for (const [valor, columna] of filtros) {
+      agregarFiltroExacto(valor, columna); // se agrega filtro por cada parametro
     }
 
-    if (cadenaParam !== "") {
-      query += `
-        AND p.negociacion LIKE CONCAT('%', ?, '%')
-      `;
-      params.push(cadenaParam);
-    }
-
-    query += `
-      GROUP BY
-          COALESCE(h.estado, ''),
-          p.negociacion,
+    // El group by podria estar mal, revisar mañana
+    const query = `
+      SELECT
           a.id_agente,
-          a.nombre
-      ORDER BY total_por_reservas DESC
-    `;
-
-    if (!mostrarTodos) {
-      query += `
-        LIMIT 10
-      `;
-    }
+          a.nombre,
+          h.nombre as hotel,
+          h.pais,
+          h.estado,
+          h.tipo_negociacion,
+          h.tipo_pago,
+          COALESCE(COALESCE(h.estado, ''), "SIN ESTADO") AS estado,
+          COUNT(b.id_booking) AS cantidad_de_reservas,
+          COALESCE(SUM(b.total),0 ) AS monto_total_reservas
+      FROM hoteles h
+      INNER JOIN hospedajes hp
+          ON hp.id_hotel = h.id_hotel
+      INNER JOIN bookings b
+          ON hp.id_booking = b.id_booking
+      INNER JOIN servicios s
+          ON b.id_servicio = s.id_servicio
+      INNER JOIN agentes a
+          ON a.id_agente = s.id_agente
+      WHERE ${where.join(" AND ")}
+      GROUP BY 
+        a.id_agente
+      ORDER BY
+          cantidad_de_reservas DESC,
+          a.nombre ASC
+  `;
 
     const result = await executeQuery(query, params);
 
+    console.log("REQ QUERY:", req.query);
+    console.log("WHERE:", where);
+    console.log("PARAMS:", params);
+    console.log("QUERY:", query);
+    console.log("Result: ", result);
+
     return res.status(200).json({
-      message: "Top clientes por estado generado exitosamente",
+      message: "detalles clientes generado exitosamente",
       data: result,
     });
   } catch (error) {
-    console.log(error);
+    console.error("Error en getDetallesClientesReporte:", error);
 
-    return res.status(error.statusCode || 500).json({
-      message:
-        error.message || "Error desconocido al generar top clientes por estado",
+    return res.status(500).json({
+      message: "Error al generar el reporte",
       data: [],
     });
   }
 };
+
+// const topClientes = async (req, res) => {
+//   try {
+//     const { estado, cadena = "", mostrarTodos = false } = req.query;
+
+//     const estadoParam = String(estado ?? "");
+//     const cadenaParam = String(cadena).trim();
+
+//     let query = `
+//       SELECT
+//           COALESCE(h.estado, '') AS estado,
+//           p.negociacion AS cadena,
+//           a.id_agente,
+//           a.nombre,
+//           COUNT(b.id_booking) AS cantidad_de_reservas,
+//           SUM(b.total) AS total_por_reservas
+//       FROM hoteles h
+//       INNER JOIN hospedajes hp
+//         ON hp.id_hotel = h.id_hotel
+//       INNER JOIN bookings b
+//         ON hp.id_booking = b.id_booking
+//       INNER JOIN servicios s
+//         ON b.id_servicio = s.id_servicio
+//       INNER JOIN agentes a
+//         ON a.id_agente = s.id_agente
+//       INNER JOIN proveedores p
+//         ON p.id = b.id_proveedor
+//       WHERE b.estado <> 'Cancelada'
+
+//     `;
+
+//     const params = [];
+
+//     if (estado !== null && estado !== undefined) {
+//       query += ` AND COALESCE(h.estado, '') = ?`;
+//       params.push(estadoParam);
+//     }
+
+//     if (cadenaParam !== "") {
+//       query += `
+//         AND p.negociacion LIKE CONCAT('%', ?, '%')
+//       `;
+//       params.push(cadenaParam);
+//     }
+
+//     query += `
+//       GROUP BY
+//           COALESCE(h.estado, ''),
+//           p.negociacion,
+//           a.id_agente,
+//           a.nombre
+//       ORDER BY total_por_reservas DESC
+//     `;
+
+//     if (!mostrarTodos) {
+//       query += `
+//         LIMIT 10
+//       `;
+//     }
+
+//     const result = await executeQuery(query, params);
+
+//     return res.status(200).json({
+//       message: "Top clientes por estado generado exitosamente",
+//       data: result,
+//     });
+//   } catch (error) {
+//     console.log(error);
+
+//     return res.status(error.statusCode || 500).json({
+//       message:
+//         error.message || "Error desconocido al generar top clientes por estado",
+//       data: [],
+//     });
+//   }
+// };
 
 /**
  * Obtiene el ranking de proveedores para un estado.
@@ -1457,7 +1570,7 @@ module.exports = {
   agregarPrioridadHotel,
   actualizarPrioridadHotel,
   buscarHotelesParaCotizacion,
-  reportePorEstado,
-  topClientes,
+  getReporteGeneralReservas,
+  getDetalleReservasPorAgente,
   topProveedores,
 };
