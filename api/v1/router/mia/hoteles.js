@@ -34,7 +34,6 @@ router.get("/carga-imagen", controller.cargaImagen);
 router.post("/prioridad", controller.agregarPrioridadHotel);
 router.patch("/prioridad/:id", controller.actualizarPrioridadHotel);
 router.get("/cotizacion", controller.buscarHotelesParaCotizacion);
-router.get("/getReportePorEstado", controller.reportePorEstado);
-router.get("/getTopClientes", controller.topClientes);
-router.get("/getTopProveedores", controller.topProveedores);
+router.get("/reporteGeneralConciliacion", controller.getReporteGeneralReservas); // Este es el endpoint para obtener el reporte general ubicado en conciliacion, trae todos los proveedores
+router.get("/detallesClientesReporte", controller.getDetalleReservasPorAgente); // Endpoint que trae detalles del reporte General de reservas, trae los clientes y los filtra de acuerdo a los parametros (ej. estado, pais, tipo_pago etc).
 module.exports = router;
