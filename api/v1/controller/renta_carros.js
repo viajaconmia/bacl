@@ -6,6 +6,7 @@ const {
   calcularNoches,
 } = require("../../../lib/utils/calculates");
 const { verificarSaldos } = require("../../../lib/utils/validates");
+const { error } = require("winston");
 
 class ValidationError extends Error {
   constructor(message, code = 400) {
@@ -15,7 +16,7 @@ class ValidationError extends Error {
   }
 }
 
-const validateRentaAutosPayload = (payload) => {
+const validateRentaAutosPayload = (payload, es_con_chofer) => {
   const {
     auto_descripcion,
     check_in,
@@ -42,10 +43,13 @@ const validateRentaAutosPayload = (payload) => {
     proveedor,
     auto_descripcion,
     tipo_vehiculo: payload.tipo_vehiculo,
-    recogida_lugar,
-    devuelta_lugar,
     faltante,
   };
+
+  if (es_con_chofer != 1) {
+    requiredFields.recogida_lugar = recogida_lugar;
+    requiredFields.devuelta_lugar = devuelta_lugar;
+  }
 
   for (const [key, value] of Object.entries(requiredFields)) {
     if (
@@ -112,17 +116,22 @@ const validateRentaAutosPayload = (payload) => {
   }
 
   // Sucursales
-  if (typeof recogida_lugar !== "object" || !recogida_lugar.id_sucursal) {
-    throw new ValidationError(
-      "El 'recogida_lugar' debe contener un 'id_sucursal'.",
-      400,
-    );
-  }
-  if (typeof devuelta_lugar !== "object" || !devuelta_lugar.id_sucursal) {
-    throw new ValidationError(
-      "El 'devuelta_lugar' debe contener un 'id_sucursal'.",
-      400,
-    );
+  // Solo es necesario para renta de autos con chofer
+
+  if (es_con_chofer != 1) {
+    if (typeof recogida_lugar !== "object" || !recogida_lugar.id_sucursal) {
+      throw new ValidationError(
+        "El 'recogida_lugar' debe contener un 'id_sucursal'.",
+        400,
+      );
+    }
+
+    if (typeof devuelta_lugar !== "object" || !devuelta_lugar.id_sucursal) {
+      throw new ValidationError(
+        "El 'devuelta_lugar' debe contener un 'id_sucursal'.",
+        400,
+      );
+    }
   }
 
   // Conductores (Array check y estructura interna)
@@ -148,14 +157,45 @@ const validateRentaAutosPayload = (payload) => {
   }
 };
 
+const debugParams = (nombre, params) => {
+  const undefinedParams = params
+    .map((value, index) => ({
+      index,
+      value,
+      tipo: typeof value,
+    }))
+    .filter((param) => param.value === undefined);
+
+  console.log(`\n========== ${nombre} ==========`);
+  console.dir(params, { depth: null });
+  console.log(`\n==========           ==========`);
+  if (undefinedParams.length > 0) {
+    console.error("🔴 PARAMETROS UNDEFINED:");
+    console.dir(undefinedParams, { depth: null });
+  } else {
+    console.log("🟢 No hay undefined");
+  }
+};
+
 const createRentaAutos = async (req, res) => {
   const formater_payload = req.body;
+
+  console.log("========== BODY RECIBIDO ==========");
+  console.dir(req.body, { depth: null });
+
+  console.log("costo:", formater_payload.costo);
+  console.log("precio:", formater_payload.precio);
+  console.log("faltante:", formater_payload.faltante);
   const payload = {
     ...req.body,
-    costo: Number(formater_payload.costo),
-    precio: Number(formater_payload.precio),
-    faltante: Number(formater_payload.faltante),
-    saldos: req.body.saldos.map((saldo) => ({
+    renta: {
+      ...formater_payload.renta,
+      costo: Number(formater_payload.renta.costo),
+      precio: Number(formater_payload.renta.precio),
+      faltante: Number(formater_payload.renta.faltante),
+    },
+
+    saldos: (formater_payload.saldos || []).map((saldo) => ({
       ...saldo,
       saldo: Number(saldo.saldo),
       monto: Number(saldo.monto),
@@ -163,20 +203,50 @@ const createRentaAutos = async (req, res) => {
       saldo_usado: Number(saldo.saldo_usado),
     })),
   };
-  const { proveedor, recogida_lugar, devuelta_lugar, conductores, saldos } =
-    payload;
+
+  const { renta, viajes = [], saldos = [], es_con_chofer } = payload;
+
+  const { proveedor, recogida_lugar, devuelta_lugar, conductores } = renta;
+
   try {
     // ## 1A. Validación Síncrona (Esquema y Tipo)
-    validateRentaAutosPayload(payload);
+    validateRentaAutosPayload(renta, es_con_chofer);
 
     // ## 1B. Validación Asíncrona (Existencia de Recursos en DB)
-    console.log(payload);
+    console.log(renta);
 
     // Lista de IDs a verificar en la base de datos
-    const proveedorId = proveedor.id;
-    const recogidaId = recogida_lugar.id_sucursal;
-    const devueltaId = devuelta_lugar.id_sucursal;
-    const viajeroIds = conductores.map((c) => c.id_viajero);
+    const proveedorId = proveedor?.id;
+
+    // Renta con chofer
+    if (es_con_chofer == 1) {
+      if (!Array.isArray(viajes) || viajes.length == 0) {
+        throw new CustomError(
+          "Una renta de autos con chofer debe tener al menos un viaje",
+        );
+      }
+
+      for (const viaje of viajes) {
+        // Validamos por cada viaje
+
+        // aun queda pendiente revisar si la direccion destino y fecha destino podran ser null junto con coordenadas destino (latitud y longitud)
+
+        if (!viaje.direccion_origen) {
+          throw new CustomError("El viaje debe tener una direccion de origen");
+        }
+
+        if (!viaje.fecha_origen) {
+          throw new CustomError("El viaje requiere una fecha de origen.");
+        }
+
+        if (!viaje.latitud_origen) {
+          throw new CustomError("El viaje requiere una latitud de origen");
+        }
+        if (!viaje.longitud_origen) {
+          throw new CustomError("El viaje requiere una longitud de origen");
+        }
+      }
+    }
 
     // A. Proveedor
     const [proveedorDB] = await executeQuery(
@@ -190,49 +260,68 @@ const createRentaAutos = async (req, res) => {
     }
 
     // B. Sucursales (Recogida y Devolución)
-    const [recogidaDB, devueltaDB] = await Promise.all([
-      executeQuery("SELECT id_sucursal FROM sucursales WHERE id_sucursal = ?", [
-        recogidaId,
-      ]),
-      executeQuery("SELECT id_sucursal FROM sucursales WHERE id_sucursal = ?", [
-        devueltaId,
-      ]),
-    ]);
 
-    if (!recogidaDB) {
-      return res.status(404).json({
-        message: `La sucursal de recogida con ID ${recogidaId} no fue encontrada.`,
-      });
-    }
-    if (!devueltaDB) {
-      return res.status(404).json({
-        message: `La sucursal de devolución con ID ${devueltaId} no fue encontrada.`,
-      });
+    if (es_con_chofer != 1) {
+      const recogidaId = recogida_lugar?.id_sucursal;
+      const devueltaId = devuelta_lugar?.id_sucursal;
+      const [recogidaDB, devueltaDB] = await Promise.all([
+        executeQuery(
+          "SELECT id_sucursal FROM sucursales WHERE id_sucursal = ?",
+          [recogidaId],
+        ),
+        executeQuery(
+          "SELECT id_sucursal FROM sucursales WHERE id_sucursal = ?",
+          [devueltaId],
+        ),
+      ]);
+
+      if (!recogidaDB) {
+        return res.status(404).json({
+          message: `La sucursal de recogida con ID ${recogidaId} no fue encontrada.`,
+        });
+      }
+      if (!devueltaDB) {
+        return res.status(404).json({
+          message: `La sucursal de devolución con ID ${devueltaId} no fue encontrada.`,
+        });
+      }
     }
 
     // C. Conductores/Viajeros
     // Nota: Es más eficiente usar IN en una sola consulta para todos los IDs de viajeros.
-    const placeholders = viajeroIds.map(() => "?").join(",");
-    const viajerosDB = await executeQuery(
-      `SELECT id_viajero FROM viajeros WHERE id_viajero IN (${placeholders})`,
-      viajeroIds,
-    );
 
-    if (viajerosDB.length !== viajeroIds.length) {
-      const foundIds = new Set(viajerosDB.map((v) => v.id_viajero));
-      const missingId = viajeroIds.find((id) => !foundIds.has(id));
-      return res.status(404).json({
-        message: `El viajero (conductor) con ID ${missingId} no fue encontrado en la base de datos.`,
-      });
+    const viajeroIds = (conductores || [])
+      .map((c) => c.id_viajero)
+      .filter(Boolean);
+
+    if (viajeroIds.length > 0) {
+      const placeholders = viajeroIds.map(() => "?").join(",");
+
+      const viajerosDB = await executeQuery(
+        `SELECT id_viajero
+     FROM viajeros
+     WHERE id_viajero IN (${placeholders})`,
+        viajeroIds,
+      );
+
+      if (viajerosDB.length !== viajeroIds.length) {
+        const foundIds = new Set(viajerosDB.map((v) => v.id_viajero));
+
+        const missingId = viajeroIds.find((id) => !foundIds.has(id));
+
+        return res.status(404).json({
+          message: `El viajero/conductor con ID ${missingId} no fue encontrado.`,
+        });
+      }
     }
 
     //D. Precios y formas de pago
     const [agente] = await executeQuery(
       `SELECT * FROM agente_details where id_agente = ?`,
-      [payload.id_agente],
+      [renta.id_agente],
     );
     if (!agente) throw new Error("No existe agente");
-    if (payload.faltante > 0 && Number(agente.saldo) < payload.faltante)
+    if (renta.faltante > 0 && Number(agente.saldo) < renta.faltante)
       throw new Error("El agente no tiene el credito suficiente");
     if (saldos.length > 0) {
       const saldosDB = await executeQuery(
@@ -256,7 +345,7 @@ const createRentaAutos = async (req, res) => {
     const id_renta_autos = `ren-${uuidv4()}`;
     const id_solicitud = `sol-${uuidv4()}`;
     const id_transaccion = `tra-${uuidv4()}`;
-    const precio = calcularPrecios(payload.precio);
+    const precio = calcularPrecios(renta.precio);
 
     // ## 3. Creación (Creación del Recurso)
     const response = await runTransaction(async (connection) => {
@@ -277,10 +366,11 @@ const createRentaAutos = async (req, res) => {
           precio.total, // No es NULL, no tiene un valor por defecto.
           precio.subtotal / 1.16, // No es NULL, no tiene un valor por defecto.
           precio.impuestos, // Puede ser NULL.
-          payload.faltante > 0, // Puede ser NULL y tiene un valor por defecto de '0'.
-          payload.id_agente, // Puede ser NULL.
+          renta.faltante > 0, // Puede ser NULL y tiene un valor por defecto de '0'.
+          renta.id_agente, // Puede ser NULL.
         ];
 
+        debugParams("INSERT SERVICIOS", paramsInsertService);
         await connection.execute(sqlInsertService, paramsInsertService);
 
         const insertSolicitudesQuery = `
@@ -304,18 +394,19 @@ const createRentaAutos = async (req, res) => {
           id_solicitud, // No es NULL, no tiene valor por defecto. Es la clave primaria.
           id_servicio, // Puede ser NULL.
           `car-${(Math.random() * 99999999).toFixed(0)}`, // No es NULL, no tiene valor por defecto.
-          payload.conductores[0].id_viajero, // No es NULL, no tiene valor por defecto.
-          payload.check_in, // Puede ser NULL.
-          payload.check_out, // Puede ser NULL.
+          renta.conductores[0].id_viajero, // No es NULL, no tiene valor por defecto.
+          renta.check_in, // Puede ser NULL.
+          renta.check_out, // Puede ser NULL.
           precio.total, // No es NULL, no tiene valor por defecto.
-          payload.id_agente, // Puede ser NULL.
-          payload.id_agente, // Puede ser NULL.
+          renta.id_agente, // Puede ser NULL.
+          renta.id_agente, // Puede ser NULL.
           req?.session?.id || null, // Puede ser NULL.
           "Operaciones", // Puede ser NULL.
-          payload,
+          renta,
         ];
 
         // Ejemplo de uso:
+        debugParams("INSERT SOLICITUDES", solicitudesParams);
         await connection.execute(insertSolicitudesQuery, solicitudesParams);
 
         const pagos_to_item_pagos = [];
@@ -358,7 +449,7 @@ const createRentaAutos = async (req, res) => {
             return [
               id_pago, // No es NULL, no tiene valor por defecto. Es la clave primaria.
               id_servicio, // No es NULL, no tiene valor por defecto. Es parte de la clave primaria.
-              payload.id_agente, // Puede ser NULL.
+              renta.id_agente, // Puede ser NULL.
               precio_saldo.total, // Puede ser NULL.
               precio_saldo.subtotal, // Puede ser NULL.
               precio_saldo.impuestos, // Puede ser NULL.
@@ -370,14 +461,14 @@ const createRentaAutos = async (req, res) => {
               saldo.ult_digits || null, // Puede ser NULL.
               saldo.metodo_pago || null, // Puede ser NULL.
               saldo.tipo_tarjeta || null, // Puede ser NULL.
-              payload.faltante > 0 ? null : "contado", // Puede ser NULL.
+              renta.faltante > 0 ? null : "contado", // Puede ser NULL.
               saldo.link_stripe, // Puede ser NULL.
               saldo.id_saldos, // Puede ser NULL.
-              payload.id_agente, // Puede ser NULL.
+              renta.id_agente, // Puede ser NULL.
               false, // Puede ser NULL y tiene un valor por defecto de '0'.
               saldo.monto, // Puede ser NULL.
               id_transaccion, // Puede ser NULL.
-              (payload.precio - payload.faltante).toFixed(2), // Puede ser NULL.
+              (renta.precio - renta.faltante).toFixed(2), // Puede ser NULL.
               saldo.saldo_usado, // Puede ser NULL.
             ];
           });
@@ -390,7 +481,7 @@ const createRentaAutos = async (req, res) => {
         }
 
         const id_credito = `cre-${uuidv4()}`;
-        if (payload.faltante > 0) {
+        if (renta.faltante > 0) {
           //PAGO A CREDITO
           const insertPagoCreditoQuery = `
   INSERT INTO pagos_credito (
@@ -412,9 +503,9 @@ const createRentaAutos = async (req, res) => {
             id_credito, // No es NULL, no tiene valor por defecto. Es la clave primaria.
             id_servicio, // No es NULL, no tiene valor por defecto.
             precio.total, // No es NULL, no tiene valor por defecto.
-            payload.id_agente, // No es NULL, no tiene valor por defecto.
+            renta.id_agente, // No es NULL, no tiene valor por defecto.
             precio.total, // No es NULL, no tiene valor por defecto.
-            payload.faltante.toFixed(2), // No es NULL, no tiene valor por defecto.
+            renta.faltante.toFixed(2), // No es NULL, no tiene valor por defecto.
             precio.total, // No es NULL, no tiene valor por defecto.
             precio.subtotal, // No es NULL, no tiene valor por defecto.
             precio.impuestos, // No es NULL, no tiene valor por defecto.
@@ -423,7 +514,7 @@ const createRentaAutos = async (req, res) => {
 
           await connection.execute(insertPagoCreditoQuery, pagoCreditoParams);
         }
-        if (payload.faltante > 0 && saldos.length > 0) {
+        if (renta.faltante > 0 && saldos.length > 0) {
           await Promise.all(
             pagos_to_item_pagos.map(({ id_pago, monto }) =>
               connection.execute(
@@ -431,7 +522,7 @@ const createRentaAutos = async (req, res) => {
                 (id_credito, id_pago, monto_del_pago, restante)
 VALUES (?, ?, ?, ?)
 `,
-                [id_credito, id_pago, monto, payload.faltante],
+                [id_credito, id_pago, monto, renta.faltante],
               ),
             ),
           );
@@ -456,13 +547,13 @@ VALUES (?, ?, ?, ?)
         const paramsInsertBooking = [
           id_booking, // No es NULL, no tiene valor por defecto. Es parte de la clave primaria.
           id_servicio, // No es NULL, no tiene valor por defecto. Es parte de la clave primaria.
-          payload.check_in, // No es NULL, no tiene valor por defecto.
-          payload.check_out, // No es NULL, no tiene valor por defecto.
+          renta.check_in, // No es NULL, no tiene valor por defecto.
+          renta.check_out, // No es NULL, no tiene valor por defecto.
           precio.total, // No es NULL, no tiene valor por defecto.
           precio.subtotal / 1.16, // No es NULL, no tiene un valor por defecto.
           precio.impuestos, // Puede ser NULL.
-          payload.status, // Puede ser NULL y tiene un valor por defecto de 'En proceso'.
-          payload.costo.toFixed(2), // Puede ser NULL.
+          renta.status, // Puede ser NULL y tiene un valor por defecto de 'En proceso'.
+          renta.costo.toFixed(2), // Puede ser NULL.
           id_solicitud, // Puede ser NULL.
           req?.session?.user?.id,
         ];
@@ -519,7 +610,8 @@ VALUES (?, ?, ?, ?)
             id_booking,
             usuario_creador,
             is_operaciones_last_move,
-            usuario_actualizador
+            usuario_actualizador,
+            es_con_chofer
         ) VALUES (
             ?, ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?,
@@ -529,64 +621,135 @@ VALUES (?, ?, ?, ?)
             ?, ?, ?, ?, ?,
             ?, ?, ?, ?, ?, 
             ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?,?
         )`;
 
         const insertParametrosRentaAutos = [
           id_renta_autos,
-          payload.proveedor.proveedor,
-          payload.proveedor.id,
-          payload.intermediario?.id || null,
-          payload.codigo,
-          payload.auto_descripcion,
-          payload.edad,
-          payload.max_pasajeros,
-          payload.conductores[0].nombre_completo,
-          payload.conductores[0].id_viajero,
-          payload.conductores,
-          payload.comentarios,
-          null,
-          payload.tipo_vehiculo,
-          null,
-          null,
-          null,
-          null,
-          payload.tipo_vehiculo,
-          null,
-          null,
-          null,
-          null,
-          payload.check_in.split("T")[1],
-          `${payload.recogida_lugar.nombre} - ${payload.recogida_lugar.direccion}`,
-          payload.recogida_lugar.id_sucursal,
-          payload.check_out.split("T")[1],
-          `${payload.devuelta_lugar.nombre} - ${payload.devuelta_lugar.direccion}`,
-          payload.devuelta_lugar.id_sucursal,
-          calcularNoches(payload.check_in, payload.check_out),
-          payload.seguro,
-          null,
-          null,
-          null,
-          payload.conductores.length > 1,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
+
+          renta.proveedor?.proveedor || null,
+          renta.proveedor?.id || null,
+          renta.intermediario?.id || null,
+
+          renta.codigo || null,
+          renta.auto_descripcion || null,
+          renta.edad || null,
+          renta.max_pasajeros || null,
+
+          renta.conductores?.[0]?.nombre_completo || null,
+          renta.conductores?.[0]?.id_viajero || null,
+          renta.conductores || null,
+
+          renta.comentarios || null,
+
+          null, // vehicle_id
+
+          renta.tipo_vehiculo || null,
+          null, // nombre_auto
+          null, // marca_auto
+          null, // modelo
+          null, // anio_auto
+          renta.tipo_vehiculo || null, // transmission
+
+          null, // fuel_type
+          null, // doors
+          null, // seats
+          null, // air_conditioning
+
+          renta.check_in?.split("T")[1] || null,
+
+          renta.recogida_lugar
+            ? `${renta.recogida_lugar.nombre} - ${renta.recogida_lugar.direccion}`
+            : null,
+
+          renta.recogida_lugar?.id_sucursal || null,
+
+          renta.check_out?.split("T")[1] || null,
+
+          renta.devuelta_lugar
+            ? `${renta.devuelta_lugar.nombre} - ${renta.devuelta_lugar.direccion}`
+            : null,
+
+          renta.devuelta_lugar?.id_sucursal || null,
+
+          renta.check_in && renta.check_out
+            ? calcularNoches(renta.check_in, renta.check_out)
+            : null,
+
+          renta.seguro || null,
+
+          null, // monto_seguro
+          null, // gps
+          null, // child_seat
+
+          renta.conductores?.length > 1 || false,
+
+          null, // wifi_hotspot
+          null, // gps_price
+          null, // child_seat_price
+          null, // additional_driver_price
+          null, // wifi_price
+          null, // fuel_policy
+          null, // mileage_limit
+          null, // free_cancellation
+
           id_booking,
           req?.session?.id || null,
           true,
           req?.session?.id || null,
+
+          es_con_chofer || 0,
         ];
+
+        debugParams("INSERT RENTA AUTOS", insertParametrosRentaAutos);
 
         await connection.execute(
           insertRentaAutosQuery,
           insertParametrosRentaAutos,
         );
 
+        // insert para viajes de renta de autos (en el caso de renta de autos por chofer)
+
+        // Se insertan los datos de los distintos viajes en la tabla viajes_renta_autos
+
+        const insertViajesQuery = `
+          INSERT INTO viajes_renta_autos(
+            id_renta_autos,
+            direccion_origen,
+            latitud_origen,
+            longitud_origen,
+            fecha_origen,
+            direccion_destino,
+            latitud_destino,
+            longitud_destino,
+            fecha_destino,
+            comentario_viaje,
+            created_at,
+            updated_at
+          )VALUES (?,?,?,?,?,?,?,?,?,?,?,?);
+        `;
+
+        if (es_con_chofer === 1) {
+          for (const viaje of viajes) {
+            const viajeParams = [
+              id_renta_autos,
+              viaje.direccion_origen,
+              viaje.latitud_origen,
+              viaje.longitud_origen,
+              viaje.fecha_origen,
+              viaje.direccion_destino || null,
+              viaje.latitud_destino || null,
+              viaje.longitud_destino || null,
+              viaje.fecha_destino || null,
+              viaje.comentario_viaje,
+              viaje.created_at || null,
+              viaje.updated_at || null,
+            ];
+
+            debugParams("INSERT VIAJE", viajeParams);
+            await connection.execute(insertViajesQuery, viajeParams);
+          }
+        }
         const insertItemsQuery = `
   INSERT INTO items (
     id_item,
@@ -607,9 +770,9 @@ VALUES (?, ?, ?, ?)
           precio.total, // No es NULL, no tiene valor por defecto.
           precio.subtotal, // No es NULL, no tiene valor por defecto.
           precio.impuestos, // No es NULL, no tiene valor por defecto.
-          payload.check_in, // No es NULL, no tiene valor por defecto.
-          payload.costo, // Puede ser NULL.
-          payload.faltante.toFixed(2), // Puede ser NULL. siempre va el faltante ya sea a credito o normal // Puede ser NULL.
+          renta.check_in, // No es NULL, no tiene valor por defecto.
+          renta.costo, // Puede ser NULL.
+          renta.faltante.toFixed(2), // Puede ser NULL. siempre va el faltante ya sea a credito o normal // Puede ser NULL.
           id_renta_autos,
         ];
 
@@ -633,10 +796,10 @@ VALUES (?, ?, ?, ?)
         );
 
         //Falta editar credito y asi
-        if (payload.faltante > 0) {
+        if (renta.faltante > 0) {
           await connection.execute(
             `UPDATE agentes SET saldo = saldo - ? where id_agente = ?`,
-            [payload.faltante, payload.id_agente],
+            [renta.faltante, renta.id_agente],
           );
         }
 
