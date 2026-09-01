@@ -1184,6 +1184,53 @@ const buscarHotelesParaCotizacion = async (req, res) => {
   }
 };
 
+const getReporteGeneralReservas = async (req, res) => {
+  try {
+    const params = [];
+
+    const query = `
+      SELECT
+          COALESCE(h.pais, '') AS pais,
+          COALESCE(h.estado, '') AS estado,
+          COALESCE(h.nombre, '') AS nombre,
+          COALESCE(h.tipo_negociacion, '') AS tipo_negociacion,
+          COALESCE(h.tipo_pago, '') AS tipo_pago,
+          COUNT(b.id_booking) AS cantidad_reservas_confirmadas,
+          COALESCE(SUM(b.total), 0) AS monto_reservas_confirmadas,
+          COALESCE(AVG(b.total), 0) AS promedio_por_reserva
+      FROM hoteles h
+      LEFT JOIN hospedajes hp
+          ON hp.id_hotel = h.id_hotel
+      LEFT JOIN bookings b
+          ON b.id_booking = hp.id_booking
+          AND b.estado <> 'Cancelada'
+      GROUP BY
+          h.pais,
+          h.estado,
+          h.tipo_negociacion,
+          h.tipo_pago,
+          h.nombre
+      ORDER BY h.estado
+    `;
+
+    const result = await executeQuery(query, params);
+
+    return res.status(200).json({
+      message: "Reporte general de conciliacion generado exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(error.statusCode || 500).json({
+      message:
+        error.message ||
+        "Error desconocido al generar el reporte general de conciliacion",
+      data: [],
+    });
+  }
+};
+
 /**
  * Obtiene un reporte de reservaciones agrupadas por estado.
  *
@@ -1457,6 +1504,7 @@ module.exports = {
   agregarPrioridadHotel,
   actualizarPrioridadHotel,
   buscarHotelesParaCotizacion,
+  getReporteGeneralReservas,
   reportePorEstado,
   topClientes,
   topProveedores,
