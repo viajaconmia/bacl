@@ -3,6 +3,7 @@ const facturasService = require("./facturas.service");
 const facturasReservasService = require("./reservas/facturasReservas.service");
 const facturasSaldosService = require("./saldos/facturasSaldos.service");
 const facturasPagosService = require("./pagos/facturasPagos.service");
+const facturasEnvioService = require("./envio/facturasEnvio.service");
 
 const filtrar = async (req, res) => {
   const {
@@ -57,18 +58,19 @@ const detalle = async (req, res) => {
   }
 
   try {
-    const { reservas, saldos, pagos } = await runTransaction(async (conn) => {
-      const [reservas, saldos, pagos] = await Promise.all([
+    const { reservas, saldos, pagos, envios } = await runTransaction(async (conn) => {
+      const [reservas, saldos, pagos, historialEnvios] = await Promise.all([
         facturasReservasService.getReservasByFactura(id_factura, conn),
         facturasSaldosService.getSaldosByFactura(id_factura, conn),
         facturasPagosService.getPagosByFactura(id_factura, conn),
+        facturasEnvioService.getHistorialByFactura(id_factura, {}, conn),
       ]);
-      return { reservas, saldos, pagos };
+      return { reservas, saldos, pagos, envios: historialEnvios.rows };
     });
 
     return res.status(200).json({
       message: "Detalle de factura obtenido correctamente",
-      data: { reservas, saldos, pagos },
+      data: { reservas, saldos, pagos, envios },
     });
   } catch (error) {
     console.error("Error en detalle:", error);

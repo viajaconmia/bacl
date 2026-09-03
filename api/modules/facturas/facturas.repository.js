@@ -11,7 +11,7 @@ class FacturasRepository {
   async findById(id_factura, conn = null) {
     const run = getExecutor(conn);
     const rows = await run(
-      `SELECT id_factura, total, saldo, saldo_x_aplicar_items, estado FROM ${this.#table} WHERE id_factura = ?`,
+      `SELECT id_factura, total, saldo, saldo_x_aplicar_items, estado, id_facturama FROM ${this.#table} WHERE id_factura = ?`,
       [id_factura],
     );
     return rows[0] ?? null;
@@ -80,7 +80,8 @@ class FacturasRepository {
 
     const [rows, countRows] = await Promise.all([
       run(
-        `SELECT f.*
+        `SELECT f.*,
+                (SELECT COUNT(*) FROM historial_envio_facturas h WHERE h.id_factura = f.id_factura) AS veces_enviada
          FROM ${this.#table} f
          ${whereSql}
          ORDER BY f.created_at DESC, f.id_factura DESC

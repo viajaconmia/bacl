@@ -171,6 +171,7 @@ const descargarFacturasXML = async (req, res) => {
   }
 };
 
+// [v2] Ya existe copia: POST /v2/mia/factura/envio/enviar — api/modules/facturas/envio/
 const mandarCorreo = async (req, res) => {
   try {
     const { id_cfdi, email } = req.body;
