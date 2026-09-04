@@ -1,6 +1,7 @@
 const router = require("express").Router();
-const { getReservasPendientes } = require("./facturasReservas.controller");
+const { getReservasPendientes, getReporteAgente } = require("./facturasReservas.controller");
 
 router.get("/pendientes", getReservasPendientes);
+router.get("/reporte-agente", getReporteAgente);
 
 module.exports = router;

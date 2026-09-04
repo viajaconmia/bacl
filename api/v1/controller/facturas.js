@@ -2951,6 +2951,7 @@ function toYMD(value) {
   return `${y}-${mo}-${da}`;
 }
 
+// [v2] Ya existe copia: GET /v2/mia/facturas/reservas/reporte-agente — api/modules/facturas/reservas/
 const agentes_report_fac = async (req, res) => {
   const { id_agente, fecha_desde, fecha_hasta } = req.query;
 
