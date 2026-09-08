@@ -157,7 +157,11 @@ class FacturasReservasRepository {
           vw.destino AS destino,
           b.subtotal AS booking_subtotal,
           b.impuestos AS booking_iva,
-          b.total AS booking_total
+          b.total AS booking_total,
+          b.ticket_zoho,
+          b.portal,
+          b.orden_compra,
+          b.cliente_solicitante_reserva
         ${baseSql}
         ORDER BY f.fecha_emision DESC, f.id_factura, vw.id_booking
         ${hasPagination ? `LIMIT ${safeLength} OFFSET ${offset}` : ""}`,
