@@ -11,6 +11,14 @@ const listar = async (req, res) => {
     comentarios_comisionables,
     estado,
     codigo_confirmacion,
+    checkin_inicio,
+    checkin_fin,
+    checkout_inicio,
+    checkout_fin,
+    uuid,
+    uuid_factura,
+    rfc,
+    rfc_factura,
   } = req.query;
   try {
     const { rows, total, hasPagination } = await service.getAll({
@@ -22,6 +30,14 @@ const listar = async (req, res) => {
       comentarios_comisionables,
       estado,
       codigo_confirmacion,
+      checkin_inicio,
+      checkin_fin,
+      checkout_inicio,
+      checkout_fin,
+      uuid,
+      uuid_factura,
+      rfc,
+      rfc_factura,
     });
     return res.status(200).json({
       message: "Comisionables obtenidos correctamente",
@@ -32,6 +48,7 @@ const listar = async (req, res) => {
     return res.status(error.statusCode ?? 500).json({ error: error.message });
   }
 };
+
 
 const cobrar = async (req, res) => {
   const { id_booking } = req.params;

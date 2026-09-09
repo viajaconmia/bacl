@@ -6,4 +6,9 @@ const applyExact = (builder, column, value) => {
   if (value) builder.addWhere(`${column} = ?`, value);
 };
 
-module.exports = { applyLike, applyExact };
+const applyDateRange = (builder, column, from, to) => {
+  if (from) builder.addWhere(`DATE(${column}) >= ?`, from);
+  if (to) builder.addWhere(`DATE(${column}) <= ?`, to);
+};
+
+module.exports = { applyLike, applyExact, applyDateRange };
