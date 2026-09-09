@@ -95,6 +95,27 @@ class FacturasRepository {
 
     return { rows, total: countRows ? (countRows[0]?.total ?? 0) : null, hasPagination };
   }
+
+  /**
+   * Update genérico y acotado por ALLOWED_FIELDS (ver service) sobre facturas.
+   * @param {string} id_factura
+   * @param {Record<string, unknown>} fields - dbField: value ya validados
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<number>} affectedRows
+   */
+  async updateFields(id_factura, fields, conn = null) {
+    const run = getExecutor(conn);
+    const setParts = Object.keys(fields).map((field) => `\`${field}\` = ?`);
+    const params = Object.values(fields);
+
+    const result = await run(
+      `UPDATE ${this.#table}
+       SET ${setParts.join(", ")}
+       WHERE id_factura = ?`,
+      [...params, id_factura],
+    );
+    return result?.affectedRows ?? 0;
+  }
 }
 
 module.exports = new FacturasRepository();

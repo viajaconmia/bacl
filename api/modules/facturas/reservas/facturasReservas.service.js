@@ -70,6 +70,7 @@ class FacturasReservasService {
         ...rest,
         chin: toYMD(row.chin),
         chout: toYMD(row.chout),
+        fecha_pago_ar: toYMD(row.fecha_pago_ar),
         codigo_confirmacion_base: getCodigoConfirmacionBase(row.codigo_confirmacion),
         origen_estado,
         destino_estado,

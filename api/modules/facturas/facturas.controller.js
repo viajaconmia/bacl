@@ -1,4 +1,4 @@
-const { runTransaction } = require("../../../config/db");
+const { runTransaction, setAuditUser } = require("../../../config/db");
 const facturasService = require("./facturas.service");
 const facturasReservasService = require("./reservas/facturasReservas.service");
 const facturasSaldosService = require("./saldos/facturasSaldos.service");
@@ -81,4 +81,22 @@ const detalle = async (req, res) => {
   }
 };
 
-module.exports = { filtrar, detalle };
+const editar = async (req, res) => {
+  const { id_factura } = req.params;
+  const { user } = req.session;
+  try {
+    const data = await runTransaction(async (conn) => {
+      await setAuditUser(conn, user);
+      return facturasService.editarCamposGenerales(id_factura, req.body, conn);
+    });
+    return res.status(200).json({
+      message: "Factura actualizada correctamente",
+      data,
+      metadata: null,
+    });
+  } catch (error) {
+    return res.status(error.statusCode ?? 500).json({ error: error.message });
+  }
+};
+
+module.exports = { filtrar, detalle, editar };

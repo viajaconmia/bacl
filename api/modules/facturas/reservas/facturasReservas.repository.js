@@ -128,6 +128,7 @@ class FacturasReservasRepository {
         `SELECT
           vw.codigo_confirmacion,
           f.uuid_factura,
+          f.uuid_crp,
           f.folio,
           f.id_factura,
           DATE(f.fecha_emision) AS fecha_emision,
@@ -161,7 +162,9 @@ class FacturasReservasRepository {
           b.ticket_zoho,
           b.portal,
           b.orden_compra,
-          b.cliente_solicitante_reserva
+          b.cliente_solicitante_reserva,
+          b.fecha_pago_ar,
+          b.estatus_pago_ar
         ${baseSql}
         ORDER BY f.fecha_emision DESC, f.id_factura, vw.id_booking
         ${hasPagination ? `LIMIT ${safeLength} OFFSET ${offset}` : ""}`,

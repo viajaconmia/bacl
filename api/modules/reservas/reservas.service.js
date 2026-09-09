@@ -7,6 +7,8 @@ const ALLOWED_FIELDS = new Set([
   "portal",
   "orden_compra",
   "cliente_solicitante_reserva",
+  "fecha_pago_ar",
+  "estatus_pago_ar",
 ]);
 
 const MAX_LENGTHS = {
@@ -14,12 +16,17 @@ const MAX_LENGTHS = {
   portal: 100,
   orden_compra: 100,
   cliente_solicitante_reserva: 100,
+  estatus_pago_ar: 100,
 };
+
+const DATE_FIELDS = new Set(["fecha_pago_ar"]);
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 class ReservasService {
   /**
    * Update genérico y acotado por ALLOWED_FIELDS de los campos generales de
-   * bookings (ticket_zoho, portal, orden_compra, cliente_solicitante_reserva).
+   * bookings (ticket_zoho, portal, orden_compra, cliente_solicitante_reserva,
+   * fecha_pago_ar, estatus_pago_ar).
    * @param {string} id_booking
    * @param {Record<string, unknown>} fields
    * @param {import('mysql2/promise').PoolConnection} [conn]
@@ -59,7 +66,15 @@ class ReservasService {
         throw new CustomError(`El campo ${key} debe ser texto`, 400, "VALIDATION_ERROR");
       }
 
-      if (normalized !== null && normalized.length > MAX_LENGTHS[key]) {
+      if (DATE_FIELDS.has(key)) {
+        if (normalized !== null && !DATE_REGEX.test(normalized)) {
+          throw new CustomError(
+            `El campo ${key} debe tener formato YYYY-MM-DD`,
+            400,
+            "VALIDATION_ERROR",
+          );
+        }
+      } else if (normalized !== null && normalized.length > MAX_LENGTHS[key]) {
         throw new CustomError(
           `El campo ${key} excede el máximo de ${MAX_LENGTHS[key]} caracteres`,
           400,
