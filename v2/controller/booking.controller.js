@@ -124,7 +124,7 @@ GROUP BY s.id_solicitud;`,
           [reserva.id_relacion],
         ),
         executeQuery(
-          `select eq_mano, eq_personal, eq_documentado, id_vuelo, flight_number, airline, departure_airport, departure_city, departure_date, departure_time, arrival_airport, arrival_city, arrival_date, arrival_time, stop_count as parada, seat_number, fly_type, comentarios, rate_type from vuelos where id_viaje_aereo = ?`,
+          `select eq_mano, eq_personal, eq_documentado, id_vuelo, flight_number, airline, departure_airport, departure_city, departure_date, departure_time, arrival_airport, arrival_city, arrival_date, arrival_time, stop_count as parada, seat_number, fly_type, seat_location, comentarios, rate_type from vuelos where id_viaje_aereo = ?`,
           [reserva.id_relacion],
         ),
       ]);
