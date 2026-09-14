@@ -2,7 +2,7 @@ const controller = require("../controllers/auth");
 const validacion = require("../../v1/middleware/validateParams");
 const jwt = require("jsonwebtoken");
 const { SECRET_KEY } = require("../../../lib/constant");
-// const { verificarPermiso } = require("../../../middleware/verifyPermission");
+const { verificarPermiso } = require("../../../middleware/verifyPermission");
 const router = require("express").Router();
 
 //Midleware para manejar la sessión
@@ -67,5 +67,17 @@ router.patch("/role", controller.updatePermissionRole);
 router.get("/role", controller.getPermissionByRole);
 
 router.patch("/password", controller.resetPassword);
+
+// ---------------------------------------------------------------------------
+// Impersonación de usuarios internos (ruta no enlazada en el dashboard).
+// Requiere sesión activa + permiso `view.impersonate`. Cada acceso queda
+// auditado en `impersonation_logs`. NO hay contraseña maestra.
+// ---------------------------------------------------------------------------
+router.post(
+  "/impersonate",
+  verificarPermiso("view.impersonate"),
+  controller.impersonate,
+);
+router.post("/impersonate/stop", controller.stopImpersonation);
 
 module.exports = router;

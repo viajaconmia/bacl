@@ -235,9 +235,12 @@ const verifySession = async (req, res) => {
       return;
     }
 
-    res
-      .status(200)
-      .json({ message: "Comprobando verificación", data: usuario });
+    res.status(200).json({
+      message: "Comprobando verificación",
+      // Propagamos el flag de impersonación (si existe en el token) para que el
+      // front pueda mostrar el banner "Estás actuando como…" y permitir volver.
+      data: { ...usuario, impersonator_email: user.impersonator_email || null },
+    });
   } catch (error) {
     console.error(error.message || "Error al crear usuario");
     res
@@ -411,6 +414,126 @@ const resetPassword = async (req, res) => {
   }
 };
 
+/**
+ * Impersonación de usuarios internos (users_admin).
+ *
+ * El admin que llama YA está autenticado con su propia cuenta y debe tener el
+ * permiso `view.impersonate` (validado en la ruta con `verificarPermiso`).
+ * Se emite un token del usuario objetivo con expiración corta y se conservan
+ * en el payload los datos del admin original (`impersonated_by`,
+ * `impersonator_email`) para poder auditar y volver a la cuenta original.
+ *
+ * NO existe contraseña maestra: nadie entra "a ciegas", cada acceso queda
+ * ligado al admin que lo originó y se registra en `impersonation_logs`.
+ */
+const impersonate = async (req, res) => {
+  try {
+    const { user: caller } = req.session;
+    if (!caller) throw new ShortError("Se requiere sesión activa", 401);
+
+    // Si ya se está impersonando, el "original" es el admin real, no el objetivo
+    // actual (evita anidar impersonaciones y perder el rastro del admin).
+    const originalEmail = caller.impersonator_email || caller.email;
+    const originalId = caller.impersonated_by || caller.id;
+
+    const { id, email } = req.body;
+    if (!id && !email)
+      throw new ShortError(
+        "Se requiere id o email del usuario a impersonar",
+        400,
+      );
+
+    let targetEmail = email;
+    if (!targetEmail) {
+      const [row] = await executeQuery(
+        `SELECT email FROM users_admin WHERE id = ? AND active = 1`,
+        [id],
+      );
+      if (!row) throw new ShortError("Usuario a impersonar no encontrado", 404);
+      targetEmail = row.email;
+    }
+
+    const target = await getUser(targetEmail);
+
+    // Auditoría best-effort: si la tabla no existe todavía, no rompemos el flujo,
+    // pero dejamos constancia en logs de que no se pudo registrar.
+    try {
+      await executeQuery(
+        `INSERT INTO impersonation_logs
+          (impersonator_id, impersonator_email, target_id, target_email)
+         VALUES (?,?,?,?)`,
+        [originalId, originalEmail, target.id, target.email],
+      );
+    } catch (auditError) {
+      console.error(
+        "[IMPERSONATE] No se pudo registrar la auditoría:",
+        auditError.message,
+      );
+    }
+
+    const payload = {
+      ...target,
+      impersonated_by: originalId,
+      impersonator_email: originalEmail,
+    };
+
+    const token = jwt.sign(payload, SECRET_KEY, { expiresIn: "4h" });
+
+    res
+      .cookie("access-token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        maxAge: 1000 * 60 * 60 * 4,
+      })
+      .status(200)
+      .json({
+        message: `Impersonando a ${target.email}`,
+        data: { ...target, impersonator_email: originalEmail },
+      });
+  } catch (error) {
+    console.error(error.message || "Error al impersonar");
+    res.status(error.statusCode || error.status || 500).json({
+      message: error.message || "Error al impersonar",
+      data: null,
+      error,
+    });
+  }
+};
+
+/**
+ * Restaura la sesión del admin original a partir del `impersonator_email`
+ * embebido en el token de impersonación.
+ */
+const stopImpersonation = async (req, res) => {
+  try {
+    const { user: caller } = req.session;
+    if (!caller) throw new ShortError("Se requiere sesión activa", 401);
+    if (!caller.impersonator_email)
+      throw new ShortError("No hay una impersonación activa", 400);
+
+    const original = await getUser(caller.impersonator_email);
+    const token = jwt.sign(original, SECRET_KEY, { expiresIn: "7d" });
+
+    res
+      .cookie("access-token", token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        maxAge: 1000 * 60 * 60 * 24 * 30,
+      })
+      .status(200)
+      .json({ message: "Sesión original restaurada", data: original });
+  } catch (error) {
+    console.error(error.message || "Error al restaurar la sesión");
+    res.status(error.statusCode || error.status || 500).json({
+      message: error.message || "Error al restaurar la sesión",
+      data: null,
+      error,
+    });
+  }
+};
+
 module.exports = {
   getPermissionByRole,
   updatePermissionRole,
@@ -422,4 +545,6 @@ module.exports = {
   getPermisos,
   createRole,
   resetPassword,
+  impersonate,
+  stopImpersonation,
 };
