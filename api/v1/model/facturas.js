@@ -1131,7 +1131,7 @@ const UUIDS_SIEMPRE_VISIBLES = [
   "a6bd1ad7-b25f-4c56-8ca2-9f67c8691a45",
   "bbf98e6f-8942-4186-bca8-dd46c8e6c159",
 ];
-
+//forzando subida
 const getDetalleFacturasCxC = async ({
   bucket = "all",
   id_agente = null,
