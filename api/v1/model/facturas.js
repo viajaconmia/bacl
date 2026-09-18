@@ -1080,6 +1080,7 @@ const getResumenFacturasCxC = async () => {
           0
         ) > 0
           AND f.estado <> "canceled"
+          AND f.fecha_emision >= '2026-01-01'
       )
       SELECT
         fb.id_agente,
@@ -1197,6 +1198,7 @@ const getDetalleFacturasCxC = async ({
           0
         ) > 0
           AND f.estado <> "canceled"
+          AND f.fecha_emision >= '2026-01-01'
           AND (
             (
               (? IS NULL OR DATE(f.fecha_vencimiento) >= ?)
