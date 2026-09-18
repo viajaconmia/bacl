@@ -1059,45 +1059,19 @@ ORDER BY vf.uuid_factura, vf.fecha_emision;`;
 const getResumenFacturasCxC = async () => {
   try {
     const query = `
-      WITH facturas_pendientes AS (
-        SELECT
-          itf.id_factura
-        FROM items_facturas itf
-        LEFT JOIN items_pagos ip
-          ON ip.id_relacion = itf.id_relacion
-        WHERE ip.id_relacion IS NULL
-        GROUP BY itf.id_factura
-      ),
-      facturas_base AS (
+      WITH facturas_base AS (
         SELECT
           f.id_factura,
-
-          COALESCE(
-            NULLIF(TRIM(a_id.id_agente), ''),
-            NULLIF(TRIM(a_usr.id_agente), ''),
-            NULLIF(TRIM(f.id_agente), ''),
-            NULLIF(TRIM(f.usuario_creador), '')
-          ) AS id_agente,
-
-          COALESCE(
-            NULLIF(TRIM(a_id.nombre), ''),
-            NULLIF(TRIM(a_usr.nombre), ''),
-            'Sin asignar'
-          ) AS nombre_agente,
-
+          NULLIF(TRIM(f.id_agente), '') AS id_agente,
+          COALESCE(NULLIF(TRIM(a.nombre), ''), 'Sin asignar') AS nombre_agente,
           DATEDIFF(CURDATE(), DATE(f.fecha_vencimiento)) AS dias_atraso,
-
           CASE
             WHEN f.saldo IS NOT NULL THEN f.saldo
             ELSE f.total
           END AS monto_pendiente
         FROM facturas f
-        INNER JOIN facturas_pendientes fp
-          ON fp.id_factura = f.id_factura
-        LEFT JOIN agentes a_id
-          ON a_id.id_agente = NULLIF(TRIM(f.id_agente), '')
-        LEFT JOIN agentes a_usr
-          ON a_usr.id_agente = NULLIF(TRIM(f.usuario_creador), '')
+        LEFT JOIN agentes a
+          ON a.id_agente = NULLIF(TRIM(f.id_agente), '')
         WHERE COALESCE(
           CASE
             WHEN f.saldo IS NOT NULL THEN f.saldo
@@ -1105,12 +1079,13 @@ const getResumenFacturasCxC = async () => {
           END,
           0
         ) > 0
+          AND f.estado <> "canceled"
       )
       SELECT
         fb.id_agente,
         fb.nombre_agente,
-        ad.linea_credito,
-        ad.nombre_identificacion,
+        a.linea_credito,
+        a.nombre_identificacion,
 
         COUNT(*) AS total_facturas,
 
@@ -1131,11 +1106,14 @@ const getResumenFacturasCxC = async () => {
         SUM(CASE WHEN fb.dias_atraso > 30 THEN 1 ELSE 0 END) AS totalMas30,
         ROUND(SUM(CASE WHEN fb.dias_atraso > 30 THEN fb.monto_pendiente ELSE 0 END), 2) AS mas_30,
 
+        SUM(CASE WHEN fb.dias_atraso IS NULL THEN 1 ELSE 0 END) AS sin_fecha_vencimiento,
+        ROUND(SUM(CASE WHEN fb.dias_atraso IS NULL THEN fb.monto_pendiente ELSE 0 END), 2) AS monto_sin_fecha,
+
         ROUND(SUM(fb.monto_pendiente), 2) AS adeudo_total,
         ROUND(SUM(CASE WHEN fb.dias_atraso <= 0 THEN fb.monto_pendiente ELSE 0 END), 2) AS total_vigente,
         ROUND(SUM(CASE WHEN fb.dias_atraso > 0 THEN fb.monto_pendiente ELSE 0 END), 2) AS total_vencido
       FROM facturas_base fb
-      left join agente_details ad on ad.id_agente = fb.id_agente
+      LEFT JOIN agentes a ON a.id_agente = fb.id_agente
       GROUP BY fb.id_agente, fb.nombre_agente
       ORDER BY fb.nombre_agente;
     `;
@@ -1176,32 +1154,13 @@ const getDetalleFacturasCxC = async ({
     const uuidsPlaceholders = UUIDS_SIEMPRE_VISIBLES.map(() => "?").join(", ");
 
     const query = `
-      WITH facturas_pendientes AS (
-        SELECT
-          itf.id_factura
-        FROM items_facturas itf
-        LEFT JOIN items_pagos ip
-          ON ip.id_relacion = itf.id_relacion
-        WHERE ip.id_relacion IS NULL
-        GROUP BY itf.id_factura
-      ),
-      facturas_base AS (
+      WITH facturas_base AS (
         SELECT
           f.id_factura,
           f.uuid_factura,
 
-          COALESCE(
-            NULLIF(TRIM(a_id.id_agente), ''),
-            NULLIF(TRIM(a_usr.id_agente), ''),
-            NULLIF(TRIM(f.id_agente), ''),
-            NULLIF(TRIM(f.usuario_creador), '')
-          ) AS id_agente,
-
-          COALESCE(
-            NULLIF(TRIM(a_id.nombre), ''),
-            NULLIF(TRIM(a_usr.nombre), ''),
-            'Sin asignar'
-          ) AS nombre_agente,
+          NULLIF(TRIM(f.id_agente), '') AS id_agente,
+          COALESCE(NULLIF(TRIM(a.nombre), ''), 'Sin asignar') AS nombre_agente,
 
           f.id_empresa,
           f.id_facturama,
@@ -1228,12 +1187,8 @@ const getDetalleFacturasCxC = async ({
             ELSE f.total
           END AS monto_pendiente
         FROM facturas f
-        LEFT JOIN facturas_pendientes fp
-          ON fp.id_factura = f.id_factura
-        LEFT JOIN agentes a_id
-          ON a_id.id_agente = NULLIF(TRIM(f.id_agente), '')
-        LEFT JOIN agentes a_usr
-          ON a_usr.id_agente = NULLIF(TRIM(f.usuario_creador), '')
+        LEFT JOIN agentes a
+          ON a.id_agente = NULLIF(TRIM(f.id_agente), '')
         WHERE COALESCE(
           CASE
             WHEN f.saldo IS NOT NULL THEN f.saldo
@@ -1243,10 +1198,8 @@ const getDetalleFacturasCxC = async ({
         ) > 0
           AND f.estado <> "canceled"
           AND (
-            -- Lógica normal: facturas sin pago aplicado + filtros de fecha
             (
-              fp.id_factura IS NOT NULL
-              AND (? IS NULL OR DATE(f.fecha_vencimiento) >= ?)
+              (? IS NULL OR DATE(f.fecha_vencimiento) >= ?)
               AND (? IS NULL OR DATE(f.fecha_vencimiento) <= ?)
             )
             OR
