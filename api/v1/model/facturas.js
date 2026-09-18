@@ -1261,6 +1261,7 @@ const getDetalleFacturasCxC = async ({
     throw error;
   }
 };
+//que ya se subaaaaaa
 
 const facturasPagoPendiente = async (id_agente) => {
   try {
