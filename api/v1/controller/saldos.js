@@ -207,7 +207,7 @@ const readSaldoByAgente = async (req, res) => {
 
 FROM saldos_a_favor sf
 
-INNER JOIN agente_details a
+INNER JOIN agentes a
     ON a.id_agente = sf.id_agente
 LEFT JOIN users_admin ua
 	ON ua.id = sf.usuario_creador
