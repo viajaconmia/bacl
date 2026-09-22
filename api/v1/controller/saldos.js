@@ -341,7 +341,7 @@ const createNewSaldo = async (req, res) => {
       data.comentario || null, // p_comentario
       data.link_stripe || null, // p_link_stripe
       data.is_facturable ?? false, // p_is_facturable
-      data.is_wallet_credito ?? false, // p_is_descuento
+      data.is_wallet_credito ?? false, // p_is_wallet_credito
       null, // p_comprobante
       data.ult_digits || null, // p_ult_digits
       data.numero_autorizacion || null, // p_numero_autorizacion
@@ -363,6 +363,13 @@ const createNewSaldo = async (req, res) => {
 };
 const update_saldo_by_id = async (req, res) => {
   console.log("Llegando al endpoint de update_saldo_by_id");
+  // NOTA (2026-09-22): el form de edicion en admin_mia (PageCuentasPorCobrar.tsx,
+  // handleEdit) no manda concepto/referencia/tipo_tarjeta/link_stripe/ult_digits/
+  // numero_autorizacion/banco_tarjeta -> llegan undefined -> NULL al SP. No se sabe
+  // si estos campos deberian ser editables desde ese form o no. Mientras se aclara,
+  // el trigger saldos_a_favor_BEFORE_UPDATE los protege de perderse (conserva el
+  // valor anterior si llega NULL) - no tocar esa proteccion sin revisar si ya se
+  // habilito la edicion real de estos campos desde el front.
   const {
     id_saldos,
     id_agente,
@@ -377,7 +384,7 @@ const update_saldo_by_id = async (req, res) => {
     comentario,
     link_stripe,
     is_facturable,
-    is_descuento,
+    is_wallet_credito,
     comprobante,
     activo,
     ult_digits,
@@ -405,7 +412,7 @@ const update_saldo_by_id = async (req, res) => {
         comentario,
         link_stripe,
         is_facturable,
-        is_descuento,
+        is_wallet_credito,
         comprobante,
         activo,
         ult_digits,
