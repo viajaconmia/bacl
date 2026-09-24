@@ -2083,6 +2083,8 @@ const createEmi = async (req, res) => {
 };
 
 const crearFacturaDesdeCargaPagos = async (req, res) => {
+  console.log("crearFacturaDesdeCargaPagos: body recibido:", req.body);
+
   const {
     fecha_emision,
     estado,
@@ -2164,6 +2166,10 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
     if (!bodyTieneFactura) {
       // Timbra con Facturama (lógica de createEmi integrada)
       const resp = await model.crearFacturaEmi(req, req.body);
+      console.log(
+        "crearFacturaDesdeCargaPagos: respuesta cruda de crearFacturaEmi/Facturama:",
+        JSON.stringify(resp, null, 2),
+      );
       facturamaData = resp?.facturama?.Id
         ? resp.facturama
         : resp?.data?.facturama?.Id
@@ -2175,6 +2181,10 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
               : null;
 
       if (!facturamaData) {
+        console.error(
+          "crearFacturaDesdeCargaPagos: el modelo no devolvió los datos de Facturama esperados",
+          { raw_id: req.body?.raw_id, resp },
+        );
         return res.status(500).json({
           ok: false,
           message: "El modelo no devolvió los datos de Facturama esperados",
@@ -2268,6 +2278,13 @@ const crearFacturaDesdeCargaPagos = async (req, res) => {
       });
     });
   } catch (error) {
+    console.error("Error en crearFacturaDesdeCargaPagos:", {
+      message: error?.message,
+      response_data: error?.response?.data,
+      details: error?.details,
+      raw_id: req.body?.raw_id,
+      stack: error?.stack,
+    });
     const status = error?.response?.status || error?.statusCode || 500;
     const payload = error?.response?.data ||
       error?.details || { message: error?.message || "Error" };
