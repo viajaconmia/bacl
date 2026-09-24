@@ -1436,6 +1436,16 @@ const createFromOperaciones = async (req, res) => {
     const { bandera } = req.body;
     const { check_in, check_out } = req.body;
     console.log(check_in, check_out);
+
+    const banderaNum = Number(bandera);
+    if (banderaNum !== 0 && banderaNum !== 1) {
+      throw new CustomError(
+        `bandera inválida: se recibió "${bandera}" pero se esperaba 0 (crédito) o 1 (wallet/saldo a favor). No se creó la reserva ni se generó ningún pago.`,
+        400,
+        "INVALID_BANDERA",
+      );
+    }
+
     const parseMySQLDate = (dateStr) => {
       const [year, month, day] = dateStr.split("-").map(Number);
       return new Date(year, month - 1, day);
@@ -1474,8 +1484,8 @@ const createFromOperaciones = async (req, res) => {
       .json({ message: "Solicitud created successfully", data: response });
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      error: "Internal Server Error",
+    res.status(error.statusCode ?? 500).json({
+      error: error.statusCode ? error.message : "Internal Server Error",
       message: error.message,
       data: null,
     });

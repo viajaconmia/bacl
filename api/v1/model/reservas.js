@@ -534,6 +534,13 @@ const asignarFacturasItems = async (req, res) => {
 };
 
 const insertarReservaOperaciones = async (reserva, bandera) => {
+  bandera = Number(bandera);
+  if (bandera !== 0 && bandera !== 1) {
+    throw new Error(
+      `bandera inválida al crear la reserva: se recibió "${bandera}" pero solo se acepta 0 (crédito) o 1 (wallet/saldo a favor). No se generó ningún pago ni se creó la reserva.`,
+    );
+  }
+
   const {
     is_comisionable,
     monto_comisionable,
@@ -607,6 +614,12 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
   const agente = agentes[0];
   if (!reserva.viajero.id_viajero)
     throw new Error("no hay viajero seleccionado");
+
+  if (!(Number(reserva.venta?.total) > 0)) {
+    throw new Error(
+      `venta.total inválido al crear la reserva: se recibió "${reserva.venta?.total}", revisen el precio, debe ser un número mayor a 0. No se generó ningún pago ni se creó la reserva.`,
+    );
+  }
 
   if (bandera === 0 && Number(agente.saldo) < Number(reserva.venta.total)) {
     // Si es crédito, validar saldo del agente
@@ -734,7 +747,17 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
             // ];
 
             // Validación de saldos
+            if (!Array.isArray(ejemplo_saldos) || ejemplo_saldos.length === 0) {
+              throw new Error(
+                "bandera=1 (wallet) pero no se recibió ningún saldo en ejemplo_saldos. No se generó ningún pago ni se creó la reserva.",
+              );
+            }
             for (const saldo of ejemplo_saldos) {
+              if (!(Number(saldo.aplicado) > 0)) {
+                throw new Error(
+                  `El saldo id_saldo=${saldo.id_saldo} viene con "aplicado"=${saldo.aplicado}, debe ser mayor a 0. No se generó ningún pago ni se creó la reserva.`,
+                );
+              }
               const [rows] = await connection.execute(
                 `SELECT saldo FROM saldos_a_favor WHERE id_saldos = ?`,
                 [saldo.id_saldo],
@@ -803,6 +826,12 @@ const insertarReservaOperaciones = async (reserva, bandera) => {
                 saldo_actual: s.saldo_actual,
               }))
               .sort((a, b) => a.restante - b.restante);
+          } else {
+            // No debería llegar aquí nunca: bandera ya se validó al inicio de la función.
+            // Se deja como resguardo para no crear un booking sin ningún pago asociado.
+            throw new Error(
+              `bandera inválida al crear la reserva: "${bandera}" no coincide con ningún método de pago soportado (0=crédito, 1=wallet). No se generó ningún pago ni se creó la reserva.`,
+            );
           }
 
           // Booking
