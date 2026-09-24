@@ -1969,6 +1969,7 @@ FROM vw_pagos_prepago_facturables where is_facturado = 1;`,
   }
 };
 
+// [v2] Ya existe copia: GET /v2/mia/factura/pagos/prepago-facturables — api/modules/facturas/pagos/
 const getAllPagosPrepagoFacturasPendientes = async (req, res) => {
   try {
     const pagos = await executeQuery(

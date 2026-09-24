@@ -14,6 +14,22 @@ class FacturasPagosService {
 
     return repository.findByFactura(id_factura, conn);
   }
+
+  /**
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<object[]>}
+   */
+  async getPrepagoFacturables(conn = null) {
+    return repository.findPrepagoFacturables(conn);
+  }
+
+  /**
+   * @param {import('mysql2/promise').PoolConnection} [conn]
+   * @returns {Promise<object[]>}
+   */
+  async getBalancePagosFacturas(conn = null) {
+    return repository.findBalancePagosFacturas(conn);
+  }
 }
 
 module.exports = new FacturasPagosService();

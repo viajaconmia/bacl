@@ -4,11 +4,13 @@ const factura = require("../../api/modules/facturas/facturas.router");
 const reservas = require("../../api/modules/reservas/reservas.router");
 const dispersion = require("../../api/modules/dispersion/dispersion.router");
 const notificaciones = require("../../api/modules/notificaciones/notificaciones.router");
+const agentes = require("../../api/modules/agentes/agentes.router");
 
 router.use("/pago_proveedor", pagoProveedor);
 router.use("/factura", factura);
 router.use("/reservas", reservas);
 router.use("/dispersion", dispersion);
 router.use("/notificaciones", notificaciones);
+router.use("/agentes", agentes);
 
 module.exports = router;

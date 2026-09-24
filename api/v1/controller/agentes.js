@@ -44,6 +44,7 @@ const readAgentesCompanies = async (req, res) => {
   }
 };
 
+// [v2] Ya existe copia: GET /v2/mia/agentes/empresas/fiscales — api/modules/agentes/empresas/
 const readEmpresasDatosFiscales = async (req, res) => {
   console.log("Entrando al controller");
   try {
