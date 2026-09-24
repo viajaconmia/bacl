@@ -156,7 +156,7 @@ class FacturasReservasRepository {
           p.estado AS estado_reserva,
           vw.origen AS origen,
           vw.destino AS destino,
-          b.subtotal AS booking_subtotal,
+          f.subtotal AS booking_subtotal,
           b.impuestos AS booking_iva,
           b.total AS booking_total,
           b.ticket_zoho,
