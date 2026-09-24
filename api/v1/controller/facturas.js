@@ -2310,6 +2310,21 @@ const crearFacturaMultiplesPagos = async (req, res) => {
     });
   }
 
+  // usuario_creador / id_agente de la factura salen de info_user.id_user (ver
+  // admin_mia/angel/lib/cfdi/payload.ts: info_user.id_user = agentId). Sin esto
+  // la fila de `facturas` truena con "usuario_creador cannot be null" después
+  // de ya haber timbrado con Facturama — cortamos antes de gastar ese timbrado.
+  if (!info_user?.id_user) {
+    console.error(
+      "crearFacturaMultiplesPagos: info_user.id_user faltante",
+      { info_user },
+    );
+    return res.status(400).json({
+      ok: false,
+      message: "info_user.id_user es requerido para crear la factura.",
+    });
+  }
+
   // Normaliza cada pago: { raw_id, monto }
   let pagos;
   try {
@@ -2363,8 +2378,12 @@ const crearFacturaMultiplesPagos = async (req, res) => {
     return {
       fecha_emision: f.Fecha || f.fecha || new Date(),
       estado: "Confirmada",
-      usuario_creador: info_user.usuario_creador,
-      id_agente: fb.id_agente ?? info_user.id_agente,
+      // info_user.id_user es el agente que arma la factura (ver
+      // admin_mia/angel/lib/cfdi/payload.ts: info_user.id_user = agentId).
+      // info_user.usuario_creador e info_user.id_agente no existen en el
+      // contrato real del front, por eso llegaban NULL.
+      usuario_creador: info_user?.id_user ?? null,
+      id_agente: fb.id_agente ?? info_user?.id_user ?? null,
       total,
       subtotal,
       impuestos,
