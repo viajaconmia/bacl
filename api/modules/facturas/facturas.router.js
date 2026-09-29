@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const { filtrar, detalle, editar } = require("./facturas.controller");
+const { filtrar, detalle, editar, vincularPago, desvincularPago } = require("./facturas.controller");
 const itemsRouter = require("./items/facturasItems.router");
 const reservasRouter = require("./reservas/facturasReservas.router");
 const envioRouter = require("./envio/facturasEnvio.router");
@@ -11,6 +11,8 @@ router.use("/items", itemsRouter);
 router.use("/reservas", reservasRouter);
 router.use("/envio", envioRouter);
 router.use("/pagos", pagosRouter);
+router.post("/vincular-pago", vincularPago);
+router.post("/desvincular-pago", desvincularPago);
 router.patch("/:id_factura", editar);
 
 module.exports = router;

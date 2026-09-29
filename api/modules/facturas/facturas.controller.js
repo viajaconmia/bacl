@@ -99,4 +99,36 @@ const editar = async (req, res) => {
   }
 };
 
-module.exports = { filtrar, detalle, editar };
+const vincularPago = async (req, res) => {
+  try {
+    const data = await runTransaction(async (conn) => facturasService.vincularPago(req.body, conn));
+    return res.status(201).json({
+      message: "Pago/saldo vinculado a la factura correctamente",
+      data,
+    });
+  } catch (error) {
+    console.error("Error en vincularPago:", error);
+    return res.status(error.statusCode ?? 500).json({
+      error: error.message,
+      detail: error.details ?? null,
+    });
+  }
+};
+
+const desvincularPago = async (req, res) => {
+  try {
+    const data = await runTransaction(async (conn) => facturasService.desvincularPago(req.body, conn));
+    return res.status(200).json({
+      message: "Pago/saldo desvinculado de la factura correctamente",
+      data,
+    });
+  } catch (error) {
+    console.error("Error en desvincularPago:", error);
+    return res.status(error.statusCode ?? 500).json({
+      error: error.message,
+      detail: error.details ?? null,
+    });
+  }
+};
+
+module.exports = { filtrar, detalle, editar, vincularPago, desvincularPago };

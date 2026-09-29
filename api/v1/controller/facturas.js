@@ -2082,6 +2082,7 @@ const createEmi = async (req, res) => {
   }
 };
 
+// [v2] Copia parcial (solo vincula, no crea factura): POST /v2/mia/factura/vincular-pago — api/modules/facturas/
 const crearFacturaDesdeCargaPagos = async (req, res) => {
   console.log("crearFacturaDesdeCargaPagos: body recibido:", req.body);
 
