@@ -706,6 +706,7 @@ const crearVuelo = async (req, res) => {
 const editarVuelo = async (req, res) => {
   try {
     const { cambios, viaje_aereo: data_meta } = req.body;
+    console.log(req.body);
 
     const [viaje_aereo_db] = await executeQuery(
       `SELECT * FROM vw_new_reservas WHERE id_booking = ?`,
