@@ -46,6 +46,22 @@ class BookingInclude {
   }
 }
 
+// Tarjeta con la que se solicitó el pago (misma lógica que get_solicitudes_pago_v2:
+// tarjetas.id = spp.id_tarjeta_solicitada). Relación 1:1, no multiplica filas.
+class TarjetaInclude {
+  apply(builder) {
+    builder.addSelect(
+      "spp.id_tarjeta_solicitada",
+      "t.ultimos_4",
+      "t.banco_emisor",
+      "t.tipo_tarjeta",
+    );
+    builder.addJoin(
+      "LEFT JOIN tarjetas t ON spp.id_tarjeta_solicitada = t.id",
+    );
+  }
+}
+
 class FacturasInclude {
   apply(builder, filters) {
     builder.addSelect(
@@ -126,4 +142,9 @@ class PagosInclude {
   }
 }
 
-module.exports = { BookingInclude, FacturasInclude, PagosInclude };
+module.exports = {
+  BookingInclude,
+  TarjetaInclude,
+  FacturasInclude,
+  PagosInclude,
+};

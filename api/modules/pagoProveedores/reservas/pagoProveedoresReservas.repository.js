@@ -2,6 +2,7 @@ const { getExecutor } = require("../../../../config/db");
 const SolicitudesQueryBuilder = require("./query/SolicitudesQueryBuilder");
 const {
   BookingInclude,
+  TarjetaInclude,
   FacturasInclude,
   PagosInclude,
 } = require("./query/includes");
@@ -67,9 +68,9 @@ class PagoProveedoresReservasRepository {
   async findAll(filters = {}, conn = null) {
     const run = getExecutor(conn);
 
-    const builder = new SolicitudesQueryBuilder(filters).use(
-      new BookingInclude(),
-    );
+    const builder = new SolicitudesQueryBuilder(filters)
+      .use(new BookingInclude())
+      .use(new TarjetaInclude());
 
     if (filters.includeFacturas) {
       builder.use(new FacturasInclude());
