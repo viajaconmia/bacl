@@ -3,6 +3,7 @@ const {
   runTransaction,
   executeSP2,
   executeQuery,
+  getExecutor,
 } = require("../../../config/db");
 const model = require("../model/facturas");
 const facturasItemsService = require("../../modules/facturas/items/facturasItems.service");
@@ -1071,7 +1072,28 @@ const asignarFacturaPagos = async (req, res) => {
     return { picked: any, mode: "partial_any" };
   };
 
+  // [2026-10-06] Error de validación que debe salir de la transacción tal
+  // cual (mismo status/body que antes) sin que runTransaction lo trate como
+  // fallo de BD. runTransaction envuelve cualquier error que no sea
+  // CustomError en uno nuevo y guarda el original en `.details` — por eso el
+  // catch de más abajo busca `error.details` además de `error` directo.
+  class ValidationExit extends Error {
+    constructor(statusCode, body) {
+      super(body?.error || "Validation error");
+      this.statusCode = statusCode;
+      this.body = body;
+    }
+  }
+
   try {
+    // Envuelto en runTransaction para que todos los INSERT/UPDATE de esta
+    // función sean atómicos (antes no había transacción — ver Obsidian
+    // db/tabla saldos_a_favor.md, caso saldo 431/442). Las validaciones que
+    // antes hacían `return res.status(400).json(...)` ahora lanzan
+    // ValidationExit para que el response se arme FUERA de la transacción,
+    // una vez que runTransaction ya hizo rollback/release de la conexión.
+    return await runTransaction(async (conn) => {
+    const run = getExecutor(conn);
     log("Pasos a iniciar (req.body)", req.body);
 
     const {
@@ -1089,14 +1111,14 @@ const asignarFacturaPagos = async (req, res) => {
     // ---------
     if (!Array.isArray(facturaDataRaw) || facturaDataRaw.length === 0) {
       log("ERROR facturaData faltante/vacío", { facturaDataRaw });
-      return res.status(400).json({
+      throw new ValidationExit(400, {
         error: "Debes enviar 'facturaData' con al menos una factura.",
       });
     }
 
     if (!saldosRaw || (Array.isArray(saldosRaw) && saldosRaw.length === 0)) {
       log("ERROR ejemplo_saldos faltante/vacío", { saldosRaw });
-      return res.status(400).json({
+      throw new ValidationExit(400, {
         error: "No elegiste saldos",
       });
     }
@@ -1109,7 +1131,7 @@ const asignarFacturaPagos = async (req, res) => {
       log("ERROR id_factura no válido dentro de facturaData", {
         facturaDataRaw,
       });
-      return res.status(400).json({
+      throw new ValidationExit(400, {
         error: "Las facturas enviadas no son válidas.",
       });
     }
@@ -1124,7 +1146,7 @@ const asignarFacturaPagos = async (req, res) => {
         itemsEntrada = JSON.parse(itemsEntrada);
       } catch (e) {
         log("ERROR JSON.parse(ejemplo_saldos)", { message: e.message });
-        return res.status(400).json({
+        throw new ValidationExit(400, {
           error: "El campo 'ejemplo_saldos' no es un JSON válido",
           details: e.message,
         });
@@ -1135,7 +1157,7 @@ const asignarFacturaPagos = async (req, res) => {
 
     if (itemsEntrada.length === 0) {
       log("ERROR ejemplo_saldos vacío después de normalizar", { itemsEntrada });
-      return res.status(400).json({
+      throw new ValidationExit(400, {
         error: "No elegiste saldos",
       });
     }
@@ -1156,7 +1178,7 @@ const asignarFacturaPagos = async (req, res) => {
 
       if (!idf) {
         log("ERROR: factura sin id_factura", { facturaPayload });
-        return res.status(400).json({
+        throw new ValidationExit(400, {
           error: "Hay una factura sin id_factura en facturaData.",
         });
       }
@@ -1166,18 +1188,18 @@ const asignarFacturaPagos = async (req, res) => {
           id_factura: idf,
           montoAsignado,
         });
-        return res.status(400).json({
+        throw new ValidationExit(400, {
           error: `El monto_asignado de la factura ${idf} debe ser mayor a 0.`,
         });
       }
 
       const q = "SELECT id_factura, saldo FROM facturas WHERE id_factura = ?;";
-      const r = await executeQuery(q, [idf]);
+      const r = await run(q, [idf]);
       logQuery("SELECT factura saldo", q, [idf], r);
 
       if (!r?.length) {
         log("ERROR: Factura no encontrada", { id_factura: idf });
-        return res.status(400).json({
+        throw new ValidationExit(400, {
           error: `Factura no encontrada: ${idf}`,
         });
       }
@@ -1189,7 +1211,7 @@ const asignarFacturaPagos = async (req, res) => {
           id_factura: idf,
           saldo: saldoDisponible,
         });
-        return res.status(400).json({
+        throw new ValidationExit(400, {
           error:
             "No se puede aplicar pago: la factura ya fue pagada total o parcialmente (saldo <= 0).",
           details: { id_factura: idf, saldo: saldoDisponible },
@@ -1202,7 +1224,7 @@ const asignarFacturaPagos = async (req, res) => {
           monto_asignado: montoAsignado,
           saldo_disponible: saldoDisponible,
         });
-        return res.status(400).json({
+        throw new ValidationExit(400, {
           error: "El monto a asignar no está disponible.",
           details: {
             id_factura: idf,
@@ -1243,7 +1265,7 @@ const asignarFacturaPagos = async (req, res) => {
       const q = `SELECT raw_id, saldo, monto_por_facturar
                  FROM vw_pagos_prepago_facturables
                  WHERE raw_id IN (${placeholdersRaw});`;
-      viewRows = await executeQuery(q, rawIds);
+      viewRows = await run(q, rawIds);
       logQuery("SELECT vw_pagos_prepago_facturables", q, rawIds, viewRows);
     }
 
@@ -1275,7 +1297,7 @@ const asignarFacturaPagos = async (req, res) => {
       WHERE id_factura IN (${placeholdersFact})
       ORDER BY id_factura ASC, id_item ASC;
     `;
-    const itemsDeFacturas = await executeQuery(qItems, facturasOrden);
+    const itemsDeFacturas = await run(qItems, facturasOrden);
     logQuery("SELECT items_facturas", qItems, facturasOrden, itemsDeFacturas);
 
     // const qItem = `SELECT saldo from items where id_factura `
@@ -1551,7 +1573,7 @@ const asignarFacturaPagos = async (req, res) => {
       log("[LINK] credito_a_item reconciliado", briefLocal(credito_a_item, 50));
     } catch (e) {
       log("[LINK][ERROR] Reconciliación falló", { message: e.message });
-      return res.status(400).json({
+      throw new ValidationExit(400, {
         error:
           "No se pudo amarrar saldos entre items y facturas (regla del centavo)",
         details: e.message,
@@ -1625,7 +1647,7 @@ const asignarFacturaPagos = async (req, res) => {
     FROM vw_new_reservas
     WHERE id_relacion IN (${phHosp});
   `;
-      const rowsVista = await executeQuery(
+      const rowsVista = await run(
         queryVistaReservas,
         hospedajesUnicos,
       );
@@ -1669,7 +1691,7 @@ const asignarFacturaPagos = async (req, res) => {
     FROM saldos_a_favor
     WHERE id_saldos IN (${phSaldo});
   `;
-      const rowsSaldoInfo = await executeQuery(querySaldoInfo, saldosIdsUnicos);
+      const rowsSaldoInfo = await run(querySaldoInfo, saldosIdsUnicos);
       logQuery(
         "SELECT saldos_a_favor (metadata)",
         querySaldoInfo,
@@ -1767,7 +1789,7 @@ const asignarFacturaPagos = async (req, res) => {
         transaccion,
       });
 
-      const rPago = await executeQuery(queryInsertPagos, paramsPago);
+      const rPago = await run(queryInsertPagos, paramsPago);
       logQuery("INSERT pagos", queryInsertPagos, paramsPago, rPago);
       insertedPagos += 1;
 
@@ -1779,7 +1801,7 @@ const asignarFacturaPagos = async (req, res) => {
         monto: aplicado,
       });
 
-      const rIP = await executeQuery(sqlIP, paramsIP);
+      const rIP = await run(sqlIP, paramsIP);
       logQuery("INSERT items_pagos", sqlIP, paramsIP, rIP);
       insertedItemsPagos += 1;
 
@@ -1818,7 +1840,7 @@ const asignarFacturaPagos = async (req, res) => {
         monto,
       });
 
-      const rB = await executeQuery(queryBridge, paramsBridge);
+      const rB = await run(queryBridge, paramsBridge);
       logQuery("INSERT facturas_pagos_y_saldos", queryBridge, paramsBridge, rB);
       insertedBridge += 1;
     }
@@ -1847,7 +1869,7 @@ const asignarFacturaPagos = async (req, res) => {
         nuevoSaldo,
       });
 
-      const rUF = await executeQuery(queryUpdateFactura, paramsUF);
+      const rUF = await run(queryUpdateFactura, paramsUF);
       logQuery("UPDATE facturas", queryUpdateFactura, paramsUF, rUF);
 
       updatedFacturas += 1;
@@ -1870,7 +1892,7 @@ const asignarFacturaPagos = async (req, res) => {
         restar: montoSub,
       });
 
-      const rUS = await executeQuery(queryUpdateSaldoAFavor, paramsUS);
+      const rUS = await run(queryUpdateSaldoAFavor, paramsUS);
       logQuery("UPDATE saldos_a_favor", queryUpdateSaldoAFavor, paramsUS, rUS);
 
       updatedSaldos += 1;
@@ -1890,7 +1912,25 @@ const asignarFacturaPagos = async (req, res) => {
       credito_a_factura,
       credito_a_item,
     });
+    });
   } catch (error) {
+    // La transacción ya hizo rollback/release de la conexión antes de que
+    // el error llegue aquí (runTransaction lo garantiza en su finally) —
+    // todo el manejo de respuesta queda fuera de la transacción.
+    // ValidationExit llega directo si runTransaction no la tocó, o envuelta
+    // en `error.details` si runTransaction la re-envolvió en CustomError
+    // (lo hace con cualquier error que no sea ya un CustomError).
+    const validationExit =
+      error instanceof ValidationExit
+        ? error
+        : error?.details instanceof ValidationExit
+          ? error.details
+          : null;
+
+    if (validationExit) {
+      return res.status(validationExit.statusCode).json(validationExit.body);
+    }
+
     console.error("[ERROR] asignarFacturaPagos", error);
     return res
       .status(500)
