@@ -1670,8 +1670,16 @@ const asignarFacturaPagos = async (req, res) => {
     );
 
     // Metadata por saldo (saldos_a_favor)
+    // Unión de credito_a_item Y credito_a_factura: un saldo puede quedar
+    // asignado a la factura (bridge, id_pago=NULL) sin tener monto para
+    // ningún item puntual, así que validarlo solo desde credito_a_item
+    // dejaría ese caso sin cubrir.
     const saldosIdsUnicos = [
-      ...new Set((credito_a_item || []).map((r) => String(r.id_saldo))),
+      ...new Set(
+        [...(credito_a_item || []), ...(credito_a_factura || [])].map((r) =>
+          String(r.id_saldo),
+        ),
+      ),
     ];
     log("[PAGOS] saldosIdsUnicos", saldosIdsUnicos);
 
@@ -1687,7 +1695,9 @@ const asignarFacturaPagos = async (req, res) => {
       currency,
       tipo_tarjeta,
       link_stripe,
-      ult_digits
+      ult_digits,
+      activo,
+      is_cancelado
     FROM saldos_a_favor
     WHERE id_saldos IN (${phSaldo});
   `;
@@ -1698,6 +1708,35 @@ const asignarFacturaPagos = async (req, res) => {
         saldosIdsUnicos,
         rowsSaldoInfo,
       );
+
+      // [2026-10-06] Guardia server-side: antes esta función confiaba
+      // ciegamente en el id_saldo que mandaba el frontend (el único filtro
+      // de "activo" vivía del lado del cliente, en los pickers de
+      // pagar_saldo.tsx/MostrarSaldos.tsx). Un saldo inactivo (ya agotado,
+      // real o por el bug de aplicación duplicada — ver Obsidian
+      // db/tabla saldos_a_favor.md) o cancelado ya no debe poder aplicarse,
+      // sin importar qué mande el cliente.
+      const rowsSaldoInfoById = new Map(
+        (rowsSaldoInfo || []).map((r) => [String(r.id_saldos), r]),
+      );
+      for (const idSaldo of saldosIdsUnicos) {
+        const row = rowsSaldoInfoById.get(idSaldo);
+        if (!row) {
+          throw new ValidationExit(400, {
+            error: `Saldo a favor no encontrado: ${idSaldo}`,
+          });
+        }
+        if (Number(row.is_cancelado) === 1) {
+          throw new ValidationExit(400, {
+            error: `El saldo a favor ${idSaldo} está cancelado y no se puede aplicar.`,
+          });
+        }
+        if (Number(row.activo) === 0) {
+          throw new ValidationExit(400, {
+            error: `El saldo a favor ${idSaldo} está inactivo (sin saldo disponible) y no se puede aplicar.`,
+          });
+        }
+      }
 
       for (const r of rowsSaldoInfo || []) {
         saldoInfoById.set(String(r.id_saldos), {
