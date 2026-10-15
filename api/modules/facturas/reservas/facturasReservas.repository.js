@@ -159,6 +159,7 @@ class FacturasReservasRepository {
           f.subtotal AS booking_subtotal,
           b.impuestos AS booking_iva,
           b.total AS booking_total,
+          b.estado AS estado_booking,
           b.ticket_zoho,
           b.portal,
           b.orden_compra,
