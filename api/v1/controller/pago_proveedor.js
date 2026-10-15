@@ -3959,7 +3959,16 @@ const getSolicitudes = async (req, res) => {
     );
 
     const [spRows, totalRows] = await Promise.all([
-      executeSP("get_solicitudes_pago_filtradas2", [
+      // Optimización 2026-10-15: get_solicitudes_pago_filtradas2_optimizado
+      // reemplaza a vw_new_reservas por vw_new_details_booking (mucho más
+      // rápida) y consolida los joins de datos de agente en agente_details_lite.
+      // Mismos 35 parámetros en el mismo orden, misma forma de salida —
+      // validado fila por fila contra el original antes de este cambio (ver
+      // notas Obsidian "sp_get_solicitudes_pago_filtradas2" y "agente_details").
+      // El SP original (get_solicitudes_pago_filtradas2) NO se tocó ni se
+      // borró — sigue en la base tal cual, por si hay que volver atrás; para
+      // revertir basta con restaurar este deploy o cambiar el nombre de vuelta.
+      executeSP("get_solicitudes_pago_filtradas2_optimizado", [
         filters.folio,
         filters.cliente,
         filters.viajero,

@@ -1,22 +1,74 @@
--- Migración: agrega 6 filtros nuevos a get_solicitudes_pago_filtradas2
---   canal_de_reservacion, nombre_intermediario, forma_pago_solicitada,
---   reservante (activa parámetro existente que estaba sin usar), comentario_AP,
---   reserva_diferencia.
+-- Versión de PRUEBA de get_solicitudes_pago_filtradas2 (SP nuevo, aparte,
+-- para comparar resultados/tiempos contra el original antes de reemplazarlo).
 --
--- IMPORTANTE: este SP queda con 35 parámetros (30 originales + 5 nuevos al
--- final: p_canal_de_reservacion, p_nombre_intermediario, p_forma_pago_solicitada,
--- p_comentario_ap, p_reserva_diferencia; reservante reusa p_reservante que ya
--- existía). El controller bacl/api/v1/controller/pago_proveedor.js (función
--- getSolicitudes, NO getSolicitudes2) debe mandar esos 5 valores nuevos al final
--- del arreglo de executeSP("get_solicitudes_pago_filtradas2", [...]) en el mismo
--- orden, o el endpoint completo de conciliación se rompe por número de
--- argumentos incorrecto.
+-- Se llama get_solicitudes_pago_filtradas2_optimizado — mismos 35 parámetros,
+-- en el mismo orden, que el original. Para probarlo manualmente:
+--
+--   CALL get_solicitudes_pago_filtradas2_optimizado(
+--     NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+--     '2026-10-01','2026-10-15',   -- p_check_out_start, p_check_out_end (ejemplo)
+--     NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+--     1,100,                        -- p_pagina, p_limite
+--     NULL,NULL,NULL,NULL,NULL
+--   );
+--
+-- Una vez que el usuario confirme que da los mismos datos (y más rápido) que
+-- el original, se puede renombrar este SP a get_solicitudes_pago_filtradas2
+-- (DROP del original + RENAME, o simplemente recrear con este mismo cuerpo
+-- bajo el nombre original) para que el controller lo use sin cambios.
+--
+-- CONTEXTO: el SP original usaba vw_new_reservas (vista pesada: joins con
+-- CAST(...AS CHAR) que rompen índices, joins muertos a pagos/pagos_credito
+-- con fan-out, subquery correlacionada en el join a viajeros, derived table
+-- que agrega toda la tabla vuelos) + dos joins extra (vw_details_agente,
+-- vw_agente_primer_empresa) para datos de agente que ya estaban disponibles
+-- un join más cerca.
+--
+-- CAMBIOS en esta versión (mismo nombre, mismos 35 parámetros en el mismo
+-- orden, mismas columnas de salida — el controller bacl/api/v1/controller/
+-- pago_proveedor.js NO necesita cambios):
+--
+--   1. vw_new_reservas (r) -> vw_new_details_booking (r). Mucho más rápida
+--      (joins directos por FK, sin CAST). Para los campos que esta vista no
+--      trae, se agregan joins puntuales y baratos, todos sobre columnas ya
+--      denormalizadas y confiables de `bookings` (confirmado con el usuario
+--      2026-09-04, ver nota Obsidian "vista vw_new_details_booking"):
+--        - `solicitudes sol`      -> reservante (sol.origen)
+--        - `hospedajes h`         -> comments, nuevo_incluye_desayuno
+--        - `proveedores i`        -> nombre del intermediario (join directo
+--                                    por FK bookings.id_intermediario, sin
+--                                    CAST — la FK garantiza tipos compatibles)
+--      id_hospedaje/id_renta_autos/id_viaje_aereo se derivan de
+--      r.id_relacion + r.type (CASE) en vez de joinear 3 tablas más.
+--      etapa_reservacion se recalcula inline con el mismo CASE que usaba
+--      vw_new_reservas, sobre r.check_in/r.check_out.
+--
+--   2. vw_details_agente + vw_agente_primer_empresa -> agente_details_lite
+--      (una sola vista, sin el join caro a saldos_a_favor). Confirmado con
+--      el usuario (2026-10-15) vía script de diagnóstico
+--      (diagnostico_primera_empresa_agente.sql): para TODOS los agentes con
+--      más de una empresa, el criterio de agente_details (primer viajero por
+--      viajero_empresa.created_at) y el de vw_agente_primer_empresa (primera
+--      empresa por empresas_agentes.created_at) resuelven la MISMA empresa
+--      -> es seguro consolidar sin perder ni cambiar ningún dato real.
+--      vw_details_agente se descarta sin reemplazo: su propia lógica
+--      (GROUP BY sin agregación real + ORDER BY post-GROUP BY) ya era no
+--      determinística, y el usuario confirmó que su `correo` coincide con el
+--      de agente_details.
+--
+-- NADA de esto se aplicó aún en la base de datos — correr manualmente
+-- después de revisar, igual que el resto de scripts en esta carpeta.
+-- Requisitos antes de correr este script:
+--   - Ya debe existir la vista `agente_details_lite`
+--     (ver crear_agente_details_lite.sql).
+--   - Recomendado probar primero contra `pruebas` (staging), no producción
+--     directo (mismo patrón cauteloso de otros cambios de este repo).
 
 DELIMITER $$
 
-DROP PROCEDURE IF EXISTS get_solicitudes_pago_filtradas2 $$
+DROP PROCEDURE IF EXISTS get_solicitudes_pago_filtradas2_optimizado $$
 
-CREATE PROCEDURE get_solicitudes_pago_filtradas2(
+CREATE PROCEDURE get_solicitudes_pago_filtradas2_optimizado(
     IN p_folio                     VARCHAR(255),
     IN p_cliente                   VARCHAR(255),
     IN p_viajero                   VARCHAR(255),
@@ -47,8 +99,6 @@ CREATE PROCEDURE get_solicitudes_pago_filtradas2(
     IN p_facturas_parciales        VARCHAR(10),
     IN p_pagina                    INT,
     IN p_limite                    INT,
-    -- ✦ NUEVO (5 filtros conciliación pago proveedor; reservante reusa el
-    -- parámetro p_reservante que ya existía arriba pero no se usaba)
     IN p_canal_de_reservacion      VARCHAR(20),
     IN p_nombre_intermediario      VARCHAR(255),
     IN p_forma_pago_solicitada     VARCHAR(20),
@@ -235,12 +285,18 @@ SELECT
     END AS estado_facturacion,
     m.id_booking,
     b.updated_at        AS booking_updated_at,
-    r.id_solicitud,
-    r.id_servicio,
+    b.is_comisionable   AS is_comisionable,
+    b.id_solicitud       AS id_solicitud,
+    b.id_servicio        AS id_servicio,
     r.id_viajero,
-    r.viajero,
+    r.nombre_viajero     AS viajero,
     r.type,
-    r.etapa_reservacion,
+    (CASE
+        WHEN r.check_in > CURDATE() THEN ''reservado''
+        WHEN r.check_out < CURDATE() THEN ''check out''
+        WHEN CURDATE() BETWEEN r.check_in AND r.check_out THEN ''In house''
+        ELSE ''Sin estado''
+    END) AS etapa_reservacion,
     r.estado,
     r.total,
     r.costo_total,
@@ -250,39 +306,43 @@ SELECT
     r.destino,
     r.horario_salida,
     r.horario_llegada,
-    r.reservante,
+    sol.origen           AS reservante,
     r.proveedor,
     r.tipo_cuarto_vuelo,
     r.codigo_confirmacion,
     r.metodo_pago,
-    r.comments,
-    r.nuevo_incluye_desayuno,
-    r.id_hospedaje,
-    r.id_renta_autos,
-    r.id_viaje_aereo,
+    h.comments,
+    h.nuevo_incluye_desayuno,
+    (CASE WHEN r.type = ''hotel''      THEN r.id_relacion END) AS id_hospedaje,
+    (CASE WHEN r.type = ''car_rental'' THEN r.id_relacion END) AS id_renta_autos,
+    (CASE WHEN r.type = ''flyght''     THEN r.id_relacion END) AS id_viaje_aereo,
     r.id_agente,
-    r.agente,
-    r.nombre_comercial,
-    r.correo_cliente,
-    r.telefono_cliente,
+    adl.nombre           AS agente,
+    adl.nombre_comercial,
+    adl.correo           AS correo_cliente,
+    adl.telefono         AS telefono_cliente,
     r.id_intermediario,
-    r.intermediario,
-    r.created_at        AS created_at_reserva,
-    r.viajero           AS nombre_viajero,
-    r.viajero           AS nombre_viajero_completo,
-    r.type              AS tipo_reserva,
-    r.etapa_reservacion AS estado_reserva,
-    r.estado            AS status,
-    r.proveedor         AS hotel,
-    r.tipo_cuarto_vuelo AS room,
-    r.agente            AS nombre_agente,
-    CONCAT_WS('' '', vwa.primer_nombre, vwa.segundo_nombre,
-                     vwa.apellido_paterno, vwa.apellido_materno) AS nombre_agente_completo,
-    vwa.correo,
-    vwa.telefono,
-    vwae.razon_social,
-    vwae.rfc            AS rfc_empresa_agente,
-    vwae.tipo_persona,
+    i.proveedor          AS intermediario,
+    r.created_at         AS created_at_reserva,
+    r.nombre_viajero     AS nombre_viajero,
+    r.nombre_viajero     AS nombre_viajero_completo,
+    r.type               AS tipo_reserva,
+    (CASE
+        WHEN r.check_in > CURDATE() THEN ''reservado''
+        WHEN r.check_out < CURDATE() THEN ''check out''
+        WHEN CURDATE() BETWEEN r.check_in AND r.check_out THEN ''In house''
+        ELSE ''Sin estado''
+    END) AS estado_reserva,
+    r.estado             AS status,
+    r.proveedor          AS hotel,
+    r.tipo_cuarto_vuelo  AS room,
+    adl.nombre           AS nombre_agente,
+    adl.nombre_other     AS nombre_agente_completo,
+    adl.correo           AS correo,
+    adl.telefono         AS telefono,
+    adl.razon_social,
+    adl.rfc              AS rfc_empresa_agente,
+    adl.tipo_persona,
     s.created_at        AS servicio_created_at,
     s.is_credito,
     pa.detalles_pagos_json       AS detalles_pagos,
@@ -315,14 +375,16 @@ LEFT JOIN users_admin ua        ON ua.id            = spp.id_creador
 LEFT JOIN TitularEnvioMap tem
     ON tem.id_enviado_key =
        TRIM(CAST(spp.id_enviado AS CHAR(255) CHARACTER SET utf8mb4)) COLLATE utf8mb4_unicode_ci
-LEFT JOIN vw_new_reservas r     ON r.id_booking     = m.id_booking
-LEFT JOIN bookings b            ON b.id_booking     = m.id_booking
-LEFT JOIN servicios s           ON s.id_servicio    = r.id_servicio
-LEFT JOIN tarjetas t            ON t.id             = spp.id_tarjeta_solicitada
-LEFT JOIN vw_details_agente vwa ON vwa.id_agente    = r.id_agente
-LEFT JOIN vw_agente_primer_empresa vwae ON vwae.id_agente = r.id_agente
-LEFT JOIN PagosAgregados pa     ON pa.id_servicio   = r.id_servicio
-LEFT JOIN SumaCredito sc        ON sc.id_servicio   = r.id_servicio
+LEFT JOIN bookings b                  ON b.id_booking     = m.id_booking
+LEFT JOIN vw_new_details_booking r    ON r.id_booking     = m.id_booking
+LEFT JOIN servicios s                 ON s.id_servicio    = b.id_servicio
+LEFT JOIN solicitudes sol             ON sol.id_solicitud = b.id_solicitud
+LEFT JOIN hospedajes h                ON h.id_booking     = b.id_booking
+LEFT JOIN proveedores i               ON i.id             = r.id_intermediario
+LEFT JOIN agente_details_lite adl     ON adl.id_agente    = s.id_agente
+LEFT JOIN tarjetas t                  ON t.id             = spp.id_tarjeta_solicitada
+LEFT JOIN PagosAgregados pa           ON pa.id_servicio   = b.id_servicio
+LEFT JOIN SumaCredito sc              ON sc.id_servicio   = b.id_servicio
 LEFT JOIN PagosFacturasAgg pfp
     ON CONVERT(pfp.id_solicitud USING utf8mb4) COLLATE utf8mb4_unicode_ci =
        CONVERT(spp.id_solicitud_proveedor USING utf8mb4) COLLATE utf8mb4_unicode_ci
@@ -334,14 +396,14 @@ WHERE
 
     AND (
         @cliente IS NULL
-        OR CONVERT(r.nombre_comercial  USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @cliente, ''%'') COLLATE utf8mb4_unicode_ci
-        OR CONVERT(r.reservante        USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @cliente, ''%'') COLLATE utf8mb4_unicode_ci
-        OR CONVERT(r.correo_cliente    USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @cliente, ''%'') COLLATE utf8mb4_unicode_ci
-        OR CONVERT(r.telefono_cliente  USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @cliente, ''%'') COLLATE utf8mb4_unicode_ci
+        OR CONVERT(adl.nombre_comercial USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @cliente, ''%'') COLLATE utf8mb4_unicode_ci
+        OR CONVERT(sol.origen          USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @cliente, ''%'') COLLATE utf8mb4_unicode_ci
+        OR CONVERT(adl.correo          USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @cliente, ''%'') COLLATE utf8mb4_unicode_ci
+        OR CONVERT(adl.telefono        USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @cliente, ''%'') COLLATE utf8mb4_unicode_ci
     )
 
-    AND (@viajero IS NULL OR CONVERT(r.viajero   USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @viajero, ''%'') COLLATE utf8mb4_unicode_ci)
-    AND (@hotel   IS NULL OR CONVERT(r.proveedor USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @hotel,   ''%'') COLLATE utf8mb4_unicode_ci)
+    AND (@viajero IS NULL OR CONVERT(r.nombre_viajero USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @viajero, ''%'') COLLATE utf8mb4_unicode_ci)
+    AND (@hotel   IS NULL OR CONVERT(r.proveedor       USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @hotel,   ''%'') COLLATE utf8mb4_unicode_ci)
 
     AND (
         @estado_solicitud IS NULL
@@ -448,7 +510,6 @@ WHERE
         )
     )
 
-    -- ✦ NUEVO: metodo_pago de la reserva (PREPAGO → contado, CREDITO → credito)
     AND (
         @metodo_pago_reserva IS NULL
         OR (@metodo_pago_reserva COLLATE utf8mb4_unicode_ci = ''CREDITO'' COLLATE utf8mb4_unicode_ci
@@ -459,46 +520,34 @@ WHERE
                 LIKE ''%contado%'' COLLATE utf8mb4_unicode_ci)
     )
 
-    -- ✦ NUEVO: reservante (activa p_reservante, antes muerto). r.reservante viene de
-    -- solicitudes.origen con valores reales ''Operaciones'' / ''Cliente''.
     AND (
         @reservante IS NULL
-        OR UPPER(CONVERT(r.reservante USING utf8mb4)) COLLATE utf8mb4_unicode_ci
+        OR UPPER(CONVERT(sol.origen USING utf8mb4)) COLLATE utf8mb4_unicode_ci
            LIKE CONCAT(''%'', UPPER(@reservante), ''%'') COLLATE utf8mb4_unicode_ci
     )
 
-    -- ✦ NUEVO: canal_de_reservacion. Se compara contra NULL, no contra un id
-    -- específico: DIRECTO = sin intermediario, INTERMEDIARIO = con intermediario.
     AND (
         @canal_de_reservacion IS NULL
         OR (@canal_de_reservacion COLLATE utf8mb4_unicode_ci = ''directo''       COLLATE utf8mb4_unicode_ci AND r.id_intermediario IS NULL)
         OR (@canal_de_reservacion COLLATE utf8mb4_unicode_ci = ''intermediario'' COLLATE utf8mb4_unicode_ci AND r.id_intermediario IS NOT NULL)
     )
 
-    -- ✦ NUEVO: nombre_intermediario. r.intermediario = proveedores.proveedor del
-    -- intermediario.
     AND (
         @nombre_intermediario IS NULL
-        OR CONVERT(r.intermediario USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @nombre_intermediario, ''%'') COLLATE utf8mb4_unicode_ci
+        OR CONVERT(i.proveedor USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @nombre_intermediario, ''%'') COLLATE utf8mb4_unicode_ci
     )
 
-    -- ✦ NUEVO: forma_pago_solicitada (enum real de solicitudes_pago_proveedor:
-    -- link/transfer/card/credit).
     AND (
         @forma_pago_solicitada IS NULL
         OR LOWER(TRIM(CONVERT(spp.forma_pago_solicitada USING utf8mb4))) COLLATE utf8mb4_unicode_ci =
            LOWER(TRIM(@forma_pago_solicitada)) COLLATE utf8mb4_unicode_ci
     )
 
-    -- ✦ NUEVO: comentario_AP (comentarios de ajustes/costos/finanzas en
-    -- solicitudes_pago_proveedor).
     AND (
         @comentario_ap IS NULL
         OR CONVERT(spp.comentario_AP USING utf8mb4) COLLATE utf8mb4_unicode_ci LIKE CONCAT(''%'', @comentario_ap, ''%'') COLLATE utf8mb4_unicode_ci
     )
 
-    -- ✦ NUEVO: reserva_diferencia = costo_proveedor (spp.monto_solicitado) -
-    -- total_facturado (pfp.total_facturado_en_pfp).
     AND (
         @reserva_diferencia IS NULL
         OR (@reserva_diferencia COLLATE utf8mb4_unicode_ci = ''SI'' COLLATE utf8mb4_unicode_ci
