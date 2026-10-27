@@ -99,6 +99,28 @@ const base = {
   notes: str(1000),
 };
 
+// Opción encontrada por un agente de transporte de mia_ai (sin precio) y anexada al ítem.
+// Mismo shape que TransportOptionItem allá, más un id propio para la preferida del cliente.
+const FoundOptionSchema = z.object({
+  id: z.string().trim().min(1).max(64),
+  provider: str(100),
+  serviceName: str(150),
+  departurePoint: str(150),
+  arrivalPoint: str(150),
+  estimatedDuration: str(60),
+  frequencyOrSchedule: str(150),
+  departureTimes: z.array(z.string().trim().max(10)).max(20).optional(),
+  serviceClass: str(60),
+  vehicleCategory: str(80),
+  highlights: z.array(z.string().trim().max(150)).max(20).optional(),
+  sourceUrl: str(500),
+});
+
+const withFoundOptions = {
+  foundOptions: z.array(FoundOptionSchema).max(3).optional(),
+  preferredOptionId: z.string().trim().max(64).nullable().optional(),
+};
+
 const FlightItem = z.object({
   ...base,
   type: z.literal("flight"),
@@ -110,6 +132,7 @@ const FlightItem = z.object({
   airline: str(80),
   cabin: str(40),
   flightNumber: str(20),
+  ...withFoundOptions,
 });
 
 const CarRentalItem = z.object({
@@ -123,6 +146,7 @@ const CarRentalItem = z.object({
   dropoffTime: timeStr,
   carCategory: str(80),
   withDriver: z.boolean().optional(),
+  ...withFoundOptions,
 });
 
 const HotelItem = z.object({
@@ -146,6 +170,7 @@ const BusItem = z.object({
   returnDate: dateStr,
   busLine: str(80),
   serviceClass: str(60),
+  ...withFoundOptions,
 });
 
 const ItemSchema = z.discriminatedUnion("type", [

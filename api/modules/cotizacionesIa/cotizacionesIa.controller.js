@@ -79,4 +79,26 @@ const getArchivoUrl = async (req, res) => {
   }
 };
 
-module.exports = { create, getAll, getById, getArchivoUrl };
+const getArchivoUrlPorStoragePath = async (req, res) => {
+  try {
+    const data = await service.getArchivoUrlPorStoragePath(
+      req.query.storage_path,
+      req.query.id_usuario,
+    );
+    return res.status(200).json({
+      message: "Enlace del archivo generado correctamente",
+      data,
+      metadata: null,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+module.exports = {
+  create,
+  getAll,
+  getById,
+  getArchivoUrl,
+  getArchivoUrlPorStoragePath,
+};

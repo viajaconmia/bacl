@@ -5,6 +5,7 @@ const defaultStorage = require("./cotizacionesIa.storage");
 const {
   ESTADOS,
   TIPOS,
+  storagePrefixFor,
   validateCotizacion,
 } = require("./cotizacionesIa.schema");
 
@@ -153,6 +154,29 @@ class CotizacionesIaService {
     }
 
     const url = await this.storage.createSignedUrl(archivo.storage_path, SIGNED_URL_TTL_SECONDS);
+    return { url, expiresIn: SIGNED_URL_TTL_SECONDS };
+  }
+
+  /**
+   * URL temporal para abrir un archivo que el cliente ya subió en el chat pero cuya
+   * cotización todavía no se confirma (vive solo en Storage, sin fila en
+   * cotizaciones_ia_archivos). Mismo chequeo de "carpeta del propio usuario" que usa
+   * validateCotizacion al crear: storage_path debe empezar con la del id_usuario dado.
+   */
+  async getArchivoUrlPorStoragePath(storagePath, idUsuario) {
+    if (!idUsuario || typeof idUsuario !== "string") {
+      throw new CustomError("'id_usuario' es requerido", 400, "VALIDATION_ERROR");
+    }
+    if (!storagePath || typeof storagePath !== "string") {
+      throw new CustomError("'storage_path' es requerido", 400, "VALIDATION_ERROR");
+    }
+    const prefix = storagePrefixFor(idUsuario);
+    if (!storagePath.startsWith(prefix)) {
+      // Mismo 404 que un archivo inexistente: no revela si la ruta es de otro usuario.
+      throw new CustomError("Archivo no encontrado", 404, "ARCHIVO_NOT_FOUND");
+    }
+
+    const url = await this.storage.createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
     return { url, expiresIn: SIGNED_URL_TTL_SECONDS };
   }
 }
