@@ -149,6 +149,14 @@ const CarRentalItem = z.object({
   ...withFoundOptions,
 });
 
+// Una habitación del hotel: cada una con su propio tipo y titular (y huéspedes
+// adicionales opcionales). Reemplaza los antiguos rooms/roomType/guests planos.
+const HotelRoomSchema = z.object({
+  roomType: str(80),
+  leadGuest: str(120),
+  additionalGuests: z.array(z.string().trim().max(120)).max(20).optional(),
+});
+
 const HotelItem = z.object({
   ...base,
   type: z.literal("hotel"),
@@ -156,9 +164,7 @@ const HotelItem = z.object({
   hotelName: str(160),
   checkIn: dateStr,
   checkOut: dateStr,
-  rooms: intRange(1, 50),
-  roomType: str(80),
-  guests: intRange(1, 200),
+  rooms: z.array(HotelRoomSchema).max(50).optional(),
 });
 
 const BusItem = z.object({
@@ -324,6 +330,14 @@ const validateCotizacion = (body) => {
     });
     if (item.type === "hotel" && !item.city && !item.hotelName) {
       issues.push({ path: at("city"), message: "Indica la ciudad o el nombre del hotel" });
+    }
+    if (
+      item.type === "hotel" &&
+      (!item.rooms ||
+        item.rooms.length === 0 ||
+        item.rooms.some((room) => !room.roomType || !room.leadGuest))
+    ) {
+      issues.push({ path: at("rooms"), message: "Cada habitación necesita tipo y titular" });
     }
     (DATE_ORDER[item.type] || []).forEach(([from, to]) => {
       if (item[from] && item[to] && item[to] < item[from]) {
